@@ -55,6 +55,7 @@ from edelweissfe.constraints.base.surfacecontactpenaltyschema import (
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.numerics.systemmatrixcontributor import localEntriesOfSubBlocks
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
@@ -660,26 +661,18 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             if self._assignedFacetIdx[p] is not None
         ]
 
-    @property
-    def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
-        return False
-
-    def getVIJContributionSize(self) -> int:
-        return sum(m * m for m in self._activeBlockSizes())
-
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        k = offset
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """One dense block per active contact point, row by row, over its slave and master DOFs."""
+        subBlocks = []
         localOffset = 0
         for m in self._activeBlockSizes():
-            blockIdcs = idcs[localOffset : localOffset + m]
+            blockIndices = np.arange(localOffset, localOffset + m)
             localOffset += m
-            I_[k : k + m * m] = np.repeat(blockIdcs, m)
-            J_[k : k + m * m] = np.tile(blockIdcs, m)
-            k += m * m
+            subBlocks.append((blockIndices, blockIndices))
+        return localEntriesOfSubBlocks(subBlocks)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> IntegratedSurfaceContactStiffnessView:
-        return IntegratedSurfaceContactStiffnessView(flat_view, self._activeBlockSizes())
+    def shapeBlock(self, values: np.ndarray) -> IntegratedSurfaceContactStiffnessView:
+        return IntegratedSurfaceContactStiffnessView(values, self._activeBlockSizes())
 
     def computeKernels(
         self,

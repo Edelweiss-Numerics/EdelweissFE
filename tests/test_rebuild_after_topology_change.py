@@ -20,13 +20,15 @@ import pytest
 from test_dofmanager_refresh import _buildTwoElementModel, _dofManager, _FakeConstraint
 
 import edelweissfe.numerics.dofmanager as dofmanager
+import edelweissfe.numerics.systemmatrixassembly as systemmatrixassembly
 from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
+from edelweissfe.numerics.systemmatrixassembly import VIJSystemMatrixAssembly
 from edelweissfe.utils.elementresultcollector import ElementResultCollector
 
 
-def _countChunks(monkeypatch) -> list:
-    """Make the DofManager note down into how many chunks each of its calls of ``mapChunksInParallel`` splits its
-    entities: the list returned gets one number per call."""
+def _countChunks(monkeypatch, module=dofmanager) -> list:
+    """Make ``module`` (the DofManager's, unless given) note down into how many chunks each of its calls of
+    ``mapChunksInParallel`` splits its entities: the list returned gets one number per call."""
     chunkCounts = []
 
     def inChunks(items, work, chunksPerThread=4):
@@ -34,7 +36,7 @@ def _countChunks(monkeypatch) -> list:
         chunkCounts.append(len(chunks))
         return chunks
 
-    monkeypatch.setattr(dofmanager, "mapChunksInParallel", inChunks)
+    monkeypatch.setattr(module, "mapChunksInParallel", inChunks)
     return chunkCounts
 
 
@@ -42,19 +44,19 @@ def test_the_vij_pattern_filled_on_the_thread_pool_is_the_serial_one_bitwise(mon
     model, n = _buildTwoElementModel()
     constraint = _FakeConstraint([n[0], n[5]], ["displacement"])
 
+    dofManager = _dofManager(model, [constraint])
+
     workerThreads(1)
-    serial = _dofManager(model, [constraint])
+    serial = VIJSystemMatrixAssembly(dofManager, 1)
 
     workerThreads(4)
-    chunkCounts = _countChunks(monkeypatch)
-    threaded = _dofManager(model, [constraint])
+    chunkCounts = _countChunks(monkeypatch, systemmatrixassembly)
+    threaded = VIJSystemMatrixAssembly(dofManager, 1)
 
     assert chunkCounts and max(chunkCounts) > 1, "the entities were not split into several chunks"
     assert threaded.I.tobytes() == serial.I.tobytes()
     assert threaded.J.tobytes() == serial.J.tobytes()
-    assert list(threaded.idcsOfHigherOrderEntitiesInVIJ.values()) == list(
-        serial.idcsOfHigherOrderEntitiesInVIJ.values()
-    )
+    assert list(threaded.vijSliceOfEntity.values()) == list(serial.vijSliceOfEntity.values())
 
 
 class _StubEntity:

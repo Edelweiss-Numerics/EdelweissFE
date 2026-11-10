@@ -31,7 +31,8 @@ exactly the constraint-derived bookkeeping a freshly constructed DofManager woul
 hand out a NEW merged entity mapping, because consumers cache plans keyed on that mapping's identity.
 
 The explicit solver calls it instead of rebuilding the whole DofManager when a contact search
-changed which nodes a constraint couples.
+changed which nodes a constraint couples. A DofManager that is built that often must not pay for what only an
+implicit solver reads: the map from index to node is built on first use.
 """
 
 import numpy as np
@@ -41,6 +42,7 @@ from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.systemmatrixcontributor import denseBlockLocalEntries
 from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
@@ -49,7 +51,10 @@ from edelweissfe.sets.nodeset import NodeSet
 
 class _FakeConstraint:
     """The face of a constraint the DofManager reads: its nodes, the fields it couples per node,
-    its scalar variables, its DOF count and its VIJ footprint."""
+    its scalar variables and its DOF count; and, for a system matrix assembly, the entries of its block."""
+
+    #: a dense block, like an element's
+    couplesAllItsDofs = True
 
     def __init__(self, nodes, fieldsPerNode):
         self.nodes = nodes
@@ -58,14 +63,8 @@ class _FakeConstraint:
         # a 2D displacement field: two degrees of freedom per node and field
         self.nDof = 2 * len(nodes) * len(fieldsPerNode)
 
-    def getVIJContributionSize(self):
-        return self.nDof**2
-
-    def initializeVIJContribution(self, indices, I, J, idxInVIJ):  # noqa: E741
-        # a dense block, like an element's
-        n = len(indices)
-        I[idxInVIJ : idxInVIJ + n * n] = np.repeat(indices, n)
-        J[idxInVIJ : idxInVIJ + n * n] = np.tile(indices, n)
+    def localEntriesOfBlock(self):
+        return denseBlockLocalEntries(self.nDof)
 
 
 def _buildTwoElementModel():
@@ -107,7 +106,7 @@ def _dofManager(model, constraints, **kwargs):
     )
 
 
-def _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ):
+def _assertSameConstraintBookkeeping(refreshed, fresh):
     assert refreshed.nDof == fresh.nDof
     assert refreshed.accumulatedConstraintNDof == fresh.accumulatedConstraintNDof
     assert refreshed.largestNumberOfConstraintNDof == fresh.largestNumberOfConstraintNDof
@@ -121,29 +120,20 @@ def _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ):
     for entity, indices in fresh.idcsOfHigherOrderEntitiesInDofVector.items():
         np.testing.assert_array_equal(refreshed.idcsOfHigherOrderEntitiesInDofVector[entity], indices)
 
-    if withVIJ:
-        assert refreshed._sizeVIJ == fresh._sizeVIJ
-        np.testing.assert_array_equal(refreshed.I, fresh.I)
-        np.testing.assert_array_equal(refreshed.J, fresh.J)
-        assert refreshed.idcsOfHigherOrderEntitiesInVIJ.keys() == fresh.idcsOfHigherOrderEntitiesInVIJ.keys()
-        for entity, indices in fresh.idcsOfHigherOrderEntitiesInVIJ.items():
-            np.testing.assert_array_equal(refreshed.idcsOfHigherOrderEntitiesInVIJ[entity], indices)
 
-
-def test_refresh_matches_a_fresh_dofmanager_without_the_vij_pattern():
-    """The explicit solver's configuration: no sparse-matrix pattern, no index-to-node map."""
+def test_refresh_matches_a_fresh_dofmanager():
     model, n = _buildTwoElementModel()
     before = _FakeConstraint([n[0], n[5]], ["displacement"])
     after = _FakeConstraint([n[2], n[3], n[4]], ["displacement"])
 
-    refreshed = _dofManager(model, [before], initializeVIJPattern=False, determiningIndexToHostObjectMapping=False)
+    refreshed = _dofManager(model, [before])
     staleMapping = refreshed.idcsOfHigherOrderEntitiesInDofVector
     staleElementIndices = {e: i.copy() for e, i in refreshed.idcsOfElementsInDofVector.items()}
 
     refreshed.refreshConstraintIndices([after])
 
-    fresh = _dofManager(model, [after], initializeVIJPattern=False, determiningIndexToHostObjectMapping=False)
-    _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ=False)
+    fresh = _dofManager(model, [after])
+    _assertSameConstraintBookkeeping(refreshed, fresh)
 
     # a NEW mapping object, and the elements untouched
     assert refreshed.idcsOfHigherOrderEntitiesInDofVector is not staleMapping
@@ -156,28 +146,32 @@ def test_refresh_matches_a_fresh_dofmanager_without_the_vij_pattern():
     assert after in vector.entitiesInDofVector and before not in vector.entitiesInDofVector
 
 
-def test_refresh_keeps_the_vij_pattern_consistent_when_it_was_initialized():
-    """With a VIJ pattern the constraint's block of I/J moves too; it must match a fresh build."""
-    model, n = _buildTwoElementModel()
-    before = _FakeConstraint([n[0], n[1]], ["displacement"])
-    after = _FakeConstraint([n[3]], ["displacement"])
-
-    refreshed = _dofManager(model, [before])
-    refreshed.refreshConstraintIndices([after])
-    fresh = _dofManager(model, [after])
-
-    _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ=True)
-
-
 def test_refresh_to_no_constraints_at_all():
     """A search may leave a constraint with nothing to couple; the bookkeeping must simply be
     empty."""
     model, n = _buildTwoElementModel()
     before = _FakeConstraint([n[0]], ["displacement"])
 
-    refreshed = _dofManager(model, [before], initializeVIJPattern=False)
+    refreshed = _dofManager(model, [before])
     refreshed.refreshConstraintIndices([])
-    fresh = _dofManager(model, [], initializeVIJPattern=False)
+    fresh = _dofManager(model, [])
 
-    _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ=False)
+    _assertSameConstraintBookkeeping(refreshed, fresh)
     assert refreshed.accumulatedConstraintNDof == 0
+
+
+def test_the_node_of_an_index_is_mapped_on_first_use_only(monkeypatch):
+    """Building the map from index to node costs a pass over every degree of freedom, and only the residual report of
+    an implicit solver reads it: a DOF manager builds it when it is first asked, once."""
+    builds = []
+    determine = DofManager._determineIndexToNodeMap
+    monkeypatch.setattr(DofManager, "_determineIndexToNodeMap", lambda self: builds.append(1) or determine(self))
+
+    model, n = _buildTwoElementModel()
+    dofManager = _dofManager(model, [])
+    assert builds == []
+
+    index = dofManager.idcsOfFieldVariablesInDofVector[n[2].fields["displacement"]][1]
+    assert dofManager.getNodeForIndexInDofVector(index) is n[2]
+    assert dofManager.getNodeForIndexInDofVector(index) is n[2]
+    assert builds == [1]

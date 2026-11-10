@@ -53,6 +53,12 @@ from edelweissfe.elements.pointmass import PointMass
 from edelweissfe.helpers.inputfilehelpers import fillFEModelFromInputFile
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.systemmatrixassembly import (
+    DirectCSRSystemMatrixAssembly,
+    VIJSystemMatrixAssembly,
+)
+from edelweissfe.numerics.systemmatrixcontributor import countEntriesOfBlock
 from edelweissfe.points.node import Node
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.inputfileparser import parseInputFile
@@ -435,9 +441,9 @@ referencePoint=gen_bottomLeftBack
     np.testing.assert_allclose(P[3 * nSlaves : 3 * nSlaves + 3], multipliers.sum(axis=0), rtol=1e-13)
 
 
-def test_node_to_discrete_rigid_body_penalty(tmp_path):
-    """The rotation-rotation block of the reference point is excluded: the constraint omits it (it needs the second
-    derivative of the exponential map), as documented in its class docstring."""
+def _nodeToDiscreteRigidBodyCase(tmp_path, slaveNodeSet: str):
+    """The node-to-discrete-rigid-body penalty contact of the nodes of ``slaveNodeSet`` against a box below the unit
+    cube, the model, and a state in which the slave nodes penetrate the box's top face."""
 
     _writeBoxStl(tmp_path / "support.stl", (-1.0, -1.0, -1.0), (2.0, 0.0, 2.0))
     model = _buildModel(
@@ -451,7 +457,7 @@ mass=1.0
 inertia="1.0, 1.0, 1.0"
 
 *constraint, type=nodeToDiscreteRigidBodyPenalty, name=theConstraint
-nSet=gen_bottom
+nSet={slaveNodeSet}
 rigidBody=support
 penalty=1e3
 searchDistance=1.0
@@ -467,7 +473,15 @@ searchDistance=1.0
         # the slave nodes penetrate the support's top face by far more than the perturbation
         return np.array([0.0, -0.05, 0.0]) + _noise(node, field, 1e-3)
 
-    U = localVector(constraint, nodalValue)
+    return model, constraint, localVector(constraint, nodalValue)
+
+
+def test_node_to_discrete_rigid_body_penalty(tmp_path):
+    """The rotation-rotation block of the reference point is excluded: the constraint omits it (it needs the second
+    derivative of the exponential map), as documented in its class docstring."""
+
+    model, constraint, U = _nodeToDiscreteRigidBodyCase(tmp_path, "gen_bottom")
+    rpNode = constraint.rpNode
     rpRotation = _localIndices(constraint, lambda node, field: node is rpNode and field == "rotation")
 
     P = _assertTangentIsTheDerivative(constraint, U, U, excluded=rpRotation)
@@ -476,6 +490,25 @@ searchDistance=1.0
     # the support pushes every slave node up, out of its top face, and is pushed down
     assert np.all(_forcesOnNodes(constraint, P, lambda node: node is not rpNode)[:, 1] > 0.0)
     assert _forcesOnNodes(constraint, P, lambda node: node is rpNode)[0, 1] < 0.0
+
+
+def test_one_slave_node_to_discrete_rigid_body_penalty_is_assembled_alike_on_both_paths(tmp_path):
+    """With one slave node the block lists exactly nDof**2 = 81 entries (36 + 9 + 18 + 18), in an order that is not
+    column-major: both assemblies place every value at its own entry, so the assembled matrices agree."""
+
+    model, constraint, U = _nodeToDiscreteRigidBodyCase(tmp_path, "gen_bottomLeftBack")
+    assert countEntriesOfBlock(constraint) == constraint.nDof**2
+
+    dofManager = DofManager(model.nodeFields.values(), model.scalarVariables.values(), [], [constraint], [])
+    assembled = []
+    for assemblyType in (VIJSystemMatrixAssembly, DirectCSRSystemMatrixAssembly):
+        K = assemblyType(dofManager, 1)
+        K.beginAssembly()
+        constraint.computeKernels(U, U, np.zeros(constraint.nDof), K[constraint], None)
+        assembled.append(K.assembledMatrix().toarray())
+
+    assert np.abs(assembled[0]).max() > 0.0, "the contact must be active"
+    np.testing.assert_array_equal(assembled[1], assembled[0])
 
 
 def _isOfTheUpperBlock(node: Node) -> bool:
@@ -567,6 +600,20 @@ def test_the_check_refuses_values_that_do_not_fill_the_layout_of_the_constraint(
 
     with pytest.raises(ValueError, match="degrees of freedom"):
         localVector(constraint, lambda node, field: _noise(node, field, 1e-2), scalarValues=[1.0])
+
+
+def test_the_check_refuses_an_entry_of_the_block_outside_the_constraint(tmp_path, monkeypatch):
+    model = _buildModel(tmp_path, _PLANE_BLOCK + _DIRECTIONAL_SPRING, 2)
+    constraint = model.constraints["theConstraint"]
+    U = localVector(constraint, lambda node, field: _noise(node, field, 1e-2))
+
+    localRows, localColumns = constraint.localEntriesOfBlock()
+    localColumns = localColumns.copy()
+    localColumns[-1] = constraint.nDof
+    monkeypatch.setattr(constraint, "localEntriesOfBlock", lambda: (localRows, localColumns))
+
+    with pytest.raises(ValueError, match="outside"):
+        residualContributionAndTangent(constraint, U, U)
 
 
 # --- element loads

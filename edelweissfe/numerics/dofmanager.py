@@ -44,7 +44,6 @@ from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
 )
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
-from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.variables.scalarvariable import ScalarVariable
@@ -57,10 +56,10 @@ class DofManager:
     Specifically, `DofManager`:
      * Analyzes the simulation domain (nodes, scalar variables, elements, constraints, and node sets).
      * Collects and assigns global Degree-of-Freedom (DOF) indices for node fields and scalar variables.
-     * Manages entity-to-index mappings for fast scatter/gather operations.
-     * Generates sparse system matrix sparsity patterns (`I` and `J` vectors in COO/VIJ format).
+     * Manages entity-to-index mappings for fast scatter/gather operations: the global DOF list of every element and
+       constraint, from which a system matrix assembly derives where each block goes.
      * Calculates accumulated elemental/constraint fluxes fieldwise for convergence tests.
-     * Constructs domain-aware `DofVector`, `ScatterDofVector`, and `VIJSystemMatrix` instances.
+     * Constructs domain-aware `DofVector` and `ScatterDofVector` instances.
 
     Parameters
     ----------
@@ -74,12 +73,8 @@ class DofManager:
         The list of Constraints for which DOF index mappings will be created.
     nodeSets : list of NodeSet, optional
         The list of NodeSets for which DOF index mappings will be created.
-    initializeVIJPattern : bool, optional
-        Whether to initialize the sparse VIJ pattern (`I` and `J` vectors) during construction. Default is True.
     initializeAccumulatedNodalFluxesFieldwise : bool, optional
         Whether to compute accumulated nodal fluxes fieldwise during construction. Default is True.
-    determiningIndexToHostObjectMapping : bool, optional
-        Whether to determine the mapping from global DOF indices to their host objects (e.g. Node) during construction. Default is True.
     """
 
     def __init__(
@@ -89,14 +84,8 @@ class DofManager:
         elements: list[BaseNodeCouplingEntity] = None,
         constraints: list[BaseNodeCouplingEntity] = None,
         nodeSets: list[NodeSet] = None,
-        initializeVIJPattern: bool = True,
         initializeAccumulatedNodalFluxesFieldwise: bool = True,
-        determiningIndexToHostObjectMapping: bool = True,
-        **kwargs,
     ):
-        if "determiningIndexToHostObjectMappping" in kwargs:
-            determiningIndexToHostObjectMapping = kwargs.pop("determiningIndexToHostObjectMappping")
-
         if scalarVariables is None:
             scalarVariables = []
         if elements is None:
@@ -119,12 +108,6 @@ class DofManager:
         self.idcsOfNodeFieldsInDofVector = (
             dict()
         )  #: Dictionary mapping a complete NodeField to all its indices in the DofVector
-        #: Reverse dictionary mapping an index to its Host object (e.g., a Node).
-        #:
-        #: .. warning::
-        #:    Not read within EdelweissFE (kept for external callers); building it costs a pass over
-        #:    every degree of freedom.
-        self.indexToHostObjectMapping = dict()
         self.accumulatedElementNDof = 0  #: Accumulated number of element DOFs (= sum of element vector sizes)
         self.largestNumberOfElNDof = 0  #: Size of the largest element DOF vector
         self.accumulatedConstraintNDof = 0  #: Accumulated number of constraint DOFs (= sum of constraint vector sizes)
@@ -135,10 +118,6 @@ class DofManager:
         self._fieldsOnNodeSets = dict()
         self.idcsOfElementsInDofVector = dict()  #: Dictionary mapping an element to its indices in the DofVector
         self.idcsOfConstraintsInDofVector = dict()  #: Dictionary mapping a constraint to its indices in the DofVector
-
-        self._sizeVIJ = (
-            0  #: Total number of nonzero entries in the system matrix resulting from higher order entity contributions
-        )
 
         # initialization:
 
@@ -156,17 +135,9 @@ class DofManager:
 
         #: Which of the optional structures this manager carries, for :meth:`refreshConstraintIndices`.
         self._hasAccumulatedNodalFluxes = initializeAccumulatedNodalFluxesFieldwise
-        self._hasVIJPattern = initializeVIJPattern
 
         if initializeAccumulatedNodalFluxesFieldwise:
             self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
-
-        if initializeVIJPattern:
-            self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
-            self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
-
-        if determiningIndexToHostObjectMapping:
-            self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
 
     def _determineDofsAndTheirIndices(self, nodeFields: list, scalarVariables: list):
 
@@ -193,14 +164,12 @@ class DofManager:
 
         (
             self.accumulatedElementNDof,
-            self._accumulatedElementVIJSize,
             self._nAccumulatedNodalFluxesFieldwiseFromElements,
             self.largestNumberOfElNDof,
         ) = self._gatherElementsInformation(elements)
 
         (
             self.accumulatedConstraintNDof,
-            self._accumulatedConstraintVIJSize,
             self._nAccumulatedNodalFluxesFieldwiseFromConstraints,
             self.largestNumberOfConstraintNDof,
         ) = self._gatherConstraintsInformation(constraints)
@@ -240,7 +209,6 @@ class DofManager:
 
         (
             self.accumulatedConstraintNDof,
-            self._accumulatedConstraintVIJSize,
             self._nAccumulatedNodalFluxesFieldwiseFromConstraints,
             self.largestNumberOfConstraintNDof,
         ) = self._gatherConstraintsInformation(constraints)
@@ -249,10 +217,6 @@ class DofManager:
 
         if self._hasAccumulatedNodalFluxes:
             self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
-
-        if self._hasVIJPattern:
-            self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
-            self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
 
     @cached_property
     def dofNumberingDigest(self) -> str:
@@ -354,6 +318,15 @@ class DofManager:
             idcsOfScalarVariablesInDofVector,
         )
 
+    @cached_property
+    def indexToHostObjectMapping(self) -> dict[int, Node]:
+        """The node of every index of a field variable in the DofVector, built on first use: only the report of the
+        largest residual of an implicit solver reads it (through :meth:`getNodeForIndexInDofVector`), while building it
+        costs a pass over every degree of freedom, which a DOF manager that is never asked -- one of the many an explicit
+        solver builds over a run, say -- does not pay."""
+
+        return self._determineIndexToNodeMap()
+
     def _determineIndexToNodeMap(
         self,
     ) -> dict[int, Node]:
@@ -377,7 +350,7 @@ class DofManager:
         return indexToNodeMapping
 
     def _computeAccumulatedNodalFluxesFieldWise(self, fields: list) -> dict:
-        """For the VIJ (COO) system matrix and the Abaqus like convergence test,
+        """For the Abaqus like convergence test,
         the number of dofs 'entity-wise' is needed:
         = Σ_(elements+constraints) Σ_nodes ( nDof (field) ).
 
@@ -436,7 +409,7 @@ class DofManager:
 
         return nAccumulatedFluxesFieldwise
 
-    def _gatherElementsInformation(self, entities: list) -> tuple[int, int, int, int]:
+    def _gatherElementsInformation(self, entities: list) -> tuple[int, dict, int]:
         """Generates some auxiliary information,
         which may be required by some modules of EdelweissFE.
 
@@ -447,32 +420,28 @@ class DofManager:
 
         Returns
         -------
-        tuple[int,int]
+        tuple[int, dict, int]
             The tuple of
                 - number of accumulated elemental degrees of freedom.
-                - number of accumulated system matrix sizes.
                 - the number of  acummulated fluxes Σ_entities Σ_nodes ( nDof (field) ) for Abaqus-like convergence tests.
                 - largest occuring number of dofs on any element.
         """
         accumulatedEntityNDof = 0
-        accumulatedEntityVIJSize = 0
         largestNumberOfAnyEntitityDof = 0
 
         for e in entities:
             accumulatedEntityNDof += e.nDof
-            accumulatedEntityVIJSize += e.nDof**2
             largestNumberOfAnyEntitityDof = max(e.nDof, largestNumberOfAnyEntitityDof)
 
         nAccumulatedFluxesFieldwise = self._accumulateNodalFluxesFieldwise(entities)
 
         return (
             accumulatedEntityNDof,
-            accumulatedEntityVIJSize,
             nAccumulatedFluxesFieldwise,
             largestNumberOfAnyEntitityDof,
         )
 
-    def _gatherConstraintsInformation(self, entities: list) -> tuple[int, int, int, int]:
+    def _gatherConstraintsInformation(self, entities: list) -> tuple[int, dict, int]:
         """Generates some auxiliary information,
         which may be required by some modules of EdelweissFE.
 
@@ -483,29 +452,24 @@ class DofManager:
 
         Returns
         -------
-        tuple[int,int]
+        tuple[int, dict, int]
             The tuple of
                 - number of accumulated elemental degrees of freedom.
-                - number of accumulated system matrix sizes.
                 - the number of  acummulated fluxes Σ_entities Σ_nodes ( nDof (field) ) for Abaqus-like convergence tests.
                 - largest occuring number of dofs on any element.
         """
 
         accumulatedEntityNDof = 0
-        accumulatedEntityVIJSize = 0
         largestNumberOfAnyEntitityDof = 0
 
         for e in entities:
             accumulatedEntityNDof += e.nDof
-            # Use the constraint-declared VIJ size (may be sparse, i.e. < nDof**2).
-            accumulatedEntityVIJSize += e.getVIJContributionSize()
             largestNumberOfAnyEntitityDof = max(e.nDof, largestNumberOfAnyEntitityDof)
 
         nAccumulatedFluxesFieldwise = self._accumulateNodalFluxesFieldwise(entities)
 
         return (
             accumulatedEntityNDof,
-            accumulatedEntityVIJSize,
             nAccumulatedFluxesFieldwise,
             largestNumberOfAnyEntitityDof,
         )
@@ -681,59 +645,6 @@ class DofManager:
         )
 
         return dofIndices, nodePositions
-
-    def _initializeVIJPattern(
-        self,
-    ) -> tuple[np.ndarray, np.ndarray, dict]:
-        """Generate the IJ pattern for VIJ (COO) system matrices.
-
-        Returns
-        -------
-        tuple
-             - I vector
-             - J vector
-             - the entities to system matrix entry mapping.
-        """
-
-        entitiesInVIJ = {}
-
-        sizeVIJ = self._sizeVIJ
-
-        I = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
-        J = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
-        idxInVIJ = 0
-
-        # The entities follow one another in the VIJ vectors, so where each one starts is known before any of them
-        # writes; each then fills only its own part of I and J, and they do so in chunks on the thread pool.
-        for entity in self.idcsOfHigherOrderEntitiesInDofVector:
-            entitiesInVIJ[entity] = idxInVIJ
-            idxInVIJ += entity.getVIJContributionSize()
-
-        def initializeChunk(entitiesWithIndices):
-            for entity, entityIdcsInDofVector in entitiesWithIndices:
-                entity.initializeVIJContribution(entityIdcsInDofVector, I, J, entitiesInVIJ[entity])
-
-        mapChunksInParallel(list(self.idcsOfHigherOrderEntitiesInDofVector.items()), initializeChunk)
-
-        return I, J, entitiesInVIJ
-
-    def constructVIJSystemMatrix(
-        self,
-    ) -> VIJSystemMatrix:
-        """Construct a VIJ (COO) Sparse System matrix object, which also has knowledge about
-        the location of each entity.
-
-        Returns
-        -------
-        VIJSystemMatrix
-            The system Matrix.
-        """
-
-        nDof = self.nDof
-        I = self.I  # noqa: E741
-        J = self.J
-
-        return VIJSystemMatrix(nDof, I, J, self.idcsOfHigherOrderEntitiesInVIJ)
 
     def constructDofVector(
         self,

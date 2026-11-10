@@ -57,6 +57,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.modelchange import ModelChange
 from edelweissfe.models.modelchangeobserver import ModelChangeType
+from edelweissfe.numerics.systemmatrixcontributor import countEntriesOfBlock
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
@@ -214,8 +215,8 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         U = np.zeros(constraint.nDof)
 
         PImplicit = np.zeros(constraint.nDof)
-        flat = np.zeros(constraint.getVIJContributionSize())
-        constraint.computeKernels(U, np.zeros_like(U), PImplicit, constraint.shapeVIJContribution(flat), None)
+        flat = np.zeros(countEntriesOfBlock(constraint))
+        constraint.computeKernels(U, np.zeros_like(U), PImplicit, constraint.shapeBlock(flat), None)
 
         PExplicit = np.zeros(constraint.nDof)
         constraint.computeKernelsExplicit(U, np.zeros_like(U), PExplicit, None)

@@ -32,16 +32,20 @@ import numpy as np
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.vijentitybase import VIJEntityBase
+from edelweissfe.numerics.systemmatrixcontributor import (
+    SystemMatrixContributorBase,
+    countEntriesOfBlock,
+)
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
-    #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards;
-    #: re-allocated only when the DOF footprint changes.
+class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
+    #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block
+    #: the constraint has in the equation system it is evaluated in; None until its first evaluation there (see
+    #: :meth:`prepareExplicitEvaluation`).
     _discardedTangentScratch = None
 
     #: The state this constraint carries from one increment to the next, by attribute name and type;
@@ -262,6 +266,25 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
 
         self.scalarVariables = scalarVariables
 
+    def prepareExplicitEvaluation(self):
+        """Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt
+        one, or one whose constraints are re-located), before it evaluates the constraint there with
+        :meth:`computeKernelsExplicit`.
+
+        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation
+        sizes it, once, for the block the constraint has now. The size is the number of entries of the block
+        (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists
+        its entries means building the list: once per equation system, not in every increment. A constraint that
+        evaluates its forces without a tangent needs nothing here.
+
+        A solver that evaluates constraints itself, rather than through
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`, calls this
+        whenever the constraint is located anew: the default :meth:`computeKernelsExplicit` does not size its tangent
+        again on its own, and a block whose size has changed (a contact with other slave nodes) would not fit it.
+        """
+
+        self._discardedTangentScratch = None
+
     def computeKernelsExplicit(
         self,
         U_np: np.ndarray,
@@ -274,7 +297,9 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear
         system and so has no use for a tangent. This default calls :meth:`computeKernels` with a
         scratch tangent that is thrown away, so that every constraint also works in an explicit
-        analysis. A constraint whose tangent is costly overrides it, e.g. through
+        analysis; the scratch is sized once per equation system: a solver that evaluates constraints itself calls
+        :meth:`prepareExplicitEvaluation` whenever the constraint is located anew.
+        A constraint whose tangent is costly overrides it, e.g. through
         :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.
 
         Parameters
@@ -289,15 +314,14 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
             The current time step.
         """
 
-        # The discarded tangent buffer is kept across increments and re-zeroed rather than reallocated.
-        size = self.getVIJContributionSize()
+        # The discarded tangent buffer is sized once per equation system, and re-zeroed in every increment.
         scratch = self._discardedTangentScratch
-        if scratch is None or scratch.size != size:
-            scratch = self._discardedTangentScratch = np.zeros(size)
+        if scratch is None:
+            scratch = self._discardedTangentScratch = np.zeros(countEntriesOfBlock(self))
         else:
             scratch[:] = 0.0
 
-        K = self.shapeVIJContribution(scratch)
+        K = self.shapeBlock(scratch)
         self.computeKernels(U_np, dU, P, K, timeStep)
 
     @abstractmethod
@@ -340,7 +364,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         P
             The residual contribution to augment.
         K
-            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeVIJContribution` gives it (a
+            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeBlock` gives it (a
             dense ``nDof x nDof`` view unless the constraint declares a sparser pattern). A
             constraint that inherits
             :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`

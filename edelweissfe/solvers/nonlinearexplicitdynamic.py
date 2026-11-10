@@ -1690,7 +1690,7 @@ class NED(NonlinearSolverBase):
             self.journal.message("Creating monolithic equation system", self.identification, verbosity)
             # The numbering of the model's degrees of freedom, and how the state passes between the model and the
             # vectors; this solver evaluates the model's elements itself, and assembles no system matrix.
-            self.equationSystemLayout = model.buildEquationSystem(withSystemMatrix=False)
+            self.equationSystemLayout = model.buildEquationSystem()
             self.theDofManager = self.equationSystemLayout.dofManager
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),

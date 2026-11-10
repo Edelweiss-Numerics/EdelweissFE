@@ -36,6 +36,7 @@ import numpy as np
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.numerics.systemmatrixcontributor import localEntriesOfSubBlocks
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -256,98 +257,52 @@ class Constraint(ConstraintBase):
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nConstraints
 
-    @property
-    def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
-        return False
-
-    def getVIJContributionSize(self) -> int:
-        """Return the actual (sparse) number of VIJ entries for this constraint.
-
-        Each slave i contributes a (nDim+nDim+nRot) × nDim block for K_UL and its
-        transpose for K_LU.  Additionally there is one shared nRot × nRot block in K_UU
-        for the reference-point rotation DOFs (accumulated over all slaves).
-
-        Total = nRot² + nSlaves × 2 × nUCoupledPerSlave × nDim
-              = 9    + nSlaves × 54  (in 3-D)
-
-        Finally the **diagonal** ``(i, i)`` of every DOF owned by this constraint is declared,
-        with a zero value.  Those entries are structurally required even though the constraint
-        never writes to them: Dirichlet boundary conditions are imposed on the assembled CSR
-        matrix by setting ``K[i, i] = 1``, which is only possible if that position exists in the
-        sparsity pattern.  The reference point belongs to no element, so this constraint is the
-        only entity that can declare its diagonal - without it a prescribed reference-point
-        displacement is silently not enforced (see issue: rigid body gives wrong results).
-
-        Total = nRot**2 + nSlaves * 2 * nUCoupledPerSlave * nDim + nDof
-        """
-        return self.nRot**2 + len(self.slaveNodes) * 2 * self._nUCoupledPerSlave * self.nDim + self.nDof
-
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyStiffnessView:
-        """Shape the flat VIJ values slice for this constraint using RigidBodyStiffnessView."""
+    def shapeBlock(self, values: np.ndarray) -> RigidBodyStiffnessView:
+        """The block as a :class:`RigidBodyStiffnessView`."""
         return RigidBodyStiffnessView(
-            flat_view,
+            values,
             nRot=self.nRot,
             nUc=self._nUCoupledPerSlave,
             nDim=self.nDim,
             nSlaves=len(self.slaveNodes),
         )
 
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        """Fill the VIJ index arrays with the sparse pattern of this constraint.
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """The sparse entries of this constraint, in its local DOF numbering.
 
-        Layout (starting at ``offset``):
+        Layout:
 
-        * [0 : nRot²)          – K_UU rotation block
-          (rows / cols = RP rotation DOFs in global index space)
+        * [0 : nRot²)          – K_UU rotation block (rows / cols = RP rotation DOFs)
         * for each slave *s*:
-          * [9 + s*2*nUc*nDim  : 9 + s*2*nUc*nDim + nUc*nDim)
+          * [nRot² + s*2*nUc*nDim  : nRot² + s*2*nUc*nDim + nUc*nDim)
             K_UL block: nUc rows (slave_s ∪ RP_u ∪ RP_phi) × nDim cols (Lambda_s)
-          * [9 + s*2*nUc*nDim + nUc*nDim : 9 + (s+1)*2*nUc*nDim)
+          * [nRot² + s*2*nUc*nDim + nUc*nDim : nRot² + (s+1)*2*nUc*nDim)
             K_LU block: nDim rows (Lambda_s) × nUc cols (slave_s ∪ RP_u ∪ RP_phi)
+        * [nRot² + nSlaves*2*nUc*nDim : ... + nDof)
+          the diagonal ``(i, i)`` of every DOF of the constraint
 
         where nUc = nDim + nDim + nRot = 9 (in 3-D).
+
+        The constraint never writes to the diagonal entries; they are structurally required. Dirichlet boundary
+        conditions are imposed on the assembled CSR matrix by setting ``K[i, i] = 1``, which is only possible if that
+        position exists in the sparsity pattern. The reference point belongs to no element, so this constraint is the
+        only entity that can declare its diagonal -- without it a prescribed reference-point displacement is silently
+        not enforced.
         """
         nDim = self.nDim
         nRot = self.nRot
-        nSlaves = len(self.slaveNodes)
         nU = self.nDofsOnNodes
-        nUc = self._nUCoupledPerSlave  # 9
 
-        k = offset
+        rpRotation = np.arange(nU - nRot, nU)
+        subBlocks = [(rpRotation, rpRotation)]
+        for s in range(len(self.slaveNodes)):
+            coupledU = np.array(self.indicesOfSlaveNodesInP[s] + self.indicesOfRPUinP + self.indicesOfRPPhiInP)
+            lambdaS = np.arange(nU + s * nDim, nU + (s + 1) * nDim)
+            subBlocks += [(coupledU, lambdaS), (lambdaS, coupledU)]
+        subBlocksRows, subBlocksColumns = localEntriesOfSubBlocks(subBlocks)
 
-        # K_UU: rotation-rotation block of the reference point
-        for ri in range(nRot):
-            for rj in range(nRot):
-                I_[k] = idcs[nU - nRot + ri]
-                J_[k] = idcs[nU - nRot + rj]
-                k += 1
-
-        # Per-slave K_UL and K_LU blocks
-        for s in range(nSlaves):
-            indcsU_s = self.indicesOfSlaveNodesInP[s] + self.indicesOfRPUinP + self.indicesOfRPPhiInP
-            L0_local = nU + s * nDim  # start of Lambda_s in the local DOF vector
-
-            # K_UL: nUc × nDim
-            for iu in range(nUc):
-                for il in range(nDim):
-                    I_[k] = idcs[indcsU_s[iu]]
-                    J_[k] = idcs[L0_local + il]
-                    k += 1
-
-            # K_LU: nDim × nUc (transpose of K_UL)
-            for il in range(nDim):
-                for iu in range(nUc):
-                    I_[k] = idcs[L0_local + il]
-                    J_[k] = idcs[indcsU_s[iu]]
-                    k += 1
-
-        # Diagonal of every owned DOF.  The constraint contributes nothing here; these entries
-        # only reserve the position so that Dirichlet BCs can be imposed on those DOFs.
-        for i in range(len(idcs)):
-            I_[k] = idcs[i]
-            J_[k] = idcs[i]
-            k += 1
+        diagonal = np.arange(self.nDof, dtype=np.intc)
+        return np.concatenate([subBlocksRows, diagonal]), np.concatenate([subBlocksColumns, diagonal])
 
     def Rz_2D(self, phi, derivative):
         phi = phi + np.pi / 2 * derivative

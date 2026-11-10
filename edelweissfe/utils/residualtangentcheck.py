@@ -84,8 +84,9 @@ def residualContributionAndTangent(
 ) -> tuple[np.ndarray, np.ndarray]:
     """The residual contribution of a constraint and its tangent, the latter as one dense matrix.
 
-    The tangent is scattered from the flat VIJ values with the constraint's own ``(I, J)`` pattern -- the one the
-    global assembly uses -- so that the check covers the pattern together with the values.
+    The tangent is scattered from the flat values with the constraint's own local entries -- the ones the global
+    assembly uses -- so that the check covers the entries together with the values; every local entry must lie within
+    the constraint's degrees of freedom.
 
     Parameters
     ----------
@@ -102,20 +103,27 @@ def residualContributionAndTangent(
     -------
     tuple[np.ndarray, np.ndarray]
         ``P`` and the dense ``nDof x nDof`` tangent.
+
+    Raises
+    ------
+    ValueError
+        If a local entry of the constraint's block lies outside its degrees of freedom.
     """
 
     nDof = constraint.nDof
-    size = constraint.getVIJContributionSize()
-    I_ = np.zeros(size, dtype=int)
-    J_ = np.zeros(size, dtype=int)
-    constraint.initializeVIJContribution(np.arange(nDof), I_, J_, 0)
+    localRows, localColumns = constraint.localEntriesOfBlock()
+    for localIndices in (localRows, localColumns):
+        if not np.all((localIndices >= 0) & (localIndices < nDof)):
+            raise ValueError(
+                "a local entry of the constraint's block lies outside its {:} degrees of freedom".format(nDof)
+            )
 
-    flat = np.zeros(size)
+    flat = np.zeros(len(localRows))
     P = np.zeros(nDof)
-    constraint.computeKernels(U, dU, P, constraint.shapeVIJContribution(flat), timeStep)
+    constraint.computeKernels(U, dU, P, constraint.shapeBlock(flat), timeStep)
 
     K = np.zeros((nDof, nDof))
-    np.add.at(K, (I_, J_), flat)
+    np.add.at(K, (localRows, localColumns), flat)
     return P, K
 
 

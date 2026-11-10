@@ -48,6 +48,7 @@ from edelweissfe.constraints.base.penaltylaw import (
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.numerics.systemmatrixcontributor import localEntriesOfSubBlocks
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
@@ -658,66 +659,37 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._frozenWeights = [None] * self.nSlaves
         self._frozenNormals = [None] * self.nSlaves
 
-    @property
-    def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
-        return False
-
-    def getVIJContributionSize(self) -> int:
-        size = 0
-        for s in range(self.nSlaves):
-            if self._assignedFacetIdx[s] is None:
-                continue
-            m = len(self.facetElements[self._assignedFacetIdx[s]].nodes) * self.nDim
-            size += self.nDim**2 + m * m + 2 * self.nDim * m
-        return size
-
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> DeformableSurfaceContactStiffnessView:
+    def shapeBlock(self, values: np.ndarray) -> DeformableSurfaceContactStiffnessView:
         facetNodeCounts = [
             len(self.facetElements[self._assignedFacetIdx[s]].nodes)
             for s in range(self.nSlaves)
             if self._assignedFacetIdx[s] is not None
         ]
-        return DeformableSurfaceContactStiffnessView(flat_view, nDim=self.nDim, facetNodeCounts=facetNodeCounts)
+        return DeformableSurfaceContactStiffnessView(values, nDim=self.nDim, facetNodeCounts=facetNodeCounts)
 
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        k = offset
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """Per assigned slave node, the blocks slave-slave, facet-facet, slave-facet and facet-slave, each row by row;
+        a slave node without a facet has no entries."""
+        subBlocks = []
         localOffset = 0
         for s in range(self.nSlaves):
-            pIdcs = [idcs[localOffset + i] for i in range(self.nDim)]
+            slaveIndices = np.arange(localOffset, localOffset + self.nDim)
             localOffset += self.nDim
 
             if self._assignedFacetIdx[s] is None:
                 continue
 
-            nFacetNodes = len(self.facetElements[self._assignedFacetIdx[s]].nodes)
-            m = nFacetNodes * self.nDim
-            fIdcs = [idcs[localOffset + i] for i in range(m)]
+            m = len(self.facetElements[self._assignedFacetIdx[s]].nodes) * self.nDim
+            facetIndices = np.arange(localOffset, localOffset + m)
             localOffset += m
 
-            for i in range(self.nDim):
-                for j in range(self.nDim):
-                    I_[k] = pIdcs[i]
-                    J_[k] = pIdcs[j]
-                    k += 1
-
-            for i in range(m):
-                for j in range(m):
-                    I_[k] = fIdcs[i]
-                    J_[k] = fIdcs[j]
-                    k += 1
-
-            for i in range(self.nDim):
-                for j in range(m):
-                    I_[k] = pIdcs[i]
-                    J_[k] = fIdcs[j]
-                    k += 1
-
-            for i in range(m):
-                for j in range(self.nDim):
-                    I_[k] = fIdcs[i]
-                    J_[k] = pIdcs[j]
-                    k += 1
+            subBlocks += [
+                (slaveIndices, slaveIndices),
+                (facetIndices, facetIndices),
+                (slaveIndices, facetIndices),
+                (facetIndices, slaveIndices),
+            ]
+        return localEntriesOfSubBlocks(subBlocks)
 
     def computeKernels(
         self,
