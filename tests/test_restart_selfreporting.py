@@ -50,11 +50,12 @@ def _stepper(journal, maxNumberIncrements=60000):
 
 
 def test_the_explicit_solver_state_survives_a_checkpoint_exactly(tmp_path):
-    """The accumulated external work and the last completed increment are written as they are and
-    read back as they were -- the state the resumed step continues from."""
+    """The accumulated external work, the energy at the step start and the last completed increment are written as
+    they are and read back as they were -- the state the resumed step continues from."""
 
     solver = _solver()
     solver._externalWork = -1234.5
+    solver._energyAtStepStart = 567.25
     solver.prevTimeStep = TimeStep(7, 0.125, 0.875, 3.5e-7, 2.45e-6, 2.45e-6)
 
     checkpoint = tmp_path / "chk.h5"
@@ -66,6 +67,7 @@ def test_the_explicit_solver_state_survives_a_checkpoint_exactly(tmp_path):
         readRestartDataInto(f, {"solver": resumed})
 
     assert resumed._externalWork == -1234.5
+    assert resumed._energyAtStepStart == 567.25
     restored = resumed.prevTimeStep
     assert (restored.number, restored.stepProgressIncrement, restored.stepProgress) == (7, 0.125, 0.875)
     assert (restored.timeIncrement, restored.stepTime, restored.totalTime) == (3.5e-7, 2.45e-6, 2.45e-6)

@@ -221,6 +221,45 @@ def test_period_is_reproduced(tmp_path):
     assert abs(u[atHalfPeriod] - 2.0 * U_STATIC) < 1e-3 * U_STATIC
 
 
+def test_the_published_force_is_the_internal_inertial_and_damping_force(tmp_path):
+    """``P = f_int + M a + C v`` (documentation page *Node field results*). At the loaded end, which no support holds,
+    it is the end load at every increment, while the internal force alone, ``K u``, swings between 0 and twice the load.
+    At the fixed end it is the reaction, the inertia of the consistent mass there included: the internal forces of the
+    bar sum to zero, so the two ends add up to its inertial force, the row sums of the mass (``rho V / 8`` per node)
+    times the acceleration of the four loaded nodes. The zero-length increment of a second step integrates nothing
+    and keeps the force the first step ended with."""
+
+    dt = 0.02
+    sums = (
+        ">>perNode, nSet=gen_right, field=displacement, result=P, name=tipP, f(x)='np.sum(x[:,0])', saveHistory=True\n"
+        ">>perNode, nSet=gen_left, field=displacement, result=P, name=fixedP, f(x)='np.sum(x[:,0])', saveHistory=True\n"
+    )
+    secondStep = f"""
+*step, solver=theSolver
+stepLength={2 * dt!r}, startInc=0.5, maxInc=0.5, minInc=1e-6, maxNumInc=10, maxIter=25
+"""
+    _, fieldOutputController = _run(tmp_path, "nid_force", _deck(dt, extra=sums) + secondStep)
+    outputs = fieldOutputController.fieldOutputs
+    t = np.asarray(outputs["tipP"].getTimeHistory(), dtype=float)
+    tipP = np.asarray(outputs["tipP"].getResultHistory(), dtype=float).ravel()
+    fixedP = np.asarray(outputs["fixedP"].getResultHistory(), dtype=float).ravel()
+    a = np.asarray(outputs["tipA"].getResultHistory(), dtype=float).ravel()
+
+    # every sample after the start, the skipped increments included: they keep the state, and with it the force
+    moving = t > 0.0
+    assert np.count_nonzero(t > STEP_LENGTH + 1e-9) == 2, "the second step has two increments of motion"
+    np.testing.assert_allclose(tipP[moving], FORCE, rtol=1e-10)
+    np.testing.assert_allclose(tipP[moving] + fixedP[moving], 4 * (RHO / 8.0) * a[moving], rtol=0.0, atol=1e-10 * FORCE)
+
+    # the last increment of the first step, the zero-length increment of the second (and a skipped round-off
+    # remainder of the first, if the stepper leaves one)
+    atTheSwitch = np.flatnonzero(np.isclose(t, STEP_LENGTH, rtol=0.0, atol=1e-9))
+    assert len(atTheSwitch) >= 2
+    assert fixedP[atTheSwitch[0]] != 0.0
+    np.testing.assert_array_equal(tipP[atTheSwitch], tipP[atTheSwitch[0]])
+    np.testing.assert_array_equal(fixedP[atTheSwitch], fixedP[atTheSwitch[0]])
+
+
 @pytest.mark.parametrize("beta", [0.0, -0.25])
 def test_refuses_non_positive_beta(tmp_path, beta):
     deck = _deck(0.02).replace(f"newmarkBeta={BETA}", f"newmarkBeta={beta}")

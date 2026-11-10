@@ -66,9 +66,10 @@ so ``tests/test_residual_tangent_convention.py`` checks every constraint this wa
 forces it exerts (see :doc:`constraints`); a dead load has no tangent, so there the sign of each element load is
 checked against the load integrated independently.
 
-The elements' sum alone, :math:`\boldsymbol{f}_\mathrm{int}`, is what the implicit solvers and ``NEST`` report as the
-nodal result ``P`` of a field output: at a degree of freedom with a Dirichlet boundary condition and no load, it is the
-reaction force. ``NED`` reports its net force :math:`\boldsymbol{R}` there.
+The elements' sum alone, :math:`\boldsymbol{f}_\mathrm{int}`, is what the quasi-static solvers report as the nodal
+result ``P`` of a field output, and the dynamic solvers add the inertial and damping forces to it
+(:doc:`nodefieldresults`): at a degree of freedom with a Dirichlet boundary condition and no load, it is the reaction
+force. ``NED``'s net force :math:`\boldsymbol{R}` is its own state, and is not reported.
 
 .. _model-equation-system:
 
@@ -115,8 +116,11 @@ The loops over the entities stay with the solver: ``NIST`` computes the elements
 The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive from ``NIST``, and build, fill and write
 back their equation systems through the layout; ``NEST`` builds its system once per step and has no topology update,
 and ``NID`` assembles its mass matrix from the model's finite elements. ``NED`` takes the numbering of the
-degrees of freedom from the layout and passes the state and the results through it, and evaluates the model's finite
-elements in its own loop.
+degrees of freedom from the layout and passes the state and the results through it, keeps the net force that drives
+its velocity update as its own state, and evaluates the model's finite elements in its own loop. A step of it starts
+from the velocity and the acceleration the model holds, and leaves the velocity at its end time
+(:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`), so that the steps of a dynamic analysis follow each
+other whichever solver solves them.
 
 A finite element model answers as follows: its constraints update the nodes they couple (a contact constraint
 searches for the surface it touches); its equation system numbers all nodes and the active constraints with their
@@ -273,7 +277,8 @@ Every accepted increment writes the load parameter of its step to the model, wit
 ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve. The solver checkpoints the
 load parameter of the step and the increments of it its predictor extrapolates, the loads what they keep from step to
 step, and the controller the change of its controlled quantity over the step, so an arc length controlled run resumes
-exactly where it stopped.
+exactly where it stopped. The load parameter advances only when an increment has converged, with its solution, so a
+cut back increment starts again from the load parameter of the last accepted one.
 
 The re-equilibration after a model change (``equilibrateAfterModelChange``, see :doc:`modelmodifiers`) is, under arc
 length control, an arc length increment of size zero: the controller asks for a change of zero, so the controlled
