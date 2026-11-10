@@ -302,6 +302,14 @@ active domain in that increment therefore keeps its <code class="docutils litera
 increment evaluates the forces of the configuration the step starts from, and writes them, when the model’s nodes
 are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves <code class="docutils literal notranslate"><span class="pre">P</span></code>
 as it is.</p>
+<p>The implicit dynamic solver (<code class="docutils literal notranslate"><span class="pre">NID</span></code>) integrates the inertia of the entities that integrate their own either in the
+entities or at the nodes they couple (option <code class="docutils literal notranslate"><span class="pre">inertia</span></code>, see <a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearimplicitdynamic" title="edelweissfe.solvers.nonlinearimplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearimplicitdynamic</span></code></a>).
+In the entities, they carry their velocity and acceleration in their state, and <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the nodes they
+couple are zero; at the nodes, <code class="docutils literal notranslate"><span class="pre">NID</span></code> carries them in <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> by node. Either way, <code class="docutils literal notranslate"><span class="pre">P</span></code> holds the inertial
+force: in the entities’ residual contributions, or added at the nodes. The two keep the motion of the entities in
+different places, and nothing transfers it between them: a step whose <code class="docutils literal notranslate"><span class="pre">inertia</span></code> would take it from where the model
+does not hold it refuses to start
+(<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion"><code class="xref py py-meth docutils literal notranslate"><span class="pre">carriersOfTheMotion()</span></code></a>).</p>
 </section>
 <section id="using-the-entries-in-code">
 <h2>Using the entries in code<a class="headerlink" href="#using-the-entries-in-code" title="Link to this heading"></a></h2>

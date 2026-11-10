@@ -176,10 +176,13 @@ for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.removeElement" title="edelweissfe.models.femodel.FEModel.removeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">removeElement</span></code></a>(elNumber)</p></td>
 <td><p>Remove an element from the model.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConnectivity</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities" title="edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNewmarkParametersOfEntities</span></code></a>(beta, gamma)</p></td>
+<td><p>Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by <code class="docutils literal notranslate"><span class="pre">NIST</span></code> and every solver derived from it -- the implicit solvers and <code class="docutils literal notranslate"><span class="pre">NEST</span></code> -- at the start of every step, so that the solver is the one source of the parameters.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConnectivity</span></code></a>()</p></td>
 <td><p>Bring the coupling of the degrees of freedom up to date with the converged state, before an increment: which nodes the entities of the equation system couple.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
 <td><p>Write the current (converged) state of the model to a restart checkpoint.</p></td>
 </tr>
 </tbody>
@@ -328,6 +331,27 @@ if the checkpoint does not hold every entry of a node field (see
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>elNumber</strong> (<em>int</em>) – The number of the element to remove.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities">
+<span class="sig-name descname"><span class="pre">setNewmarkParametersOfEntities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gamma</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.setNewmarkParametersOfEntities"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities" title="Link to this definition"></a></dt>
+<dd><p>Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by
+<code class="docutils literal notranslate"><span class="pre">NIST</span></code> and every solver derived from it – the implicit solvers and <code class="docutils literal notranslate"><span class="pre">NEST</span></code> – at the start of every step,
+so that the solver is the one source of the parameters. With <span class="math notranslate nohighlight">\(\beta = \gamma = 0\)</span>, which every
+quasi-static solver passes, such an entity carries no inertia.</p>
+<p>In a finite element model, no entity integrates its own inertia: the elements report their mass, and a
+dynamic solver integrates the nodes. An entity that carries its state in itself, velocity and acceleration
+included, integrates the Newmark scheme at its own evaluation points; a model with such entities passes the
+parameters on to them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>beta</strong> (<em>float</em>) – The Newmark parameter <span class="math notranslate nohighlight">\(\beta\)</span>; 0 for no inertia.</p></li>
+<li><p><strong>gamma</strong> (<em>float</em>) – The Newmark parameter <span class="math notranslate nohighlight">\(\gamma\)</span>; 0 for no inertia.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -543,32 +567,104 @@ what its methods do; the solver calls them the same way.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readEntryOfNodeField</span></code></a>(dofVector, nodeField, entry)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLumpedMassOfEntitiesWithOwnInertia</span></code></a>(...)</p></td>
+<td><p>The lumped (diagonal) mass, at the nodes they couple, of the entities that integrate their own inertia (see <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities" title="edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setNewmarkParametersOfEntities()</span></code></a>): what the implicit dynamic solver adds to the mass of the nodes when it integrates the inertia of these entities there instead (option <code class="docutils literal notranslate"><span class="pre">inertia=nodes</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">carriersOfTheMotion</span></code></a>()</p></td>
+<td><p>Where the model holds the motion of its entities that integrate their own inertia: <code class="docutils literal notranslate"><span class="pre">&quot;entities&quot;</span></code> if such an entity carries a velocity or an acceleration in its own state, <code class="docutils literal notranslate"><span class="pre">&quot;nodes&quot;</span></code> if a node these entities couple carries one in the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the model's node fields.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofsWithNodalInertia</span></code></a>(fieldNames)</p></td>
+<td><p>The degrees of freedom of the given fields whose inertia is that of the nodes, i.e. the mass the elements assemble: those the implicit dynamic solver integrates in time with its own Newmark scheme.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readEntryOfNodeField</span></code></a>(dofVector, nodeField, entry)</p></td>
 <td><p>Read one entry of one node field of the model into a vector of the equation system; every read of <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a> goes through here, as every write goes through <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeEntryOfNodeField()</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code></a>(U[, V, A, dynamicFields])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code></a>(U[, V, A, dynamicFields])</p></td>
 <td><p>Read the state the model carries from increment to increment into the vectors of a (re)built equation system, from which the next increment starts (see the documentation page <em>Node field results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, and, for a solver that integrates in time, the velocity <code class="docutils literal notranslate"><span class="pre">V</span></code> and the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialPoints</span></code></a>(dU, timeStep, forEachChunk)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialPoints</span></code></a>(dU, timeStep, forEachChunk)</p></td>
 <td><p>Bring the material points that belong to no element up to date with the trial solution increment, right before the solver computes the elements.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeEntryOfNodeField</span></code></a>(dofVector, nodeField, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeEntryOfNodeField</span></code></a>(dofVector, nodeField, ...)</p></td>
 <td><p>Write a vector of the equation system to one entry of one node field of the model; every write of <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>, <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a> and <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeZeroVelocityAndAccelerationToModel()</span></code></a> goes through here, as every read goes through <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readEntryOfNodeField()</span></code></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P)</p></td>
 <td><p>Write the results of an accepted increment to the model, once (see the documentation page <em>Node field results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the force <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same names of the node fields, and the solution to the scalar variables.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel</span></code></a>(V, A)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel</span></code></a>(V, A)</p></td>
 <td><p>Write the velocity and the acceleration to the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of every node field, the one way a solver that integrates in time passes them to the model: at acceptance, with <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>, and when it completes the state an increment starts from, e.g. the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeZeroVelocityAndAccelerationToModel</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeZeroVelocityAndAccelerationToModel</span></code></a>()</p></td>
 <td><p>Write zero to the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of every node field of the model, on every node: the state a quasi-static solver leaves at acceptance.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients</span></code></a>(U)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients</span></code></a>(U)</p></td>
 <td><p>Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a converged increment, before its results are written to the model: these <em>incremental</em> degrees of freedom are the coefficients of one increment, and every increment starts them at zero (see the documentation page <em>Node field results</em>).</p></td>
 </tr>
 </tbody>
 </table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia">
+<span class="sig-name descname"><span class="pre">assembleLumpedMassOfEntitiesWithOwnInertia</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">forEachChunk</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia" title="Link to this definition"></a></dt>
+<dd><p>The lumped (diagonal) mass, at the nodes they couple, of the entities that integrate their own inertia (see
+<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities" title="edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setNewmarkParametersOfEntities()</span></code></a>): what the implicit dynamic solver
+adds to the mass of the nodes when it integrates the inertia of these entities there instead (option
+<code class="docutils literal notranslate"><span class="pre">inertia=nodes</span></code>). Such entities may move with every increment, so this mass is one of the current
+configuration.</p>
+<p>A finite element model has no such entity: None.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>forEachChunk</strong> (<em>Callable</em><em>[</em><em>[</em><em>list</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>None</em><em>]</em>) – The solver’s loop over chunks of independent entities, see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateMaterialPoints()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The lumped mass, one value per degree of freedom; None if the model has no such entity.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a> | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion">
+<span class="sig-name descname"><span class="pre">carriersOfTheMotion</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.carriersOfTheMotion"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion" title="Link to this definition"></a></dt>
+<dd><p>Where the model holds the motion of its entities that integrate their own inertia: <code class="docutils literal notranslate"><span class="pre">&quot;entities&quot;</span></code> if such
+an entity carries a velocity or an acceleration in its own state, <code class="docutils literal notranslate"><span class="pre">&quot;nodes&quot;</span></code> if a node these entities couple
+carries one in the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the model’s node fields. Asked by the implicit dynamic solver at
+the start of a step: it takes the motion from one of the two, as its option <code class="docutils literal notranslate"><span class="pre">inertia</span></code> says, and nothing
+transfers it from the other.</p>
+<p>A finite element model has no such entity: none.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">&quot;entities&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;nodes&quot;</span></code>, both or none.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>set[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia">
+<span class="sig-name descname"><span class="pre">dofsWithNodalInertia</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fieldNames</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.dofsWithNodalInertia"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia" title="Link to this definition"></a></dt>
+<dd><p>The degrees of freedom of the given fields whose inertia is that of the nodes, i.e. the mass the elements
+assemble: those the implicit dynamic solver integrates in time with its own Newmark scheme.</p>
+<p>In a finite element model, every node carries its total solution and every element its mass, so these are all
+degrees of freedom of the fields. A model whose entities carry their state in themselves, and with it the
+inertia, leaves out the nodes these entities couple: their values are the coefficients of one increment (see
+<a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLumpedMassOfEntitiesWithOwnInertia()</span></code></a>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>fieldNames</strong> (<em>list</em>) – The names of the fields, e.g. those whose inertia is a mass.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The indices of the degrees of freedom in the vectors of the equation system, sorted.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField">
 <span class="sig-name descname"><span class="pre">readEntryOfNodeField</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeField</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entry</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.readEntryOfNodeField"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField" title="Link to this definition"></a></dt>
@@ -743,6 +839,18 @@ model, whose background grid and kernel functions are incremental, sets their de
 <a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>: the finite elements of the model,
 and in a meshfree model its cells and particles as well. A list, which a parallel solver hands out in slices
 to its threads.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.materialPoints">
+<span class="sig-name descname"><span class="pre">materialPoints</span></span><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.materialPoints" title="Link to this definition"></a></dt>
+<dd><p>none in a
+finite element model, whose elements evaluate the material at their own quadrature points.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The material points that belong to no element, which <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateMaterialPoints()</span></code></a> updates</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py attribute">

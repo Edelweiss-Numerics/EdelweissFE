@@ -117,7 +117,16 @@ The loops over the entities stay with the solver: ``NIST`` computes the elements
 
 The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive from ``NIST``, and build, fill and write
 back their equation systems through the layout; ``NEST`` builds its system once per step and has no topology update,
-and ``NID`` assembles its mass matrix from the model's finite elements. ``NED`` takes the numbering of the
+and ``NID`` assembles its mass matrix from the model's finite elements, asks the layout which degrees of freedom
+carry the mass of the nodes
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`) and, if it integrates the
+inertia of the entities that integrate their own at the nodes, for their lumped mass
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia`),
+and, at the start of a step, where the model holds the motion of these entities
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion`). At the start
+of every step, the implicit solvers give the entities of the model that integrate their own inertia their Newmark
+parameters (:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`): ``NID`` its own, every
+quasi-static solver zero, so that a quasi-static solver is quasi-static by construction. ``NED`` takes the numbering of the
 degrees of freedom from the layout and passes the state and the results through it, keeps the net force that drives
 its velocity update as its own state, and evaluates the model's finite elements in its own loop. A step of it starts
 from the velocity and the acceleration the model holds, and leaves the velocity at its end time
@@ -336,6 +345,11 @@ rule the mass is singular, and the equilibrium solve for the initial acceleratio
 The material must report a density (for ``LinearElastic``, the third material parameter): the mass
 is assembled from it, and a time-integrated degree of freedom that receives none is refused rather
 than integrated as though it had inertia.
+
+A model whose entities carry their state, and with it their inertia, in themselves is solved through the same
+layout: these entities integrate their own inertia with the solver's Newmark parameters (``inertia=entities``, the
+default), or the solver integrates the nodes they couple with their lumped mass (``inertia=nodes``). The module
+documentation above states what each one does; material points that belong to no element are refused.
 
 A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is supported: ``V`` and ``A`` are
 carried onto new nodes by the node-field warm start, the mass and damping are reassembled on the

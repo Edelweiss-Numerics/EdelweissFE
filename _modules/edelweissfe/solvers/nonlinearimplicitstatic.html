@@ -713,11 +713,30 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">validateModelCapabilities</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
+        <span class="n">model</span><span class="o">.</span><span class="n">setNewmarkParametersOfEntities</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">newmarkParametersOfEntities</span><span class="p">())</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtStepStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
 
         <span class="c1"># The timing table and the step's wall clock must start together.</span>
         <span class="n">performancetiming</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stepWallClockTic</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="NIST.newmarkParametersOfEntities">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.newmarkParametersOfEntities">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">newmarkParametersOfEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The Newmark parameters :math:`(\\beta, \\gamma)` that the entities of the model which integrate their own</span>
+<span class="sd">        inertia take at the start of every step (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`). A quasi-static solver does not</span>
+<span class="sd">        integrate in time: :math:`(0, 0)`, no inertia, whatever the entities were given before.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[float, float]</span>
+<span class="sd">            :math:`\\beta` and :math:`\\gamma`.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span></div>
 
 
 <div class="viewcode-block" id="NIST.prepareIncrement">

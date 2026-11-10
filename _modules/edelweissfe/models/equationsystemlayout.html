@@ -110,6 +110,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 
@@ -157,6 +159,9 @@
         <span class="c1">#: The model the linear solver is set up for (see :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`),</span>
         <span class="c1">#: whose node fields are the ones the DOF manager numbers: here, the model itself.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">modelForLinearSolver</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="c1">#: The material points that belong to no element, which :meth:`updateMaterialPoints` updates: none in a</span>
+        <span class="c1">#: finite element model, whose elements evaluate the material at their own quadrature points.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">materialPoints</span> <span class="o">=</span> <span class="p">[]</span>
 
 <div class="viewcode-block" id="EquationSystemLayout.readStateFromModel">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel">[docs]</a>
@@ -351,6 +356,82 @@
             <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
 
         <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span> <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="n">dynamicFields</span><span class="p">]</span>
+
+<div class="viewcode-block" id="EquationSystemLayout.dofsWithNodalInertia">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dofsWithNodalInertia</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldNames</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The degrees of freedom of the given fields whose inertia is that of the nodes, i.e. the mass the elements</span>
+<span class="sd">        assemble: those the implicit dynamic solver integrates in time with its own Newmark scheme.</span>
+
+<span class="sd">        In a finite element model, every node carries its total solution and every element its mass, so these are all</span>
+<span class="sd">        degrees of freedom of the fields. A model whose entities carry their state in themselves, and with it the</span>
+<span class="sd">        inertia, leaves out the nodes these entities couple: their values are the coefficients of one increment (see</span>
+<span class="sd">        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fieldNames</span>
+<span class="sd">            The names of the fields, e.g. those whose inertia is a mass.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The indices of the degrees of freedom in the vectors of the equation system, sorted.</span>
+<span class="sd">        """</span>
+
+        <span class="n">isWithNodalInertia</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="n">fieldNames</span><span class="p">:</span>
+            <span class="n">isWithNodalInertia</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">isWithNodalInertia</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleLumpedMassOfEntitiesWithOwnInertia</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The lumped (diagonal) mass, at the nodes they couple, of the entities that integrate their own inertia (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`): what the implicit dynamic solver</span>
+<span class="sd">        adds to the mass of the nodes when it integrates the inertia of these entities there instead (option</span>
+<span class="sd">        ``inertia=nodes``). Such entities may move with every increment, so this mass is one of the current</span>
+<span class="sd">        configuration.</span>
+
+<span class="sd">        A finite element model has no such entity: None.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        forEachChunk</span>
+<span class="sd">            The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector | None</span>
+<span class="sd">            The lumped mass, one value per degree of freedom; None if the model has no such entity.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="EquationSystemLayout.carriersOfTheMotion">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">carriersOfTheMotion</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Where the model holds the motion of its entities that integrate their own inertia: ``"entities"`` if such</span>
+<span class="sd">        an entity carries a velocity or an acceleration in its own state, ``"nodes"`` if a node these entities couple</span>
+<span class="sd">        carries one in the entries ``V`` and ``A`` of the model's node fields. Asked by the implicit dynamic solver at</span>
+<span class="sd">        the start of a step: it takes the motion from one of the two, as its option ``inertia`` says, and nothing</span>
+<span class="sd">        transfers it from the other.</span>
+
+<span class="sd">        A finite element model has no such entity: none.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set[str]</span>
+<span class="sd">            ``"entities"``, ``"nodes"``, both or none.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="nb">set</span><span class="p">()</span></div>
+
 
 <div class="viewcode-block" id="EquationSystemLayout.updateMaterialPoints">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints">[docs]</a>
