@@ -38,11 +38,13 @@ np.import_array()
 
 class AliasedCSRMatrix(csr_matrix):
     """
-    The csr_matrix returned by :meth:`CSRGenerator.updateInPlace`.
+    The csr_matrix returned by :meth:`CSRGenerator.updateInPlace` and held by :class:`DirectCSRAssembler`, and a copy
+    of it with values of its own on the same pattern
+    (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`).
 
-    Its ``data``/``indices``/``indptr`` buffers are owned by the generator's C++ core,
-    which rewrites ``data`` in place on every subsequent ``updateInPlace`` call via a
-    gather/scatter map fixed once at construction time. Structurally mutating this
+    Its ``indices``/``indptr`` buffers are owned by the generator's C++ core (and so are the ``data`` of the generator's
+    own matrix, which the core rewrites in place on every subsequent ``updateInPlace`` call via a
+    gather/scatter map fixed once at construction time); a copy on the pattern shares them. Structurally mutating this
     matrix (``eliminate_zeros()``, ``prune()``, ``sum_duplicates()``, ``resize()``, or
     reassigning ``.data``/``.indices``/``.indptr`` to arrays of a different length)
     would silently desynchronize that fixed map from the (now compacted/reshaped)
@@ -65,9 +67,9 @@ class AliasedCSRMatrix(csr_matrix):
     _lockedBuffers = None
 
     _MUTATION_ERROR = (
-        "Refusing to call {:}() on a CSRGenerator.updateInPlace() matrix: this is the "
-        "generator's own aliased, reused buffer, and structurally mutating it would "
-        "silently corrupt every subsequent update (see GitHub issue #72). Call "
+        "Refusing to call {:}() on a matrix on the sparsity pattern of a system matrix assembly: its "
+        "pattern arrays are the assembly's own, and structurally mutating it would "
+        "silently corrupt every subsequent assembly (see GitHub issue #72). Call "
         ".copy() first if you need an independently mutable snapshot."
     )
 
@@ -101,9 +103,10 @@ class AliasedCSRMatrix(csr_matrix):
         buffers = self._lockedBuffers
         if buffers is not None and name in buffers and value is not buffers[name]:
             raise RuntimeError(
-                "Refusing to reassign '{:}' on a CSRGenerator.updateInPlace() matrix: its buffers are the ones the "
-                "assembly writes into (see AliasedCSRMatrix docstring, GitHub issue #72). Write into them in place, or "
-                "call .copy() first if you need an independently mutable snapshot.".format(name)
+                "Refusing to reassign '{:}' on a matrix on the sparsity pattern of a system matrix assembly: its "
+                "buffers are the ones the assembly writes into or shares (see AliasedCSRMatrix docstring, GitHub issue "
+                "#72). Write into them in place, or call .copy() first if you need an independently mutable "
+                "snapshot.".format(name)
             )
         super().__setattr__(name, value)
 

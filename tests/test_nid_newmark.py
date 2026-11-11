@@ -57,6 +57,9 @@ import pytest
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils.inputfileparser import parseInputFile
 
+#: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
+pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
+
 E = 4.0 * np.pi**2
 RHO = 3.0
 MASS = RHO / 3.0  # consistent mass of the uniform tip mode: rho * A * L / 3

@@ -30,6 +30,7 @@
 import pytest
 
 from edelweissfe.numerics import parallelizationutilities
+from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 
 
 @pytest.fixture
@@ -51,3 +52,21 @@ def workerThreads(monkeypatch):
         monkeypatch.setattr(parallelizationutilities, "getNumberOfWorkerThreads", lambda: numThreads)
 
     return choose
+
+
+@pytest.fixture(params=["vij", "direct"])
+def systemMatrixAssemblyOfNID(request, monkeypatch):
+    """Run the test once with each way of summing the system matrix as the default of ``NID`` and ``NIDParallel``
+    (solver option ``systemMatrixAssembly``, see :ref:`system-matrix-assembly`), for the decks and the programmatic
+    runs of the test alike; a deck that names the option keeps its own. A module of ``NID`` tests uses it for all its
+    tests with ``pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")``.
+
+    Returns the name of the assembly.
+    """
+
+    monkeypatch.setattr(
+        NonlinearImplicitDynamic,
+        "SolverSpecificOptions",
+        NonlinearImplicitDynamic.SolverSpecificOptions | {"systemMatrixAssembly": request.param},
+    )
+    return request.param

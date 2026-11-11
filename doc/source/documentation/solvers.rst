@@ -332,11 +332,14 @@ increment. The velocity and acceleration are available to every ``*fieldOutput``
 ``result=A`` on the displacement field, and travel with the ``*output, type=restart`` checkpoints,
 which is what makes a resumed run continue the same trajectory rather than restart it from rest.
 
-``NIDParallel`` is the same solver with the element loop evaluated in parallel (see below). The
+``NIDParallel`` is the same solver with the element loop evaluated in parallel (see below). Both assemble the
+system matrix either way (``systemMatrixAssembly=vij|direct``, see :ref:`system-matrix-assembly`): the mass is
+assembled through the same assembly as the stiffness, kept on its sparsity pattern, and added to the effective tangent
+while it is assembled, together with the lumped damping. The
 mass and the damping are assembled at a step's start and after every topology change; when a
 contact constraint merely changes its connectivity, they are reused in the rebuilt equation
-system instead, which matters for contact problems whose candidate lists change on nearly every
-increment.
+system instead (the mass copied onto the new sparsity pattern), which matters for contact problems whose candidate
+lists change on nearly every increment.
 
 Reduced-integration elements (``C3D20R``, ``GC3D20R``, ...) need a Marmot whose consistent mass is
 integrated with the full rule of the element shape (Marmot PR #101): with the element's own reduced
@@ -362,7 +365,8 @@ Verified in ``tests/test_nid_newmark.py``, ``tests/test_nid_restart.py`` and
 the continuous closed form at second order, for exact conservation of the discrete energy, for
 restart equivalence of ``U``, ``V`` and ``A``, and -- under live refinement -- for exact transfer of
 a velocity field of degree at most one onto new nodes together with exact conservation of mass,
-momentum and kinetic energy in that case.
+momentum and kinetic energy in that case. Every one of these tests runs with both ways of summing the system matrix,
+and ``tests/test_nid_assemblies_agree.py`` compares the two to round-off.
 
 ``NIDParallel`` - Nonlinear Implicit Dynamic (Newmark-beta, parallel)
 ----------------------------------------------------------------------

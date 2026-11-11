@@ -56,6 +56,9 @@ from edelweissfe.models.topologypipeline import TopologyPipeline
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.utils.inputfileparser import parseInputFile
 
+#: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
+pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
+
 #: The unpatched methods, captured once at import -- a test that runs the solver more than once must
 #: wrap THESE rather than whatever is currently on the class, or the wrappers chain. Same reason as
 #: in test_explicit_operator_reuse.py.

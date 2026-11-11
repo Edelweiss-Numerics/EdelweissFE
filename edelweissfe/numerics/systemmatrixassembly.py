@@ -41,13 +41,18 @@ know which is in use (see :ref:`system-matrix-assembly`):
 """
 
 from abc import ABC, abstractmethod
+from functools import partial
 from typing import Callable
 
 import numpy as np
 from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator, DirectCSRAssembler
+from edelweissfe.numerics.csrgeneratorv2 import (
+    AliasedCSRMatrix,
+    CSRGenerator,
+    DirectCSRAssembler,
+)
 from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.numerics.parallelizationutilities import (
     forEachSliceInParallel,
@@ -58,6 +63,49 @@ from edelweissfe.numerics.systemmatrixcontributor import (
     countEntriesOfBlock,
 )
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
+
+#: Rows per block in which the positions of the entries of a matrix in the sparsity pattern are searched (see
+#: :meth:`SystemMatrixAssembly.copyOntoSparsityPattern`): the temporaries of a block stay small.
+_ROWS_PER_SEARCH_BLOCK = 1 << 14
+
+
+def _addScaledValues(systemValues: np.ndarray, values: np.ndarray, factor: float):
+    """``systemValues += factor * values``, in slices on the thread pool, each slice with a temporary of its own size
+    only: the term of :meth:`SystemMatrixAssembly.addMatrix`.
+
+    Parameters
+    ----------
+    systemValues
+        The values of the system matrix, added to in place.
+    values
+        The values of the matrix added, one per entry of the same pattern.
+    factor
+        The factor they enter with.
+    """
+
+    def addSlice(s: slice):
+        systemValues[s] += factor * values[s]
+
+    forEachSliceInParallel(addSlice, len(systemValues))
+
+
+def _addScaledValuesAt(systemValues: np.ndarray, positions: np.ndarray, values: np.ndarray, factor: float):
+    """``systemValues[positions] += factor * values``, every position once: the term of
+    :meth:`SystemMatrixAssembly.addLumpedMatrix`.
+
+    Parameters
+    ----------
+    systemValues
+        The values of the system matrix, added to in place.
+    positions
+        The positions of the entries the values enter, distinct.
+    values
+        The values.
+    factor
+        The factor they enter with.
+    """
+
+    systemValues[positions] += factor * values
 
 
 class SystemMatrixBlocks(ABC):
@@ -194,16 +242,21 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
 
     ``K[entity]`` hands out the blocks of worker 0, for the entity loops in the calling thread.
 
+    A term that is not the block of an entity, but a whole matrix on the sparsity pattern of the system matrix, enters
+    during the assembly too: :meth:`addMatrix` and :meth:`addLumpedMatrix`. A dynamic solver forms its effective
+    tangent this way, ``K_eff = K + M / (beta dT^2) + gamma C / (beta dT)``::
+
+        K.addMatrix(M, massFactor)
+        K.addLumpedMatrix(lumpedDamping, dampingFactor)
+
+    with the mass ``M`` kept on the sparsity pattern of the system matrix (:meth:`copyOntoSparsityPattern`).
+
     Parameters
     ----------
     numberOfWorkers
         How many threads may write blocks at the same time, each through its own
         :meth:`blocksOfWorker`.
     """
-
-    #: The VIJ value array, for code that works on it directly (e.g., the mass term of a dynamic solver, or a compiled
-    #: entity loop); None on a path without one.
-    vijArray = None
 
     def __init__(self, numberOfWorkers: int):
         #: How many threads may write blocks at the same time.
@@ -262,6 +315,206 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
         csr_matrix
             The system matrix.
         """
+
+    @abstractmethod
+    def _addDuringAssembly(self, addToValues: Callable[[np.ndarray], None]):
+        """Let ``addToValues`` add a term to the values of :attr:`csrMatrix`, where the assembly sums the blocks into
+        them: at once, if they hold the sum from :meth:`beginAssembly` on, or in :meth:`assembledMatrix`, if they are
+        written only there.
+
+        Parameters
+        ----------
+        addToValues
+            Called with the value array of :attr:`csrMatrix`, to which it adds the term in place.
+        """
+
+    def addMatrix(self, matrix: csr_matrix, factor: float):
+        """Add ``factor * matrix`` to the system matrix, during the assembly: like the block of an entity, after
+        :meth:`beginAssembly` and before :meth:`assembledMatrix`. E.g., the mass of a dynamic solver to its effective
+        tangent, ``K_eff = K + M / (beta dT^2) + ...``.
+
+        ``matrix`` is on the sparsity pattern of the system matrix (:meth:`copyOntoSparsityPattern`), so its values are
+        added entry by entry, in slices on the thread pool, without a temporary matrix. Its values must not change
+        before :meth:`assembledMatrix`: an assembly that writes the values of the system matrix only there adds them
+        there.
+
+        Parameters
+        ----------
+        matrix
+            The matrix, on the sparsity pattern of the system matrix.
+        factor
+            The factor it enters with.
+
+        Raises
+        ------
+        ValueError
+            If ``matrix`` is not on the sparsity pattern of the system matrix.
+        """
+
+        pattern = self.csrMatrix
+        if matrix.indptr is not pattern.indptr or matrix.indices is not pattern.indices:
+            raise ValueError(
+                "The matrix to add is not on the sparsity pattern of the system matrix; copy it onto the pattern first "
+                "(copyOntoSparsityPattern)."
+            )
+
+        self._addDuringAssembly(partial(_addScaledValues, values=matrix.data, factor=factor))
+
+    def addLumpedMatrix(self, lumpedMatrix: np.ndarray, factor: float):
+        """Add ``factor`` times a lumped matrix -- a diagonal matrix, kept as one value per degree of freedom -- to the
+        system matrix, during the assembly: like the block of an entity, after :meth:`beginAssembly` and before
+        :meth:`assembledMatrix`. E.g., the lumped damping of a dynamic solver to its effective tangent,
+        ``K_eff = ... + gamma C / (beta dT)``.
+
+        Every nonzero value enters the diagonal entry of its degree of freedom, which the sparsity pattern must have.
+        The values are taken when this is called.
+
+        Parameters
+        ----------
+        lumpedMatrix
+            The lumped matrix, one value per degree of freedom.
+        factor
+            The factor it enters with.
+
+        Raises
+        ------
+        ValueError
+            If ``lumpedMatrix`` does not hold one value per degree of freedom, or if a nonzero value lies on a degree of
+            freedom without a diagonal entry in the sparsity pattern.
+        """
+
+        lumpedMatrix = np.asarray(lumpedMatrix)
+        if lumpedMatrix.shape != (self.csrMatrix.shape[0],):
+            raise ValueError(
+                "A lumped matrix holds one value per degree of freedom, {:}; got an array of shape {:}.".format(
+                    self.csrMatrix.shape[0], lumpedMatrix.shape
+                )
+            )
+
+        dofs = np.flatnonzero(lumpedMatrix)
+        positions = self._positionsOfEntries(dofs, dofs)
+        withoutDiagonal = dofs[positions < 0]
+        if withoutDiagonal.size:
+            raise ValueError(
+                "The lumped matrix has values on {:} degrees of freedom (first: {:}) that have no diagonal entry in the "
+                "sparsity pattern of the system matrix: no entity couples them.".format(
+                    withoutDiagonal.size, int(withoutDiagonal[0])
+                )
+            )
+
+        self._addDuringAssembly(
+            partial(_addScaledValuesAt, positions=positions, values=lumpedMatrix[dofs], factor=factor)
+        )
+
+    def copyOntoSparsityPattern(self, matrix: csr_matrix) -> csr_matrix:
+        """A copy of ``matrix`` on the sparsity pattern of the system matrix, the form :meth:`addMatrix` takes: a value
+        array of its own, one value per entry of the pattern (zero where ``matrix`` has no entry), and the pattern
+        arrays of the system matrix, shared, not copied. E.g., the mass a dynamic solver assembled through this
+        assembly (:meth:`assembledMatrix`, whose values the next assembly overwrites), or the mass of the equation
+        system before a rebuild, moved onto the pattern of the new one.
+
+        The copy refuses to be changed structurally (see :class:`~edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix`):
+        its pattern is the one of the system matrix. Its values may be changed in place. It keeps the pattern alive as
+        long as it lives.
+
+        Parameters
+        ----------
+        matrix
+            The matrix, on this pattern, on a part of it, or on any pattern whose entries outside this one are zero.
+
+        Returns
+        -------
+        csr_matrix
+            The copy.
+
+        Raises
+        ------
+        ValueError
+            If ``matrix`` does not have the shape of the system matrix, or has a nonzero entry outside the sparsity
+            pattern.
+        """
+
+        pattern = self.csrMatrix
+        if matrix.shape != pattern.shape:
+            raise ValueError(
+                "A matrix of shape {:} cannot be copied onto the sparsity pattern of the system matrix, of shape "
+                "{:}.".format(matrix.shape, pattern.shape)
+            )
+
+        if matrix.indptr is pattern.indptr and matrix.indices is pattern.indices:
+            values = np.array(matrix.data, dtype=float)
+        else:
+            values = np.zeros(pattern.nnz)
+
+            def copyRows(rows: slice):
+                entries = slice(matrix.indptr[rows.start], matrix.indptr[rows.stop])
+                rowOfEntry = np.repeat(
+                    np.arange(rows.start, rows.stop), np.diff(matrix.indptr[rows.start : rows.stop + 1])
+                )
+                positions = self._positionsOfEntries(rowOfEntry, matrix.indices[entries])
+                entryValues = matrix.data[entries]
+                outside = positions < 0
+                if np.any(entryValues[outside] != 0.0):
+                    first = np.flatnonzero(outside & (entryValues != 0.0))[0]
+                    raise ValueError(
+                        "The matrix has a nonzero entry ({:}, {:}) outside the sparsity pattern of the system "
+                        "matrix.".format(int(rowOfEntry[first]), int(matrix.indices[entries][first]))
+                    )
+                # the rows of a block are the block's alone, so the blocks add to separate values; a duplicate entry
+                # is summed
+                np.add.at(values, positions[~outside], entryValues[~outside])
+
+            forEachSliceInParallel(copyRows, pattern.shape[0], _ROWS_PER_SEARCH_BLOCK)
+
+        # Built empty and given the arrays afterwards: the constructor might copy the pattern arrays (SciPy's prune).
+        copy = AliasedCSRMatrix(pattern.shape)
+        copy.indptr = pattern.indptr
+        copy.indices = pattern.indices
+        copy.data = values
+        copy.lock()
+        return copy
+
+    def _positionsOfEntries(self, rows: np.ndarray, columns: np.ndarray) -> np.ndarray:
+        """Where the entries ``(rows[k], columns[k])`` are in the value array of the sparsity pattern: in row ``r``,
+        the columns are the sorted ``indices[indptr[r] : indptr[r + 1]]``, so each column is found by bisection there,
+        all entries at once.
+
+        Parameters
+        ----------
+        rows
+            The rows of the entries.
+        columns
+            Their columns.
+
+        Returns
+        -------
+        np.ndarray
+            The position of every entry in the value array, or -1 for an entry that is not in the pattern.
+        """
+
+        indptr, indices = self.csrMatrix.indptr, self.csrMatrix.indices
+        rows = np.asarray(rows, dtype=np.int64)
+        columns = np.asarray(columns, dtype=np.int64)
+        if indices.size == 0:
+            return np.full(rows.shape, -1, dtype=np.int64)
+
+        rowEnd = indptr[rows + 1].astype(np.int64)
+        # The first position in the row whose column is not smaller than the one searched for, in [lower, upper].
+        lower = indptr[rows].astype(np.int64)
+        upper = rowEnd.copy()
+        searching = lower < upper
+        while np.any(searching):
+            middle = (lower + upper) // 2
+            # a finished search reads any valid position, and does not move
+            columnInTheMiddle = indices[np.where(searching, middle, 0)]
+            goRight = searching & (columnInTheMiddle < columns)
+            goLeft = searching & ~goRight
+            lower[goRight] = middle[goRight] + 1
+            upper[goLeft] = middle[goLeft]
+            searching = lower < upper
+
+        found = (lower < rowEnd) & (indices[np.minimum(lower, indices.size - 1)] == columns)
+        return np.where(found, lower, -1)
 
     def scaledBy(self, factor: float) -> ScaledSystemMatrixBlocks:
         """Blocks that enter this matrix scaled by ``factor``, see :class:`ScaledSystemMatrixBlocks`.
@@ -335,7 +588,11 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
         self.csrGenerator = CSRGenerator(self.I, self.J, dofManager.nDof)
         if patternFillIn is not None:
             self.csrGenerator.addToPattern(patternFillIn(self.csrGenerator.csrMatrix))
+        #: The VIJ value array: the blocks of all entities, each in its slice.
         self.vijArray = self.constructVIJSystemMatrix()
+        #: The terms added during the current assembly (:meth:`addMatrix`, :meth:`addLumpedMatrix`), added to the
+        #: values of the CSR matrix after the gather, which overwrites them.
+        self._termsAddedAfterGather = []
 
     def _locateEntriesInSystem(self, entitiesWithIndices: list):
         """The local-to-global step: the global row and column of every value of the blocks of some entities.
@@ -352,8 +609,8 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
             self.J[vijSlice] = idcs[localColumns]
 
     def constructVIJSystemMatrix(self) -> VIJSystemMatrix:
-        """A value array in the layout of this assembly, zeroed, for another matrix on the same pattern (the mass of a
-        dynamic solver); :attr:`csrGenerator` gathers it into CSR.
+        """A value array in the layout of this assembly, zeroed, for another matrix assembled from the blocks of the
+        same entities; :attr:`csrGenerator` gathers it into CSR.
 
         Returns
         -------
@@ -365,6 +622,11 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
     def beginAssembly(self):
         # the value array holds the entries of all blocks, far too many to zero on a single thread
         forEachSliceInParallel(lambda s: self.vijArray[s].fill(0.0), len(self.vijArray))
+        self._termsAddedAfterGather.clear()
+
+    def _addDuringAssembly(self, addToValues: Callable[[np.ndarray], None]):
+        # the gather overwrites the values of the CSR matrix: the term is added after it
+        self._termsAddedAfterGather.append(addToValues)
 
     def blocksOfWorker(self, worker: int) -> SystemMatrixBlocks:
         return self
@@ -384,9 +646,13 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
     def csrMatrix(self) -> csr_matrix:
         return self.csrGenerator.csrMatrix
 
-    @performancetiming.timeit("gather VIJ to CSR")
     def assembledMatrix(self) -> csr_matrix:
-        return self.csrGenerator.updateInPlace(self.vijArray)
+        with performancetiming.timeit("gather VIJ to CSR"):
+            matrix = self.csrGenerator.updateInPlace(self.vijArray)
+        # after every gather anew, so that the matrix is the same however often it is asked for
+        for addToValues in self._termsAddedAfterGather:
+            addToValues(matrix.data)
+        return matrix
 
 
 class _DirectCSRBlocksOfWorker(_ScratchSystemMatrixBlocks):
@@ -481,6 +747,10 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
     @property
     def csrMatrix(self) -> csr_matrix:
         return self.assembler.csrMatrix
+
+    def _addDuringAssembly(self, addToValues: Callable[[np.ndarray], None]):
+        # the values of the CSR matrix hold the sum from beginAssembly on: the term is added at once
+        addToValues(self.assembler.csrMatrix.data)
 
     def assembledMatrix(self) -> csr_matrix:
         for worker in self._workers:

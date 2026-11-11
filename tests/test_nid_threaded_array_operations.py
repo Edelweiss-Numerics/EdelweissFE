@@ -24,12 +24,14 @@
 #  ---------------------------------------------------------------------
 """The array operations the implicit solvers run on the thread pool, slice by slice
 (:func:`~edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel`): zeroing the tangent,
-adding the scaled mass to it, NID's products with the mass matrix, in row blocks of it, and the passes over the
-entries of the mass; and the loop over the elements that assembles the mass and the damping, in chunks of elements
-(:func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`).
+adding the scaled mass to it, NID's products with the mass matrix, in row blocks of it, and the pass over the
+rows of the mass; and the loop over the elements that assembles the mass and the damping, in chunks of elements on the
+workers of the assembly (:func:`~edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers`).
 
 Every slice computes its entries exactly as the operation on the whole array does, and the chunks of elements come
-back in the order of the elements, so the result must be bitwise the serial one -- not merely close. The test models are far smaller than one slice or one
+back in the order of the elements, so the result must be bitwise the serial one -- not merely close (on the VIJ path,
+where every element writes its block into a slice of its own; the direct path adds the blocks of several workers
+atomically, in the order of their timing). The test models are far smaller than one slice or one
 mass row block, so the solvers run them serially; here both are shrunk until the same live-refining
 deck takes the threaded path. SuperLU solves the linear systems: it is serial and deterministic, so
 the two runs can only differ through the operations under test.
@@ -59,6 +61,7 @@ import edelweissfe.solvers.nonlinearimplicitdynamic as nonlinearimplicitdynamic
 from edelweissfe.numerics.parallelizationutilities import (
     forEachSliceInParallel,
     mapChunksInParallel,
+    mapChunksOnWorkers,
 )
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 
@@ -167,7 +170,10 @@ def test_the_mass_row_blocks_multiply_bitwise_like_the_whole_matrix():
     assert np.concatenate([block @ x for block in blocks]).tobytes() == (M @ x).tobytes()
 
 
+@pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 def test_the_threaded_path_reproduces_the_serial_one_bitwise(tmp_path, monkeypatch, workerThreads):
+    """With one worker of the assembly, the direct path too assembles in a fixed order, so the slices alone are
+    tested on both paths."""
     deck = _deck(modifier=_REFINE_THE_FIXED_END_TWICE, nX=2, lX=4.0, steps=_CANTILEVER_STEP).replace(
         "*solver, solver=NID, name=theSolver", "*solver, solver=NID, name=theSolver\nlinsolver=superlu"
     )
@@ -196,18 +202,22 @@ def test_the_threaded_path_reproduces_the_serial_one_bitwise(tmp_path, monkeypat
 def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_ones_bitwise(
     tmp_path, monkeypatch, workerThreads
 ):
-    """Every assembly of the mass and the damping of the live-refining deck, once with one thread, and once with four
-    threads, the elements in chunks and the passes over the entries of the mass in slices of 8."""
+    """Every assembly of the mass and the damping of the live-refining deck, once with one thread and one worker of the
+    assembly, and once with four threads and four workers, the elements in chunks on the workers and the pass over the
+    rows of the mass in slices of 8. Only the assembly gets four workers; the rest of the run is serial, so both runs
+    refine alike. The deck names the VIJ assembly, whose sums run in a fixed order: the direct assembly adds the
+    blocks of several workers atomically, in a varying order, so its sums agree only to round-off."""
     deck = _deck(modifier=_REFINE_THE_FIXED_END_TWICE, nX=2, lX=4.0, steps=_CANTILEVER_STEP).replace(
-        "*solver, solver=NID, name=theSolver", "*solver, solver=NID, name=theSolver\nlinsolver=superlu"
+        "*solver, solver=NID, name=theSolver",
+        "*solver, solver=NID, name=theSolver\nlinsolver=superlu\nsystemMatrixAssembly=vij",
     )
     assembleMassAndDamping = NonlinearImplicitDynamic._assembleMassAndDamping
 
     def recordingAssemblies(assemblies):
         def assemble(self, model, dynamicDofs, dynamicFields, lumpedMassOfEntities):
             result = assembleMassAndDamping(self, model, dynamicDofs, dynamicFields, lumpedMassOfEntities)
-            Mvij, damping, M, C, massByField = result
-            assemblies.append((np.asarray(Mvij).tobytes(), damping, M.data.tobytes(), C.data.tobytes()))
+            M, lumpedDamping, massByField = result
+            assemblies.append((M.data.tobytes(), lumpedDamping.tobytes()))
             return result
 
         return assemble
@@ -219,8 +229,8 @@ def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_on
 
     chunkCounts = []
 
-    def inChunks(items, work, chunksPerThread=4):
-        chunks = mapChunksInParallel(items, work, chunksPerThread)
+    def inChunks(items, work, numberOfWorkers, chunksPerWorker=4):
+        chunks = mapChunksOnWorkers(items, work, numberOfWorkers, chunksPerWorker)
         chunkCounts.append(len(chunks))
         return chunks
 
@@ -228,7 +238,8 @@ def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_on
         return forEachSliceInParallel(work, length, 8)
 
     workerThreads(4)
-    monkeypatch.setattr(nonlinearimplicitdynamic, "mapChunksInParallel", inChunks)
+    monkeypatch.setattr(NonlinearImplicitDynamic, "numberOfAssemblyWorkers", lambda self: 4)
+    monkeypatch.setattr(nonlinearimplicitdynamic, "mapChunksOnWorkers", inChunks)
     monkeypatch.setattr(nonlinearimplicitdynamic, "forEachSliceInParallel", inSlicesOfEight)
     monkeypatch.setattr(nonlinearimplicitdynamic, "_MASS_ROWS_PER_BLOCK", 8)  # the slices of 8 take blocks of 8 rows
     monkeypatch.setattr(NonlinearImplicitDynamic, "_assembleMassAndDamping", recordingAssemblies(threadedAssemblies))
@@ -238,6 +249,5 @@ def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_on
     assert chunkCounts and min(chunkCounts) > 1, "the elements were not split into several chunks"
     assert len(threadedAssemblies) == len(serialAssemblies)
     for serial, threaded in zip(serialAssemblies, threadedAssemblies):
-        assert threaded[0] == serial[0], "the mass in the VIJ layout"
-        assert threaded[2] == serial[2], "the mass as CSR"
-        assert threaded[3] == serial[3], "the damping as CSR"
+        assert threaded[0] == serial[0], "the mass"
+        assert threaded[1] == serial[1], "the lumped damping"
