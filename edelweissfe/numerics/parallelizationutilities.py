@@ -329,7 +329,8 @@ def forEachSliceInParallel(work, length: int, sliceLength: int = 1 << 20) -> lis
     persistent thread pool, and return what the calls returned, in the order of the slices.
 
     Meant for the simple array operations on arrays as long as the system matrix -- zeroing it,
-    adding a scaled mass matrix to it -- which numpy runs on a single thread, and which on a large
+    adding a scaled mass matrix to it (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix`)
+    -- which numpy runs on a single thread, and which on a large
     model take seconds per Newton iteration that way. Every call works on its own part of the
     arrays, so the result is bitwise the one of the same operation on the whole array. Short slices
     keep the temporaries of an expression like ``K[s] += a * M[s]`` small.
