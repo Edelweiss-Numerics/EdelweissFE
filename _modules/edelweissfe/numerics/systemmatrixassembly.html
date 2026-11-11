@@ -118,13 +118,18 @@
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csr_matrix</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgeneratorv2</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSRGenerator</span><span class="p">,</span> <span class="n">DirectCSRAssembler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgeneratorv2</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AliasedCSRMatrix</span><span class="p">,</span>
+    <span class="n">CSRGenerator</span><span class="p">,</span>
+    <span class="n">DirectCSRAssembler</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">forEachSliceInParallel</span><span class="p">,</span>
@@ -135,6 +140,49 @@
     <span class="n">countEntriesOfBlock</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.vijsystemmatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIJSystemMatrix</span>
+
+<span class="c1">#: Rows per block in which the positions of the entries of a matrix in the sparsity pattern are searched (see</span>
+<span class="c1">#: :meth:`SystemMatrixAssembly.copyOntoSparsityPattern`): the temporaries of a block stay small.</span>
+<span class="n">_ROWS_PER_SEARCH_BLOCK</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">14</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_addScaledValues</span><span class="p">(</span><span class="n">systemValues</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``systemValues += factor * values``, in slices on the thread pool, each slice with a temporary of its own size</span>
+<span class="sd">    only: the term of :meth:`SystemMatrixAssembly.addMatrix`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    systemValues</span>
+<span class="sd">        The values of the system matrix, added to in place.</span>
+<span class="sd">    values</span>
+<span class="sd">        The values of the matrix added, one per entry of the same pattern.</span>
+<span class="sd">    factor</span>
+<span class="sd">        The factor they enter with.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">addSlice</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">slice</span><span class="p">):</span>
+        <span class="n">systemValues</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">+=</span> <span class="n">factor</span> <span class="o">*</span> <span class="n">values</span><span class="p">[</span><span class="n">s</span><span class="p">]</span>
+
+    <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">addSlice</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">systemValues</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_addScaledValuesAt</span><span class="p">(</span><span class="n">systemValues</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">positions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``systemValues[positions] += factor * values``, every position once: the term of</span>
+<span class="sd">    :meth:`SystemMatrixAssembly.addLumpedMatrix`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    systemValues</span>
+<span class="sd">        The values of the system matrix, added to in place.</span>
+<span class="sd">    positions</span>
+<span class="sd">        The positions of the entries the values enter, distinct.</span>
+<span class="sd">    values</span>
+<span class="sd">        The values.</span>
+<span class="sd">    factor</span>
+<span class="sd">        The factor they enter with.</span>
+<span class="sd">    """</span>
+
+    <span class="n">systemValues</span><span class="p">[</span><span class="n">positions</span><span class="p">]</span> <span class="o">+=</span> <span class="n">factor</span> <span class="o">*</span> <span class="n">values</span>
 
 
 <div class="viewcode-block" id="SystemMatrixBlocks">
@@ -285,16 +333,21 @@
 
 <span class="sd">    ``K[entity]`` hands out the blocks of worker 0, for the entity loops in the calling thread.</span>
 
+<span class="sd">    A term that is not the block of an entity, but a whole matrix on the sparsity pattern of the system matrix, enters</span>
+<span class="sd">    during the assembly too: :meth:`addMatrix` and :meth:`addLumpedMatrix`. A dynamic solver forms its effective</span>
+<span class="sd">    tangent this way, ``K_eff = K + M / (beta dT^2) + gamma C / (beta dT)``::</span>
+
+<span class="sd">        K.addMatrix(M, massFactor)</span>
+<span class="sd">        K.addLumpedMatrix(lumpedDamping, dampingFactor)</span>
+
+<span class="sd">    with the mass ``M`` kept on the sparsity pattern of the system matrix (:meth:`copyOntoSparsityPattern`).</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    numberOfWorkers</span>
 <span class="sd">        How many threads may write blocks at the same time, each through its own</span>
 <span class="sd">        :meth:`blocksOfWorker`.</span>
 <span class="sd">    """</span>
-
-    <span class="c1">#: The VIJ value array, for code that works on it directly (e.g., the mass term of a dynamic solver, or a compiled</span>
-    <span class="c1">#: entity loop); None on a path without one.</span>
-    <span class="n">vijArray</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">numberOfWorkers</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
         <span class="c1">#: How many threads may write blocks at the same time.</span>
@@ -365,6 +418,215 @@
 <span class="sd">            The system matrix.</span>
 <span class="sd">        """</span></div>
 
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_addDuringAssembly</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">addToValues</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="kc">None</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Let ``addToValues`` add a term to the values of :attr:`csrMatrix`, where the assembly sums the blocks into</span>
+<span class="sd">        them: at once, if they hold the sum from :meth:`beginAssembly` on, or in :meth:`assembledMatrix`, if they are</span>
+<span class="sd">        written only there.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        addToValues</span>
+<span class="sd">            Called with the value array of :attr:`csrMatrix`, to which it adds the term in place.</span>
+<span class="sd">        """</span>
+
+<div class="viewcode-block" id="SystemMatrixAssembly.addMatrix">
+<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">addMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">matrix</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Add ``factor * matrix`` to the system matrix, during the assembly: like the block of an entity, after</span>
+<span class="sd">        :meth:`beginAssembly` and before :meth:`assembledMatrix`. E.g., the mass of a dynamic solver to its effective</span>
+<span class="sd">        tangent, ``K_eff = K + M / (beta dT^2) + ...``.</span>
+
+<span class="sd">        ``matrix`` is on the sparsity pattern of the system matrix (:meth:`copyOntoSparsityPattern`), so its values are</span>
+<span class="sd">        added entry by entry, in slices on the thread pool, without a temporary matrix. Its values must not change</span>
+<span class="sd">        before :meth:`assembledMatrix`: an assembly that writes the values of the system matrix only there adds them</span>
+<span class="sd">        there.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        matrix</span>
+<span class="sd">            The matrix, on the sparsity pattern of the system matrix.</span>
+<span class="sd">        factor</span>
+<span class="sd">            The factor it enters with.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``matrix`` is not on the sparsity pattern of the system matrix.</span>
+<span class="sd">        """</span>
+
+        <span class="n">pattern</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrMatrix</span>
+        <span class="k">if</span> <span class="n">matrix</span><span class="o">.</span><span class="n">indptr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">pattern</span><span class="o">.</span><span class="n">indptr</span> <span class="ow">or</span> <span class="n">matrix</span><span class="o">.</span><span class="n">indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">pattern</span><span class="o">.</span><span class="n">indices</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"The matrix to add is not on the sparsity pattern of the system matrix; copy it onto the pattern first "</span>
+                <span class="s2">"(copyOntoSparsityPattern)."</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_addDuringAssembly</span><span class="p">(</span><span class="n">partial</span><span class="p">(</span><span class="n">_addScaledValues</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="n">matrix</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">factor</span><span class="o">=</span><span class="n">factor</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="SystemMatrixAssembly.addLumpedMatrix">
+<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addLumpedMatrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">addLumpedMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lumpedMatrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Add ``factor`` times a lumped matrix -- a diagonal matrix, kept as one value per degree of freedom -- to the</span>
+<span class="sd">        system matrix, during the assembly: like the block of an entity, after :meth:`beginAssembly` and before</span>
+<span class="sd">        :meth:`assembledMatrix`. E.g., the lumped damping of a dynamic solver to its effective tangent,</span>
+<span class="sd">        ``K_eff = ... + gamma C / (beta dT)``.</span>
+
+<span class="sd">        Every nonzero value enters the diagonal entry of its degree of freedom, which the sparsity pattern must have.</span>
+<span class="sd">        The values are taken when this is called.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        lumpedMatrix</span>
+<span class="sd">            The lumped matrix, one value per degree of freedom.</span>
+<span class="sd">        factor</span>
+<span class="sd">            The factor it enters with.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``lumpedMatrix`` does not hold one value per degree of freedom, or if a nonzero value lies on a degree of</span>
+<span class="sd">            freedom without a diagonal entry in the sparsity pattern.</span>
+<span class="sd">        """</span>
+
+        <span class="n">lumpedMatrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedMatrix</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">lumpedMatrix</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">csrMatrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"A lumped matrix holds one value per degree of freedom, </span><span class="si">{:}</span><span class="s2">; got an array of shape </span><span class="si">{:}</span><span class="s2">."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">csrMatrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">lumpedMatrix</span><span class="o">.</span><span class="n">shape</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="n">dofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">lumpedMatrix</span><span class="p">)</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_positionsOfEntries</span><span class="p">(</span><span class="n">dofs</span><span class="p">,</span> <span class="n">dofs</span><span class="p">)</span>
+        <span class="n">withoutDiagonal</span> <span class="o">=</span> <span class="n">dofs</span><span class="p">[</span><span class="n">positions</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">withoutDiagonal</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"The lumped matrix has values on </span><span class="si">{:}</span><span class="s2"> degrees of freedom (first: </span><span class="si">{:}</span><span class="s2">) that have no diagonal entry in the "</span>
+                <span class="s2">"sparsity pattern of the system matrix: no entity couples them."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">withoutDiagonal</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">withoutDiagonal</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_addDuringAssembly</span><span class="p">(</span>
+            <span class="n">partial</span><span class="p">(</span><span class="n">_addScaledValuesAt</span><span class="p">,</span> <span class="n">positions</span><span class="o">=</span><span class="n">positions</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="n">lumpedMatrix</span><span class="p">[</span><span class="n">dofs</span><span class="p">],</span> <span class="n">factor</span><span class="o">=</span><span class="n">factor</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemMatrixAssembly.copyOntoSparsityPattern">
+<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">copyOntoSparsityPattern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">matrix</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""A copy of ``matrix`` on the sparsity pattern of the system matrix, the form :meth:`addMatrix` takes: a value</span>
+<span class="sd">        array of its own, one value per entry of the pattern (zero where ``matrix`` has no entry), and the pattern</span>
+<span class="sd">        arrays of the system matrix, shared, not copied. E.g., the mass a dynamic solver assembled through this</span>
+<span class="sd">        assembly (:meth:`assembledMatrix`, whose values the next assembly overwrites), or the mass of the equation</span>
+<span class="sd">        system before a rebuild, moved onto the pattern of the new one.</span>
+
+<span class="sd">        The copy refuses to be changed structurally (see :class:`~edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix`):</span>
+<span class="sd">        its pattern is the one of the system matrix. Its values may be changed in place. It keeps the pattern alive as</span>
+<span class="sd">        long as it lives.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        matrix</span>
+<span class="sd">            The matrix, on this pattern, on a part of it, or on any pattern whose entries outside this one are zero.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        csr_matrix</span>
+<span class="sd">            The copy.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``matrix`` does not have the shape of the system matrix, or has a nonzero entry outside the sparsity</span>
+<span class="sd">            pattern.</span>
+<span class="sd">        """</span>
+
+        <span class="n">pattern</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrMatrix</span>
+        <span class="k">if</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">pattern</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"A matrix of shape </span><span class="si">{:}</span><span class="s2"> cannot be copied onto the sparsity pattern of the system matrix, of shape "</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2">."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">pattern</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">matrix</span><span class="o">.</span><span class="n">indptr</span> <span class="ow">is</span> <span class="n">pattern</span><span class="o">.</span><span class="n">indptr</span> <span class="ow">and</span> <span class="n">matrix</span><span class="o">.</span><span class="n">indices</span> <span class="ow">is</span> <span class="n">pattern</span><span class="o">.</span><span class="n">indices</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">pattern</span><span class="o">.</span><span class="n">nnz</span><span class="p">)</span>
+
+            <span class="k">def</span><span class="w"> </span><span class="nf">copyRows</span><span class="p">(</span><span class="n">rows</span><span class="p">:</span> <span class="nb">slice</span><span class="p">):</span>
+                <span class="n">entries</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">rows</span><span class="o">.</span><span class="n">start</span><span class="p">],</span> <span class="n">matrix</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">rows</span><span class="o">.</span><span class="n">stop</span><span class="p">])</span>
+                <span class="n">rowOfEntry</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">rows</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">rows</span><span class="o">.</span><span class="n">stop</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">rows</span><span class="o">.</span><span class="n">start</span> <span class="p">:</span> <span class="n">rows</span><span class="o">.</span><span class="n">stop</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+                <span class="p">)</span>
+                <span class="n">positions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_positionsOfEntries</span><span class="p">(</span><span class="n">rowOfEntry</span><span class="p">,</span> <span class="n">matrix</span><span class="o">.</span><span class="n">indices</span><span class="p">[</span><span class="n">entries</span><span class="p">])</span>
+                <span class="n">entryValues</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">entries</span><span class="p">]</span>
+                <span class="n">outside</span> <span class="o">=</span> <span class="n">positions</span> <span class="o">&lt;</span> <span class="mi">0</span>
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">entryValues</span><span class="p">[</span><span class="n">outside</span><span class="p">]</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">):</span>
+                    <span class="n">first</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">outside</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">entryValues</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="s2">"The matrix has a nonzero entry (</span><span class="si">{:}</span><span class="s2">, </span><span class="si">{:}</span><span class="s2">) outside the sparsity pattern of the system "</span>
+                        <span class="s2">"matrix."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">rowOfEntry</span><span class="p">[</span><span class="n">first</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">indices</span><span class="p">[</span><span class="n">entries</span><span class="p">][</span><span class="n">first</span><span class="p">]))</span>
+                    <span class="p">)</span>
+                <span class="c1"># the rows of a block are the block's alone, so the blocks add to separate values; a duplicate entry</span>
+                <span class="c1"># is summed</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">positions</span><span class="p">[</span><span class="o">~</span><span class="n">outside</span><span class="p">],</span> <span class="n">entryValues</span><span class="p">[</span><span class="o">~</span><span class="n">outside</span><span class="p">])</span>
+
+            <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">copyRows</span><span class="p">,</span> <span class="n">pattern</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">_ROWS_PER_SEARCH_BLOCK</span><span class="p">)</span>
+
+        <span class="c1"># Built empty and given the arrays afterwards: the constructor might copy the pattern arrays (SciPy's prune).</span>
+        <span class="n">copy</span> <span class="o">=</span> <span class="n">AliasedCSRMatrix</span><span class="p">(</span><span class="n">pattern</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">copy</span><span class="o">.</span><span class="n">indptr</span> <span class="o">=</span> <span class="n">pattern</span><span class="o">.</span><span class="n">indptr</span>
+        <span class="n">copy</span><span class="o">.</span><span class="n">indices</span> <span class="o">=</span> <span class="n">pattern</span><span class="o">.</span><span class="n">indices</span>
+        <span class="n">copy</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">values</span>
+        <span class="n">copy</span><span class="o">.</span><span class="n">lock</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">copy</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_positionsOfEntries</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rows</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">columns</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Where the entries ``(rows[k], columns[k])`` are in the value array of the sparsity pattern: in row ``r``,</span>
+<span class="sd">        the columns are the sorted ``indices[indptr[r] : indptr[r + 1]]``, so each column is found by bisection there,</span>
+<span class="sd">        all entries at once.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rows</span>
+<span class="sd">            The rows of the entries.</span>
+<span class="sd">        columns</span>
+<span class="sd">            Their columns.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The position of every entry in the value array, or -1 for an entry that is not in the pattern.</span>
+<span class="sd">        """</span>
+
+        <span class="n">indptr</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrMatrix</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrMatrix</span><span class="o">.</span><span class="n">indices</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">rows</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+        <span class="n">rowEnd</span> <span class="o">=</span> <span class="n">indptr</span><span class="p">[</span><span class="n">rows</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="c1"># The first position in the row whose column is not smaller than the one searched for, in [lower, upper].</span>
+        <span class="n">lower</span> <span class="o">=</span> <span class="n">indptr</span><span class="p">[</span><span class="n">rows</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">upper</span> <span class="o">=</span> <span class="n">rowEnd</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">searching</span> <span class="o">=</span> <span class="n">lower</span> <span class="o">&lt;</span> <span class="n">upper</span>
+        <span class="k">while</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">searching</span><span class="p">):</span>
+            <span class="n">middle</span> <span class="o">=</span> <span class="p">(</span><span class="n">lower</span> <span class="o">+</span> <span class="n">upper</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="c1"># a finished search reads any valid position, and does not move</span>
+            <span class="n">columnInTheMiddle</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">searching</span><span class="p">,</span> <span class="n">middle</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span>
+            <span class="n">goRight</span> <span class="o">=</span> <span class="n">searching</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">columnInTheMiddle</span> <span class="o">&lt;</span> <span class="n">columns</span><span class="p">)</span>
+            <span class="n">goLeft</span> <span class="o">=</span> <span class="n">searching</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">goRight</span>
+            <span class="n">lower</span><span class="p">[</span><span class="n">goRight</span><span class="p">]</span> <span class="o">=</span> <span class="n">middle</span><span class="p">[</span><span class="n">goRight</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">upper</span><span class="p">[</span><span class="n">goLeft</span><span class="p">]</span> <span class="o">=</span> <span class="n">middle</span><span class="p">[</span><span class="n">goLeft</span><span class="p">]</span>
+            <span class="n">searching</span> <span class="o">=</span> <span class="n">lower</span> <span class="o">&lt;</span> <span class="n">upper</span>
+
+        <span class="n">found</span> <span class="o">=</span> <span class="p">(</span><span class="n">lower</span> <span class="o">&lt;</span> <span class="n">rowEnd</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">indices</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">lower</span><span class="p">,</span> <span class="n">indices</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">==</span> <span class="n">columns</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">found</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 
 <div class="viewcode-block" id="SystemMatrixAssembly.scaledBy">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.scaledBy">[docs]</a>
@@ -447,7 +709,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="n">CSRGenerator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">,</span> <span class="n">dofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">patternFillIn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">addToPattern</span><span class="p">(</span><span class="n">patternFillIn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">csrMatrix</span><span class="p">))</span>
+        <span class="c1">#: The VIJ value array: the blocks of all entities, each in its slice.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
+        <span class="c1">#: The terms added during the current assembly (:meth:`addMatrix`, :meth:`addLumpedMatrix`), added to the</span>
+        <span class="c1">#: values of the CSR matrix after the gather, which overwrites them.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_termsAddedAfterGather</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_locateEntriesInSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entitiesWithIndices</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""The local-to-global step: the global row and column of every value of the blocks of some entities.</span>
@@ -466,8 +732,8 @@
 <div class="viewcode-block" id="VIJSystemMatrixAssembly.constructVIJSystemMatrix">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.constructVIJSystemMatrix">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">constructVIJSystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VIJSystemMatrix</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""A value array in the layout of this assembly, zeroed, for another matrix on the same pattern (the mass of a</span>
-<span class="sd">        dynamic solver); :attr:`csrGenerator` gathers it into CSR.</span>
+<span class="w">        </span><span class="sd">"""A value array in the layout of this assembly, zeroed, for another matrix assembled from the blocks of the</span>
+<span class="sd">        same entities; :attr:`csrGenerator` gathers it into CSR.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -481,8 +747,13 @@
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.beginAssembly">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">beginAssembly</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># the value array holds the entries of all blocks, far too many to zero on a single thread</span>
-        <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="mf">0.0</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">))</span></div>
+        <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="mf">0.0</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_termsAddedAfterGather</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
 
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_addDuringAssembly</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">addToValues</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="kc">None</span><span class="p">]):</span>
+        <span class="c1"># the gather overwrites the values of the CSR matrix: the term is added after it</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_termsAddedAfterGather</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">addToValues</span><span class="p">)</span>
 
 <div class="viewcode-block" id="VIJSystemMatrixAssembly.blocksOfWorker">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.blocksOfWorker">[docs]</a>
@@ -513,9 +784,13 @@
 
 <div class="viewcode-block" id="VIJSystemMatrixAssembly.assembledMatrix">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.assembledMatrix">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"gather VIJ to CSR"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">assembledMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">updateInPlace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">)</span></div>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"gather VIJ to CSR"</span><span class="p">):</span>
+            <span class="n">matrix</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">updateInPlace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">)</span>
+        <span class="c1"># after every gather anew, so that the matrix is the same however often it is asked for</span>
+        <span class="k">for</span> <span class="n">addToValues</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_termsAddedAfterGather</span><span class="p">:</span>
+            <span class="n">addToValues</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">matrix</span></div>
 </div>
 
 
@@ -623,6 +898,10 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">csrMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembler</span><span class="o">.</span><span class="n">csrMatrix</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_addDuringAssembly</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">addToValues</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="kc">None</span><span class="p">]):</span>
+        <span class="c1"># the values of the CSR matrix hold the sum from beginAssembly on: the term is added at once</span>
+        <span class="n">addToValues</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">assembler</span><span class="o">.</span><span class="n">csrMatrix</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
 
 <div class="viewcode-block" id="DirectCSRSystemMatrixAssembly.assembledMatrix">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.assembledMatrix">[docs]</a>

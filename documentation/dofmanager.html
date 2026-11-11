@@ -1652,7 +1652,8 @@ after the other: the layout of the constraints that couple only some of their de
 <dd><p>Call <code class="docutils literal notranslate"><span class="pre">work(s)</span></code> for consecutive slices <code class="docutils literal notranslate"><span class="pre">s</span></code> that together cover <code class="docutils literal notranslate"><span class="pre">range(length)</span></code>, on the
 persistent thread pool, and return what the calls returned, in the order of the slices.</p>
 <p>Meant for the simple array operations on arrays as long as the system matrix – zeroing it,
-adding a scaled mass matrix to it – which numpy runs on a single thread, and which on a large
+adding a scaled mass matrix to it (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addMatrix()</span></code></a>)
+– which numpy runs on a single thread, and which on a large
 model take seconds per Newton iteration that way. Every call works on its own part of the
 arrays, so the result is bitwise the one of the same operation on the whole array. Short slices
 keep the temporaries of an expression like <code class="docutils literal notranslate"><span class="pre">K[s]</span> <span class="pre">+=</span> <span class="pre">a</span> <span class="pre">*</span> <span class="pre">M[s]</span></code> small.</p>

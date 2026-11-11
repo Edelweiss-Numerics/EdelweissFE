@@ -124,9 +124,8 @@ an element, constraint or load knows which path is in use. Every entity asks for
 ``vij`` (the default) is :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`,
 stage then gather; ``direct`` is
 :class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`, scatter directly.
-``NIST``, ``NISTParallel`` and ``NISTPArcLength`` support both. ``NonlinearImplicitDynamic`` (and
-``NIDParallel``) assemble on the VIJ path only, since they add the mass entry by entry to the VIJ value
-array, and so does ``NEST``.
+``NIST``, ``NISTParallel``, ``NISTPArcLength``, ``NID`` and ``NIDParallel`` support both; ``NEST`` assembles on
+the VIJ path only.
 
 What the direct path has to know about the entities and the solvers:
 
@@ -143,7 +142,18 @@ What the direct path has to know about the entities and the solvers:
   load besides the tangent of the elements. It adds them to the tangent of the increment as blocks
   scaled by :math:`1 - \lambda` and :math:`\lambda`
   (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.scaledBy`), on both paths, so
-  that no further matrix is held.
+  that no further matrix is held. The dynamic solver holds one: the mass, assembled once through the same
+  interface (every element writes its consistent mass into its block) and kept with values of its own on the
+  sparsity pattern of the tangent
+  (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`), which shares
+  the pattern arrays. Its effective tangent
+  :math:`\boldsymbol{K} + \boldsymbol{M}/(\beta \Delta t^2) + \gamma \boldsymbol{C}/(\beta \Delta t)` adds the mass
+  and the lumped damping during the assembly, like the block of an entity
+  (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix`,
+  :meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addLumpedMatrix`): the direct path adds
+  them to its CSR values at once, which hold the sum from the start of the assembly; the VIJ path adds them after its
+  gather, which overwrites the CSR values. On the VIJ path the effective tangent is therefore the gathered tangent
+  plus the scaled mass, which agrees with gathering the sum to round-off.
 - **The complete pattern.** The multi-point-constraint condensation adds entries to the CSR pattern. The
   solver builds the condensation first and hands its
   :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn` to the

@@ -161,24 +161,27 @@
 <span class="sd">of the family) is refused, because the formulation above divides by it.</span>
 
 <span class="sd">**Mass.** The mass is the CONSISTENT one, :math:`\\int_\\Omega \\rho N^T N \\, dV`, assembled from</span>
-<span class="sd">:meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia` into the very</span>
-<span class="sd">sparsity pattern the stiffness uses -- both are scattered through the same VIJ layout of the</span>
-<span class="sd">:class:`~edelweissfe.numerics.dofmanager.DofManager`, so adding :math:`\\boldsymbol{M}/(\\beta \\Delta t^2)`</span>
-<span class="sd">to the tangent is an entry-wise scaled addition of two value vectors, before the parent's in-place CSR update, its</span>
-<span class="sd">multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act</span>
-<span class="sd">on the effective matrix without knowing it is one. For the same reason the mass is summed into</span>
-<span class="sd">CSR form by the stiffness' own CSR generator. The damping :math:`\\boldsymbol{C}` is the diagonal</span>
-<span class="sd">each element reports through ``computeLumpedDamping``; being diagonal, it is kept only as its</span>
-<span class="sd">nonzero entries and their positions in the same layout, not as a full value vector. Both are</span>
-<span class="sd">assembled in one loop over the elements (in chunks of elements on the thread pool, see</span>
-<span class="sd">:doc:`/documentation/parallelization`) when the equation system is (re)built -- at a step's start</span>
-<span class="sd">and after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing</span>
-<span class="sd">its connectivity (a contact candidate list, which can change on every increment) leaves every</span>
-<span class="sd">element, and with it every element's slot in the layout, where it was: the operators are then</span>
-<span class="sd">reused in the new layout rather than reassembled -- see</span>
-<span class="sd">:meth:`NonlinearImplicitDynamic._reuseMassAndDamping`. The one exception is a step that changes a</span>
-<span class="sd">material property mid-step (``&gt;&gt;changematerialproperty``), which invalidates the density and makes</span>
-<span class="sd">them reassemble every increment.</span>
+<span class="sd">:meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia` through the assembly of the system</span>
+<span class="sd">matrix (:class:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly`): every element writes its mass into</span>
+<span class="sd">its block as it writes its stiffness, so the mass lands on the very sparsity pattern the stiffness uses, whichever way</span>
+<span class="sd">the assembly sums the blocks (option ``systemMatrixAssembly``, ``vij`` or ``direct``, see</span>
+<span class="sd">:ref:`system-matrix-assembly`). It is kept as a CSR matrix with values of its own on the pattern of the stiffness</span>
+<span class="sd">(:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`). The damping</span>
+<span class="sd">:math:`\\boldsymbol{C}` is the diagonal each element reports through ``computeLumpedDamping``; being diagonal, it is</span>
+<span class="sd">kept lumped, as one value per degree of freedom. The effective tangent</span>
+<span class="sd">:math:`\\boldsymbol{K} + \\boldsymbol{M}/(\\beta \\Delta t^2) + \\gamma \\boldsymbol{C}/(\\beta \\Delta t)` is then formed</span>
+<span class="sd">while the tangent is assembled, both terms entering like the block of an element</span>
+<span class="sd">(:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix`,</span>
+<span class="sd">:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addLumpedMatrix`): before the parent's</span>
+<span class="sd">multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act on the effective</span>
+<span class="sd">matrix without knowing it is one. Mass and damping are assembled in one loop over the elements (in chunks of elements</span>
+<span class="sd">on the assembly's worker threads, see :doc:`/documentation/parallelization`) when the equation system is (re)built --</span>
+<span class="sd">at a step's start and after a topology change -- not per Newton iteration. A rebuild caused only by a constraint</span>
+<span class="sd">changing its connectivity (a contact candidate list, which can change on every increment) leaves the numbering of the</span>
+<span class="sd">degrees of freedom and every element where they were: the mass is then copied onto the sparsity pattern of the new</span>
+<span class="sd">system and the damping kept, rather than reassembled -- see :meth:`NonlinearImplicitDynamic._reuseMassAndDamping`. The</span>
+<span class="sd">one exception is a step that changes a material property mid-step (``&gt;&gt;changematerialproperty``), which invalidates</span>
+<span class="sd">the density and makes them reassemble every increment.</span>
 
 <span class="sd">**Checks on the mass.** The assembled mass and damping are checked at runtime for non-finite</span>
 <span class="sd">entries, the damping for negative entries, and every time-integrated degree of freedom for a</span>
@@ -322,7 +325,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">coo_matrix</span><span class="p">,</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">diags</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">diags</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">carriesLinearMomentum</span>
@@ -330,13 +333,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">forEachSliceInParallel</span><span class="p">,</span>
-    <span class="n">mapChunksInParallel</span><span class="p">,</span>
+    <span class="n">mapChunksOnWorkers</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
-    <span class="n">VIJSystemMatrixAssembly</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.vijsystemmatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIJSystemMatrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemMatrixAssembly</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.base.outputmanagerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputManagerBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.conservationchecks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CONSERVATION_TOLERANCE</span><span class="p">,</span>
@@ -355,7 +354,9 @@
 <span class="n">_NEGLIGIBLE_INCREMENT_FRACTION</span> <span class="o">=</span> <span class="mf">1e-10</span>
 
 <span class="c1">#: Rows per block of the mass matrix, in which the inertia forces are computed on the thread pool (see</span>
-<span class="c1">#: :meth:`NonlinearImplicitDynamic._rowBlocks`). A smaller model is a single block, computed serially.</span>
+<span class="c1">#: :meth:`NonlinearImplicitDynamic._rowBlocks`), and the mass of the fields kept quasi-static is discarded (see</span>
+<span class="c1">#: :meth:`NonlinearImplicitDynamic._discardInertiaOfQuasiStaticFields`). A smaller model is a single block, computed</span>
+<span class="c1">#: serially.</span>
 <span class="n">_MASS_ROWS_PER_BLOCK</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">14</span>
 
 
@@ -433,24 +434,18 @@
 <span class="sd">    ----------</span>
 <span class="sd">    dofManager</span>
 <span class="sd">        The manager these operators and vectors are indexed by.</span>
-<span class="sd">    I, J, vijSliceOfEntity</span>
-<span class="sd">        The VIJ layout ``Mvij`` and the damping indices are in: the row and column of every value and the slice of</span>
-<span class="sd">        every entity, the arrays of the stiffness' assembly they were assembled for (references to them alone, not to</span>
-<span class="sd">        the assembly, whose value array and gather map would otherwise outlive a rebuild).</span>
 <span class="sd">    dynamicDofs</span>
 <span class="sd">        The degrees of freedom integrated in time -- those of the fields carrying a mass.</span>
 <span class="sd">    dynamicFields</span>
 <span class="sd">        The names of those fields, in the model's field order.</span>
-<span class="sd">    Mvij</span>
-<span class="sd">        The consistent mass as a VIJ value vector, in the stiffness' layout, ready to be scaled</span>
-<span class="sd">        and added onto the tangent; None if no degree of freedom is integrated in time (see</span>
+<span class="sd">    M</span>
+<span class="sd">        The consistent mass, on the sparsity pattern of the stiffness of this equation system</span>
+<span class="sd">        (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`), the form</span>
+<span class="sd">        in which it is added to the tangent; it shares the pattern arrays of the stiffness, and keeps them alive. An</span>
+<span class="sd">        empty matrix if no degree of freedom is integrated in time (see</span>
 <span class="sd">        :meth:`NonlinearImplicitDynamic._noMassAndDamping`).</span>
-<span class="sd">    dampingVIJIndices, dampingVIJValues</span>
-<span class="sd">        The diagonal damping, only where it is nonzero: each element's lumped damping at its own</span>
-<span class="sd">        diagonal slots of the VIJ layout. Diagonal by construction, so a full VIJ value vector for</span>
-<span class="sd">        it would be all zeros but for a few entries per element.</span>
-<span class="sd">    M, C</span>
-<span class="sd">        The mass and the damping as CSR matrices, for the residual's matrix-vector products.</span>
+<span class="sd">    lumpedDamping</span>
+<span class="sd">        The damping, diagonal by construction, as one value per degree of freedom.</span>
 <span class="sd">    MRowBlocks, MRowsPerBlock</span>
 <span class="sd">        ``M`` in blocks of ``MRowsPerBlock`` consecutive rows (:data:`_MASS_ROWS_PER_BLOCK`), sharing</span>
 <span class="sd">        its arrays, for the products with the mass on the thread pool (:meth:`massTimes`).</span>
@@ -467,16 +462,10 @@
 <span class="sd">    """</span>
 
     <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span>
-    <span class="n">I</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">J</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">vijSliceOfEntity</span><span class="p">:</span> <span class="nb">dict</span>
     <span class="n">dynamicDofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span>
-    <span class="n">Mvij</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span> <span class="o">|</span> <span class="kc">None</span>
-    <span class="n">dampingVIJIndices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">dampingVIJValues</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">M</span><span class="p">:</span> <span class="n">csr_matrix</span>
-    <span class="n">C</span><span class="p">:</span> <span class="n">csr_matrix</span>
+    <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">MRowBlocks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">csr_matrix</span><span class="p">]</span>
     <span class="n">MRowsPerBlock</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">massByField</span><span class="p">:</span> <span class="nb">dict</span>
@@ -575,10 +564,6 @@
 
     <span class="c1">#: Option schema for this solver, per OptionSchemaProvider.</span>
     <span class="n">schema</span> <span class="o">=</span> <span class="n">NIDSchema</span>
-
-    <span class="c1">#: Only the VIJ assembly: the effective tangent adds the mass and the damping entry by entry to the VIJ value array</span>
-    <span class="c1">#: (see :meth:`assembleAdditionalTerms`), and the mass is gathered into CSR by the generator's gather map.</span>
-    <span class="n">systemMatrixAssemblies</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"vij"</span><span class="p">:</span> <span class="n">VIJSystemMatrixAssembly</span><span class="p">}</span>
 
     <span class="c1">#: The predictor's state, as in the parent, the drift the conservation checks accumulate over the</span>
     <span class="c1">#: step, the conserved totals after the last accepted increment, which a topology change is</span>
@@ -919,7 +904,7 @@
 <span class="sd">        F</span>
 <span class="sd">            The reference flux scale of the convergence test, augmented in place.</span>
 <span class="sd">        K</span>
-<span class="sd">            The tangent being assembled; its VIJ value array is augmented in place.</span>
+<span class="sd">            The tangent being assembled; the mass and the damping are added to it.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The time step.</span>
 <span class="sd">        """</span>
@@ -946,9 +931,9 @@
             <span class="p">)</span>
 
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"inertia and damping forces"</span><span class="p">):</span>
-            <span class="c1"># The damping is diagonal, so C @ V_np costs next to nothing.</span>
             <span class="n">PInertia</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">A_np</span><span class="p">)</span>
-            <span class="n">PDamping</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">C</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">V_np</span><span class="p">)</span>
+            <span class="c1"># The damping is lumped (diagonal), so C v is an entry-wise product.</span>
+            <span class="n">PDamping</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">V_np</span><span class="p">)</span>
 
             <span class="n">R</span> <span class="o">-=</span> <span class="n">PInertia</span>
             <span class="n">R</span> <span class="o">-=</span> <span class="n">PDamping</span>
@@ -958,24 +943,11 @@
             <span class="n">F</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">PInertia</span><span class="p">)</span>
             <span class="n">F</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">PDamping</span><span class="p">)</span>
 
-        <span class="c1"># The effective tangent K + M / (beta dT^2) + gamma C / (beta dT). Same VIJ layout as K, so it</span>
-        <span class="c1"># is an entry-wise sum, before the parent's CSR conversion, MPC condensation and Dirichlet row</span>
-        <span class="c1"># replacement. The mass is added slice by slice on the thread pool; the damping is diagonal.</span>
+        <span class="c1"># The effective tangent K_eff = K + M / (beta dT^2) + gamma C / (beta dT), added while K is assembled, like</span>
+        <span class="c1"># the block of an element: before the parent's CSR conversion, MPC condensation and Dirichlet row replacement.</span>
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"effective tangent"</span><span class="p">):</span>
-            <span class="n">Kvij</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">vijArray</span>
-            <span class="c1"># A slice-wise sum would silently add only a prefix of a longer mass vector.</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">Kvij</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">"The mass (</span><span class="si">{:}</span><span class="s2"> entries) and the tangent (</span><span class="si">{:}</span><span class="s2"> entries) differ in their VIJ layout."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                        <span class="nb">len</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">Kvij</span><span class="p">)</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-
-            <span class="k">def</span><span class="w"> </span><span class="nf">addScaledMass</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">slice</span><span class="p">):</span>
-                <span class="n">Kvij</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">+=</span> <span class="n">increment</span><span class="o">.</span><span class="n">massFactor</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">[</span><span class="n">s</span><span class="p">]</span>
-
-            <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">addScaledMass</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">Kvij</span><span class="p">))</span>
-            <span class="n">Kvij</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dampingVIJIndices</span><span class="p">]</span> <span class="o">+=</span> <span class="n">increment</span><span class="o">.</span><span class="n">dampingFactor</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">dampingVIJValues</span></div>
+            <span class="n">K</span><span class="o">.</span><span class="n">addMatrix</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">M</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">massFactor</span><span class="p">)</span>
+            <span class="n">K</span><span class="o">.</span><span class="n">addLumpedMatrix</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">dampingFactor</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NonlinearImplicitDynamic.finalizeIncrement">
@@ -1107,7 +1079,9 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">system</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">system</span>
             <span class="n">internalInertialAndDampingForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-            <span class="n">internalInertialAndDampingForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">C</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">)</span>
+            <span class="n">internalInertialAndDampingForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">P</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">)</span>
+            <span class="p">)</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">internalInertialAndDampingForce</span><span class="p">)</span></div>
 
@@ -1215,29 +1189,23 @@
             <span class="ow">and</span> <span class="n">lumpedMassOfEntities</span> <span class="ow">is</span> <span class="kc">None</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">system</span><span class="o">.</span><span class="n">includesLumpedMassOfEntities</span>
         <span class="p">):</span>
-            <span class="n">reusedMassAndDamping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reuseMassAndDamping</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+            <span class="n">reusedMassAndDamping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reuseMassAndDamping</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
-            <span class="n">Mvij</span><span class="p">,</span> <span class="n">damping</span><span class="p">,</span> <span class="n">M</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">massByField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noMassAndDamping</span><span class="p">()</span>
+            <span class="n">M</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">massByField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noMassAndDamping</span><span class="p">()</span>
         <span class="k">elif</span> <span class="n">reusedMassAndDamping</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">Mvij</span><span class="p">,</span> <span class="n">damping</span><span class="p">,</span> <span class="n">M</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">massByField</span> <span class="o">=</span> <span class="n">reusedMassAndDamping</span>
+            <span class="n">M</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">massByField</span> <span class="o">=</span> <span class="n">reusedMassAndDamping</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">Mvij</span><span class="p">,</span> <span class="n">damping</span><span class="p">,</span> <span class="n">M</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">massByField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assembleMassAndDamping</span><span class="p">(</span>
+            <span class="n">M</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">massByField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assembleMassAndDamping</span><span class="p">(</span>
                 <span class="n">model</span><span class="p">,</span> <span class="n">dynamicDofs</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">,</span> <span class="n">lumpedMassOfEntities</span>
             <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_newmarkSystem</span> <span class="o">=</span> <span class="n">_NewmarkSystem</span><span class="p">(</span>
             <span class="n">dofManager</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span>
-            <span class="n">I</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">I</span><span class="p">,</span>
-            <span class="n">J</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">J</span><span class="p">,</span>
-            <span class="n">vijSliceOfEntity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">,</span>
             <span class="n">dynamicDofs</span><span class="o">=</span><span class="n">dynamicDofs</span><span class="p">,</span>
             <span class="n">dynamicFields</span><span class="o">=</span><span class="n">dynamicFields</span><span class="p">,</span>
-            <span class="n">Mvij</span><span class="o">=</span><span class="n">Mvij</span><span class="p">,</span>
-            <span class="n">dampingVIJIndices</span><span class="o">=</span><span class="n">damping</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="n">dampingVIJValues</span><span class="o">=</span><span class="n">damping</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
             <span class="n">M</span><span class="o">=</span><span class="n">M</span><span class="p">,</span>
-            <span class="n">C</span><span class="o">=</span><span class="n">C</span><span class="p">,</span>
+            <span class="n">lumpedDamping</span><span class="o">=</span><span class="n">lumpedDamping</span><span class="p">,</span>
             <span class="n">MRowBlocks</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rowBlocks</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">_MASS_ROWS_PER_BLOCK</span><span class="p">),</span>
             <span class="n">MRowsPerBlock</span><span class="o">=</span><span class="n">_MASS_ROWS_PER_BLOCK</span><span class="p">,</span>
             <span class="n">massByField</span><span class="o">=</span><span class="n">massByField</span><span class="p">,</span>
@@ -1304,86 +1272,63 @@
             <span class="p">)</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_noMassAndDamping</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_noMassAndDamping</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""The mass and the damping of an equation system none of whose degrees of freedom is integrated in time here --</span>
-<span class="sd">        a model whose only inertia is that of entities which integrate it themselves (``inertia=entities``). Nothing is assembled: the matrices are empty, so that the products with them</span>
-<span class="sd">        cost nothing, and there is no VIJ value vector, so that the Newmark terms add nothing to the tangent (see</span>
-<span class="sd">        :meth:`assembleAdditionalTerms`).</span>
+<span class="sd">        a model whose only inertia is that of entities which integrate it themselves (``inertia=entities``). Nothing</span>
+<span class="sd">        is assembled: the mass is an empty matrix and the damping zero, so that the products with them cost nothing;</span>
+<span class="sd">        the Newmark terms add nothing to the residual and the tangent (see :meth:`assembleAdditionalTerms`).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[None, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict]</span>
-<span class="sd">            No VIJ mass, no damping entries, the empty mass and damping, and no mass by field.</span>
+<span class="sd">        tuple[csr_matrix, np.ndarray, dict]</span>
+<span class="sd">            The empty mass, the zero lumped damping, and no mass by field.</span>
 <span class="sd">        """</span>
 
         <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span>
-        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span> <span class="n">csr_matrix</span><span class="p">((</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">)),</span> <span class="n">csr_matrix</span><span class="p">((</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">)),</span> <span class="p">{}</span>
+        <span class="k">return</span> <span class="n">csr_matrix</span><span class="p">((</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">),</span> <span class="p">{}</span>
 
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"reuse mass and damping"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_reuseMassAndDamping</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The mass and the damping of ``system``, moved into the layout of the current</span>
-<span class="sd">        :class:`~edelweissfe.numerics.dofmanager.DofManager` without reassembling them -- or None if</span>
-<span class="sd">        that manager differs from the old one in anything the operators depend on.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reuseMassAndDamping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The mass and the damping of ``system``, moved onto the equation system of the current</span>
+<span class="sd">        :class:`~edelweissfe.numerics.dofmanager.DofManager` without reassembling them -- or None if that manager</span>
+<span class="sd">        differs from the old one in anything they depend on.</span>
 
-<span class="sd">        The parent builds a new manager whenever a constraint reports a change of its connectivity,</span>
-<span class="sd">        which a contact candidate list does on almost every increment. Such a change moves no node</span>
-<span class="sd">        and touches no element: the degree-of-freedom numbering, the elements, their order and so</span>
-<span class="sd">        their slots in the VIJ layout -- which come first, ahead of every constraint's -- are all</span>
-<span class="sd">        where they were, and only the constraints' slots behind them change. Mass and damping live</span>
-<span class="sd">        entirely in the elements' slots (a constraint carries none), so the CSR operators are</span>
-<span class="sd">        unchanged and the VIJ value vectors only need their element part copied into a vector of the</span>
-<span class="sd">        new length. That replaces a loop over every element and the checks on the assembled mass.</span>
+<span class="sd">        The parent builds a new manager whenever a constraint reports a change of its connectivity, which a contact</span>
+<span class="sd">        candidate list does on almost every increment. Such a change moves no node and touches no element: the</span>
+<span class="sd">        numbering of the degrees of freedom and the elements are where they were, and only the coupling the</span>
+<span class="sd">        constraints add to the sparsity pattern changes. Mass and damping are the elements' alone (a constraint carries</span>
+<span class="sd">        none), so they are unchanged: the mass only needs its values copied onto the sparsity pattern of the new</span>
+<span class="sd">        stiffness</span>
+<span class="sd">        (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`), and the</span>
+<span class="sd">        lumped damping, a vector of the unchanged numbering, is kept. That replaces a loop over every element and the</span>
+<span class="sd">        checks on the assembled mass.</span>
 
-<span class="sd">        Nothing about that is assumed: the numbering, the element set, every element's slot and the</span>
-<span class="sd">        row and column indices of all element slots are compared, and anything that differs falls</span>
-<span class="sd">        back to a full assembly.</span>
+<span class="sd">        Nothing about that is assumed beyond what the numbering tells: the digests of the two numberings</span>
+<span class="sd">        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`) and the two sets of elements are</span>
+<span class="sd">        compared, and anything that differs falls back to a full assembly. An element changes its nodes only in a</span>
+<span class="sd">        topology change, which is never reused (see :meth:`_updateNewmarkSystem`).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        system</span>
 <span class="sd">            The Newmark system of the previous manager.</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict] | None</span>
-<span class="sd">            The mass as a VIJ value vector of the current manager, the damping's VIJ indices and</span>
-<span class="sd">            values (all in the unchanged element slots), both as CSR matrices, and the mass by field</span>
-<span class="sd">            (unchanged, as the fields' slots are) -- or None if they have to be reassembled.</span>
+<span class="sd">        tuple[csr_matrix, np.ndarray, dict] | None</span>
+<span class="sd">            The mass on the sparsity pattern of the current stiffness, the lumped damping, and the mass by field</span>
+<span class="sd">            (unchanged, as the numbering is) -- or None if they have to be reassembled.</span>
 <span class="sd">        """</span>
 
         <span class="n">old</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">dofManager</span>
         <span class="n">new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span>
 
-        <span class="k">if</span> <span class="n">new</span><span class="o">.</span><span class="n">nDof</span> <span class="o">!=</span> <span class="n">old</span><span class="o">.</span><span class="n">nDof</span> <span class="ow">or</span> <span class="n">new</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span> <span class="o">!=</span> <span class="n">old</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">new</span><span class="o">.</span><span class="n">dofNumberingDigest</span> <span class="o">!=</span> <span class="n">old</span><span class="o">.</span><span class="n">dofNumberingDigest</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">new</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">!=</span> <span class="n">old</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="k">return</span> <span class="kc">None</span>
 
-        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span>
-        <span class="n">nElementVIJ</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">vijSlice</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">vijSlice</span> <span class="o">!=</span> <span class="n">system</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">el</span><span class="p">]:</span>
-                <span class="k">return</span> <span class="kc">None</span>
-            <span class="n">nElementVIJ</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">nElementVIJ</span><span class="p">,</span> <span class="n">vijSlice</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">K</span><span class="o">.</span><span class="n">I</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">],</span> <span class="n">system</span><span class="o">.</span><span class="n">I</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">])</span>
-            <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">K</span><span class="o">.</span><span class="n">J</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">],</span> <span class="n">system</span><span class="o">.</span><span class="n">J</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">])</span>
-        <span class="p">):</span>
-            <span class="k">return</span> <span class="kc">None</span>
-
-        <span class="c1"># Behind the elements' slots lie only constraints', which carry no mass and no damping.</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">)[</span><span class="n">nElementVIJ</span><span class="p">:])</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">dampingVIJIndices</span> <span class="o">&gt;=</span> <span class="n">nElementVIJ</span><span class="p">):</span>
-            <span class="k">return</span> <span class="kc">None</span>
-
-        <span class="n">Mvij</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
-        <span class="n">Mvij</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="n">Mvij</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">]</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">]</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">copyOntoSparsityPattern</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">M</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"constraint connectivity changed only: mass and damping reused, not reassembled"</span><span class="p">,</span>
@@ -1391,7 +1336,7 @@
             <span class="mi">2</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">Mvij</span><span class="p">,</span> <span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">dampingVIJIndices</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">dampingVIJValues</span><span class="p">),</span> <span class="n">system</span><span class="o">.</span><span class="n">M</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">C</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">massByField</span>
+        <span class="k">return</span> <span class="n">M</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">massByField</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_conservedQuantities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_ConservedQuantities</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Total mass, linear momentum and kinetic energy of one Newmark system.</span>
@@ -1610,16 +1555,22 @@
         <span class="n">dynamicDofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
         <span class="n">lumpedMassOfEntities</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">csr_matrix</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Assemble the consistent mass and the diagonal damping, in the stiffness' VIJ layout and</span>
-<span class="sd">        as CSR matrices, with the lumped mass of the entities that integrate their own inertia on the diagonal if it</span>
-<span class="sd">        is integrated at the nodes</span>
-<span class="sd">        (see :meth:`_addLumpedMassOfEntities`).</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Assemble the consistent mass, on the sparsity pattern of the stiffness, and the lumped (diagonal) damping,</span>
+<span class="sd">        with the lumped mass of the entities that integrate their own inertia on the diagonal of the mass if it is</span>
+<span class="sd">        integrated at the nodes.</span>
 
-<span class="sd">        Entries coupling to a degree of freedom that is not integrated in time are zeroed in both:</span>
-<span class="sd">        the mass an element reports on a non-mechanical block (a micro-inertia) belongs to a field</span>
-<span class="sd">        this solver keeps quasi-static. Elements without kernels -- contact facets -- carry geometry,</span>
-<span class="sd">        not a material, and are skipped.</span>
+<span class="sd">        The mass is assembled as the stiffness is, through the assembly of the system matrix: every element writes its</span>
+<span class="sd">        consistent mass into its block (``K.blocksOfWorker(worker)[element]``), the elements in chunks on the</span>
+<span class="sd">        assembly's workers, and the assembled matrix is copied onto the sparsity pattern</span>
+<span class="sd">        (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`): the</span>
+<span class="sd">        assembly's own matrix is overwritten by the next assembly. Every element reports its damping on its degrees of</span>
+<span class="sd">        freedom, which are summed into one value per degree of freedom.</span>
+
+<span class="sd">        Entries coupling to a degree of freedom that is not integrated in time are zeroed in both</span>
+<span class="sd">        (:meth:`_discardInertiaOfQuasiStaticFields`): the mass an element reports on a non-mechanical block (a</span>
+<span class="sd">        micro-inertia) belongs to a field this solver keeps quasi-static. Elements without kernels -- contact facets --</span>
+<span class="sd">        carry geometry, not a material, and are skipped.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1634,28 +1585,32 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict]</span>
-<span class="sd">            The mass as a VIJ value vector, the damping as the VIJ indices and values of its</span>
-<span class="sd">            nonzero diagonal entries (see :meth:`_lumpedDampingOfElement`), the same two as CSR</span>
-<span class="sd">            matrices, and each dynamic field's total mass.</span>
+<span class="sd">        tuple[csr_matrix, np.ndarray, dict]</span>
+<span class="sd">            The mass, the lumped damping, and each dynamic field's total mass.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If the assembled mass or damping is not finite, the damping is negative, or the mass</span>
-<span class="sd">            leaves a dynamic degree of freedom without any mass.</span>
+<span class="sd">            If the assembled mass or damping is not finite, the damping is negative, the mass leaves a dynamic degree</span>
+<span class="sd">            of freedom without any mass, or the lumped mass of the entities lies on a degree of freedom without a</span>
+<span class="sd">            diagonal entry in the sparsity pattern.</span>
 <span class="sd">        """</span>
 
-        <span class="n">Mvij</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
+        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span>
+        <span class="n">dofsOfElement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span>
+        <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span>
 
-        <span class="c1"># The elements are independent: each writes its mass into its own slice of Mvij and reports its damping, so</span>
-        <span class="c1"># they are done in chunks on the thread pool. The chunks come back in the order of the elements, which makes</span>
-        <span class="c1"># the concatenated damping the one of a serial loop.</span>
-        <span class="k">def</span><span class="w"> </span><span class="nf">assembleChunk</span><span class="p">(</span><span class="n">elements</span><span class="p">):</span>
-            <span class="n">dampingIndices</span><span class="p">,</span> <span class="n">dampingValues</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="n">K</span><span class="o">.</span><span class="n">beginAssembly</span><span class="p">()</span>
+
+        <span class="c1"># The elements are independent: each writes its mass into its block and reports its damping, so they are done</span>
+        <span class="c1"># in chunks on the workers of the assembly. The chunks come back in the order of the elements, which makes the</span>
+        <span class="c1"># summed damping the one of a serial loop.</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">assembleChunk</span><span class="p">(</span><span class="n">worker</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">elements</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
+            <span class="n">blocks</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">blocksOfWorker</span><span class="p">(</span><span class="n">worker</span><span class="p">)</span>
+            <span class="n">dampedDofs</span><span class="p">,</span> <span class="n">dampingValues</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">el</span><span class="o">.</span><span class="n">computeConsistentInertia</span><span class="p">(</span><span class="n">Mvij</span><span class="p">[</span><span class="n">el</span><span class="p">])</span>
+                    <span class="n">el</span><span class="o">.</span><span class="n">computeConsistentInertia</span><span class="p">(</span><span class="n">blocks</span><span class="p">[</span><span class="n">el</span><span class="p">])</span>
                 <span class="k">except</span> <span class="ne">NotImplementedError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                         <span class="s2">"</span><span class="si">{:}</span><span class="s2"> needs a consistent mass matrix, which element </span><span class="si">{:}</span><span class="s2"> (</span><span class="si">{:}</span><span class="s2">) does not provide; "</span>
@@ -1665,58 +1620,41 @@
                         <span class="p">)</span>
                     <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
 
-                <span class="n">indices</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lumpedDampingOfElement</span><span class="p">(</span><span class="n">el</span><span class="p">)</span>
-                <span class="n">dampingIndices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
-                <span class="n">dampingValues</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">dampingIndices</span><span class="p">,</span> <span class="n">dampingValues</span>
+                <span class="n">Ce</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+                <span class="n">el</span><span class="o">.</span><span class="n">computeLumpedDamping</span><span class="p">(</span><span class="n">Ce</span><span class="p">)</span>
+                <span class="n">nonzero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">Ce</span><span class="p">)</span>
+                <span class="n">dampedDofs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dofsOfElement</span><span class="p">[</span><span class="n">el</span><span class="p">][</span><span class="n">nonzero</span><span class="p">])</span>
+                <span class="n">dampingValues</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Ce</span><span class="p">[</span><span class="n">nonzero</span><span class="p">])</span>
+            <span class="n">blocks</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">dampedDofs</span><span class="p">,</span> <span class="n">dampingValues</span>
 
-        <span class="n">chunks</span> <span class="o">=</span> <span class="n">mapChunksInParallel</span><span class="p">([</span><span class="n">el</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">el</span><span class="o">.</span><span class="n">hasKernels</span><span class="p">],</span> <span class="n">assembleChunk</span><span class="p">)</span>
+        <span class="n">chunks</span> <span class="o">=</span> <span class="n">mapChunksOnWorkers</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">el</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">el</span><span class="o">.</span><span class="n">hasKernels</span><span class="p">],</span> <span class="n">assembleChunk</span><span class="p">,</span> <span class="n">K</span><span class="o">.</span><span class="n">numberOfWorkers</span>
+        <span class="p">)</span>
 
-        <span class="c1"># Seeded with empty arrays, so that a model without any damping still concatenates to</span>
-        <span class="c1"># empty arrays of the right dtype.</span>
-        <span class="n">dampingVIJIndices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
-        <span class="n">dampingVIJValues</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">v</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">chunk</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+        <span class="c1"># Seeded with empty arrays, so that a model without any damping still sums to zeros. Of float type in any case:</span>
+        <span class="c1"># np.bincount gives integers for an empty input, even with weights.</span>
+        <span class="n">dampedDofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
+        <span class="n">dampingValues</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">v</span> <span class="k">for</span> <span class="n">chunk</span> <span class="ow">in</span> <span class="n">chunks</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">chunk</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+        <span class="n">lumpedDamping</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">dampedDofs</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">dampingValues</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="n">nDof</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">lumpedMassOfEntities</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_addLumpedMassOfEntities</span><span class="p">(</span><span class="n">Mvij</span><span class="p">,</span> <span class="n">lumpedMassOfEntities</span><span class="p">)</span>
+            <span class="c1"># Only the positive values: a node that receives no positive mass from the entities carries no inertia</span>
+            <span class="c1"># and stays quasi-static (see _locateDynamicDofs).</span>
+            <span class="n">lumpedMass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedMassOfEntities</span><span class="p">)</span>
+            <span class="n">K</span><span class="o">.</span><span class="n">addLumpedMatrix</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">lumpedMass</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">lumpedMass</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="mf">1.0</span><span class="p">)</span>
 
-        <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span>
-        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">J</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">copyOntoSparsityPattern</span><span class="p">(</span><span class="n">K</span><span class="o">.</span><span class="n">assembledMatrix</span><span class="p">())</span>
 
         <span class="n">isDynamic</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
         <span class="n">isDynamic</span><span class="p">[</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-
-        <span class="c1"># The three passes over the VIJ entries below are as long as the system matrix has entries (hundreds of</span>
-        <span class="c1"># millions on a large model): in slices on the thread pool, each slice as the pass over the whole would do it.</span>
-        <span class="n">couplesDynamicOnly</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">I</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="nf">markCouplingOfDynamicDofs</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">slice</span><span class="p">):</span>
-            <span class="n">couplesDynamicOnly</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">=</span> <span class="n">isDynamic</span><span class="p">[</span><span class="n">I</span><span class="p">[</span><span class="n">s</span><span class="p">]]</span> <span class="o">&amp;</span> <span class="n">isDynamic</span><span class="p">[</span><span class="n">J</span><span class="p">[</span><span class="n">s</span><span class="p">]]</span>
-
-        <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">markCouplingOfDynamicDofs</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">I</span><span class="p">))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_warnAboutDiscardedInertia</span><span class="p">(</span><span class="n">Mvij</span><span class="p">,</span> <span class="n">dampingVIJIndices</span><span class="p">,</span> <span class="n">couplesDynamicOnly</span><span class="p">)</span>
-
-        <span class="c1"># Mass and damping on the quasi-static fields are discarded, see the warning above.</span>
-        <span class="n">massValues</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">Mvij</span><span class="p">)</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="nf">zeroMassOfQuasiStaticDofs</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">slice</span><span class="p">):</span>
-            <span class="n">massValues</span><span class="p">[</span><span class="n">s</span><span class="p">][</span><span class="o">~</span><span class="n">couplesDynamicOnly</span><span class="p">[</span><span class="n">s</span><span class="p">]]</span> <span class="o">=</span> <span class="mf">0.0</span>
-
-        <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">zeroMassOfQuasiStaticDofs</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">I</span><span class="p">))</span>
-        <span class="n">keptDamping</span> <span class="o">=</span> <span class="n">couplesDynamicOnly</span><span class="p">[</span><span class="n">dampingVIJIndices</span><span class="p">]</span>
-        <span class="n">dampingVIJIndices</span> <span class="o">=</span> <span class="n">dampingVIJIndices</span><span class="p">[</span><span class="n">keptDamping</span><span class="p">]</span>
-        <span class="n">dampingVIJValues</span> <span class="o">=</span> <span class="n">dampingVIJValues</span><span class="p">[</span><span class="n">keptDamping</span><span class="p">]</span>
-
-        <span class="c1"># The mass matrix has the stiffness' VIJ layout, so K's CSR generator sums it into K's pattern.</span>
-        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">updateCSR</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">Mvij</span><span class="p">))</span>
-        <span class="n">C</span> <span class="o">=</span> <span class="n">coo_matrix</span><span class="p">((</span><span class="n">dampingVIJValues</span><span class="p">,</span> <span class="p">(</span><span class="n">I</span><span class="p">[</span><span class="n">dampingVIJIndices</span><span class="p">],</span> <span class="n">J</span><span class="p">[</span><span class="n">dampingVIJIndices</span><span class="p">])),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">))</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_discardInertiaOfQuasiStaticFields</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">isDynamic</span><span class="p">)</span>
 
         <span class="c1"># Symmetry is checked per element type in the tests; see the module documentation.</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">M</span><span class="o">.</span><span class="n">data</span><span class="p">))</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">data</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">M</span><span class="o">.</span><span class="n">data</span><span class="p">))</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">lumpedDamping</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"The assembled consistent mass or damping contains non-finite entries."</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">data</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">lumpedDamping</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"The assembled damping has negative entries; a damping must dissipate."</span><span class="p">)</span>
 
         <span class="c1"># A dynamic degree of freedom without mass (zero density, or only mass-less entities) would be</span>
@@ -1739,104 +1677,59 @@
                 <span class="mi">2</span><span class="p">,</span>
             <span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">Mvij</span><span class="p">,</span> <span class="p">(</span><span class="n">dampingVIJIndices</span><span class="p">,</span> <span class="n">dampingVIJValues</span><span class="p">),</span> <span class="n">M</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">massByField</span>
+        <span class="k">return</span> <span class="n">M</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">massByField</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_addLumpedMassOfEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Mvij</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">lumpedMassOfEntities</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Add the positive entries of the lumped mass of the entities that integrate their own inertia to the</span>
-<span class="sd">        diagonal of the mass, in the VIJ layout: each to one diagonal slot of its degree of freedom, which the blocks of</span>
-<span class="sd">        these entities hold. A diagonal is the same in every layout, so the mass gathered into CSR holds exactly the</span>
-<span class="sd">        lumped mass the layout assembled (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia`).</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        Mvij</span>
-<span class="sd">            The mass as a VIJ value vector, augmented in place.</span>
-<span class="sd">        lumpedMassOfEntities</span>
-<span class="sd">            The lumped mass of the entities, one value per degree of freedom.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If a degree of freedom with a positive lumped mass has no diagonal slot in the layout.</span>
-<span class="sd">        """</span>
-
-        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">J</span>
-        <span class="n">lumpedMass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedMassOfEntities</span><span class="p">)</span>
-
-        <span class="n">diagonalSlots</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">I</span> <span class="o">==</span> <span class="n">J</span><span class="p">)</span>
-        <span class="n">dofsOnTheDiagonal</span><span class="p">,</span> <span class="n">firstSlotOfDof</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">I</span><span class="p">[</span><span class="n">diagonalSlots</span><span class="p">],</span> <span class="n">return_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">hasMass</span> <span class="o">=</span> <span class="n">lumpedMass</span><span class="p">[</span><span class="n">dofsOnTheDiagonal</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
-
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">hasMass</span><span class="p">)</span> <span class="o">!=</span> <span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">lumpedMass</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"The lumped mass of the entities lies on degrees of freedom that have no diagonal entry in the system "</span>
-                <span class="s2">"matrix: no entity couples them."</span>
-            <span class="p">)</span>
-
-        <span class="n">Mvij</span><span class="p">[</span><span class="n">diagonalSlots</span><span class="p">[</span><span class="n">firstSlotOfDof</span><span class="p">[</span><span class="n">hasMass</span><span class="p">]]]</span> <span class="o">+=</span> <span class="n">lumpedMass</span><span class="p">[</span><span class="n">dofsOnTheDiagonal</span><span class="p">[</span><span class="n">hasMass</span><span class="p">]]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_lumpedDampingOfElement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">el</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""The lumped (diagonal) damping one element reports, placed on the diagonal of its own</span>
-<span class="sd">        block in the VIJ layout -- only the nonzero entries, as their VIJ indices and values.</span>
-
-<span class="sd">        An element's block occupies ``nDof * nDof`` consecutive VIJ entries in column-major order, so</span>
-<span class="sd">        its ``k``-th diagonal entry is at ``start + k * (nDof + 1)``. Each slot belongs to one</span>
-<span class="sd">        element, so indices collected over all elements are unique.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_discardInertiaOfQuasiStaticFields</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">M</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">isDynamic</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Zero the mass and the damping on the fields this solver keeps quasi-static: every entry of the mass in a row</span>
+<span class="sd">        or a column of a degree of freedom not integrated in time, and the damping of such a degree of freedom. What</span>
+<span class="sd">        was nonzero there is warned about (:meth:`_warnAboutDiscardedInertia`). One pass over the rows of the mass, in</span>
+<span class="sd">        blocks of rows (:data:`_MASS_ROWS_PER_BLOCK`) on the thread pool.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        el</span>
-<span class="sd">            The element.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        tuple[np.ndarray, np.ndarray]</span>
-<span class="sd">            The VIJ indices of the element's nonzero damping entries, and the damping values there.</span>
+<span class="sd">        M</span>
+<span class="sd">            The assembled mass, changed in place.</span>
+<span class="sd">        lumpedDamping</span>
+<span class="sd">            The assembled lumped damping, changed in place.</span>
+<span class="sd">        isDynamic</span>
+<span class="sd">            Per degree of freedom, whether it is integrated in time.</span>
 <span class="sd">        """</span>
 
-        <span class="n">Ce</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
-        <span class="n">el</span><span class="o">.</span><span class="n">computeLumpedDamping</span><span class="p">(</span><span class="n">Ce</span><span class="p">)</span>
-        <span class="n">nonzero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">Ce</span><span class="p">)</span>
+        <span class="n">indptr</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span> <span class="n">M</span><span class="o">.</span><span class="n">indices</span><span class="p">,</span> <span class="n">M</span><span class="o">.</span><span class="n">data</span>
 
-        <span class="n">start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">el</span><span class="p">]</span><span class="o">.</span><span class="n">start</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">nonzero</span> <span class="o">*</span> <span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span> <span class="n">Ce</span><span class="p">[</span><span class="n">nonzero</span><span class="p">]</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">discardInRows</span><span class="p">(</span><span class="n">rows</span><span class="p">:</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+            <span class="n">entries</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">indptr</span><span class="p">[</span><span class="n">rows</span><span class="o">.</span><span class="n">start</span><span class="p">],</span> <span class="n">indptr</span><span class="p">[</span><span class="n">rows</span><span class="o">.</span><span class="n">stop</span><span class="p">])</span>
+            <span class="n">rowOfEntry</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">rows</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">rows</span><span class="o">.</span><span class="n">stop</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">indptr</span><span class="p">[</span><span class="n">rows</span><span class="o">.</span><span class="n">start</span> <span class="p">:</span> <span class="n">rows</span><span class="o">.</span><span class="n">stop</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]))</span>
+            <span class="n">columnOfEntry</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[</span><span class="n">entries</span><span class="p">]</span>
+            <span class="n">discarded</span> <span class="o">=</span> <span class="o">~</span><span class="p">(</span><span class="n">isDynamic</span><span class="p">[</span><span class="n">rowOfEntry</span><span class="p">]</span> <span class="o">&amp;</span> <span class="n">isDynamic</span><span class="p">[</span><span class="n">columnOfEntry</span><span class="p">])</span>
+            <span class="n">valuesOfRows</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">entries</span><span class="p">]</span>  <span class="c1"># a view: zeroed in M</span>
+            <span class="n">nonzero</span> <span class="o">=</span> <span class="n">discarded</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">valuesOfRows</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">)</span>
+            <span class="n">valuesOfRows</span><span class="p">[</span><span class="n">discarded</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">rowOfEntry</span><span class="p">[</span><span class="n">nonzero</span><span class="p">],</span> <span class="n">columnOfEntry</span><span class="p">[</span><span class="n">nonzero</span><span class="p">]))</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_warnAboutDiscardedInertia</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">Mvij</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">dampingVIJIndices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">couplesDynamicOnly</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="p">):</span>
+        <span class="n">affectedDofs</span> <span class="o">=</span> <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">discardInRows</span><span class="p">,</span> <span class="n">M</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">_MASS_ROWS_PER_BLOCK</span><span class="p">)</span>
+        <span class="n">affectedDofs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="o">~</span><span class="n">isDynamic</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">lumpedDamping</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">)))</span>
+        <span class="n">lumpedDamping</span><span class="p">[</span><span class="o">~</span><span class="n">isDynamic</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warnAboutDiscardedInertia</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)]</span> <span class="o">+</span> <span class="n">affectedDofs</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_warnAboutDiscardedInertia</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">affectedDofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Warn, once per field, when an element reported a nonzero inertia or damping on a field</span>
 <span class="sd">        this solver keeps quasi-static -- a rotational inertia, or a gradient-enhanced element's</span>
-<span class="sd">        micro-inertia -- which is about to be discarded.</span>
+<span class="sd">        micro-inertia -- which is discarded.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        Mvij</span>
-<span class="sd">            The assembled mass, before the entries are zeroed.</span>
-<span class="sd">        dampingVIJIndices</span>
-<span class="sd">            The VIJ indices of the nonzero damping, before those are dropped.</span>
-<span class="sd">        couplesDynamicOnly</span>
-<span class="sd">            Per VIJ entry, whether it couples two time-integrated degrees of freedom.</span>
+<span class="sd">        affectedDofs</span>
+<span class="sd">            The degrees of freedom in the rows and columns of the discarded nonzero entries of the mass, and those</span>
+<span class="sd">            whose nonzero damping was discarded.</span>
 <span class="sd">        """</span>
 
-        <span class="n">massValues</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">Mvij</span><span class="p">)</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="nf">discardedMassInSlice</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">slice</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="o">~</span><span class="n">couplesDynamicOnly</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">massValues</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">))</span> <span class="o">+</span> <span class="n">s</span><span class="o">.</span><span class="n">start</span>
-
-        <span class="n">discarded</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
-            <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">discardedMassInSlice</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">massValues</span><span class="p">))</span>
-            <span class="o">+</span> <span class="p">[</span><span class="n">dampingVIJIndices</span><span class="p">[</span><span class="o">~</span><span class="n">couplesDynamicOnly</span><span class="p">[</span><span class="n">dampingVIJIndices</span><span class="p">]]]</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">discarded</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">affectedDofs</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
             <span class="k">return</span>
 
-        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">J</span>
         <span class="n">isAffected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-        <span class="n">isAffected</span><span class="p">[</span><span class="n">I</span><span class="p">[</span><span class="n">discarded</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="n">isAffected</span><span class="p">[</span><span class="n">J</span><span class="p">[</span><span class="n">discarded</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">isAffected</span><span class="p">[</span><span class="n">affectedDofs</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">if</span> <span class="n">carriesLinearMomentum</span><span class="p">(</span><span class="n">fieldName</span><span class="p">)</span> <span class="ow">or</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fieldsWarnedAboutDiscardedInertia</span><span class="p">:</span>
@@ -1915,7 +1808,7 @@
         <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">P</span>
         <span class="n">R</span> <span class="o">-=</span> <span class="n">PLoadsAndConstraints</span>
-        <span class="n">R</span> <span class="o">-=</span> <span class="n">system</span><span class="o">.</span><span class="n">C</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
+        <span class="n">R</span> <span class="o">-=</span> <span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
 
         <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span>
         <span class="n">isStatic</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
@@ -1925,7 +1818,7 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformResidual</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">dU0</span><span class="p">)</span>
-            <span class="c1"># MEff is a matrix of its own, not the CSR generator's, whose pattern holds the condensed one</span>
+            <span class="c1"># MEff is a matrix of its own, not the assembly's, whose pattern holds the condensed one</span>
             <span class="n">MEff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformSystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">withCondensedPattern</span><span class="p">(</span><span class="n">MEff</span><span class="p">))</span>
 
         <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>

@@ -3818,24 +3818,27 @@ damping at the price of first-order accuracy; <span class="math notranslate nohi
 that region is accepted with a warning, <span class="math notranslate nohighlight">\(\beta = 0\)</span> (the explicit central-difference member
 of the family) is refused, because the formulation above divides by it.</p>
 <p><strong>Mass.</strong> The mass is the CONSISTENT one, <span class="math notranslate nohighlight">\(\int_\Omega \rho N^T N \, dV\)</span>, assembled from
-<a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia" title="edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeConsistentInertia()</span></code></a> into the very
-sparsity pattern the stiffness uses – both are scattered through the same VIJ layout of the
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a>, so adding <span class="math notranslate nohighlight">\(\boldsymbol{M}/(\beta \Delta t^2)\)</span>
-to the tangent is an entry-wise scaled addition of two value vectors, before the parent’s in-place CSR update, its
-multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act
-on the effective matrix without knowing it is one. For the same reason the mass is summed into
-CSR form by the stiffness’ own CSR generator. The damping <span class="math notranslate nohighlight">\(\boldsymbol{C}\)</span> is the diagonal
-each element reports through <code class="docutils literal notranslate"><span class="pre">computeLumpedDamping</span></code>; being diagonal, it is kept only as its
-nonzero entries and their positions in the same layout, not as a full value vector. Both are
-assembled in one loop over the elements (in chunks of elements on the thread pool, see
-<a class="reference internal" href="parallelization.html"><span class="doc">Parallelization</span></a>) when the equation system is (re)built – at a step’s start
-and after a topology change – not per Newton iteration. A rebuild caused only by a constraint changing
-its connectivity (a contact candidate list, which can change on every increment) leaves every
-element, and with it every element’s slot in the layout, where it was: the operators are then
-reused in the new layout rather than reassembled – see
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">NonlinearImplicitDynamic._reuseMassAndDamping()</span></code>. The one exception is a step that changes a
-material property mid-step (<code class="docutils literal notranslate"><span class="pre">&gt;&gt;changematerialproperty</span></code>), which invalidates the density and makes
-them reassemble every increment.</p>
+<a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia" title="edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeConsistentInertia()</span></code></a> through the assembly of the system
+matrix (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixAssembly</span></code></a>): every element writes its mass into
+its block as it writes its stiffness, so the mass lands on the very sparsity pattern the stiffness uses, whichever way
+the assembly sums the blocks (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>, <code class="docutils literal notranslate"><span class="pre">vij</span></code> or <code class="docutils literal notranslate"><span class="pre">direct</span></code>, see
+<a class="reference internal" href="assembly.html#system-matrix-assembly"><span class="std std-ref">System matrix assembly</span></a>). It is kept as a CSR matrix with values of its own on the pattern of the stiffness
+(<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern"><code class="xref py py-meth docutils literal notranslate"><span class="pre">copyOntoSparsityPattern()</span></code></a>). The damping
+<span class="math notranslate nohighlight">\(\boldsymbol{C}\)</span> is the diagonal each element reports through <code class="docutils literal notranslate"><span class="pre">computeLumpedDamping</span></code>; being diagonal, it is
+kept lumped, as one value per degree of freedom. The effective tangent
+<span class="math notranslate nohighlight">\(\boldsymbol{K} + \boldsymbol{M}/(\beta \Delta t^2) + \gamma \boldsymbol{C}/(\beta \Delta t)\)</span> is then formed
+while the tangent is assembled, both terms entering like the block of an element
+(<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addMatrix()</span></code></a>,
+<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addLumpedMatrix" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addLumpedMatrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addLumpedMatrix()</span></code></a>): before the parent’s
+multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act on the effective
+matrix without knowing it is one. Mass and damping are assembled in one loop over the elements (in chunks of elements
+on the assembly’s worker threads, see <a class="reference internal" href="parallelization.html"><span class="doc">Parallelization</span></a>) when the equation system is (re)built –
+at a step’s start and after a topology change – not per Newton iteration. A rebuild caused only by a constraint
+changing its connectivity (a contact candidate list, which can change on every increment) leaves the numbering of the
+degrees of freedom and every element where they were: the mass is then copied onto the sparsity pattern of the new
+system and the damping kept, rather than reassembled – see <code class="xref py py-meth docutils literal notranslate"><span class="pre">NonlinearImplicitDynamic._reuseMassAndDamping()</span></code>. The
+one exception is a step that changes a material property mid-step (<code class="docutils literal notranslate"><span class="pre">&gt;&gt;changematerialproperty</span></code>), which invalidates
+the density and makes them reassemble every increment.</p>
 <p><strong>Checks on the mass.</strong> The assembled mass and damping are checked at runtime for non-finite
 entries, the damping for negative entries, and every time-integrated degree of freedom for a
 nonzero mass; the total mass of each field is reported. The <em>symmetry</em> of the mass is not checked
@@ -4269,7 +4272,7 @@ tangent; see the parent’s hook. The trial displacement increment fixes the tri
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current trial solution increment.</p></li>
 <li><p><strong>R</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The residual, augmented in place.</p></li>
 <li><p><strong>F</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The reference flux scale of the convergence test, augmented in place.</p></li>
-<li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly"><em>SystemMatrixAssembly</em></a>) – The tangent being assembled; its VIJ value array is augmented in place.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly"><em>SystemMatrixAssembly</em></a>) – The tangent being assembled; the mass and the damping are added to it.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The time step.</p></li>
 </ul>
 </dd>
@@ -4490,18 +4493,6 @@ the module documentation.</p>
 <dd><p>Live h-adaptivity is supported; see the module docstring.</p>
 </dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.systemMatrixAssemblies">
-<span class="sig-name descname"><span class="pre">systemMatrixAssemblies</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'vij':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.systemMatrixAssemblies" title="Link to this definition"></a></dt>
-<dd><p>the effective tangent adds the mass and the damping entry by entry to the VIJ value array
-(see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.assembleAdditionalTerms" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.assembleAdditionalTerms"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleAdditionalTerms()</span></code></a>), and the mass is gathered into CSR by the generator’s gather map.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Only the VIJ assembly</p>
-</dd>
-</dl>
-</dd></dl>
-
 </dd></dl>
 
 <table class="docutils align-default" id="id5">
@@ -4689,11 +4680,14 @@ constant <code class="docutils literal notranslate"><span class="pre">dt</span><
 increment. The velocity and acceleration are available to every <code class="docutils literal notranslate"><span class="pre">*fieldOutput</span></code> as <code class="docutils literal notranslate"><span class="pre">result=V</span></code> and
 <code class="docutils literal notranslate"><span class="pre">result=A</span></code> on the displacement field, and travel with the <code class="docutils literal notranslate"><span class="pre">*output,</span> <span class="pre">type=restart</span></code> checkpoints,
 which is what makes a resumed run continue the same trajectory rather than restart it from rest.</p>
-<p><code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code> is the same solver with the element loop evaluated in parallel (see below). The
+<p><code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code> is the same solver with the element loop evaluated in parallel (see below). Both assemble the
+system matrix either way (<code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly=vij|direct</span></code>, see <a class="reference internal" href="assembly.html#system-matrix-assembly"><span class="std std-ref">System matrix assembly</span></a>): the mass is
+assembled through the same assembly as the stiffness, kept on its sparsity pattern, and added to the effective tangent
+while it is assembled, together with the lumped damping. The
 mass and the damping are assembled at a step’s start and after every topology change; when a
 contact constraint merely changes its connectivity, they are reused in the rebuilt equation
-system instead, which matters for contact problems whose candidate lists change on nearly every
-increment.</p>
+system instead (the mass copied onto the new sparsity pattern), which matters for contact problems whose candidate
+lists change on nearly every increment.</p>
 <p>Reduced-integration elements (<code class="docutils literal notranslate"><span class="pre">C3D20R</span></code>, <code class="docutils literal notranslate"><span class="pre">GC3D20R</span></code>, …) need a Marmot whose consistent mass is
 integrated with the full rule of the element shape (Marmot PR #101): with the element’s own reduced
 rule the mass is singular, and the equilibrium solve for the initial acceleration with it.</p>
@@ -4714,7 +4708,8 @@ such an event and what is not.</p>
 the continuous closed form at second order, for exact conservation of the discrete energy, for
 restart equivalence of <code class="docutils literal notranslate"><span class="pre">U</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>, and – under live refinement – for exact transfer of
 a velocity field of degree at most one onto new nodes together with exact conservation of mass,
-momentum and kinetic energy in that case.</p>
+momentum and kinetic energy in that case. Every one of these tests runs with both ways of summing the system matrix,
+and <code class="docutils literal notranslate"><span class="pre">tests/test_nid_assemblies_agree.py</span></code> compares the two to round-off.</p>
 </section>
 <section id="module-edelweissfe.solvers.nonlinearimplicitdynamicparallel">
 <span id="nidparallel-nonlinear-implicit-dynamic-newmark-beta-parallel"></span><h2><code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code> - Nonlinear Implicit Dynamic (Newmark-beta, parallel)<a class="headerlink" href="#module-edelweissfe.solvers.nonlinearimplicitdynamicparallel" title="Link to this heading"></a></h2>
