@@ -48,10 +48,14 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
 # tests/ carries no __init__.py, so pytest's default (prepend) import mode puts this directory on
 # sys.path and sibling test modules import by their bare module name.
 from test_nid_newmark import _deck, _run
+
+#: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
+pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 
 DT = 0.02
 N_INCREMENTS_FULL = 100  # two periods

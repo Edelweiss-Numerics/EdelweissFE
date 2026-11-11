@@ -37,6 +37,7 @@ code of its own. What can go wrong is therefore the composition, not the dynamic
 """
 
 import numpy as np
+import pytest
 from test_nid_amr import (
     _CANTILEVER_STEP,
     _REFINE_THE_FIXED_END_TWICE,
@@ -51,6 +52,9 @@ from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynami
 from edelweissfe.solvers.nonlinearimplicitdynamicparallel import NIDParallel
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
+
+#: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
+pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 
 
 def test_the_parallel_element_loop_is_reached_through_nid():

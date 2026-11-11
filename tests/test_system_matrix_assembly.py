@@ -25,7 +25,8 @@
 #  ---------------------------------------------------------------------
 """The two assemblies of the system matrix (:mod:`edelweissfe.numerics.systemmatrixassembly`) assemble the same
 matrix: from dense blocks and from blocks with entries of their own, from several worker threads, with blocks scaled
-by a factor, and after an abandoned assembly; the constraints with entries of their own list them in their local
+by a factor, with whole matrices added during the assembly, and after an abandoned assembly; a matrix copied onto
+their sparsity pattern holds its values there; the constraints with entries of their own list them in their local
 numbering; and the worker loop deals out its chunks as documented."""
 
 from types import SimpleNamespace
@@ -125,15 +126,8 @@ def _fillInOfTheWholeMatrix(pattern):
     return entries
 
 
-def _assemble(assemblyType, numberOfWorkers, factor=None, model=_model, patternFillIn=None):
-    entities, dofManager, blocks = model()
-    K = assemblyType(dofManager, numberOfWorkers, patternFillIn)
-
-    # an abandoned assembly: a block handed out, never committed
-    K.beginAssembly()
-    K[entities[0]][...] = 1e10
-
-    K.beginAssembly()
+def _writeBlocks(K, entities, blocks, numberOfWorkers):
+    """Every entity adds its block, the entities in chunks on the workers, as the element loop does."""
 
     def work(worker, chunk):
         writer = K.blocksOfWorker(worker)
@@ -143,6 +137,18 @@ def _assemble(assemblyType, numberOfWorkers, factor=None, model=_model, patternF
         writer.flush()
 
     mapChunksOnWorkers(entities, work, numberOfWorkers)
+
+
+def _assemble(assemblyType, numberOfWorkers, factor=None, model=_model, patternFillIn=None):
+    entities, dofManager, blocks = model()
+    K = assemblyType(dofManager, numberOfWorkers, patternFillIn)
+
+    # an abandoned assembly: a block handed out, never committed
+    K.beginAssembly()
+    K[entities[0]][...] = 1e10
+
+    K.beginAssembly()
+    _writeBlocks(K, entities, blocks, numberOfWorkers)
 
     if factor is not None:
         scaled = K.scaledBy(factor)
@@ -294,6 +300,137 @@ def test_direct_assembly_with_workers_agrees_with_itself_to_round_off():
     first = _assemble(DirectCSRSystemMatrixAssembly, 3)
     for _ in range(5):
         np.testing.assert_allclose(_assemble(DirectCSRSystemMatrixAssembly, 3), first, rtol=1e-14, atol=1e-14)
+
+
+_ASSEMBLIES = [VIJSystemMatrixAssembly, DirectCSRSystemMatrixAssembly]
+
+
+def _onThePattern(K, values):
+    """A matrix of its own (not sharing an array with the system matrix) on the sparsity pattern of ``K``."""
+    pattern = K.csrMatrix
+    return csr_matrix((values, pattern.indices.copy(), pattern.indptr.copy()), shape=pattern.shape)
+
+
+@pytest.mark.parametrize("assemblyType", _ASSEMBLIES)
+@pytest.mark.parametrize("numberOfWorkers", [1, 3])
+def test_a_matrix_and_a_lumped_matrix_enter_during_the_assembly(assemblyType, numberOfWorkers):
+    """K = sum of the blocks + 0.7 M - 0.2 C, as a dynamic solver forms its effective tangent: the same however often
+    the assembled matrix is asked for, and gone in the next assembly."""
+    entities, dofManager, blocks = _model()
+    K = assemblyType(dofManager, numberOfWorkers)
+    rng = np.random.default_rng(7)
+
+    source = _onThePattern(K, rng.standard_normal(K.csrMatrix.nnz))
+    M = K.copyOntoSparsityPattern(source)
+    lumpedMatrix = rng.standard_normal(dofManager.nDof)
+    lumpedMatrix[[1, 4]] = 0.0
+    coupled = np.unique(np.concatenate([entity.dofs for entity in entities if isinstance(entity, _DenseEntity)]))
+    lumpedMatrix[np.setdiff1d(np.arange(dofManager.nDof), coupled)] = 0.0
+
+    K.beginAssembly()
+    _writeBlocks(K, entities, blocks, numberOfWorkers)
+    K.addMatrix(M, 0.7)
+    K.addLumpedMatrix(lumpedMatrix, -0.2)
+
+    expected = _reference() + 0.7 * source.toarray() - 0.2 * np.diag(lumpedMatrix)
+    np.testing.assert_allclose(K.assembledMatrix().toarray(), expected, rtol=1e-14, atol=1e-14)
+    np.testing.assert_allclose(K.assembledMatrix().toarray(), expected, rtol=1e-14, atol=1e-14)
+
+    K.beginAssembly()
+    _writeBlocks(K, entities, blocks, numberOfWorkers)
+    np.testing.assert_allclose(K.assembledMatrix().toarray(), _reference(), rtol=1e-14, atol=1e-14)
+
+
+def _sparseModel():
+    """Two dense blocks and one block with entries of its own on eight degrees of freedom: the pattern is known, with
+    entries outside it, and dofs 4 and 6 without a diagonal entry (dof 7 is coupled to nothing)."""
+    entities = [_DenseEntity([0, 1]), _DenseEntity([2, 3]), _SparseEntity([4, 5, 6])]
+    blocks = {entity: np.arange(1.0, countEntriesOfBlock(entity) + 1.0) for entity in entities}
+    return entities, _DofManager(entities, 8), blocks
+
+
+@pytest.mark.parametrize("assemblyType", _ASSEMBLIES)
+@pytest.mark.parametrize("numberOfWorkers", [1, 3])
+def test_a_lumped_matrix_off_the_diagonal_of_the_pattern_is_refused(assemblyType, numberOfWorkers):
+    _, dofManager, _ = _sparseModel()
+    K = assemblyType(dofManager, numberOfWorkers)
+    K.beginAssembly()
+
+    onTheDiagonal = np.zeros(dofManager.nDof)
+    onTheDiagonal[[0, 3, 5]] = 1.0
+    K.addLumpedMatrix(onTheDiagonal, 2.0)
+    np.testing.assert_array_equal(K.assembledMatrix().diagonal(), 2.0 * onTheDiagonal)
+
+    offTheDiagonal = np.zeros(dofManager.nDof)
+    offTheDiagonal[4] = 1.0
+    with pytest.raises(ValueError, match="no diagonal entry"):
+        K.addLumpedMatrix(offTheDiagonal, 1.0)
+
+    with pytest.raises(ValueError, match="one value per degree of freedom"):
+        K.addLumpedMatrix(np.ones(dofManager.nDof + 1), 1.0)
+
+
+@pytest.mark.parametrize("assemblyType", _ASSEMBLIES)
+@pytest.mark.parametrize("numberOfWorkers", [1, 3])
+def test_a_copy_on_the_same_pattern_has_values_of_its_own(assemblyType, numberOfWorkers):
+    entities, dofManager, blocks = _sparseModel()
+    K = assemblyType(dofManager, numberOfWorkers)
+    K.beginAssembly()
+    _writeBlocks(K, entities, blocks, numberOfWorkers)
+    assembled = K.assembledMatrix()
+    expected = assembled.toarray()
+
+    copy = K.copyOntoSparsityPattern(assembled)
+
+    assert copy.indptr is K.csrMatrix.indptr and copy.indices is K.csrMatrix.indices
+    assert not np.shares_memory(copy.data, K.csrMatrix.data)
+    K.beginAssembly()
+    K.assembledMatrix()
+    np.testing.assert_array_equal(copy.toarray(), expected)
+
+    # the pattern is the system matrix's: a structural change is refused, a change of the values is not
+    with pytest.raises(RuntimeError):
+        copy.eliminate_zeros()
+    copy.data *= 2.0
+    np.testing.assert_array_equal(copy.toarray(), 2.0 * expected)
+
+    with pytest.raises(ValueError, match="not on the sparsity pattern"):
+        K.addMatrix(assembled.copy(), 1.0)
+
+
+@pytest.mark.parametrize("assemblyType", _ASSEMBLIES)
+@pytest.mark.parametrize("numberOfWorkers", [1, 3])
+def test_a_copy_from_a_part_of_the_pattern_is_zero_elsewhere(assemblyType, numberOfWorkers):
+    """A matrix on a part of the pattern (as the mass of the equation system before a contact search widened the
+    pattern), with a stored zero outside the pattern, and a duplicate entry, which is summed."""
+    _, dofManager, _ = _sparseModel()
+    K = assemblyType(dofManager, numberOfWorkers)
+
+    # row 0: (0, 1) and a stored zero at (0, 3), outside; row 1: (1, 1); row 3: (3, 2) twice; row 5: (5, 5); row 6: (6, 4)
+    values = np.array([1.0, 0.0, 2.0, 3.0, 4.0, 6.0, 5.0])
+    columns = np.array([1, 3, 1, 2, 2, 5, 4])
+    rowStarts = np.array([0, 2, 3, 3, 5, 5, 6, 7, 7])
+    part = csr_matrix((values, columns, rowStarts), shape=(dofManager.nDof, dofManager.nDof))
+
+    copy = K.copyOntoSparsityPattern(part)
+
+    assert copy.indices is K.csrMatrix.indices
+    np.testing.assert_array_equal(copy.toarray(), part.toarray())
+    assert copy.nnz == K.csrMatrix.nnz
+
+
+@pytest.mark.parametrize("assemblyType", _ASSEMBLIES)
+@pytest.mark.parametrize("numberOfWorkers", [1, 3])
+def test_a_nonzero_outside_the_pattern_is_not_copied_onto_it(assemblyType, numberOfWorkers):
+    _, dofManager, _ = _sparseModel()
+    K = assemblyType(dofManager, numberOfWorkers)
+
+    outside = csr_matrix(([1.0, 2.0], ([0, 0], [1, 3])), shape=(dofManager.nDof, dofManager.nDof))
+    with pytest.raises(ValueError, match=r"nonzero entry \(0, 3\) outside the sparsity pattern"):
+        K.copyOntoSparsityPattern(outside)
+
+    with pytest.raises(ValueError, match="shape"):
+        K.copyOntoSparsityPattern(csr_matrix((dofManager.nDof + 1, dofManager.nDof + 1)))
 
 
 def test_workers_get_their_chunks_in_turn():

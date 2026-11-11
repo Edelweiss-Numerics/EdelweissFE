@@ -58,6 +58,7 @@ from test_nid_newmark import (
 )
 
 from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.equationsystemlayout import EquationSystemLayout
@@ -65,6 +66,9 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.utils.inputfileparser import parseInputFile
+
+#: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
+pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 
 #: A deck of the explicit static solver NEST.
 _NEST_DECK = Path(__file__).resolve().parent.parent / "testfiles" / "marmot" / "NEST" / "test.inp"
@@ -159,34 +163,31 @@ def test_a_reduced_integration_element_starts_under_load(tmp_path):
     assert uReduced < 10.0 * uFull, (uReduced, uFull)
 
 
+_TRUE_DISCARD = NonlinearImplicitDynamic._discardInertiaOfQuasiStaticFields
+
+
 def _corruptTheAssembledMass(monkeypatch, value: float):
-    """Replace the first nonzero entry of the assembled mass matrix (still in VIJ form) by
-    ``value`` -- the elements' own output is out of reach of a test, the Marmot elements being
-    compiled. The discarded-inertia warning is the hook: it is handed the mass right before the
-    CSR conversion and the checks."""
+    """Replace the first nonzero entry of the assembled mass matrix by ``value`` -- the elements' own output is out of
+    reach of a test, the Marmot elements being compiled. The discarding of the inertia of the quasi-static fields is
+    the hook: it is handed the assembled mass right before the checks."""
 
-    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+    def corruptingDiscard(self, M, lumpedDamping, isDynamic):
+        _TRUE_DISCARD(self, M, lumpedDamping, isDynamic)
+        M.data[np.flatnonzero(M.data)[0]] = value
 
-    trueWarn = NonlinearImplicitDynamic._warnAboutDiscardedInertia
-
-    def corruptingWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly):
-        trueWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly)
-        Mvij[np.flatnonzero(np.asarray(Mvij))[0]] = value
-
-    monkeypatch.setattr(NonlinearImplicitDynamic, "_warnAboutDiscardedInertia", corruptingWarn)
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_discardInertiaOfQuasiStaticFields", corruptingDiscard)
 
 
 def _reportADamping(monkeypatch, value: float):
-    """Let every element report ``value`` as the damping of its first (dynamic) dof -- the
-    elements' own output is out of reach of a test, the Marmot elements being compiled."""
+    """Give the first dynamic dof the damping ``value``, as though an element had reported it -- the elements' own
+    output is out of reach of a test, the Marmot elements being compiled. Through the same hook as
+    :func:`_corruptTheAssembledMass`."""
 
-    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+    def dampingDiscard(self, M, lumpedDamping, isDynamic):
+        _TRUE_DISCARD(self, M, lumpedDamping, isDynamic)
+        lumpedDamping[np.flatnonzero(isDynamic)[0]] = value
 
-    def lumpedDampingOfElement(self, el):
-        start = self._K.vijSliceOfEntity[el].start
-        return np.array([start], dtype=np.int64), np.array([value])
-
-    monkeypatch.setattr(NonlinearImplicitDynamic, "_lumpedDampingOfElement", lumpedDampingOfElement)
+    monkeypatch.setattr(NonlinearImplicitDynamic, "_discardInertiaOfQuasiStaticFields", dampingDiscard)
 
 
 def test_refuses_a_non_finite_mass(tmp_path, monkeypatch):
@@ -208,8 +209,6 @@ def test_refuses_a_negative_damping(tmp_path, monkeypatch):
 
 
 def test_reports_the_assembled_total_mass(tmp_path, monkeypatch):
-    from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
-
     reported = []
     trueTotalMassByField = NonlinearImplicitDynamic._totalMassByField
 
@@ -352,3 +351,79 @@ def test_inertia_at_the_nodes_is_refused_for_a_model_without_entities_that_integ
     solverClass = functools.partial(NonlinearImplicitDynamic, inertia="nodes")
     with pytest.raises(ValueError, match="inertia=nodes means nothing"):
         _solve(_strip(FEModel(2), 2), solverClass, journal)
+
+
+#: The consistent mass the elements of the strip are given in :func:`test_the_lumped_mass_of_entities_enters_the_diagonal`
+#: (the pure-Python elements have none), per degree of freedom, and the lumped mass of the entities on every
+#: displacement dof.
+_ELEMENT_MASS = 0.25
+_LUMPED_MASS_OF_ENTITIES = 0.5
+
+
+class _LayoutWithLumpedMassOfEntities(EquationSystemLayout):
+    """The layout of a model with entities that integrate their own inertia, which it does not model: their lumped mass
+    lies on every displacement dof, ``lumpedMass`` each (zero is a lumped mass too, unlike none)."""
+
+    def __init__(self, model, dofManager, elements, lumpedMass: float):
+        super().__init__(model, dofManager, elements)
+        self.lumpedMass = lumpedMass
+
+    def assembleLumpedMassOfEntitiesWithOwnInertia(self, forEachChunk):
+        lumpedMass = self.dofManager.constructDofVector()
+        lumpedMass[:] = 0.0
+        lumpedMass[self.dofManager.idcsOfFieldsInDofVector["displacement"]] = self.lumpedMass
+        return lumpedMass
+
+
+class _ModelWithLumpedMassOfEntities(FEModel):
+    """A finite element model that answers with :class:`_LayoutWithLumpedMassOfEntities`."""
+
+    def __init__(self, dimension, lumpedMass: float):
+        super().__init__(dimension)
+        self.lumpedMass = lumpedMass
+
+    def buildEquationSystem(self):
+        layout = super().buildEquationSystem()
+        return _LayoutWithLumpedMassOfEntities(self, layout.dofManager, layout.elements, self.lumpedMass)
+
+
+def test_the_lumped_mass_of_entities_enters_the_diagonal(monkeypatch):
+    """inertia=nodes: the lumped mass of the entities that integrate their own inertia enters the diagonal of the
+    mass (``SystemMatrixAssembly.addLumpedMatrix``), on both assemblies. A stub layout here; the real coverage is in
+    EdelweissMeshfree, whose particles are such entities. Run once with a lumped mass of zero and once with
+    ``_LUMPED_MASS_OF_ENTITIES``: the masses assembled differ by exactly that on the diagonal of the displacement
+    dofs, and nowhere else."""
+
+    # the elements of the strip
+    elementClass = getElementClass("CPE4", "edelweiss")
+
+    def computeConsistentInertia(self, M):
+        M[...] = (_ELEMENT_MASS * np.eye(self.nDof)).reshape(M.shape)
+
+    monkeypatch.setattr(elementClass, "computeConsistentInertia", computeConsistentInertia)
+
+    trueAssemble = NonlinearImplicitDynamic._assembleMassAndDamping
+
+    def run(lumpedMass: float) -> list:
+        masses = []
+
+        def recordingAssemble(self, model, dynamicDofs, dynamicFields, lumpedMassOfEntities):
+            result = trueAssemble(self, model, dynamicDofs, dynamicFields, lumpedMassOfEntities)
+            masses.append(result[0].toarray())
+            return result
+
+        monkeypatch.setattr(NonlinearImplicitDynamic, "_assembleMassAndDamping", recordingAssemble)
+        solverClass = functools.partial(NonlinearImplicitDynamic, inertia="nodes")
+        model = _solve(_strip(_ModelWithLumpedMassOfEntities(2, lumpedMass), 2), solverClass, Journal(verbose=False))
+        assert np.max(np.abs(model.nodeFields["displacement"]["U"])) > 0.0
+        return masses
+
+    withoutLumpedMass = run(0.0)
+    withLumpedMass = run(_LUMPED_MASS_OF_ENTITIES)
+
+    # the mass is assembled anew for every increment, as the entities may move
+    assert len(withLumpedMass) == len(withoutLumpedMass) > 1
+    for without, withLumped in zip(withoutLumpedMass, withLumpedMass):
+        np.testing.assert_allclose(
+            withLumped - without, _LUMPED_MASS_OF_ENTITIES * np.eye(len(without)), rtol=0.0, atol=1e-14
+        )

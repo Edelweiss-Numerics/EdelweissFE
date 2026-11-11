@@ -44,10 +44,14 @@ property.
 """
 
 import numpy as np
+import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.utils.inputfileparser import parseInputFile
+
+#: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
+pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 
 # A small enough tip force that the elastic strain energy stays far below what would drive the
 # phase field away from (near-)zero -- the point of this test is the multi-field bookkeeping, not
@@ -133,9 +137,9 @@ def test_the_discarded_nonlocal_inertia_is_warned_about_once(tmp_path, monkeypat
     trueWarn = NonlinearImplicitDynamic._warnAboutDiscardedInertia
     warned = []
 
-    def recordingWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly):
+    def recordingWarn(self, affectedDofs):
         before = set(self._fieldsWarnedAboutDiscardedInertia)
-        trueWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly)
+        trueWarn(self, affectedDofs)
         warned.extend(self._fieldsWarnedAboutDiscardedInertia - before)
 
     monkeypatch.setattr(NonlinearImplicitDynamic, "_warnAboutDiscardedInertia", recordingWarn)

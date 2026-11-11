@@ -414,6 +414,7 @@ _SCENARIOS = {
     ),
     "amrRigidContact": dict(
         solvers=["implicit", "explicit", "NID"],
+        assemblies={"NID": _ASSEMBLIES},
         blocks=[_BEAM, _RIGID_PLATE],
         threshold={"implicit": 6.0, "explicit": 40.0, "NID": 6.0},
         steps=[_LOADS_SLIDE],
@@ -476,6 +477,7 @@ _SCENARIOS = {
     # (i) Newmark implicit dynamics, with live AMR.
     "amrDynamic": dict(
         solvers=["NID"],
+        assemblies={"NID": _ASSEMBLIES},
         blocks=[_BEAM],
         threshold={"NID": 6.0},
         steps=[_LOADS_BEND],
