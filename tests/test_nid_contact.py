@@ -41,6 +41,8 @@ system and keeps the damping instead (``_reuseMassAndDamping``). What has to hol
   identity is a bug, not round-off.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -152,3 +154,18 @@ def test_reusing_is_bit_identical_to_reassembling(tmp_path, monkeypatch):
 
     for c, r, name in zip(reusedState, reassembledState, "UVA"):
         np.testing.assert_array_equal(c, r, err_msg=name)
+
+
+@pytest.mark.parametrize("change", ["numbering", "elements"])
+def test_the_mass_is_reassembled_when_the_numbering_or_the_elements_differ(change):
+    """The reuse compares the digest of the dof numbering and the set of elements of the two systems, and refuses as
+    soon as either differs; the stiffness is never asked for a copy then."""
+
+    def dofManager(digest, elements):
+        return SimpleNamespace(dofNumberingDigest=digest, idcsOfElementsInDofVector={e: None for e in elements})
+
+    old = dofManager("a", ["e1", "e2"])
+    new = dofManager("b", ["e1", "e2"]) if change == "numbering" else dofManager("a", ["e1", "e3"])
+    solver = SimpleNamespace(theDofManager=new, _K=None)
+
+    assert NonlinearImplicitDynamic._reuseMassAndDamping(solver, SimpleNamespace(dofManager=old)) is None

@@ -371,6 +371,21 @@ def test_a_lumped_matrix_off_the_diagonal_of_the_pattern_is_refused(assemblyType
 
 
 @pytest.mark.parametrize("assemblyType", _ASSEMBLIES)
+def test_a_lumped_matrix_finds_no_diagonal_in_an_empty_pattern(assemblyType):
+    """A model whose degrees of freedom are coupled to nothing has a sparsity pattern without entries: a lumped matrix
+    with a nonzero value is refused, a zero one adds nothing."""
+    K = assemblyType(_DofManager([], 3), 1)
+    K.beginAssembly()
+
+    K.addLumpedMatrix(np.zeros(3), 1.0)
+    assert K.assembledMatrix().nnz == 0
+
+    K.beginAssembly()
+    with pytest.raises(ValueError, match="no diagonal entry"):
+        K.addLumpedMatrix(np.array([0.0, 1.0, 0.0]), 1.0)
+
+
+@pytest.mark.parametrize("assemblyType", _ASSEMBLIES)
 @pytest.mark.parametrize("numberOfWorkers", [1, 3])
 def test_a_copy_on_the_same_pattern_has_values_of_its_own(assemblyType, numberOfWorkers):
     entities, dofManager, blocks = _sparseModel()
