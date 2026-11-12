@@ -33,8 +33,9 @@ accepted increment wrote it, of this step or of the step before. These are
 - in ``NID``, also an increment of negligible length: the round-off remainder the time stepper may leave at the end
   of a step (see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`).
 
-A rebuilt discrete system (a changed mesh, a changed active domain, a changed coupling) reads the state entries from
-the model. A refinement of the mesh interpolates the state entries onto the nodes it creates; the results there are
+A discrete system with a new numbering (a changed mesh, a changed active domain, a changed set of scalar variables)
+reads the state entries from the model; new locations on the same numbering (a changed connectivity, e.g. a contact
+search) do not: the vectors of the solver keep their values, which are the state. A refinement of the mesh interpolates the state entries onto the nodes it creates; the results there are
 zero until the next accepted increment.
 
 Every solver passes these entries through the discrete system
@@ -94,7 +95,7 @@ The entries
 
 The Lagrange multipliers of constraints are scalar variables, not node field entries
 (:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
-value, written at acceptance and read back at every rebuild. A constraint that is not active keeps the value it
+value, written at acceptance and read back whenever the discrete system gets a new numbering. A constraint that is not active keeps the value it
 had.
 
 What each solver writes

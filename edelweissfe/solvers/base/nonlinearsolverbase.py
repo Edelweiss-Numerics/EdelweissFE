@@ -35,6 +35,7 @@ from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.change import Change
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.mpctransformation import (
@@ -82,6 +83,19 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: A solver that runs it only before its increment loop sets this too, and refuses the modifiers that would
     #: need it later (see ModelModifierBase.actsOnlyAtSimulationStart and NED.validateModelCapabilities).
     supportsModelModifiers = False
+
+    #: The current discrete system of the model (see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`),
+    #: with its numbering, its locations, and how the solution passes between the model and the vectors of the solver.
+    #: Replaced by a new one, never changed (see :meth:`updateDiscreteSystem`); None until the first one is built.
+    system: DiscreteSystem | None = None
+
+    #: What the topology update changed at the start of the increment, which the increment reacts on (see
+    #: :meth:`updateTopologyAndConnectivity`).
+    _change: Change = Change.NONE
+
+    #: The actions of the step being solved, set when it begins. The multi-point constraints are reconciled with its
+    #: Dirichlet boundary conditions whenever the discrete system gets a new numbering.
+    _stepActions: dict | None = None
 
     #: The active multi-point-constraint (hanging node / tie) condensation, or None without MPCs. Lets
     #: applyDirichletToStiffness tell an MPC-transformed (disposable) system matrix apart from the
@@ -218,6 +232,80 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         if meshChanged or meshDependentsRefreshed:
             return Change.MESH
         return change
+
+    def updateDiscreteSystem(self, model: FEModel, change: Change):
+        """Bring the discrete system up to date with what changed: the one way a solver builds its discrete system, from
+        the first to the last increment.
+
+        * No discrete system yet, or a change of the numbering or of the mesh
+          (:attr:`~edelweissfe.models.change.Change.NUMBERING`, :attr:`~edelweissfe.models.change.Change.MESH`): the
+          model builds a new one (:meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), then
+          :meth:`onNewNumbering` and :meth:`onNewLocations` follow. The old one is dropped before
+          (:meth:`forgetDiscreteSystem`): never both at once.
+        * A change of the locations (:attr:`~edelweissfe.models.change.Change.LOCATIONS`): the same numbering, new
+          locations (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`); only
+          :meth:`onNewLocations` follows, so that nothing sized by the numbering is touched.
+        * Else nothing.
+
+        The change is the one :meth:`updateTopologyAndConnectivity` reports: the model classifies what its entities
+        report, and the topology update adds a change of the mesh. The solver never tests whether an entity changed.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        change
+            What changed since the discrete system was built.
+        """
+
+        if self.system is not None and change == Change.NONE:
+            return
+
+        with performancetiming.timeit("discrete system rebuild"):
+            if self.system is None or change >= Change.NUMBERING:
+                self.forgetDiscreteSystem()
+                with performancetiming.timeit("numbering and locations"):
+                    self.system = model.buildDiscreteSystem()
+                self.onNewNumbering()
+            else:
+                with performancetiming.timeit("numbering and locations"):
+                    self.system = self.system.withNewLocations()
+            self.onNewLocations()
+
+    def forgetDiscreteSystem(self) -> None:
+        """Drop the discrete system, and everything that belongs to it, before the next one is built; a solver that
+        keeps more of it extends this."""
+
+        self.system = None
+
+    def onNewNumbering(self):
+        """Everything that is sized by the numbering of the new discrete system, :attr:`system`, is built here, e.g. the
+        vectors, which the state is read into from the model, the linear solver's view of the degrees of freedom, the
+        layout of the convergence table. Called by :meth:`updateDiscreteSystem` when the discrete system was built
+        anew, before :meth:`onNewLocations`. Never called for new locations on the same numbering: what is built here
+        stays as it is.
+
+        Raises
+        ------
+        NotImplementedError
+            A solver that builds through :meth:`updateDiscreteSystem` implements this.
+        """
+
+        raise NotImplementedError("{:} implements onNewNumbering.".format(self.identification))
+
+    def onNewLocations(self):
+        """Everything that is derived from the locations of the new discrete system, :attr:`system`, is built here: the
+        vectors are wrapped with them (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`, the values are
+        kept), and the system matrix assembly, whose sparsity pattern the locations determine. Called by
+        :meth:`updateDiscreteSystem` after every new discrete system, and after new locations on the same numbering.
+
+        Raises
+        ------
+        NotImplementedError
+            A solver that builds through :meth:`updateDiscreteSystem` implements this.
+        """
+
+        raise NotImplementedError("{:} implements onNewLocations.".format(self.identification))
 
     @staticmethod
     def collectLoads(stepActions: dict) -> list[LoadBase]:

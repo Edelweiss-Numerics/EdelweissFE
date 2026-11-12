@@ -6,6 +6,7 @@ DofNumbering, DofLocations).
 """
 
 import unittest
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -40,13 +41,16 @@ class TestNumerics(unittest.TestCase):
     def setUp(self):
         self.ent1 = DummyEntity(nDof=2, entity_id=1)
         self.ent2 = DummyEntity(nDof=3, entity_id=2)
-        self.entity_map = {
-            self.ent1: np.array([0, 1], dtype=int),
-            self.ent2: np.array([1, 2, 3], dtype=int),
-        }
+        #: The locations of the entities: all a DofVector asks of them is the mapping.
+        self.locations = SimpleNamespace(
+            ofEntity={
+                self.ent1: np.array([0, 1], dtype=int),
+                self.ent2: np.array([1, 2, 3], dtype=int),
+            }
+        )
 
     def test_dof_vector_creation_and_indexing(self):
-        dof_vec = DofVector(nDof=4, entitiesInDofVector=self.entity_map)
+        dof_vec = DofVector(nDof=4, locations=self.locations)
         self.assertEqual(dof_vec.size, 4)
         self.assertTrue(np.allclose(dof_vec, 0.0))
 
@@ -71,7 +75,7 @@ class TestNumerics(unittest.TestCase):
         dof_copy = dof_vec.copy()
         self.assertIsInstance(dof_copy, DofVector)
         self.assertTrue(np.allclose(dof_copy, dof_vec))
-        self.assertIn(self.ent1, dof_copy.entitiesInDofVector)
+        self.assertIs(dof_copy.locations, self.locations)
 
         # Create Scatter Vector
         scatter_vec = dof_vec.createScatterVector()
@@ -79,7 +83,7 @@ class TestNumerics(unittest.TestCase):
         self.assertEqual(scatter_vec.size, 5)  # 2 + 3 entries
 
     def test_scatter_dof_vector(self):
-        template = ScatterDofVectorTemplate(self.entity_map, nDof=4)
+        template = ScatterDofVectorTemplate(self.locations, nDof=4)
         scatter_vec = ScatterDofVector(template)
         self.assertEqual(scatter_vec.size, 5)
 
@@ -90,7 +94,7 @@ class TestNumerics(unittest.TestCase):
         self.assertTrue(np.allclose(scatter_vec[self.ent2], [7.0, 8.0, 9.0]))
 
         # Assemble into global DofVector
-        target = DofVector(4, self.entity_map)
+        target = DofVector(4, self.locations)
         scatter_vec.assembleInto(target)
         # index 0: 5.0 (from ent1)
         # index 1: 6.0 (from ent1) + 7.0 (from ent2) = 13.0

@@ -30,8 +30,8 @@
 of every element and constraint, the counts of the fluxes of the convergence tests, and the digest of the numbering.
 
 ``DofLocations.withNewLocationsOf()`` must reproduce, for a changed constraint connectivity, exactly the
-locations built from scratch would hold -- and must hand out a NEW mapping of the entities, because consumers cache
-plans keyed on that mapping's identity.
+locations built from scratch would hold -- and must hand out a NEW mapping of the entities, because the locations are
+immutable: whoever still holds the old locations holds a mapping that stays valid.
 
 The explicit solver asks for it (``DiscreteSystem.withNewLocations()``) instead of building the whole discrete system
 when a contact search changed which nodes a constraint couples. A numbering that is built that often must not pay for
@@ -146,6 +146,8 @@ def test_new_locations_match_fresh_locations():
     stale = _locations(model, [before])
     staleMapping = stale.ofEntity
     staleElementIndices = {e: stale[e].copy() for e in stale.elements}
+    # asked on the old locations first: the new ones must not take over a count made for the old constraint
+    staleCounts = stale.nAccumulatedNodalFluxesFieldwise
 
     relocated = stale.withNewLocationsOf([after])
 
@@ -158,12 +160,13 @@ def test_new_locations_match_fresh_locations():
     assert stale.ofEntity is staleMapping and before in stale
     assert before not in relocated
     assert relocated.constraints == [after] and stale.constraints == [before]
+    assert stale.nAccumulatedNodalFluxesFieldwise == staleCounts != relocated.nAccumulatedNodalFluxesFieldwise
     for element, indices in staleElementIndices.items():
         np.testing.assert_array_equal(relocated[element], indices)
 
     # and a DofVector constructed afterwards knows the new constraint and not the old one
     vector = relocated.constructDofVector()
-    assert after in vector.entitiesInDofVector and before not in vector.entitiesInDofVector
+    assert after in vector.locations and before not in vector.locations
 
 
 def test_new_locations_with_no_constraints_at_all():
@@ -192,6 +195,35 @@ def test_moved_further_entities_are_located_anew_and_the_others_keep_their_locat
     assert relocated[resting] is indicesOfResting
     np.testing.assert_array_equal(locations[moving], [0, 1, 2, 3])
     assert relocated.elements == [moving, resting]
+
+
+def test_the_flux_counts_of_the_elements_are_counted_once_for_all_locations_made_from_them(monkeypatch):
+    model, n = _buildTwoElementModel()
+    locations = _locations(model, [_FakeConstraint([n[0], n[5]], ["displacement"])])
+    entitiesCounted = []
+    count = DofLocations._accumulateNodalFluxesFieldwise
+    monkeypatch.setattr(
+        DofLocations,
+        "_accumulateNodalFluxesFieldwise",
+        lambda self, entities: entitiesCounted.append(len(entities)) or count(self, entities),
+    )
+
+    locations.nAccumulatedNodalFluxesFieldwise
+    assert entitiesCounted == [2, 0, 1], "the elements, the further entities, the constraints"
+    entitiesCounted.clear()
+
+    relocated = locations.withNewLocationsOf([_FakeConstraint([n[2], n[3], n[4]], ["displacement"])])
+    relocated.nAccumulatedNodalFluxesFieldwise
+    assert entitiesCounted == [1], "only the constraints are counted again"
+
+
+def test_a_moved_entity_must_be_located_already():
+    model, n = _buildTwoElementModel()
+    resting = _FakeEntity([n[4], n[5]], ["displacement"])
+    locations = DofLocations(_numbering(model), [], [], [resting])
+
+    with pytest.raises(ValueError, match="not located"):
+        locations.withNewLocationsOf([], [_FakeEntity([n[0], n[1]], ["displacement"])])
 
 
 def test_an_entity_that_couples_a_field_its_node_does_not_have_is_an_error():

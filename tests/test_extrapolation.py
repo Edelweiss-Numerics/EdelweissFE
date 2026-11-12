@@ -323,7 +323,7 @@ def test_prediction_across_a_change_of_the_connectivity(tmp_path, increments, mo
     np.testing.assert_allclose(result, reference, rtol=0.0, atol=1e-12)
 
 
-def test_a_rebuild_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tmp_path):
+def test_a_new_numbering_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tmp_path):
     model = run(tmp_path, deck())
     field = model.nodeFields["displacement"]
     digest = DofNumbering([field]).digest
@@ -334,26 +334,29 @@ def test_a_rebuild_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tm
 
     lastIncrement = np.zeros(field.dimension * len(field.nodes))
     solver = solverWithHistory("linear", [0.1], [lastIncrement], digest, extrapolateAcrossConnectivityChange=True)
-    # a rebuild after a change of the connectivity alone (LOCATIONS), or at the first increment of a step that continues
-    # from a checkpoint (NONE): the prediction survives only if the rebuilt system numbers the DOFs alike
-    for change in (Change.LOCATIONS, Change.NONE):
-        solver.system = SimpleNamespace(numbering=DofNumbering([renumbered]))
-        assert not solver.predictionSurvivesRebuild(change)
-        solver.system = SimpleNamespace(numbering=DofNumbering([field]))
-        assert solver.predictionSurvivesRebuild(change)
+    # a new numbering at the first increment of a step that continues from a checkpoint (NONE): the prediction survives
+    # only if the new numbering numbers the DOFs alike
+    solver.system = SimpleNamespace(numbering=DofNumbering([renumbered]))
+    assert not solver.predictionSurvives(Change.NONE)
+    solver.system = SimpleNamespace(numbering=DofNumbering([field]))
+    assert solver.predictionSurvives(Change.NONE)
     # never after a change of the mesh
-    assert not solver.predictionSurvivesRebuild(Change.MESH)
+    assert not solver.predictionSurvives(Change.MESH)
     # a prediction without the digest of its numbering cannot be compared, and does not survive
     solver.dofNumberingOfLastIncrement = None
-    assert not solver.predictionSurvivesRebuild(Change.NONE)
-    solver.dofNumberingOfLastIncrement = digest
-    # across a change of the connectivity only with the option
-    solver.options["extrapolateAcrossConnectivityChange"] = False
-    assert not solver.predictionSurvivesRebuild(Change.LOCATIONS)
-    assert solver.predictionSurvivesRebuild(Change.NONE)
+    assert not solver.predictionSurvives(Change.NONE)
 
 
-def test_a_rebuild_that_numbers_other_scalar_variables_drops_the_prediction():
+@pytest.mark.parametrize("change", [Change.LOCATIONS, Change.NUMBERING])
+def test_a_prediction_survives_a_change_of_the_connectivity_only_if_the_option_says_so(change):
+    digest = DofNumbering([], [ScalarVariable("tie_0")]).digest
+    for option, survives in ((True, True), (False, False)):
+        solver = solverWithHistory("linear", [0.1], [[0.5]], digest, extrapolateAcrossConnectivityChange=option)
+        solver.system = SimpleNamespace(numbering=DofNumbering([], [ScalarVariable("tie_0")]))
+        assert solver.predictionSurvives(change) is survives
+
+
+def test_a_new_numbering_of_other_scalar_variables_drops_the_prediction():
     """Two constraints with one Lagrange multiplier each, one switched on and the other off, then the other way round
     (a constraint may switch within a step): the two discrete systems have as many degrees of freedom, but the last one
     numbers another multiplier. The digest names the scalar variables, by the names the model holds them under, so the
@@ -371,9 +374,9 @@ def test_a_rebuild_that_numbers_other_scalar_variables_drops_the_prediction():
 
     solver = solverWithHistory("linear", [0.1], [[0.5]], digest, extrapolateAcrossConnectivityChange=True)
     solver.system = SimpleNamespace(numbering=DofNumbering([], [ScalarVariable("tieB_0")]))
-    assert not solver.predictionSurvivesRebuild(Change.LOCATIONS)
+    assert not solver.predictionSurvives(Change.NUMBERING)
     solver.system = SimpleNamespace(numbering=DofNumbering([], [ScalarVariable("tieA_0")]))
-    assert solver.predictionSurvivesRebuild(Change.LOCATIONS)
+    assert solver.predictionSurvives(Change.NUMBERING)
 
 
 def test_the_history_of_a_quadratic_extrapolation_is_checkpointed():

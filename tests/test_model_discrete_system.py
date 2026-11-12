@@ -302,6 +302,10 @@ class _FirstElementsSystem(DiscreteSystem):
     def updateMaterialPoints(self, dU, timeStep, forEachChunk):
         self.model.materialPointUpdates += 1
 
+    def withNewLocations(self):
+        self.model.newLocationsMade += 1
+        return super().withNewLocations()
+
 
 class _StripWithDiscreteSystemOnFirstElements(FEModel):
     """A model whose discrete system holds its first elements only, and which reports a change of the coupling in every
@@ -312,6 +316,7 @@ class _StripWithDiscreteSystemOnFirstElements(FEModel):
         self.nElementsInSystem = nElementsInSystem
         self.connectivityUpdates = 0
         self.discreteSystemBuilds = 0
+        self.newLocationsMade = 0
         self.materialPointUpdates = 0
 
     def updateConnectivity(self):
@@ -423,6 +428,8 @@ def test_a_discrete_system_on_a_part_of_the_model(solverClass, numThreads, worke
         np.testing.assert_array_equal(partialField[entry][outside], 0.0)
     assert np.abs(referenceField["U"]).max() > 0.0
 
-    # asked at every attempt of an increment, and rebuilt every time it reported a change
-    assert partial.connectivityUpdates == 5 and partial.discreteSystemBuilds == 5
+    # asked at every attempt of an increment; built once, and given new locations on its numbering every time it
+    # reported a change of the locations
+    assert partial.connectivityUpdates == 5
+    assert partial.discreteSystemBuilds == 1 and partial.newLocationsMade == 4
     assert partial.materialPointUpdates > partial.connectivityUpdates

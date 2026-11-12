@@ -48,6 +48,16 @@ from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
 
 
+class _FluxCount:
+    """The accumulated nodal fluxes of one kind of entity, counted at the first request. Locations made from others
+    that keep the entities of this kind as they are share it, so that the entities are counted once, not after every
+    change of the connectivity."""
+
+    def __init__(self):
+        #: The count per field, or None until it is asked for.
+        self.perField = None
+
+
 class DofLocations:
     """
     The locations of the entities of a discrete system: for every element and every constraint, the global indices of
@@ -102,13 +112,19 @@ class DofLocations:
         self._ofConstraints = self._locateConstraints(constraints)
         self._ofFurtherEntities = self._locateNodeCouplingEntities(furtherEntities)
 
+        #: The accumulated nodal fluxes of the elements and of the further entities, counted when first asked for
+        #: (see :attr:`nAccumulatedNodalFluxesFieldwise`) and shared by the locations made from these, see
+        #: :meth:`withNewLocationsOf`.
+        self._fluxesOfElements = _FluxCount()
+        self._fluxesOfFurtherEntities = _FluxCount()
+
         self._mergeEntities()
 
     def _mergeEntities(self):
         """Merge what is known per kind of entity: the lists of the elements and of the constraints the locations hold,
-        the merged mapping of every entity to its indices, and the accumulated nodal fluxes. The merged mapping is a new
-        dict object on purpose: consumers cache plans keyed on its identity (the scatter template, the element loop's
-        gather plan), and a mapping mutated in place would leave those plans silently stale."""
+        the merged mapping of every entity to its indices, and the accumulated nodal fluxes. The locations are
+        immutable: the merged mapping is made anew for every locations, never changed in place, so that whoever still
+        holds the old locations holds a mapping that stays valid."""
 
         #: Everything the solver computes like an element, in the order in which it computes it, that is the elements,
         #: followed by the further entities.
@@ -122,7 +138,8 @@ class DofLocations:
         #: scatter vectors) read; a single location is read by ``locations[entity]``.
         self.ofEntity = self._ofElements | self._ofConstraints | self._ofFurtherEntities
 
-        #: The accumulated nodal fluxes, computed at the first request, see :attr:`nAccumulatedNodalFluxesFieldwise`.
+        #: The accumulated nodal fluxes of all entities, computed at the first request, see
+        #: :attr:`nAccumulatedNodalFluxesFieldwise`.
         self._nAccumulatedNodalFluxesFieldwise = None
 
     @property
@@ -130,7 +147,9 @@ class DofLocations:
         """For the Abaqus like convergence test, the number of degrees of freedom 'entity-wise' per field, that is
         Σ_(elements+constraints) Σ_nodes ( nDof (field) ).
         Computed from the entities of these locations at the first request, and kept: only the convergence criteria
-        ask, so a solver without them does not pay.
+        ask, so a solver without them does not pay. The count of the elements, and of the further entities that did
+        not move, is shared with the locations these were made from: only the constraints, and the entities that
+        moved, are counted again.
 
         Returns
         -------
@@ -139,9 +158,19 @@ class DofLocations:
         """
 
         if self._nAccumulatedNodalFluxesFieldwise is None:
-            countsOfAllFields = self._accumulateNodalFluxesFieldwise([*self.elements, *self.constraints])
+            for fluxCount, entities in (
+                (self._fluxesOfElements, self._ofElements),
+                (self._fluxesOfFurtherEntities, self._ofFurtherEntities),
+            ):
+                if fluxCount.perField is None:
+                    fluxCount.perField = self._accumulateNodalFluxesFieldwise(entities)
+            ofConstraints = self._accumulateNodalFluxesFieldwise(self._ofConstraints)
+
             self._nAccumulatedNodalFluxesFieldwise = {
-                field: countsOfAllFields.get(field, 0) for field in self.numbering.fields
+                field: self._fluxesOfElements.perField.get(field, 0)
+                + self._fluxesOfFurtherEntities.perField.get(field, 0)
+                + ofConstraints.get(field, 0)
+                for field in self.numbering.fields
             }
 
         return self._nAccumulatedNodalFluxesFieldwise
@@ -195,7 +224,8 @@ class DofLocations:
         locations for the same model costs.
 
         A change that moves the numbering -- a mesh refinement, a constraint gaining a scalar variable of its own -- is
-        not a connectivity change, and needs a new :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`.
+        not a change of the connectivity, and needs a new :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`:
+        this method refuses it.
 
         Parameters
         ----------
@@ -209,12 +239,39 @@ class DofLocations:
         -------
         DofLocations
             The new locations; these locations are not changed.
+
+        Raises
+        ------
+        ValueError
+            If the scalar variables of the constraints are not exactly those the numbering numbers, in this order, or
+            a moved entity is not located in these locations.
         """
+
+        scalarVariables = [variable for constraint in constraints for variable in constraint.scalarVariables]
+        if scalarVariables != list(self.numbering.idcsOfScalarVariablesInDofVector):
+            raise ValueError(
+                "The scalar variables {:} of the constraints are not those the numbering numbers, {:}: a change of "
+                "the scalar variables is a change of the numbering, and needs a new numbering, not new "
+                "locations.".format(
+                    [variable.name for variable in scalarVariables],
+                    [variable.name for variable in self.numbering.idcsOfScalarVariablesInDofVector],
+                )
+            )
+
+        notLocated = [entity for entity in movedEntities or () if entity not in self._ofFurtherEntities]
+        if notLocated:
+            raise ValueError(
+                "{:} moved entit{:} not located in these locations, which only locate anew what they hold: a "
+                "change of the entities is a change of the numbering.".format(
+                    len(notLocated), "y is" if len(notLocated) == 1 else "ies are"
+                )
+            )
 
         relocated = copy.copy(self)
         relocated._ofConstraints = self._locateConstraints(constraints)
         if movedEntities:
             relocated._ofFurtherEntities = self._ofFurtherEntities | self._locateNodeCouplingEntities(movedEntities)
+            relocated._fluxesOfFurtherEntities = _FluxCount()
         relocated._mergeEntities()
 
         return relocated
@@ -425,4 +482,4 @@ class DofLocations:
             A DofVector.
         """
 
-        return DofVector(self.numbering.nDof, self.ofEntity)
+        return DofVector(self.numbering.nDof, self)

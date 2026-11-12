@@ -3,7 +3,7 @@
 """The blockamg linear solver on a system constrained by the solvers' own Dirichlet elimination, which keeps the eliminated
 entries as explicitly stored zeros: the solve must be the one of the same system without them -- bitwise on one
 thread; with several, AMGCL's own power iterations sum in thread order, so even two identical solves differ in
-the last bits -- while the hierarchy-reuse pattern gate still sees the input's own nonzero count.
+the last bits -- while the solve itself is the one of the stored matrix.
 """
 
 import numpy as np
@@ -29,7 +29,7 @@ def _solve(A, b, blocks):
     return solver(A, b), solver
 
 
-def test_stored_zeros_change_nothing_but_the_pattern_gate_input():
+def test_stored_zeros_change_nothing():
     withZeros, b, blocks = _system()
     assert np.any(withZeros.data == 0.0), "the Dirichlet elimination must leave stored zeros for this test"
     withoutZeros = withZeros.copy()
@@ -39,7 +39,6 @@ def test_stored_zeros_change_nothing_but_the_pattern_gate_input():
     y, reference = _solve(withoutZeros, b, blocks)
     assert np.linalg.norm(x - y) <= 1e-12 * np.linalg.norm(y)
     assert solver.lastSolveSummary.iters == reference.lastSolveSummary.iters
-    assert solver.lastNnz == withZeros.nnz
 
 
 def test_a_non_canonical_matrix_is_solved_as_its_canonical_form():

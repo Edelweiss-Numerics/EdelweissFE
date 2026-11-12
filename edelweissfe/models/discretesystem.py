@@ -136,9 +136,10 @@ class DiscreteSystem:
         variables the numbering holds: a change of these needs a new numbering, built by
         :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`.
 
-        This discrete system is not changed. The vectors of the solver belong to the locations they were constructed
-        with (:meth:`~edelweissfe.numerics.doflocations.DofLocations.constructDofVector`), and the solver constructs
-        them anew on the locations of the returned discrete system.
+        This discrete system is not changed. The vectors of the solver refer to the locations they were wrapped with
+        (:meth:`~edelweissfe.numerics.doflocations.DofLocations.constructDofVector`), and the solver wraps them on the
+        locations of the returned discrete system, their values kept
+        (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`).
 
         This is the one implementation. A discrete system that holds more than the numbering and the locations
         extends :meth:`_newLocations`; whatever else it holds must not depend on the connectivity, or be read from

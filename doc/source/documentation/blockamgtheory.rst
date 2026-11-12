@@ -75,8 +75,10 @@ live :class:`~edelweissfe.models.femodel.FEModel` and
 :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, and the base class derives from them the
 ordered list of :class:`~edelweissfe.linsolve.base.FieldBlock` records -- field name, half-open DOF
 range ``[start, stop)``, and nodal dimension (3 for a 3D displacement field, 1 for a scalar damage
-field). The nonlinear solver calls it whenever the discrete system is (re)built: on the first solve,
-and again after every adaptive-refinement or connectivity change, so the layout tracks the mesh.
+field). The nonlinear solver calls it whenever the discrete system gets a new numbering: on the first solve,
+and again after every change of the mesh (e.g. adaptive refinement) or of the scalar variables, so the layout tracks
+the numbering. A change of the connectivity that leaves the numbering as it is calls
+:meth:`~edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern` instead.
 
 Two consequences worth knowing:
 
@@ -187,8 +189,10 @@ components that hold them:
                 |  MPC condensation      K <- T' K T + I_s     both size preserving:
                 |  Dirichlet elimination  row, column i -> e_i  DOF ordering unchanged
                 |
-                |  setModel(model, numbering)  -- on a (re)build only
+                |  setModel(model, numbering)  -- on a new numbering only
                 |      -> field blocks, nodal dimensions, node coordinates
+                |  onNewMatrixPattern()  -- on new locations (a contact search)
+                |      -> forgets the hierarchies built for the old pattern
                 v
     (A, b) ---> the composed linear solver
                 |
@@ -198,7 +202,7 @@ components that hold them:
                                refresh (with rebuildOnNewIncrement)
                         no  -> eta from Eisenstat-Walker forcing
                     refresh the hierarchies?  first solve | block layout | size |
-                        nnz differs from the rebuild's | new increment | setModel |
+                        new matrix pattern | new increment | setModel |
                         hot reload | previous solve stale or at the iteration cap
                 |
           (2)   equilibration     Ahat = D A D,  bhat = D b,  D = diag(1/sqrt|A_ii|)
@@ -224,7 +228,7 @@ components that hold them:
                         no  -> done
                 |
           (7)   record ||b||, eta and the outer iteration count for the next solve
-                (after a rebuild also nnz and the staleness reference count)
+                (after a rebuild also the staleness reference count)
                 v
     x ------> nonlinear solver
                 |
@@ -759,11 +763,12 @@ The hierarchies are rebuilt when
 * ``reusePreconditioner`` is off: then every solve builds its own, and none of the triggers below matters,
 * there is nothing to reuse yet (the first solve),
 * the field-block layout or the system size changed (e.g. an adaptive-refinement event),
-* the number of stored nonzeros changed -- a free :math:`O(1)` proxy for "the sparsity pattern
-  changed". It is not exact (two different patterns could coincidentally share an ``nnz``) but it
-  errs safely, since an unnecessary refresh costs time and never correctness. A pattern change is not
-  a graceful degradation: measured on one transition, a hierarchy built for the previous pattern
-  needed far more outer iterations than a fresh one, an outright wall-clock regression,
+* the nonlinear solver announced a new sparsity pattern (``onNewMatrixPattern``: the discrete system got new
+  locations, e.g. from a contact search, or a new numbering). The hierarchies built for the previous pattern are
+  dropped right then, before the new pattern is built, so that nothing is held twice. A pattern change is not
+  a graceful degradation, whether or not the number of stored entries changed: measured on one transition, a
+  hierarchy built for the previous pattern needed far more outer iterations than a fresh one, an outright
+  wall-clock regression,
 * a residual jump marks a new increment (see ``residualGrowthFactor`` and its blind spot above) and
   ``rebuildOnNewIncrement`` is set (the default), or
 * the previous solve's outer iteration count exceeded both ``stalenessFactor`` times and 15

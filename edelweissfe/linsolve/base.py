@@ -151,8 +151,9 @@ class LinearSolver:
     def setModel(self, model, numbering) -> None:
         """Receive the live model and numbering of the degrees of freedom this solver is being asked to solve for.
 
-        Called by the nonlinear solver whenever the discrete system is (re)built -- i.e. on the first
-        solve and again after any AMR/connectivity change. The default implementation derives and
+        Called by the nonlinear solver whenever the discrete system gets a new numbering -- i.e. on the first
+        solve and again after a change of the mesh or of the scalar variables (a change of the connectivity alone
+        keeps the numbering, and is announced by :meth:`onNewMatrixPattern`). The default implementation derives and
         stores the per-field DOF-block structure (name, DOF range, nodal dimension) any field-split
         solver needs -- equivalent to calling :meth:`setFieldStructure` with those blocks -- and keeps
         ``model``/``numbering`` themselves on ``self._model``/``self._numbering`` for a solver that
@@ -176,6 +177,17 @@ class LinearSolver:
             FieldBlock(fieldName, fieldIndices.start, fieldIndices.stop, model.nodeFields[fieldName].dimension)
             for fieldName, fieldIndices in numbering.idcsOfFieldsInDofVector.items()
         ]
+
+    def onNewMatrixPattern(self) -> None:
+        """The sparsity pattern of the system matrix is about to change: a change of the connectivity (e.g. a contact
+        search, which couples other nodes) gives the discrete system new locations on the same numbering, and with them
+        a new pattern. Whatever this solver built for the old pattern (a hierarchy, a factorization) is of no use
+        for the new one and is dropped, before the nonlinear solver builds the new pattern, so that nothing is held
+        twice. What is bound to the model and the numbering (:meth:`setModel`) stays.
+
+        The default holds nothing bound to a pattern. A change of the numbering is a new pattern as well, and calls
+        this from :meth:`setModel`.
+        """
 
     def setFieldStructure(self, fields: "list[FieldBlock]") -> None:
         """Receive the ordered field blocks of the DOF vector directly (in DOF order), bypassing

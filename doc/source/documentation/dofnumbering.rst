@@ -41,6 +41,15 @@ Every entity of the discrete system is located. An entity that couples a field i
 variable the numbering does not number, is an error of the model: it is reported, naming the entity and what is
 missing, when the locations are made.
 
+``locations[entity]`` is the one way to read the location of a single entity, ``entity in locations`` tells whether it
+has one; the consumers that handle all entities at once (the system matrix assembly, the layout of the scatter
+vectors) read the mapping of all of them, :attr:`~edelweissfe.numerics.doflocations.DofLocations.ofEntity`. The number
+of accumulated fluxes per field, which the convergence criteria compare the residual with, is computed from the
+entities of the locations when it is first asked for, so that new locations always have correct counts and a solver
+without convergence criteria never pays. A vector (:class:`~edelweissfe.numerics.dofvector.DofVector`) refers to the
+locations it was wrapped with; for new locations on the same numbering it is wrapped on them, its values kept
+(:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`).
+
 The numbering knows nothing about the entities, and neither of the two knows anything about the system matrix. How
 the blocks of the entities -- each given in the entity's own numbering by
 :class:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase` -- become the global matrix is the

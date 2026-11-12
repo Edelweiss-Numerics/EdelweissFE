@@ -94,11 +94,35 @@ A solver solves; what the discrete system is made of, the model says. ``NIST``, 
    * ``MESH``: a model modifier changed the mesh (e.g. h-adaptivity), or a mesh-dependent consumer (a tie or contact
      surface) caught up on a changed mesh: it refreshes only when nodes or elements did change.
 
-   The implicit solvers rebuild their discrete system before they solve the increment on any change, and keep it if
-   there is none. Only a change of the mesh makes them re-equilibrate (``equilibrateAfterModelChange``): a change of the
-   locations or of the numbering moves no node and creates none. A prediction survives a change of the connectivity only
-   with ``extrapolateAcrossConnectivityChange``, and only if the rebuilt system numbers the degrees of freedom as before;
-   after a change of the mesh, never. The explicit solver ``NED`` asks the same question at the start of its step and
+   The solvers that derive from ``NIST`` update their discrete system before they solve the increment, by one path
+   (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem`), which only the
+   ``Change`` decides:
+
+   .. code-block:: python
+
+      if self.system is None or change >= Change.NUMBERING:
+          self.system = model.buildDiscreteSystem()
+          self.onNewNumbering()
+          self.onNewLocations()
+      elif change == Change.LOCATIONS:
+          self.system = self.system.withNewLocations()
+          self.onNewLocations()
+
+   Everything that is sized by the numbering is built in ``onNewNumbering`` (the vectors, which the state is read into
+   from the model, the linear solver's view of the degrees of freedom, the layout of the convergence table, and the
+   multi-point-constraint condensation); everything that is derived from the locations is built in ``onNewLocations``
+   (the vectors are wrapped with the new locations, their values kept; the linear solver is told that the sparsity
+   pattern changes (:meth:`~edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern`), and drops what it built for the
+   old one, a hierarchy or a factorization, before the new pattern is built; the system matrix assembly and its
+   sparsity pattern, and, in ``NID``, the mass copied onto it). ``NID``'s mass and damping are dropped with the
+   discrete system they were assembled for and assembled by the first increment on the next one. Nothing sized by the
+   numbering is touched by new locations. Only a change of the mesh makes the solvers re-equilibrate
+   (``equilibrateAfterModelChange``): a change of the locations or of the numbering moves no node and creates none.
+   The prediction is judged once per increment, right after the update
+   (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvives`): it survives new locations on the
+   same numbering by construction, but is extrapolated across a change of the connectivity only with
+   ``extrapolateAcrossConnectivityChange``; it survives a new numbering only if the new one numbers the degrees of
+   freedom as before, and a change of the mesh never. The explicit solver ``NED`` asks the same question at the start of its step and
    after the topology checks, and, every ``contact-update-frequency`` increments, of
    :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity` alone. It asks it only if a
    constraint of the model searches as the bodies move
@@ -108,7 +132,8 @@ A solver solves; what the discrete system is made of, the model says. ``NIST``, 
 2. **What is the discrete system made of?** Whenever the solver (re)builds its discrete system, it calls
    :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`, which returns the discrete system, a
    :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. The solver keeps it as long as the numbering
-   of the degrees of freedom it holds -- until the next rebuild -- and takes from it:
+   of the degrees of freedom it holds -- until the next rebuild, or until new locations on the same numbering replace
+   it -- and takes from it:
 
    * the numbering of the degrees of freedom (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.numbering`, a
      :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, the *ID* array). It also locates the degrees of freedom
@@ -117,9 +142,12 @@ A solver solves; what the discrete system is made of, the model says. ``NIST``, 
    * the locations of the entities in that numbering
      (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.locations`, a
      :class:`~edelweissfe.numerics.doflocations.DofLocations`, the *LM* array): the global indices of the local
-     degrees of freedom of every element and constraint. Numbering and locations are immutable: a contact search
-     leaves the numbering as it is, and gives a new discrete system with new locations on the same numbering
-     (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`);
+     degrees of freedom of every element and constraint, ``locations[entity]``. Numbering and locations are immutable:
+     a contact search leaves the numbering as it is, and gives a new discrete system with new locations on the same
+     numbering (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`), which refuses a change of
+     the scalar variables, as that is a change of the numbering. The vectors of the solver
+     (:class:`~edelweissfe.numerics.dofvector.DofVector`) refer to the locations they were wrapped with, and are
+     wrapped on the new ones (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`) without a copy;
    * the elements, a list of everything the solver computes like an element (``computeElements``), the ones the
      locations hold;
    * the constraints that take part in the discrete system, the active ones the locations hold
@@ -148,7 +176,8 @@ The loops over the entities stay with the solver: ``NIST`` computes the elements
 :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`, so that they are evaluated on the same threads.
 
 The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive from ``NIST``, and build, fill and write
-back their discrete systems through it; ``NEST`` builds its discrete system once per step and has no topology update,
+back their discrete systems through it; ``NEST`` builds its discrete system once per step, in its first ``onNewNumbering``
+and ``onNewLocations``, and has no topology update,
 and ``NID`` assembles its mass matrix from the model's finite elements, asks the discrete system which degrees of freedom
 carry the mass of the nodes
 (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia`) and, if it integrates the
@@ -174,7 +203,7 @@ themselves.
 A model of EdelweissMeshfree answers differently, with the same solvers:
 
 * Its material points move through a fixed background grid of cells, and its particles carry their kernel functions
-  along. When asked for the coupling, it first assigns the material points to the cells they lie in and the particles
+  along. When asked what has changed, it first assigns the material points to the cells they lie in and the particles
   to the kernel functions they reach, then lets its constraints follow.
 * Only the part of the grid that holds material points, and the nodes in reach of the particles, form the discrete
   system (the active domain). So a node set of the grid may reach beyond the discrete system: a Dirichlet boundary
@@ -368,10 +397,9 @@ which is what makes a resumed run continue the same trajectory rather than resta
 system matrix either way (``systemMatrixAssembly=vij|direct``, see :ref:`system-matrix-assembly`): the mass is
 assembled through the same assembly as the stiffness, kept on its sparsity pattern, and added to the effective tangent
 while it is assembled, together with the lumped damping. The
-mass and the damping are assembled at a step's start and after every topology change; when a
-contact constraint merely changes its connectivity, they are reused in the rebuilt discrete
-system instead (the mass copied onto the new sparsity pattern), which matters for contact problems whose candidate
-lists change on nearly every increment.
+mass and the damping are assembled at a step's start and after every change of the numbering; when a
+contact constraint merely changes its connectivity, the new locations keep them (the mass copied onto the new
+sparsity pattern), which matters for contact problems whose candidate lists change on nearly every increment.
 
 Reduced-integration elements (``C3D20R``, ``GC3D20R``, ...) need a Marmot whose consistent mass is
 integrated with the full rule of the element shape (Marmot PR #101): with the element's own reduced
@@ -434,19 +462,19 @@ and around rebuilds of the discrete system, both off by default:
   cutback is extrapolated from it as well. Without this option, a failed increment drops the prediction, and the
   increments up to the next accepted one start from zero.
 * ``extrapolateAcrossConnectivityChange``: a change of the connectivity, e.g., a contact search that couples other
-  nodes, rebuilds the discrete system, and the increment starts from zero. With this option, it is extrapolated
-  nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the one the last increments
-  were accepted in (compared by the digests of the two numberings,
-  :attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`): the last accepted increments are vectors of
-  the same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
-  ``extrapolateAfterModelChange`` for the increment that follows it).
+  nodes, gives the discrete system new locations, and the increment starts from zero. With this option, it is
+  extrapolated nevertheless, as long as the new discrete system numbers the degrees of freedom exactly as the one the
+  last increments were accepted in -- the numbering is the same object for new locations, and a new numbering is
+  compared by the digests of the two numberings, :attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`: the
+  last accepted increments are vectors of the same degrees of freedom then. A change of the topology, e.g., a mesh
+  refinement, always starts from zero (see ``extrapolateAfterModelChange`` for the increment that follows it).
 
 Both act on a prediction: a declaration of options -- the ``*solver`` datalines, or an ``>>options`` block -- that
 switches either on with ``extrapolation=off`` is refused.
 
 The last accepted increments are checkpointed with the digest of their numbering. A step that continues from a
-restart checkpoint, resumed or fallen back to (see :doc:`restart`), rebuilds its discrete system at its first
-increment, and extrapolates them only if the rebuilt system numbers the degrees of freedom alike: the numbering of a
+restart checkpoint, resumed or fallen back to (see :doc:`restart`), builds its discrete system at its first
+increment, and extrapolates them only if the new numbering numbers the degrees of freedom alike: the numbering of a
 meshfree model, e.g., follows its active cells, which may have changed since the checkpoint was written.
 
 Line search and quasi-Newton fallback of the implicit solvers
@@ -565,8 +593,8 @@ element is involved:
 
 * ``topology update``: the model modifiers (e.g. ``AMR``), then the ties and the contact catching up;
 * ``discrete system rebuild``, after a change (:class:`~edelweissfe.models.change.Change`): ``numbering and locations``,
-  ``linear solver setup``, ``system matrix pattern``, ``mpc transformation build`` and ``mpc dirichlet conflict
-  check``;
+  and, for a new numbering, ``linear solver setup``, ``mpc transformation build`` and ``mpc dirichlet conflict check``;
+  for new locations as well, ``system matrix pattern``;
 * ``mpc transform system matrix``: condensing the slave DOFs of the multi-point constraints out of the system;
 * ``inertia and damping terms`` (``NID``, ``NIDParallel``), per Newton iteration: ``newmark kinematics``,
   ``inertia and damping forces`` and ``effective tangent``;

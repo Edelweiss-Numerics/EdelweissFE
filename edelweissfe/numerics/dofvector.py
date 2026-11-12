@@ -26,31 +26,51 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 import edelweissfe.numerics.scatterdofvector
+
+if TYPE_CHECKING:
+    from edelweissfe.numerics.doflocations import DofLocations
+
+
+class _NoLocations:
+    """The locations of a vector that is wrapped with none: no entity is located."""
+
+    #: No entity has a location.
+    ofEntity = {}
+
+
+_WITHOUT_LOCATIONS = _NoLocations()
 
 
 class DofVector(np.ndarray):
     """
     Represents a Degree-of-Freedom (DOF) vector with entity-aware indexing.
 
-    A `DofVector` is a 1D NumPy array subclass augmented with metadata mapping simulation
-    entities (such as elements, constraints, or node sets) to their respective DOF indices.
-    This enables direct indexing and assignment using entity objects as keys.
+    A `DofVector` is a 1D NumPy array subclass wrapped with the locations of the entities (elements, constraints, ...)
+    in the numbering of its discrete system
+    (:class:`~edelweissfe.numerics.doflocations.DofLocations`). This enables direct indexing and assignment using
+    entity objects as keys: ``vector[entity]`` are the values at the entity's location.
+
+    The vector refers to the locations it was wrapped with. When the locations change but the numbering does not -- a
+    contact search that couples other nodes -- the values stay the values of the same degrees of freedom: the vector is
+    wrapped on the new locations, see :meth:`onLocations`.
 
     Parameters
     ----------
     nDof : int
         The total number of degrees of freedom (length of the vector).
-    entitiesInDofVector : dict, optional
-        A dictionary mapping entities (or entity keys) to their index arrays or slices
-        in the DofVector.
+    locations : DofLocations, optional
+        The locations of the entities, which map every entity to its indices in the vector: a
+        :class:`~edelweissfe.numerics.doflocations.DofLocations`, or any object with a mapping ``ofEntity``.
     """
 
-    def __new__(cls, nDof: int, entitiesInDofVector: dict | None = None):
+    def __new__(cls, nDof: int, locations: "DofLocations | None" = None):
         obj = np.zeros(nDof, dtype=float).view(cls)
-        obj.entitiesInDofVector = entitiesInDofVector if entitiesInDofVector is not None else {}
+        obj.locations = locations if locations is not None else _WITHOUT_LOCATIONS
         obj._scatterTemplate = None
         #: Plain-ndarray alias of the same buffer, built lazily on first entity access so
         #: that the hot path never triggers numpy subclass wrapping. See __getitem__.
@@ -60,16 +80,41 @@ class DofVector(np.ndarray):
     def __array_finalize__(self, obj):
         if obj is None:
             return
-        self.entitiesInDofVector = getattr(obj, "entitiesInDofVector", None)
+        self.locations = getattr(obj, "locations", _WITHOUT_LOCATIONS)
         self._scatterTemplate = getattr(obj, "_scatterTemplate", None)
         self._plainView = None
+
+    def onLocations(self, locations: "DofLocations") -> "DofVector":
+        """The same values, wrapped with other locations: a view of this vector's buffer, not a copy. For a discrete
+        system whose locations changed on the same numbering
+        (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`): the degrees of freedom are the
+        same, and so are their values, only where the entities find theirs has changed. Writes through either vector
+        are writes to both.
+
+        Parameters
+        ----------
+        locations
+            The new locations, on the same numbering.
+
+        Returns
+        -------
+        DofVector
+            The vector wrapped with the new locations.
+        """
+
+        rewrapped = self.view(DofVector)
+        rewrapped.locations = locations
+        rewrapped._scatterTemplate = None
+        rewrapped._plainView = None
+
+        return rewrapped
 
     def __getitem__(self, key):
         # Hot path (called per element per increment): try the entity dictionary first, skipping an isinstance()
         # chain, and return a plain ndarray view, skipping numpy's subclass wrapping. Non-entity keys (ints,
         # slices, arrays) fall through to normal ndarray indexing at the cost of one exception.
         try:
-            indices = self.entitiesInDofVector[key]
+            indices = self.locations.ofEntity[key]
         except (KeyError, TypeError):
             return super().__getitem__(key)
 
@@ -100,7 +145,7 @@ class DofVector(np.ndarray):
             return
 
         try:
-            super().__setitem__(self.entitiesInDofVector[key], value)
+            super().__setitem__(self.locations.ofEntity[key], value)
         except (KeyError, TypeError):
             super().__setitem__(key, value)
 
@@ -116,16 +161,13 @@ class DofVector(np.ndarray):
         Returns
         -------
         DofVector
-            A new `DofVector` instance with copied array data and an independent copy of `entitiesInDofVector`.
+            A new `DofVector` instance with copied array data, wrapped with the same locations.
         """
-        newDofVector = super().copy(order).view(DofVector)
-        if self.entitiesInDofVector is not None:
-            newDofVector.entitiesInDofVector = self.entitiesInDofVector.copy()
-        return newDofVector
+        return super().copy(order).view(DofVector)
 
     def createScatterVector(self) -> "edelweissfe.numerics.scatterdofvector.ScatterDofVector":
         """
-        Create a scatter vector for ALL entities registered in this DofVector.
+        Create a scatter vector for ALL entities located in the locations of this DofVector.
 
         The underlying layout (entity lookup map and scatter indices) is computed once
         and cached, so repeated calls (e.g. once per Newton iteration) only allocate
@@ -134,20 +176,13 @@ class DofVector(np.ndarray):
         Returns
         -------
         ScatterDofVector
-            A `ScatterDofVector` initialized with this vector's entity mapping and total DOF count.
-
-        Raises
-        ------
-        ValueError
-            If `entitiesInDofVector` is None or uninitialized.
+            A `ScatterDofVector` initialized with this vector's locations and total DOF count.
         """
-        if self.entitiesInDofVector is None:
-            raise ValueError("Cannot create a ScatterDofVector: entitiesInDofVector is None.")
 
-        # The template is inherited across views/copies, but entitiesInDofVector may since have been replaced
-        # (e.g. by copy()): do not reuse a template built for a stale mapping.
-        if self._scatterTemplate is None or self._scatterTemplate.entitiesInDofVector is not self.entitiesInDofVector:
+        # The template is inherited across views/copies, but the vector may since have been wrapped with other
+        # locations: do not reuse a template built for stale locations.
+        if self._scatterTemplate is None or self._scatterTemplate.locations is not self.locations:
             self._scatterTemplate = edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate(
-                self.entitiesInDofVector, self.size
+                self.locations, self.size
             )
         return edelweissfe.numerics.scatterdofvector.ScatterDofVector(self._scatterTemplate)
