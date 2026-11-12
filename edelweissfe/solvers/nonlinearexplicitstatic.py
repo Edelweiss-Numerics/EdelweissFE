@@ -32,7 +32,6 @@ import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.timing import createTimingDict
-from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.systemmatrixassembly import (
@@ -237,8 +236,10 @@ class NEST(NIST):
         self.linSolverName = None
 
     def validateModelCapabilities(self, model: FEModel):
-        """Refuse, on top of the base checks, a constraint that is switched on and needs its connectivity updated in
-        every increment, i.e. a contact, which searches for what it touches: this solver never performs the update. A
+        """Refuse, on top of the base checks, a constraint that is switched on and whose connectivity changes with the
+        motion
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.connectivityChangesWithMotion`), e.g. a
+        contact, which searches for what it touches: this solver never updates the connectivity. A
         constraint switched off from outside
         (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it rests,
         and takes no part in the step.
@@ -252,11 +253,11 @@ class NEST(NIST):
         super().validateModelCapabilities(model)
 
         for constraintName, constraint in model.constraints.items():
-            if constraint.switchedOn and type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+            if constraint.switchedOn and constraint.connectivityChangesWithMotion:
                 raise Exception(
-                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
-                    f"(contact) every increment, which {self.identification} never performs -- "
-                    "contact is not currently supported with this solver."
+                    f"Constraint '{constraintName}' has a connectivity that changes with the motion "
+                    f"(e.g. contact), which {self.identification} never updates -- "
+                    "such a constraint is not currently supported with this solver."
                 )
 
     def beginStep(

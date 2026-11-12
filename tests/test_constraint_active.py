@@ -45,6 +45,7 @@ from edelweissfe.config import registry
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.solvers.nonlinearexplicitstatic import NEST
@@ -144,8 +145,7 @@ def test_the_explicit_solver_refuses_a_lagrange_constraint_only_while_it_is_swit
 
 class _ConstraintWithAPartner(ConstraintBase):
     """A constraint that finds itself within reach of its partner or not, as the test places the partner
-    (``partnerInReach``), and reports a change of :attr:`active` as a change of its connectivity. It counts how often
-    it is located (``timesLocated``)."""
+    (``partnerInReach``), and couples no nodes. It counts how often it is located (``timesLocated``)."""
 
     def __init__(self):
         super().__init__("withAPartner", None)
@@ -167,9 +167,8 @@ class _ConstraintWithAPartner(ConstraintBase):
 
     def updateConnectivity(self, model):
         self.timesLocated += 1
-        wasActive = self.active
         self.withinReach = self.partnerInReach
-        return self.active != wasActive
+        return False
 
     def computeKernels(self, U_np, dU, P, K, timeStep):
         pass
@@ -187,12 +186,12 @@ def test_a_constraint_out_of_reach_is_not_active():
     assert constraint.active and model.activeConstraints() == [constraint]
 
     constraint.partnerInReach = False
-    assert constraint.updateConnectivity(model), "switching itself off is a change of the connectivity"
+    constraint.updateConnectivity(model)
     assert constraint.switchedOn and not constraint.active
     assert model.activeConstraints() == []
 
     constraint.partnerInReach = True
-    assert constraint.updateConnectivity(model), "switching itself on is a change of the connectivity"
+    constraint.updateConnectivity(model)
     assert constraint.active and model.activeConstraints() == [constraint]
 
 
@@ -216,16 +215,18 @@ def test_the_model_locates_a_constraint_out_of_reach_but_not_one_switched_off_fr
     model, constraint = _modelWithAPartnerConstraint()
 
     constraint.active = False
-    assert not model.updateConnectivity()
+    assert model.updateConnectivity() == Change.NONE
     assert constraint.timesLocated == 0, "switched off from outside, the constraint rests"
 
     constraint.active = True
     constraint.partnerInReach = False
-    assert model.updateConnectivity()
+    assert model.updateConnectivity() == Change.LOCATIONS, "the model sees the constraint leave reach"
     assert constraint.timesLocated == 1 and not constraint.active
 
     constraint.partnerInReach = True
-    assert model.updateConnectivity(), "out of reach, it is located, so that it finds itself within reach again"
+    assert (
+        model.updateConnectivity() == Change.LOCATIONS
+    ), "out of reach, it is located, so that it finds itself within reach again"
     assert constraint.timesLocated == 2 and constraint.active
 
 
@@ -249,34 +250,23 @@ def test_the_system_follows_its_dof_manager_when_a_constraint_leaves_reach_and_r
     system = model.buildDiscreteSystem()
 
     constraint.partnerInReach = False
-    assert model.updateConnectivity()
+    assert model.updateConnectivity() == Change.LOCATIONS
     system.dofManager.refreshConstraintIndices(model.activeConstraints())
     assert system.constraints == [] and not system.dofManager.idcsOfConstraintsInDofVector
 
     constraint.partnerInReach = True
-    assert model.updateConnectivity()
+    assert model.updateConnectivity() == Change.LOCATIONS
     system.dofManager.refreshConstraintIndices(model.activeConstraints())
     assert system.constraints == [constraint]
     assert set(system.dofManager.idcsOfConstraintsInDofVector) == {constraint}
 
 
-def test_the_explicit_dynamic_solver_does_not_locate_a_constraint_switched_off_from_outside():
-    model, constraint = _modelWithAPartnerConstraint()
-    explicitSolver = NED({}, Journal(verbose=False))
-    explicitSolver._dynamicConnectivityConstraints = [constraint]
-
-    constraint.active = False
-    assert not explicitSolver.updateConstraintConnectivity(model)
-    assert constraint.timesLocated == 0
-
-    constraint.active = True
-    explicitSolver.updateConstraintConnectivity(model)
-    assert constraint.timesLocated == 1
-
-
 class _ReachProbe(ConstraintBase):
     """A constraint on one node that leaves reach once it has been evaluated three times, and counts its explicit
-    evaluations (``nEvaluations``, and ``nEvaluationsAtLeaving``)."""
+    evaluations (``nEvaluations``, and ``nEvaluationsAtLeaving``). It stands in for a contact: it searches for its
+    connectivity."""
+
+    connectivityChangesWithMotion = True
 
     def __init__(self, name, model, **kwargs):
         super().__init__(name, model)
@@ -298,11 +288,10 @@ class _ReachProbe(ConstraintBase):
         return 2
 
     def updateConnectivity(self, model):
-        wasActive = self.active
         self.withinReach = self.nEvaluations < 3
-        if wasActive and not self.active:
+        if not self.withinReach and self.nEvaluationsAtLeaving is None:
             self.nEvaluationsAtLeaving = self.nEvaluations
-        return self.active != wasActive
+        return False
 
     def computeKernels(self, U_np, dU, P, K, timeStep):
         pass
@@ -423,13 +412,50 @@ def test_the_explicit_static_solver_refuses_a_contact_only_while_it_is_switched_
     explicitSolver.validateModelCapabilities(model)
 
     model.constraints["contact"].active = True
-    with pytest.raises(Exception, match="dynamic connectivity update"):
+    with pytest.raises(Exception, match="changes with the motion"):
         explicitSolver.validateModelCapabilities(model)
 
     # switched on, but out of reach: it would have to be located to find itself within reach again
     model.constraints["contact"].withinReach = False
-    with pytest.raises(Exception, match="dynamic connectivity update"):
+    with pytest.raises(Exception, match="changes with the motion"):
         explicitSolver.validateModelCapabilities(model)
+
+
+#: A block, and a rigid floor pushing back the bottom nodes: fixed nodes, a gap that is stateless per stage.
+RIGID_SURFACE_MODEL = """
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+100.0, 0.3
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, y0=0, l=1.0, h=1.0, nX=2, nY=2, elType=CPE4, elProvider=edelweiss
+
+*section, name=section1, thickness=1.0, material=linearelastic, type=plane
+gen_all
+
+*constraint, type=nodeToRigidSurfacePenalty, name=floor
+nSet=gen_bottom
+field=displacement
+component=1
+penalty=20.0
+value=-0.1
+direction=-1.0
+
+*step, solver=theSolver
+maxInc=1e0, minInc=1e0, maxNumInc=1, maxIter=5, stepLength=1
+>>dirichlet, name=top, nSet=gen_top, field=displacement, 1=0.0, 2=0.0
+"""
+
+
+def test_the_explicit_static_solver_accepts_a_constraint_with_fixed_nodes(tmp_path):
+    """A rigid surface the nodes of a set may not penetrate couples the same nodes throughout, and is only refreshed
+    after a change of the mesh: NEST has nothing to update for it, even while it is switched on."""
+
+    model = _runDeck(tmp_path, RIGID_SURFACE_MODEL)
+
+    NEST({}, Journal(verbose=False)).validateModelCapabilities(model)
 
 
 def test_a_contact_switched_off_for_a_step_keeps_its_multipliers_and_its_frictional_history(tmp_path):

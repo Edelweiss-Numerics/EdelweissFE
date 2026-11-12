@@ -41,8 +41,8 @@ from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.change import Change
 from edelweissfe.numerics.dofmanager import DofManager
-from edelweissfe.solvers.base.nonlinearsolverbase import TopologyUpdate
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.stepactions.base.dirichletbase import DirichletBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -304,7 +304,7 @@ def test_prediction_across_a_change_of_the_connectivity(tmp_path, increments, mo
     monkeypatch.setattr(
         NIST,
         "updateTopologyAndConnectivity",
-        lambda self, model, step, offerModelModifiers=True: TopologyUpdate(False, False, True),
+        lambda self, model, step, offerModelModifiers=True: Change.LOCATIONS,
     )
     result = displacements(
         run(
@@ -332,23 +332,23 @@ def test_a_rebuild_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tm
 
     lastIncrement = np.zeros(field.dimension * len(field.nodes))
     solver = solverWithHistory("linear", [0.1], [lastIncrement], numbering, extrapolateAcrossConnectivityChange=True)
-    # a rebuild after a change of the connectivity alone (True), or at the first increment of a step that continues
-    # from a checkpoint (False): the prediction survives only if the rebuilt system numbers the DOFs alike
-    for connectivityHasChanged in (True, False):
+    # a rebuild after a change of the connectivity alone (LOCATIONS), or at the first increment of a step that continues
+    # from a checkpoint (NONE): the prediction survives only if the rebuilt system numbers the DOFs alike
+    for change in (Change.LOCATIONS, Change.NONE):
         solver.theDofManager = DofManager([renumbered])
-        assert not solver.predictionSurvivesRebuild(False, connectivityHasChanged)
+        assert not solver.predictionSurvivesRebuild(change)
         solver.theDofManager = DofManager([field])
-        assert solver.predictionSurvivesRebuild(False, connectivityHasChanged)
-    # never after a change of the topology
-    assert not solver.predictionSurvivesRebuild(True, False)
+        assert solver.predictionSurvivesRebuild(change)
+    # never after a change of the mesh
+    assert not solver.predictionSurvivesRebuild(Change.MESH)
     # a prediction without the digest of its numbering cannot be compared, and does not survive
     solver.dofNumberingOfLastIncrement = None
-    assert not solver.predictionSurvivesRebuild(False, False)
+    assert not solver.predictionSurvivesRebuild(Change.NONE)
     solver.dofNumberingOfLastIncrement = numbering
     # across a change of the connectivity only with the option
     solver.options["extrapolateAcrossConnectivityChange"] = False
-    assert not solver.predictionSurvivesRebuild(False, True)
-    assert solver.predictionSurvivesRebuild(False, False)
+    assert not solver.predictionSurvivesRebuild(Change.LOCATIONS)
+    assert solver.predictionSurvivesRebuild(Change.NONE)
 
 
 def test_a_rebuild_that_numbers_other_scalar_variables_drops_the_prediction():
@@ -369,9 +369,9 @@ def test_a_rebuild_that_numbers_other_scalar_variables_drops_the_prediction():
 
     solver = solverWithHistory("linear", [0.1], [[0.5]], numbering, extrapolateAcrossConnectivityChange=True)
     solver.theDofManager = DofManager([], [ScalarVariable("tieB_0")])
-    assert not solver.predictionSurvivesRebuild(False, True)
+    assert not solver.predictionSurvivesRebuild(Change.LOCATIONS)
     solver.theDofManager = DofManager([], [ScalarVariable("tieA_0")])
-    assert solver.predictionSurvivesRebuild(False, True)
+    assert solver.predictionSurvivesRebuild(Change.LOCATIONS)
 
 
 def test_the_history_of_a_quadratic_extrapolation_is_checkpointed():

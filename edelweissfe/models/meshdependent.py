@@ -74,10 +74,9 @@ class MeshDependent(ABC):
         -------
         bool
             True if the model changed since this consumer last checked AND :meth:`refresh` found
-            that change relevant (e.g. this is a direct, correct value to return from a
-            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity`
-            override -- a mesh mutation this consumer didn't care about shouldn't, on its own,
-            force a discrete system rebuild).
+            that change relevant: it then counts as a change of the mesh (see
+            :class:`~edelweissfe.models.change.Change`) -- a mesh mutation this consumer didn't care
+            about shouldn't, on its own, be one for the solvers.
         """
         if model.topology.version == self._lastSeenTopologyVersion:
             return False

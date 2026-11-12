@@ -45,6 +45,7 @@ from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.change import Change
 from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager
@@ -303,7 +304,7 @@ class _StripWithDiscreteSystemOnFirstElements(FEModel):
     def updateConnectivity(self):
         self.connectivityUpdates += 1
         super().updateConnectivity()
-        return True
+        return Change.LOCATIONS
 
     def buildDiscreteSystem(self):
         self.discreteSystemBuilds += 1
