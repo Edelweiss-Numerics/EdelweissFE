@@ -56,7 +56,7 @@ def computeElementsInParallel(
     The elements are anything that contributes like an element (a block of the system matrix and a part of the
     internal forces, see :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`) and is located in
     the DofVector: the finite elements, and the cells and particles of a meshfree model alike (see
-    :attr:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements`). Every element writes its forces
+    :attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elements`). Every element writes its forces
     into its own part of a scatter vector, and every worker thread writes the tangents of its elements through blocks of
     its own (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`). Each worker
     handles a fixed share of the elements in a fixed order (see

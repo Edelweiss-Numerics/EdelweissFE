@@ -26,11 +26,11 @@
 #  the top level directory of EdelweissFE.
 """The first increment of a step that continues from a restart checkpoint -- a resumed run, or a step that fell back to
 its latest checkpoint (``maxCheckpointFallbacks``) -- extrapolates the checkpoint's last accepted increments only if
-its rebuilt equation system numbers the degrees of freedom as they are numbered. The checkpoint holds the digest of
+its rebuilt discrete system numbers the degrees of freedom as they are numbered. The checkpoint holds the digest of
 their numbering with them (``DofManager.dofNumberingDigest``).
 
 In a material point model, the numbering follows the active cells, which may have changed since the checkpoint was
-written. Here, the plate's equation system loses the Lagrange multipliers of a constraint instead: the vectors of the
+written. Here, the plate's discrete system loses the Lagrange multipliers of a constraint instead: the vectors of the
 checkpoint are then longer than those of the rebuilt system, and extrapolating them would end the run with an error.
 With as many degrees of freedom, the prediction would be silently mis-numbered.
 """
@@ -135,7 +135,7 @@ def predictions(monkeypatch) -> list:
 
 
 @pytest.mark.parametrize("extrapolation", ["linear", "quadratic"])
-def test_a_resumed_step_extrapolates_only_increments_numbered_as_its_equation_system(
+def test_a_resumed_step_extrapolates_only_increments_numbered_as_its_discrete_system(
     tmp_path, predictions, extrapolation
 ):
     directory = tmp_path / "uninterrupted"
@@ -151,7 +151,7 @@ def test_a_resumed_step_extrapolates_only_increments_numbered_as_its_equation_sy
     assert predictions == afterTheCheckpoint
     np.testing.assert_array_equal(_displacements(resumed), _displacements(uninterrupted))
 
-    # Resumed without the constraint: its multipliers leave the equation system, which numbers the degrees of freedom
+    # Resumed without the constraint: its multipliers leave the discrete system, which numbers the degrees of freedom
     # differently from the checkpoint's last accepted increments. The first increment starts from zero, the following
     # ones extrapolate the increments accepted in the new numbering.
     predictions.clear()
@@ -163,12 +163,12 @@ def test_a_resumed_step_extrapolates_only_increments_numbered_as_its_equation_sy
 
 
 @pytest.mark.parametrize("renumbered", [False, True])
-def test_a_step_that_fell_back_extrapolates_only_increments_numbered_as_its_equation_system(
+def test_a_step_that_fell_back_extrapolates_only_increments_numbered_as_its_discrete_system(
     tmp_path, predictions, monkeypatch, renumbered
 ):
     """The increment starting at CHECKPOINT_TIME fails at every size until the step has fallen back to a checkpoint.
     Falling back, the constraint is switched off (renumbered), or not: the prediction of the first increment after the
-    fallback survives only if the rebuilt equation system numbers the degrees of freedom as the checkpoint's last
+    fallback survives only if the rebuilt discrete system numbers the degrees of freedom as the checkpoint's last
     accepted increments are numbered."""
 
     fellBack = []

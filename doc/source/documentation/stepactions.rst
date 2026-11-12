@@ -179,7 +179,7 @@ Implementing your own loads
 ---------------------------
 
 A load is a step action that derives from :class:`~edelweissfe.stepactions.base.loadbase.LoadBase` and assembles its
-own contribution to the equation system in ``assembleLoad``: the *negative* of the external load it applies, and the
+own contribution to the discrete system in ``assembleLoad``: the *negative* of the external load it applies, and the
 tangent of that contribution, nonzero only for a load that follows the deformation (see
 :ref:`residual-and-tangent-convention`). The solvers do not need to know what a load acts on; their ``assembleLoads``
 only loops over the loads of the step and lets each assemble itself. They find the loads by this base class, whatever

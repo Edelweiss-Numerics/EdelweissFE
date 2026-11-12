@@ -39,7 +39,7 @@ import numpy as np
 from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
-from edelweissfe.models.equationsystemlayout import EquationSystemLayout
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.modelchange import TopologyRecord
 from edelweissfe.models.topologypipeline import TopologyPipeline
 from edelweissfe.numerics.dofmanager import DofManager
@@ -411,7 +411,7 @@ class FEModel:
         self.topology.recordSetupFingerprint()
 
     def activeConstraints(self) -> list:
-        """The constraints that take part in the equation system: all constraints, in their order, that are active,
+        """The constraints that take part in the discrete system: all constraints, in their order, that are active,
         i.e. switched on and within reach (see
         :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).
 
@@ -425,10 +425,10 @@ class FEModel:
 
     def updateConnectivity(self) -> bool:
         """Bring the coupling of the degrees of freedom up to date with the converged state, before an increment: which
-        nodes the entities of the equation system couple. Called by the solvers' topology update at the start of every
+        nodes the entities of the discrete system couple. Called by the solvers' topology update at the start of every
         increment and of every retry after a cutback, before the increment is proposed (see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`). If it
-        reports a change, an implicit solver rebuilds its equation system (:meth:`buildEquationSystem`).
+        reports a change, an implicit solver rebuilds its discrete system (:meth:`buildDiscreteSystem`).
 
         In a finite element model, the elements keep their nodes, and only a constraint may change the nodes it
         couples: a contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves
@@ -441,12 +441,12 @@ class FEModel:
         switched on again, and is located anew at the start of the next increment then.
 
         A change of the coupling is not a change of the mesh: it neither moves nodes nor creates them, so a solver
-        rebuilds its equation system, but does not re-equilibrate (``equilibrateAfterModelChange``).
+        rebuilds its discrete system, but does not re-equilibrate (``equilibrateAfterModelChange``).
 
         Returns
         -------
         bool
-            True if a coupling changed, so that the equation system has to be rebuilt.
+            True if a coupling changed, so that the discrete system has to be rebuilt.
         """
 
         # A list, not a generator in any(): every constraint must update, not just those up to the first change.
@@ -473,21 +473,21 @@ class FEModel:
             The Newmark parameter :math:`\\gamma`; 0 for no inertia.
         """
 
-    def buildEquationSystem(self) -> EquationSystemLayout:
-        """Lay out the global equation system of the model as it is now: number its degrees of freedom, and say which
-        elements contribute to it, see :class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`. Called
-        by a solver whenever it (re)builds its equation system: at the start of a step, and after the topology update
+    def buildDiscreteSystem(self) -> DiscreteSystem:
+        """Build the discrete system of the model as it is now: number its degrees of freedom, and say which elements
+        and which constraints contribute to it, see :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. Called
+        by a solver whenever it (re)builds its discrete system: at the start of a step, and after the topology update
         reported a change of the mesh or of the coupling (:meth:`updateConnectivity`).
 
-        The equation system of a finite element model holds the node fields, the elements, and the active constraints
+        The discrete system of a finite element model holds the node fields, the elements, and the active constraints
         with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see
         :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
         scalar variables, which would otherwise be unknowns without an equation.
 
         Returns
         -------
-        EquationSystemLayout
-            The layout of the equation system.
+        DiscreteSystem
+            The discrete system.
         """
 
         constraints = self.activeConstraints()
@@ -500,7 +500,7 @@ class FEModel:
             self.nodeSets.values(),
         )
 
-        return EquationSystemLayout(self, dofManager, list(self.elements.values()))
+        return DiscreteSystem(self, dofManager, list(self.elements.values()))
 
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and
@@ -535,7 +535,7 @@ class FEModel:
         and publishes the acceleration at the end of every increment. At the end of its step, it advances the velocity
         by the half increment it lags behind, so that the step leaves the velocity at its end time, as every solver
         does (see the documentation page *Node field results*). Where the acceleration is zero, the velocity stays as
-        it is. The model does this itself, without an equation system: a step resumed at its very end has built none.
+        it is. The model does this itself, without a discrete system: a step resumed at its very end has built none.
 
         Parameters
         ----------

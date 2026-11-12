@@ -25,13 +25,13 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""What the implicit solvers ask the model (see the documentation section ``model-equation-system``): whether the
-coupling changed (``FEModel.updateConnectivity``), what the equation system is made of (``FEModel.buildEquationSystem``
-and its ``EquationSystemLayout``), and what to update before the elements are computed
-(``EquationSystemLayout.updateMaterialPoints``).
+"""What the implicit solvers ask the model (see the documentation section ``model-discrete-system``): whether the
+coupling changed (``FEModel.updateConnectivity``), what the discrete system is made of (``FEModel.buildDiscreteSystem``
+and its ``DiscreteSystem``), and what to update before the elements are computed
+(``DiscreteSystem.updateMaterialPoints``).
 
 The end-to-end test solves a strip of four elements whose model answers that only its first two elements form the
-equation system, as the active domain of a meshfree model does: its node sets reach beyond the equation system, its
+discrete system, as the active domain of a meshfree model does: its node sets reach beyond the discrete system, its
 nodes outside of it carry no solution, and it reports a change of the coupling in every increment. It must give, bit for
 bit, the solution of a model that consists of these two elements only -- with ``NIST``, and with the threaded element
 loop of ``NISTParallel``.
@@ -45,7 +45,7 @@ from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
-from edelweissfe.models.equationsystemlayout import EquationSystemLayout
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.points.node import Node
@@ -73,8 +73,8 @@ def _nodesWithDisplacement(labels):
     return nodes
 
 
-def test_a_node_set_is_located_on_its_nodes_in_the_equation_system():
-    """Nodes 1..5 carry the field, the equation system numbers 1, 3 and 5: a node set of all five, in a mixed order,
+def test_a_node_set_is_located_on_its_nodes_in_the_discrete_system():
+    """Nodes 1..5 carry the field, the discrete system numbers 1, 3 and 5: a node set of all five, in a mixed order,
     is located on these three, in the order of the set, with their positions in it."""
     nodes = _nodesWithDisplacement(range(1, 6))
     byLabel = {node.label: node for node in nodes}
@@ -88,14 +88,14 @@ def test_a_node_set_is_located_on_its_nodes_in_the_equation_system():
     np.testing.assert_array_equal(dofIndices, [4, 5, 0, 1, 2, 3])
     np.testing.assert_array_equal(nodePositions, [0, 2, 4])
 
-    # a set of nodes outside the equation system only
+    # a set of nodes outside the discrete system only
     dofIndices, nodePositions = dofManager.locateFieldOnNodeSet(_FIELD, NodeSet("outside", [byLabel[2]]))
     assert dofIndices.size == 0 and nodePositions.size == 0
 
 
-def test_a_dirichlet_boundary_condition_prescribes_its_nodes_in_the_equation_system():
+def test_a_dirichlet_boundary_condition_prescribes_its_nodes_in_the_discrete_system():
     """The prescribed increment of a boundary condition is given per node of its set; the solver takes the rows of the
-    nodes in the equation system, in the order of the constrained degrees of freedom."""
+    nodes in the discrete system, in the order of the constrained degrees of freedom."""
 
     nodes = _nodesWithDisplacement(range(1, 5))
     numbered = NodeField(_FIELD, 2, NodeSet("numbered", [nodes[1], nodes[3]]))
@@ -126,7 +126,7 @@ def test_a_dirichlet_boundary_condition_prescribes_its_nodes_in_the_equation_sys
     np.testing.assert_array_equal(R, [0.0, 2.0, 0.0, 4.0])
 
 
-def test_a_node_force_loads_its_nodes_in_the_equation_system():
+def test_a_node_force_loads_its_nodes_in_the_discrete_system():
     nodes = _nodesWithDisplacement(range(1, 5))
     model = FEModel(2)
     numbered = NodeField(_FIELD, 2, NodeSet("numbered", [nodes[0], nodes[2]]))
@@ -151,15 +151,15 @@ def _twoFieldModel() -> tuple[FEModel, DofManager]:
     return model, DofManager(model.nodeFields.values())
 
 
-def test_the_layout_of_a_finite_element_model_reads_the_state_of_every_node():
+def test_the_discrete_system_of_a_finite_element_model_reads_the_state_of_every_node():
     model, dofManager = _twoFieldModel()
     for value, entry in enumerate(NodeField.ENTRIES, start=1):
         for nodeField in model.nodeFields.values():
             nodeField[entry][:] = value
-    layout = EquationSystemLayout(model, dofManager, [])
+    system = DiscreteSystem(model, dofManager, [])
 
     U, V, A = (dofManager.constructDofVector() for _ in range(3))
-    layout.readStateFromModel(U, V, A, dynamicFields=[_FIELD])
+    system.readStateFromModel(U, V, A, dynamicFields=[_FIELD])
 
     displacement, rotation = (dofManager.idcsOfFieldsInDofVector[name] for name in (_FIELD, "rotation"))
     np.testing.assert_array_equal(U, 1.0)
@@ -170,42 +170,42 @@ def test_the_layout_of_a_finite_element_model_reads_the_state_of_every_node():
     np.testing.assert_array_equal(A[rotation], 0.0)
 
 
-def test_the_layout_of_a_finite_element_model_writes_the_results_to_every_node():
+def test_the_discrete_system_of_a_finite_element_model_writes_the_results_to_every_node():
     model, dofManager = _twoFieldModel()
     for nodeField in model.nodeFields.values():
         nodeField["V"][:] = nodeField["A"][:] = -1.0
-    layout = EquationSystemLayout(model, dofManager, [])
+    system = DiscreteSystem(model, dofManager, [])
 
     U = dofManager.constructDofVector()
     U[:] = np.arange(dofManager.nDof)
     # every node carries its total solution: nothing is incremental
-    layout.zeroIncrementalCoefficients(U)
+    system.zeroIncrementalCoefficients(U)
     np.testing.assert_array_equal(U, np.arange(dofManager.nDof))
 
-    layout.writeResultsToModel(U, 2 * U, 3 * U)
+    system.writeResultsToModel(U, 2 * U, 3 * U)
     for nodeField in model.nodeFields.values():
         rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
         for entry, factor in (("U", 1), ("dU", 2), ("P", 3)):
             np.testing.assert_array_equal(nodeField[entry], factor * rows)
-        # passed no velocity and no acceleration, the layout leaves them as they are
+        # passed no velocity and no acceleration, the system leaves them as they are
         np.testing.assert_array_equal(nodeField["V"], -1.0)
         np.testing.assert_array_equal(nodeField["A"], -1.0)
 
     # the velocity and the acceleration, the state of a solver that integrates in time, go their own way, to every field
-    layout.writeVelocityAndAccelerationToModel(4 * U, 5 * U)
+    system.writeVelocityAndAccelerationToModel(4 * U, 5 * U)
     for nodeField in model.nodeFields.values():
         rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
         np.testing.assert_array_equal(nodeField["V"], 4 * rows)
         np.testing.assert_array_equal(nodeField["A"], 5 * rows)
-    layout.writeVelocityAndAccelerationToModel(None, 6 * U)
+    system.writeVelocityAndAccelerationToModel(None, 6 * U)
     for nodeField in model.nodeFields.values():
         rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
         np.testing.assert_array_equal(nodeField["V"], 4 * rows)
         np.testing.assert_array_equal(nodeField["A"], 6 * rows)
 
 
-class _LayoutListingItsWrites(EquationSystemLayout):
-    """The layout of a finite element model that lists every entry written through its hook."""
+class _SystemListingItsWrites(DiscreteSystem):
+    """The discrete system of a finite element model that lists every entry written through its hook."""
 
     def __init__(self, model, dofManager, elements):
         super().__init__(model, dofManager, elements)
@@ -216,59 +216,59 @@ class _LayoutListingItsWrites(EquationSystemLayout):
         super().writeEntryOfNodeField(dofVector, nodeField, entry)
 
 
-def test_the_layout_writes_the_state_of_a_quasi_static_solver_at_rest():
+def test_the_discrete_system_writes_the_state_of_a_quasi_static_solver_at_rest():
     model, dofManager = _twoFieldModel()
     for nodeField in model.nodeFields.values():
         for entry in NodeField.ENTRIES:
             nodeField[entry][:] = -1.0
-    layout = _LayoutListingItsWrites(model, dofManager, [])
+    system = _SystemListingItsWrites(model, dofManager, [])
 
-    layout.writeZeroVelocityAndAccelerationToModel()
+    system.writeZeroVelocityAndAccelerationToModel()
     for nodeField in model.nodeFields.values():
         np.testing.assert_array_equal(nodeField["V"], 0.0)
         np.testing.assert_array_equal(nodeField["A"], 0.0)
         # the state U and the results are not touched
         for entry in ("U", "dU", "P"):
             np.testing.assert_array_equal(nodeField[entry], -1.0)
-    # the zeros go the one way every entry is written, through the hook a layout covering a part of the nodes overrides
-    assert sorted(layout.writes) == sorted((name, entry) for name in model.nodeFields for entry in ("V", "A"))
+    # the zeros go the one way every entry is written, through the hook a system covering a part of the nodes overrides
+    assert sorted(system.writes) == sorted((name, entry) for name in model.nodeFields for entry in ("V", "A"))
 
 
-def test_the_layout_of_a_finite_element_model_has_the_inertia_at_the_nodes():
+def test_the_discrete_system_of_a_finite_element_model_has_the_inertia_at_the_nodes():
     model, dofManager = _twoFieldModel()
-    layout = EquationSystemLayout(model, dofManager, [])
+    system = DiscreteSystem(model, dofManager, [])
 
     # every node carries the mass the elements assemble
     displacement = dofManager.idcsOfFieldsInDofVector[_FIELD]
     np.testing.assert_array_equal(
-        layout.dofsWithNodalInertia([_FIELD]), np.arange(displacement.start, displacement.stop)
+        system.dofsWithNodalInertia([_FIELD]), np.arange(displacement.start, displacement.stop)
     )
-    np.testing.assert_array_equal(layout.dofsWithNodalInertia([_FIELD, "rotation"]), np.arange(dofManager.nDof))
+    np.testing.assert_array_equal(system.dofsWithNodalInertia([_FIELD, "rotation"]), np.arange(dofManager.nDof))
     # no entity with an inertia of its own, so no lumped mass of such entities, and no material points
-    assert layout.assembleLumpedMassOfEntitiesWithOwnInertia(lambda entities, work: work(entities)) is None
-    assert layout.materialPoints == []
+    assert system.assembleLumpedMassOfEntitiesWithOwnInertia(lambda entities, work: work(entities)) is None
+    assert system.materialPoints == []
 
 
-def test_the_layout_writes_the_results_in_two_parts():
+def test_the_discrete_system_writes_the_results_in_two_parts():
     model, dofManager = _twoFieldModel()
-    layout = EquationSystemLayout(model, dofManager, [])
+    system = DiscreteSystem(model, dofManager, [])
     U = dofManager.constructDofVector()
     U[:] = np.arange(dofManager.nDof)
 
     # the increment on the system it was taken on, then the force on the system it is evaluated on
-    layout.writeResultsToModel(U, 2 * U, None)
-    layout.writeResultsToModel(U, None, 3 * U)
+    system.writeResultsToModel(U, 2 * U, None)
+    system.writeResultsToModel(U, None, 3 * U)
     for nodeField in model.nodeFields.values():
         rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
         np.testing.assert_array_equal(nodeField["dU"], 2 * rows)
         np.testing.assert_array_equal(nodeField["P"], 3 * rows)
 
 
-# --- a model whose equation system covers a part of it -------------------------------------------------------------
+# --- a model whose discrete system covers a part of it -------------------------------------------------------------
 
 
-class _FirstElementsLayout(EquationSystemLayout):
-    """The layout of the equation system of the first elements of the strip: only their nodes are numbered, carry a
+class _FirstElementsSystem(DiscreteSystem):
+    """The discrete system of the first elements of the strip: only their nodes are numbered, carry a
     solution from increment to increment, and receive results; the other nodes of the model are left as they are, at
     zero."""
 
@@ -289,15 +289,15 @@ class _FirstElementsLayout(EquationSystemLayout):
         self.model.materialPointUpdates += 1
 
 
-class _StripWithEquationSystemOnFirstElements(FEModel):
-    """A model whose equation system holds its first elements only, and which reports a change of the coupling in every
+class _StripWithDiscreteSystemOnFirstElements(FEModel):
+    """A model whose discrete system holds its first elements only, and which reports a change of the coupling in every
     increment: the shape of the active domain of a meshfree model."""
 
     def __init__(self, dimension, nElementsInSystem):
         super().__init__(dimension)
         self.nElementsInSystem = nElementsInSystem
         self.connectivityUpdates = 0
-        self.equationSystemBuilds = 0
+        self.discreteSystemBuilds = 0
         self.materialPointUpdates = 0
 
     def updateConnectivity(self):
@@ -305,8 +305,8 @@ class _StripWithEquationSystemOnFirstElements(FEModel):
         super().updateConnectivity()
         return True
 
-    def buildEquationSystem(self):
-        self.equationSystemBuilds += 1
+    def buildDiscreteSystem(self):
+        self.discreteSystemBuilds += 1
         elements = list(self.elements.values())[: self.nElementsInSystem]
         nodesInSystem = NodeSet("in system", sorted({n for el in elements for n in el.nodes}, key=lambda n: n.label))
         nodeFieldsInSystem = {
@@ -317,7 +317,7 @@ class _StripWithEquationSystemOnFirstElements(FEModel):
             elements=elements,
             nodeSets=self.nodeSets.values(),
         )
-        return _FirstElementsLayout(self, dofManager, elements, nodesInSystem, nodeFieldsInSystem)
+        return _FirstElementsSystem(self, dofManager, elements, nodesInSystem, nodeFieldsInSystem)
 
 
 def _strip(model: FEModel, nElements: int) -> FEModel:
@@ -393,12 +393,12 @@ def _solve(model: FEModel, solverClass, journal: Journal) -> FEModel:
 
 @pytest.mark.parametrize("solverClass", [NIST, NISTParallel])
 @pytest.mark.parametrize("numThreads", [1, 2])
-def test_an_equation_system_on_a_part_of_the_model(solverClass, numThreads, workerThreads):
+def test_a_discrete_system_on_a_part_of_the_model(solverClass, numThreads, workerThreads):
     workerThreads(numThreads)
     journal = Journal(verbose=False)
 
     reference = _solve(_strip(FEModel(2), 2), solverClass, journal)
-    partial = _solve(_strip(_StripWithEquationSystemOnFirstElements(2, nElementsInSystem=2), 4), solverClass, journal)
+    partial = _solve(_strip(_StripWithDiscreteSystemOnFirstElements(2, nElementsInSystem=2), 4), solverClass, journal)
 
     # the nodes of the first two elements: the bottom nodes 1-3 and the top nodes 6-8 of the four-element strip
     inSystem = [1, 2, 3, 6, 7, 8]
@@ -413,5 +413,5 @@ def test_an_equation_system_on_a_part_of_the_model(solverClass, numThreads, work
     assert np.abs(referenceField["U"]).max() > 0.0
 
     # asked at every attempt of an increment, and rebuilt every time it reported a change
-    assert partial.connectivityUpdates == 5 and partial.equationSystemBuilds == 5
+    assert partial.connectivityUpdates == 5 and partial.discreteSystemBuilds == 5
     assert partial.materialPointUpdates > partial.connectivityUpdates

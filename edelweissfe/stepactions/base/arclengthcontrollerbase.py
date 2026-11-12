@@ -74,7 +74,7 @@ class ArcLengthControllerBase(StepActionBase):
             The increment being solved: ``timeStep.stepProgress`` is the progress of the step at its end, and
             ``timeStep.stepProgressIncrement`` its size, so it starts at their difference.
         dofManager
-            The dof manager of the current equation system.
+            The dof manager of the current discrete system.
 
         Returns
         -------
@@ -97,5 +97,5 @@ class ArcLengthControllerBase(StepActionBase):
         timeStep
             The converged time step.
         dofManager
-            The dof manager of the current equation system.
+            The dof manager of the current discrete system.
         """

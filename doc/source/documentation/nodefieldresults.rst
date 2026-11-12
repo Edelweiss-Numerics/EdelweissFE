@@ -17,9 +17,9 @@ Who owns what
 -------------
 
 One rule decides where a value lives: *the model owns the state the next attempt starts from; a solver owns only
-what lives within one equation system.* An entry is therefore of one of two kinds:
+what lives within one discrete system.* An entry is therefore of one of two kinds:
 
-- **state** -- what a solver reads back from the model whenever it (re)builds its equation system, and what a
+- **state** -- what a solver reads back from the model whenever it (re)builds its discrete system, and what a
   restart checkpoint must carry for the run to continue;
 - **result** -- what a solver writes for output and for the user; no solver reads it back.
 
@@ -33,26 +33,26 @@ accepted increment wrote it, of this step or of the step before. These are
 - in ``NID``, also an increment of negligible length: the round-off remainder the time stepper may leave at the end
   of a step (see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`).
 
-A rebuilt equation system (a changed mesh, a changed active domain, a changed coupling) reads the state entries from
+A rebuilt discrete system (a changed mesh, a changed active domain, a changed coupling) reads the state entries from
 the model. A refinement of the mesh interpolates the state entries onto the nodes it creates; the results there are
 zero until the next accepted increment.
 
-Every solver passes these entries through the model's layout of its equation system
-(:class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`), and in no other way:
-:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel` when it (re)builds the
-system, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` when it accepts
+Every solver passes these entries through the discrete system
+(:class:`~edelweissfe.models.discretesystem.DiscreteSystem`), and in no other way:
+:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel` when it (re)builds the
+system, :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel` when it accepts
 an increment, and, if it integrates in time,
-:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel` for the
+:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel` for the
 velocity and the acceleration. A quasi-static solver does not integrate in time: the state it accepts is at rest, and it writes zero to
 ``V`` and ``A`` of every node field
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel`), so
+(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel`), so
 that a dynamic step after it starts from rest.
 
 A step hands the next one the model's state at its end time: the solution, and the velocity and the acceleration at
 that time. The explicit solvers integrate the velocity staggered half an increment behind the solution, and so write
 that staggered velocity at every accepted increment; at the end of their step, the model advances it by the half
 increment it lags behind, with the acceleration (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`, the one
-change of these entries that needs no equation system). A dynamic step starts from this state: the implicit dynamic
+change of these entries that needs no discrete system). A dynamic step starts from this state: the implicit dynamic
 solver from the velocity, completing the acceleration from equilibrium; the explicit solver ``NED`` from both, without
 evaluating anything (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
 
@@ -144,7 +144,7 @@ its masters. Elsewhere, its ``A`` is the acceleration with which the velocity at
 increment after its ``V``, satisfies the equation of motion. The net force itself is the solver's state, not an entry
 (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
 
-Models whose equation system covers a part of their nodes
+Models whose discrete system covers a part of their nodes
 ---------------------------------------------------------
 
 A meshfree model (EdelweissMeshfree) has nodes that carry no total solution: the nodes of the background grid of
@@ -155,10 +155,10 @@ accepted increment, which is their meaningful nodal value. Nodes outside the act
 zero in every entry.
 
 The explicit meshfree solver carries the velocity of the kernel functions in ``V``: it writes ``V`` by node at
-acceptance and reads it back by node whenever its equation system is rebuilt, also at the start of a step, so that a
+acceptance and reads it back by node whenever its discrete system is rebuilt, also at the start of a step, so that a
 node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
 increment ends on other kernel functions than it started on -- the particles move, and reach other nodes -- so it
-writes the results in two parts, each through the layout of the equation system that holds them: ``dU`` on the nodes
+writes the results in two parts, each through the discrete system that holds them: ``dU`` on the nodes
 the increment was taken on, ``P``, ``V`` and ``A`` on the nodes of the configuration it ends in. A node that left the
 active domain in that increment therefore keeps its ``dU``, and holds zero in ``P``, ``V`` and ``A``. Its zero-length
 increment evaluates the forces of the configuration the step starts from, and writes them, when the model's nodes
@@ -172,7 +172,7 @@ couple are zero; at the nodes, ``NID`` carries them in ``V`` and ``A`` by node. 
 force: in the entities' residual contributions, or added at the nodes. The two keep the motion of the entities in
 different places, and nothing transfers it between them: a step whose ``inertia`` would take it from where the model
 does not hold it refuses to start
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion`).
+(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`).
 
 Using the entries in code
 -------------------------
@@ -182,6 +182,6 @@ instance, by adaptive mesh refinement) keeps all of them. Reading or writing an 
 :class:`~edelweissfe.numerics.dofmanager.DofManager` refuses a name that is not one of the five, and a node field
 the DofManager does not number: a node field is read or written as a whole only by the DofManager that numbers it,
 since its rows are addressed by position; on a node set, its rows are found by node, so that any node field of a
-numbered field can be read or written there (e.g. the node field of the model, while the equation system numbers
+numbered field can be read or written there (e.g. the node field of the model, while the discrete system numbers
 that of an active domain). A restart checkpoint holds every entry of every node field, and a
 checkpoint lacking one is refused (see :doc:`restart`).

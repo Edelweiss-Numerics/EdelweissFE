@@ -26,9 +26,9 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""What the global equation system of a model is made of: the answer a model gives a solver that (re)builds its
-equation system, see :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem` and
-:ref:`model-equation-system`."""
+"""What the global discrete system of a model is made of: the answer a model gives a solver that (re)builds its
+discrete system, see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem` and
+:ref:`model-discrete-system`."""
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -43,33 +43,34 @@ if TYPE_CHECKING:
     from edelweissfe.models.femodel import FEModel
 
 
-class EquationSystemLayout:
-    """The layout of the global equation system of a model: which degrees of freedom it has, which elements contribute
+class DiscreteSystem:
+    """The discrete system of a model: which degrees of freedom it has, which elements and which constraints contribute
     to it, and how the solution passes between the model and the vectors a solver iterates on.
 
-    A solver asks the model for it whenever it (re)builds its equation system
-    (:meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), and keeps it as long as the numbering of the
+    A solver asks the model for it whenever it (re)builds its discrete system
+    (:meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), and keeps it as long as the numbering of the
     degrees of freedom it holds: until the next rebuild. The solver itself only solves; what the model is made of, the
-    layout says.
+    discrete system says.
 
-    This class is the layout of a finite element model. A model made of other entities -- EdelweissMeshfree's material
-    point and RKPM models, with their background cells and particles -- returns a layout derived from it, which changes
-    what its methods do; the solver calls them the same way.
+    This class is the discrete system of a finite element model. A model made of other entities -- EdelweissMeshfree's
+    material point and RKPM models, with their background cells and particles -- returns a discrete system derived from
+    it, which changes what its methods do; the solver calls them the same way.
 
     Parameters
     ----------
     model
         The model.
     dofManager
-        The numbering of the degrees of freedom.
+        The numbering of the degrees of freedom, and the locations of the constraints that take part in the
+        discrete system.
     elements
         The elements, in the order in which the solver computes them.
     """
 
     def __init__(self, model: "FEModel", dofManager: DofManager, elements: list):
-        #: The model this equation system belongs to.
+        #: The model this discrete system belongs to.
         self.model = model
-        #: The numbering of the degrees of freedom of the equation system; see
+        #: The numbering of the degrees of freedom of the discrete system; see
         #: :class:`~edelweissfe.numerics.dofmanager.DofManager`.
         self.dofManager = dofManager
         #: Everything the solver computes like an element in every evaluation of the model, see
@@ -84,8 +85,24 @@ class EquationSystemLayout:
         #: finite element model, whose elements evaluate the material at their own quadrature points.
         self.materialPoints = []
 
+    @property
+    def constraints(self) -> list:
+        """The constraints that take part in the discrete system: the ones the DOF manager located, with their scalar
+        variables, when the discrete system was built or last located its constraints anew (see
+        :meth:`~edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices`). The solver evaluates exactly
+        these in every evaluation of the model, so that every constraint it evaluates has its rows in the system
+        matrix, and every row of a constraint is filled.
+
+        Returns
+        -------
+        list
+            The constraints, in the order in which the DOF manager located them.
+        """
+
+        return list(self.dofManager.idcsOfConstraintsInDofVector)
+
     def readStateFromModel(self, U: DofVector, V: DofVector = None, A: DofVector = None, dynamicFields: list = None):
-        """Read the state the model carries from increment to increment into the vectors of a (re)built equation
+        """Read the state the model carries from increment to increment into the vectors of a (re)built discrete
         system, from which the next increment starts (see the documentation page *Node field results*): the solution
         ``U``, and, for a solver that integrates in time, the velocity ``V`` and the acceleration ``A``.
 
@@ -97,11 +114,11 @@ class EquationSystemLayout:
         Parameters
         ----------
         U
-            The solution vector of the equation system, zero, overwritten.
+            The solution vector of the discrete system, zero, overwritten.
         V
-            The velocity vector of the equation system, zero, overwritten; None if the solver has none.
+            The velocity vector of the discrete system, zero, overwritten; None if the solver has none.
         A
-            The acceleration vector of the equation system, zero, overwritten; None if the solver has none.
+            The acceleration vector of the discrete system, zero, overwritten; None if the solver has none.
         dynamicFields
             The names of the fields whose velocity and acceleration are read, e.g. those the solver integrates in time;
             None for every field.
@@ -118,17 +135,17 @@ class EquationSystemLayout:
                 self.readEntryOfNodeField(A, nodeField, "A")
 
     def readEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
-        """Read one entry of one node field of the model into a vector of the equation system; every read of
+        """Read one entry of one node field of the model into a vector of the discrete system; every read of
         :meth:`readStateFromModel` goes through here, as every write goes through :meth:`writeEntryOfNodeField`.
 
-        In a finite element model, the equation system numbers every node of the field, and every node carries its
-        total solution and its velocity: the whole entry is read. A model whose equation system covers a part of its
+        In a finite element model, the discrete system numbers every node of the field, and every node carries its
+        total solution and its velocity: the whole entry is read. A model whose discrete system covers a part of its
         nodes reads the entry on the nodes that carry it.
 
         Parameters
         ----------
         dofVector
-            The vector of the equation system, overwritten on the degrees of freedom of the field.
+            The vector of the discrete system, overwritten on the degrees of freedom of the field.
         nodeField
             The node field of the model.
         entry
@@ -158,8 +175,8 @@ class EquationSystemLayout:
         names of the node fields, and the solution to the scalar variables. The velocity and the acceleration, the
         state of a solver that integrates in time, go through :meth:`writeVelocityAndAccelerationToModel`.
 
-        A solver whose increment ends on another equation system than it started on writes in two parts, each through
-        the layout of the system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the
+        A solver whose increment ends on another discrete system than it started on writes in two parts, each through
+        the discrete system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the
         kernel functions the particles reached at its start, and evaluates the force on those they reach at its end.
         It passes None for the entries the other part writes.
 
@@ -207,29 +224,29 @@ class EquationSystemLayout:
         quasi-static solver leaves at acceptance. It does not integrate in time, so the state it accepts is at rest
         (see the documentation page *Node field results*), and a dynamic step that follows starts from rest.
 
-        A zero velocity and a zero acceleration of the equation system, written as every velocity and acceleration
-        is, by :meth:`writeVelocityAndAccelerationToModel`. A layout covering a part of the nodes sets the entries to
-        zero on the others (see :meth:`writeEntryOfNodeField`), so the model is at rest on every node, inside the
-        equation system or not.
+        A zero velocity and a zero acceleration of the discrete system, written as every velocity and acceleration
+        is, by :meth:`writeVelocityAndAccelerationToModel`. A discrete system covering a part of the nodes sets the
+        entries to zero on the others (see :meth:`writeEntryOfNodeField`), so the model is at rest on every node, inside
+        the discrete system or not.
         """
 
         zero = self.dofManager.constructDofVector()
         self.writeVelocityAndAccelerationToModel(zero, zero)
 
     def writeEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
-        """Write a vector of the equation system to one entry of one node field of the model; every write of
+        """Write a vector of the discrete system to one entry of one node field of the model; every write of
         :meth:`writeResultsToModel`, :meth:`writeVelocityAndAccelerationToModel` and
         :meth:`writeZeroVelocityAndAccelerationToModel` goes through here, as every read goes through
         :meth:`readEntryOfNodeField`.
 
-        In a finite element model, the equation system numbers every node of the field, so the whole entry is written.
-        A model whose equation system covers a part of its nodes writes the entry on these nodes, and sets it to zero
+        In a finite element model, the discrete system numbers every node of the field, so the whole entry is written.
+        A model whose discrete system covers a part of its nodes writes the entry on these nodes, and sets it to zero
         on the others.
 
         Parameters
         ----------
         dofVector
-            The vector of the equation system.
+            The vector of the discrete system.
         nodeField
             The node field of the model.
         entry
@@ -274,7 +291,7 @@ class EquationSystemLayout:
         Returns
         -------
         np.ndarray
-            The indices of the degrees of freedom in the vectors of the equation system, sorted.
+            The indices of the degrees of freedom in the vectors of the discrete system, sorted.
         """
 
         isWithNodalInertia = np.zeros(self.dofManager.nDof, dtype=bool)
@@ -335,7 +352,7 @@ class EquationSystemLayout:
         The loops over the entities belong to the solver, as the loop over the elements does: ``forEachChunk(entities,
         work)`` calls ``work(chunk)`` for chunks that together hold all ``entities``, in the calling thread or on the
         threads of a parallel solver (see :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`). A
-        layout loops through it over entities that are independent of each other.
+        discrete system loops through it over entities that are independent of each other.
 
         A finite element model has no such material points: every element evaluates the material at its own quadrature
         points, in :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`, so there is nothing to do

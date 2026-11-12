@@ -157,7 +157,7 @@ What the direct path has to know about the entities and the solvers:
 - **The complete pattern.** The multi-point-constraint condensation adds entries to the CSR pattern. The
   solver builds the condensation first and hands its
   :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn` to the
-  assembly, which adds the entries to its pattern before anything is mapped to it, whenever the equation system is
+  assembly, which adds the entries to its pattern before anything is mapped to it, whenever the discrete system is
   (re)built. Both paths add them by the same merge.
 
 Every block of the direct path is a zeroed scratch array, so an entity that is handed its block twice in

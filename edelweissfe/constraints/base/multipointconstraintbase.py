@@ -46,7 +46,7 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
 
     between a slave degree of freedom :math:`u_s` and master degrees of freedom :math:`u_{m_a}`.
     The solver collects these records from all multi-point constraints in the model, condenses
-    the slave degrees of freedom out of the equation system (implicit solvers), or folds slave
+    the slave degrees of freedom out of the system of equations (implicit solvers), or folds slave
     masses/forces onto the masters and slaves the kinematics directly (explicit dynamics). See
     :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`.
 

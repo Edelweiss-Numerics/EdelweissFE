@@ -27,9 +27,9 @@
 #  ---------------------------------------------------------------------
 """The constraint forces of an explicit solver
 (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`): the force buffer
-and the DOF indices of a constraint are made once per equation system and reused in every increment, and a plan made
+and the DOF indices of a constraint are made once per discrete system and reused in every increment, and a plan made
 for indices the constraint no longer has is never used. The tangent that a constraint's default explicit evaluation
-throws away is sized once per equation system as well."""
+throws away is sized once per discrete system as well."""
 
 import numpy as np
 
@@ -88,12 +88,12 @@ def _forces(host, constraints, entitiesInDofVector):
     return np.asarray(host.assemble(constraints, P))
 
 
-def test_the_plan_follows_a_constraint_located_anew_in_the_same_mapping():
-    """The meshfree explicit solver re-locates its constraints in place (the DofManager updates its entity mapping):
-    the plan made for the old indices must not be used for the new ones."""
+def test_the_plan_follows_a_constraint_whose_indices_change_in_the_same_mapping():
+    """A constraint located anew has indices of its own, also if the mapping that holds them is the same object: the
+    plan made for the old indices must not be used for the new ones."""
     host = _Host()
     constraint = _UnitForceConstraint()
-    constraints = {"spring": constraint}
+    constraints = [constraint]
     entitiesInDofVector = {constraint: np.array([0, 1])}
 
     np.testing.assert_array_equal(_forces(host, constraints, entitiesInDofVector), [1, 1, 0, 0])
@@ -103,10 +103,10 @@ def test_the_plan_follows_a_constraint_located_anew_in_the_same_mapping():
     np.testing.assert_array_equal(_forces(host, constraints, entitiesInDofVector), [0, 0, 1, 1])
 
 
-def test_the_plan_follows_a_rebuilt_equation_system():
+def test_the_plan_follows_a_rebuilt_discrete_system():
     host = _Host()
     constraint = _UnitForceConstraint()
-    constraints = {"spring": constraint}
+    constraints = [constraint]
 
     np.testing.assert_array_equal(_forces(host, constraints, {constraint: np.array([0, 1])}), [1, 1, 0, 0])
     np.testing.assert_array_equal(_forces(host, constraints, {constraint: np.array([3, 1])}), [0, 1, 0, 1])
@@ -115,21 +115,21 @@ def test_the_plan_follows_a_rebuilt_equation_system():
 def test_the_plan_is_reused_while_the_indices_stay():
     host = _Host()
     constraint = _UnitForceConstraint()
-    constraints = {"spring": constraint}
+    constraints = [constraint]
     entitiesInDofVector = {constraint: np.array([0, 1])}
 
     _forces(host, constraints, entitiesInDofVector)
-    plan = host._constraintForcePlans["spring"]
+    plan = host._constraintForcePlans[constraint]
     _forces(host, constraints, entitiesInDofVector)
-    assert host._constraintForcePlans["spring"] is plan
+    assert host._constraintForcePlans[constraint] is plan
 
 
-def test_the_discarded_tangent_is_sized_once_per_equation_system():
+def test_the_discarded_tangent_is_sized_once_per_discrete_system():
     """A constraint that lists the entries of its block builds the list to size the tangent its explicit evaluation
-    throws away: once per equation system, not in every increment."""
+    throws away: once per discrete system, not in every increment."""
     host = _Host()
     constraint = _ListedUnitForceConstraint()
-    constraints = {"spring": constraint}
+    constraints = [constraint]
     entitiesInDofVector = {constraint: np.array([0, 1])}
 
     for _ in range(3):

@@ -232,7 +232,7 @@ class ComposedLinearSolver(LinearSolver):
     def setModel(self, model, dofManager) -> None:
         """Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built
         for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear
-        solver builds the new equation system before that."""
+        solver builds the new discrete system before that."""
         self.root.forget()
         super().setModel(model, dofManager)
         self._coordinateCache.clear()

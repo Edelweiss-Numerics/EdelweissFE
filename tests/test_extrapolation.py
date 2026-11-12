@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """The prediction an increment of the implicit solvers starts from (the solver option ``extrapolation``), the retry of a
-failed extrapolated increment (``retryWithoutExtrapolation``), and the prediction across a rebuild of the equation
+failed extrapolated increment (``retryWithoutExtrapolation``), and the prediction across a rebuild of the discrete
 system after a change of the connectivity (``extrapolateAcrossConnectivityChange``).
 
 The decks are a linear elastic plate whose edge displacement follows a prescribed path in the step progress. For a
@@ -137,7 +137,7 @@ def displacements(model) -> np.ndarray:
 
 def solverWithHistory(extrapolation, sizes, dUs, dofNumbering="the numbering", **options) -> NIST:
     """A NIST solver whose accepted history is the given increments (oldest first), sizes in step progress, accepted in
-    an equation system with the given digest of its DOF numbering."""
+    a discrete system with the given digest of its DOF numbering."""
     solver = NIST(loadConfiguration({}), Journal(verbose=False), extrapolation=extrapolation, **options)
     timeSteps = [TimeStep(i + 1, size, 0.0, size, 0.0, 0.0) for i, size in enumerate(sizes)]
     solver.prevTimeStep, solver.dUOfLastIncrement = timeSteps[-1], np.array(dUs[-1], dtype=float)
@@ -353,7 +353,7 @@ def test_a_rebuild_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tm
 
 def test_a_rebuild_that_numbers_other_scalar_variables_drops_the_prediction():
     """Two constraints with one Lagrange multiplier each, one switched on and the other off, then the other way round
-    (a constraint may switch within a step): the two equation systems have as many degrees of freedom, but the last one
+    (a constraint may switch within a step): the two discrete systems have as many degrees of freedom, but the last one
     numbers another multiplier. The digest names the scalar variables, by the names the model holds them under, so the
     prediction does not survive the switch."""
 

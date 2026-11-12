@@ -80,7 +80,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
     .. note::
        This constraint requires a node set of *fixed* size. It needs ``len(nSet) - 1`` Lagrange
-       multipliers, and those scalar variables are allocated exactly once, when the equation system
+       multipliers, and those scalar variables are allocated exactly once, when the discrete system
        is first set up. A node set that grows in-place during the simulation (e.g. by adaptive mesh
        refinement) can therefore not be supported, and is rejected in :meth:`updateConnectivity`.
        Use the penalty variant ``equalValuePenalty`` instead, which re-sizes itself per increment.
@@ -182,7 +182,7 @@ class Constraint(ConstraintBase, MeshDependent):
         raise Exception(
             "Constraint '{:}' (equalValueLagrangian) does not support a node set that changes "
             "size during the simulation: its {:} Lagrange multipliers are allocated once, when "
-            "the equation system is first set up, and cannot grow with the node set (e.g. under "
+            "the discrete system is first set up, and cannot grow with the node set (e.g. under "
             "adaptive mesh refinement). Use the penalty variant 'equalValuePenalty' on this node "
             "set instead, or constrain a node set that is not refined.".format(self._name, self.nMultipliers)
         )

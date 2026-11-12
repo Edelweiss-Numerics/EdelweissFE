@@ -128,7 +128,7 @@ class Constraint(ConstraintBase):
         return 0
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        """Called once per increment, before the equation system is (re)built -- exactly the tick
+        """Called once per increment, before the discrete system is (re)built -- exactly the tick
         at which a freshly refined mesh's ``model.topology.version`` has already advanced. Raises if the
         cached node set has not grown accordingly, i.e. if it is still the pre-refinement object
         (a stale reference) rather than the same, in-place-mutated one."""

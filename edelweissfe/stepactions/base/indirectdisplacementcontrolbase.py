@@ -95,12 +95,12 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
 
     @abstractmethod
     def controlledDofIndices(self, dofManager: DofManager) -> np.ndarray:
-        """The indices of the controlled degrees of freedom in the dof vector of an equation system.
+        """The indices of the controlled degrees of freedom in the dof vector of a discrete system.
 
         Parameters
         ----------
         dofManager
-            The dof manager of the equation system.
+            The dof manager of the discrete system.
 
         Returns
         -------
@@ -162,7 +162,7 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
         timeStep
             The increment being solved, whose size :math:`\\Delta p` is ``timeStep.stepProgressIncrement``.
         dofManager
-            The dof manager of the current equation system.
+            The dof manager of the current discrete system.
 
         Returns
         -------

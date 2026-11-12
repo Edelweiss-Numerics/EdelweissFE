@@ -237,7 +237,7 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
 
     One assembly per Newton iteration: :meth:`beginAssembly`, then every entity writes its block (``K[entity]``, or
     from a worker thread, ``K.blocksOfWorker(worker)[entity]``), then :meth:`assembledMatrix` returns the global
-    matrix. It is built per equation system, together with its CSR pattern, see
+    matrix. It is built per discrete system, together with its CSR pattern, see
     :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly`.
 
     ``K[entity]`` hands out the blocks of worker 0, for the entity loops in the calling thread.
@@ -410,7 +410,7 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
         """A copy of ``matrix`` on the sparsity pattern of the system matrix, the form :meth:`addMatrix` takes: a value
         array of its own, one value per entry of the pattern (zero where ``matrix`` has no entry), and the pattern
         arrays of the system matrix, shared, not copied. E.g., the mass a dynamic solver assembled through this
-        assembly (:meth:`assembledMatrix`, whose values the next assembly overwrites), or the mass of the equation
+        assembly (:meth:`assembledMatrix`, whose values the next assembly overwrites), or the mass of the discrete
         system before a rebuild, moved onto the pattern of the new one.
 
         The copy refuses to be changed structurally (see :class:`~edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix`):
@@ -554,7 +554,7 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
     Parameters
     ----------
     dofManager
-        The DOF manager of the equation system: the global DOF list of every entity.
+        The DOF manager of the discrete system: the global DOF list of every entity.
     numberOfWorkers
         How many threads may write blocks at the same time.
     patternFillIn
@@ -660,7 +660,7 @@ class _DirectCSRBlocksOfWorker(_ScratchSystemMatrixBlocks):
     every entity, added to the CSR values when the block is committed.
 
     It holds what it needs of the assembly, not the assembly itself: a reference cycle would keep the whole assembly
-    alive until the cyclic garbage collector runs, also across a rebuild of the equation system.
+    alive until the cyclic garbage collector runs, also across a rebuild of the discrete system.
 
     Parameters
     ----------
@@ -708,7 +708,7 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
     Parameters
     ----------
     dofManager
-        The DOF manager of the equation system: the global DOF list of every entity.
+        The DOF manager of the discrete system: the global DOF list of every entity.
     numberOfWorkers
         How many threads may write blocks at the same time; one scratch array each.
     patternFillIn

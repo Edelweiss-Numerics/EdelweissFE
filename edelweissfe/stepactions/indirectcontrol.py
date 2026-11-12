@@ -246,7 +246,7 @@ class StepAction(IndirectDisplacementControlBase):
         Parameters
         ----------
         dofManager
-            The dof manager of the equation system.
+            The dof manager of the discrete system.
 
         Returns
         -------
@@ -286,7 +286,7 @@ class StepAction(IndirectDisplacementControlBase):
         timeStep
             The current time step.
         dofManager
-            The dof manager of the current equation system.
+            The dof manager of the current discrete system.
         """
 
         self.journal.message(

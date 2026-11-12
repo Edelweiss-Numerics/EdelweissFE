@@ -37,7 +37,7 @@ class ScatterDofVectorTemplate:
     the entity lookup map and the gather/scatter index array.
 
     Since the layout only depends on the entities and their indices in the DofVector,
-    it can be computed once and shared by all scatter vectors of the same equation
+    it can be computed once and shared by all scatter vectors of the same discrete
     system, e.g. across Newton iterations.
 
     Parameters

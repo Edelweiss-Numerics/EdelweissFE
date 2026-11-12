@@ -39,7 +39,7 @@ One increment, three phases
     ╚═══════════════════════════════════════════════════════════════════════════╝
                                           │
     ╔══════════════════════════════════════▼════════════════════════════════════╗
-    ║ PHASE 3 — SOLVE   assemble the equation system and iterate to convergence  ║
+    ║ PHASE 3 — SOLVE   assemble the system of equations, iterate to convergence ║
     ╚═══════════════════════════════════════════════════════════════════════════╝
 
 Phase 1 is :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`, phase 2 is
@@ -71,7 +71,7 @@ modifier's change in a later round is fine; mutating the same element it mutated
 
 An ``apply`` that returns an *empty*
 :class:`~edelweissfe.models.modelchange.ModelChange` counts as nothing having happened: it is not
-recorded in the history, it does not bump the version, and it does not trigger an equation-system
+recorded in the history, it does not bump the version, and it does not trigger a discrete system
 rebuild. Planning and then finding nothing left to do is a legitimate outcome, not a change.
 
 
@@ -193,7 +193,7 @@ field variables on every node, resizing every NodeField, relinking every field v
 deferred to the end of the replay window and run once
 (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes` with ``deferFieldBookkeeping``). It
 is recomputed from the final mesh either way, so the result is the same; only the intermediate
-layouts, which no increment ever solves on, are skipped. The live per-increment window does not
+discrete systems, which no increment ever solves on, are skipped. The live per-increment window does not
 defer, and ``apply`` itself is unaware of the difference: it issues the same calls in both cases.
 
 **What a modifier carries between decisions** is declared like every other component's state, in

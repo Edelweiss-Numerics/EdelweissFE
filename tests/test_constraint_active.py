@@ -25,12 +25,12 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""A constraint that is not active (``ConstraintBase.active``) is not part of the equation system: it gets no degrees
-of freedom, the solver does not evaluate it, and its Lagrange multipliers leave the equation system with it. It is
+"""A constraint that is not active (``ConstraintBase.active``) is not part of the discrete system: it gets no degrees
+of freedom, the solver does not evaluate it, and its Lagrange multipliers leave the discrete system with it. It is
 active while it is switched on from outside (``switchedOn``, set through ``active``) and within reach of what it
 constrains (``withinReach``, which the constraint finds itself).
 
-A Lagrange multiplier constraint is the sharp case: if its multipliers stayed in the equation system without the
+A Lagrange multiplier constraint is the sharp case: if its multipliers stayed in the discrete system without the
 constraint that gives them an equation, the system matrix would be singular. Switched off by a ``modelupdate``, the
 constraint below lets the loaded corner of a plate move freely; switched on in the next step, it pulls the top edge
 back to one common displacement. The explicit solver ``NED``, which refuses a constraint with multipliers, does not
@@ -41,6 +41,7 @@ off from outside rests: the model does not locate it anew.
 import numpy as np
 import pytest
 
+from edelweissfe.config import registry
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
@@ -108,7 +109,7 @@ def test_switched_off_lagrange_constraint_leaves_no_singular_rows(tmp_path):
     # without the constraint, the loaded corner runs ahead of the rest of the top edge
     assert np.ptp(uTop) > 1e-3
 
-    # the multipliers were not part of the equation system, so they kept their initial value
+    # the multipliers were not part of the discrete system, so they kept their initial value
     assert all(model.scalarVariables[name].value == 0.0 for name in model.scalarVariables)
 
 
@@ -124,7 +125,7 @@ def test_switched_on_again_the_constraint_takes_part_again(tmp_path):
 
 def test_the_explicit_solver_refuses_a_lagrange_constraint_only_while_it_is_switched_on(tmp_path):
     """NED refuses a constraint with scalar variables: they carry no inertia, so it has no equation of motion for
-    them. A constraint that is switched off takes no part in the equation system, nor do its multipliers."""
+    them. A constraint that is switched off takes no part in the discrete system, nor do its multipliers."""
 
     model = _run(tmp_path, secondStep="")
     explicitSolver = NED({}, Journal(verbose=False))
@@ -228,6 +229,37 @@ def test_the_model_locates_a_constraint_out_of_reach_but_not_one_switched_off_fr
     assert constraint.timesLocated == 2 and constraint.active
 
 
+def test_the_system_holds_exactly_the_constraints_its_dof_manager_located():
+    """The solver evaluates the constraints of the discrete system: they must be those that have rows in it."""
+    model, constraint = _modelWithAPartnerConstraint()
+
+    system = model.buildDiscreteSystem()
+    assert system.constraints == [constraint]
+    assert set(system.dofManager.idcsOfConstraintsInDofVector) == {constraint}
+    with pytest.raises(AttributeError):
+        system.constraints = []
+
+    constraint.active = False
+    system = model.buildDiscreteSystem()
+    assert system.constraints == [] and not system.dofManager.idcsOfConstraintsInDofVector
+
+
+def test_the_system_follows_its_dof_manager_when_a_constraint_leaves_reach_and_returns():
+    model, constraint = _modelWithAPartnerConstraint()
+    system = model.buildDiscreteSystem()
+
+    constraint.partnerInReach = False
+    assert model.updateConnectivity()
+    system.dofManager.refreshConstraintIndices(model.activeConstraints())
+    assert system.constraints == [] and not system.dofManager.idcsOfConstraintsInDofVector
+
+    constraint.partnerInReach = True
+    assert model.updateConnectivity()
+    system.dofManager.refreshConstraintIndices(model.activeConstraints())
+    assert system.constraints == [constraint]
+    assert set(system.dofManager.idcsOfConstraintsInDofVector) == {constraint}
+
+
 def test_the_explicit_dynamic_solver_does_not_locate_a_constraint_switched_off_from_outside():
     model, constraint = _modelWithAPartnerConstraint()
     explicitSolver = NED({}, Journal(verbose=False))
@@ -240,6 +272,84 @@ def test_the_explicit_dynamic_solver_does_not_locate_a_constraint_switched_off_f
     constraint.active = True
     explicitSolver.updateConstraintConnectivity(model)
     assert constraint.timesLocated == 1
+
+
+class _ReachProbe(ConstraintBase):
+    """A constraint on one node that leaves reach once it has been evaluated three times, and counts its explicit
+    evaluations (``nEvaluations``, and ``nEvaluationsAtLeaving``)."""
+
+    def __init__(self, name, model, **kwargs):
+        super().__init__(name, model)
+        self.name = name
+        self._node = next(iter(model.nodeSets["gen_top"]))
+        self.nEvaluations = 0
+        self.nEvaluationsAtLeaving = None
+
+    @property
+    def nodes(self):
+        return [self._node]
+
+    @property
+    def fieldsOnNodes(self):
+        return [["displacement"]]
+
+    @property
+    def nDof(self):
+        return 2
+
+    def updateConnectivity(self, model):
+        wasActive = self.active
+        self.withinReach = self.nEvaluations < 3
+        if wasActive and not self.active:
+            self.nEvaluationsAtLeaving = self.nEvaluations
+        return self.active != wasActive
+
+    def computeKernels(self, U_np, dU, P, K, timeStep):
+        pass
+
+    def computeKernelsExplicit(self, U_np, dU, P, timeStep):
+        self.nEvaluations += 1
+
+
+registry.register("constraint", "reachprobe", _ReachProbe)
+
+REACH_PROBE_DECK = """
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.0e4, 0.0, 1.0
+
+*section, name=section1, material=linearelastic, type=plane, thickness=1
+all
+
+*job, name=job, domain=2d
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=1, h=1, nX=1, nY=1, elType=CPE4, elProvider=edelweiss
+
+*solver, solver=NED, name=theSolver
+courant-number=1.0
+output-frequency=1
+contact-update-frequency=1
+
+*constraint, name=probe, type=reachprobe
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-12, maxNumInc=1000, maxIter=25, stepLength=0.02
+>>dirichlet, name=base, nSet=gen_bottom, field=displacement, 1=0.0, 2=0.0
+"""
+
+
+def test_the_explicit_dynamic_solver_evaluates_the_constraints_of_its_system(tmp_path, monkeypatch):
+    """A constraint that leaves reach is located out of the system in place (the DOF manager refreshes the indices of
+    the constraints): from then on the system holds no constraint, and the solver evaluates none."""
+
+    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, model, U: 2.0e-3)
+
+    model = _runDeck(tmp_path, REACH_PROBE_DECK)
+
+    probe = model.constraints["probe"]
+    assert not probe.active
+    assert probe.nEvaluationsAtLeaving == 3, "left reach after three evaluations"
+    assert probe.nEvaluations == probe.nEvaluationsAtLeaving, "evaluated while in reach, never once it has left"
 
 
 #: Two plane-strain blocks, the upper one 0.05 above the lower one, and a frictional contact with augmented Lagrange

@@ -77,7 +77,7 @@ class MeshDependent(ABC):
             that change relevant (e.g. this is a direct, correct value to return from a
             :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity`
             override -- a mesh mutation this consumer didn't care about shouldn't, on its own,
-            force an equation-system rebuild).
+            force a discrete system rebuild).
         """
         if model.topology.version == self._lastSeenTopologyVersion:
             return False

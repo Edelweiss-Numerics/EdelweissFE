@@ -159,7 +159,7 @@ Implementing your own elements
 
 Relevant module: ``edelweissfe.elements.base.baseelement``
 
-An element follows the rule every entity of the equation system follows (see
+An element follows the rule every entity of the discrete system follows (see
 :ref:`residual-and-tangent-convention`): each method adds a residual contribution ``P`` and its tangent
 ``K = dP/dU``. ``computeKernels(K, P, U, dU, time, dT)`` adds the internal forces and the stiffness matrix -- the
 tangent comes first in its arguments; the load methods ``computeDistributedLoad`` and ``computeBodyForce`` add the

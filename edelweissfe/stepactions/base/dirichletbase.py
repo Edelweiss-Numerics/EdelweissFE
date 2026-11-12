@@ -49,7 +49,7 @@ class DirichletBase(StepActionBase):
         * by how much they must move this step -> ``getPrescribedIncrementOfConstrainedDofs()``
 
     The BC itself states the second per node of its set (:meth:`getPrescribedIncrement`). Of these, the solver
-    takes the nodes that are part of the equation system (:attr:`constrainedNodePositions`): all of them in a finite
+    takes the nodes that are part of the discrete system (:attr:`constrainedNodePositions`): all of them in a finite
     element model, those in the active domain in a meshfree one.
     """
 
@@ -65,7 +65,7 @@ class DirichletBase(StepActionBase):
     #: on the DofManager.
     constrainedDofIndices: np.ndarray = None
     #: The positions, in ``nSet``, of the nodes whose DOFs :attr:`constrainedDofIndices` holds: the nodes of the set
-    #: that are part of the equation system -- every node of the set in a finite element model, the nodes in the
+    #: that are part of the discrete system -- every node of the set in a finite element model, the nodes in the
     #: active domain in a meshfree one. Populated together with :attr:`constrainedDofIndices`.
     constrainedNodePositions: np.ndarray = None
 
@@ -84,7 +84,7 @@ class DirichletBase(StepActionBase):
 
     def getPrescribedIncrementOfConstrainedDofs(self, timeStep: TimeStep) -> np.ndarray:
         """The increment by which the constrained DOFs must move in this time step: the rows of
-        :meth:`getPrescribedIncrement` of the nodes in the equation system, flattened into the node-major order of
+        :meth:`getPrescribedIncrement` of the nodes in the discrete system, flattened into the node-major order of
         :attr:`constrainedDofIndices`.
 
         Parameters

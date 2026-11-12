@@ -461,7 +461,7 @@ def test_a_two_step_deck_without_adaptivity_is_bit_identical_to_before_the_chang
     once with the re-arm neutralised, and the two final states must agree to the last bit.
 
     The second step deliberately prescribes a different set of degrees of freedom from the first,
-    so the two steps really do present different equation systems rather than accidentally the
+    so the two steps really do present different discrete systems rather than accidentally the
     same one.
     """
 
@@ -523,7 +523,7 @@ def test_suppressing_the_rearm_does_change_an_adaptive_run(tmp_path, monkeypatch
 
 def test_a_rebuild_without_a_topology_change_does_not_re_equilibrate(tmp_path, monkeypatch):
     """A constraint reporting that its connectivity changed -- a contact candidate list, most of
-    all -- rebuilds the equation system without moving a single node. There is then no interpolated
+    all -- rebuilds the discrete system without moving a single node. There is then no interpolated
     acceleration to replace and no conservation statement to make, and restarting the acceleration
     of the whole model there would be both wrong and, repeated per increment, expensive.
 
@@ -548,7 +548,7 @@ def test_a_rebuild_without_a_topology_change_does_not_re_equilibrate(tmp_path, m
     _run(tmp_path, "connectivity_only", _deck(nX=2, lX=4.0))
 
     assert calls["n"] > 3, "the forced connectivity change never happened"
-    assert len(recorder.builds) == 2, "the equation system was not rebuilt mid-step; nothing was exercised"
+    assert len(recorder.builds) == 2, "the discrete system was not rebuilt mid-step; nothing was exercised"
     assert not recorder.conservation, "a rebuild that moved no node reported a topology change"
     assert recorder.initialAccelerations == [0.0], recorder.initialAccelerations
 

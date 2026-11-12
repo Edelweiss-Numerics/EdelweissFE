@@ -30,7 +30,7 @@ That update
 #. evaluates each configured **marker**, obtaining from each a *set* of elements to refine,
 #. **unions** those sets (see :ref:`multiple-markers`),
 #. keeps only elements below ``maxLevel``,
-#. subdivides them, rebalances, transfers state, and rebuilds the equation system.
+#. subdivides them, rebalances, transfers state, and rebuilds the discrete system.
 
 A marker is a small object with a single responsibility -- given the current model, return the set
 of elements it wants refined. The base class is
@@ -80,7 +80,7 @@ independent reasons: the marker refines on the last finalized field output, so a
 would decide on stale results; the velocity of a central-difference scheme is staggered half an
 increment behind the displacement, so the pairing of the two is unambiguous only *between*
 increments; and it keeps a topology change disjoint from the failure path, whose restore vectors
-are sized by the old equation system. Increment 0 is excluded deliberately -- the time stepper
+are sized by the old discrete system. Increment 0 is excluded deliberately -- the time stepper
 yields a zero-length increment first, before anything has been solved, and a marker evaluated
 there would refine on the initial condition.
 

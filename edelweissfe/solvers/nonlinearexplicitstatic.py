@@ -266,7 +266,7 @@ class NEST(NIST):
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
-        """Build the equation system, once per step, and start the step; see
+        """Build the discrete system, once per step, and start the step; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. As every quasi-static
         solver, it gives the entities that integrate their own inertia no inertia
         (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.newmarkParametersOfEntities`).
@@ -289,12 +289,12 @@ class NEST(NIST):
 
         model.setNewmarkParametersOfEntities(*self.newmarkParametersOfEntities())
 
-        self.journal.message("Creating monolithic equation system", self.identification, 0)
-        self.forgetEquationSystem()
-        self.equationSystemLayout = model.buildEquationSystem()
-        self.theDofManager = self.equationSystemLayout.dofManager
+        self.journal.message("Creating monolithic discrete system", self.identification, 0)
+        self.forgetDiscreteSystem()
+        self.system = model.buildDiscreteSystem()
+        self.theDofManager = self.system.dofManager
         self.journal.message(
-            "total size of eq. system: {:}".format(self.theDofManager.nDof),
+            "total size of discrete system: {:}".format(self.theDofManager.nDof),
             self.identification,
             0,
         )
@@ -313,9 +313,9 @@ class NEST(NIST):
         # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited
         # linearSolve()), so its linear solver needs the setModel NIST gives its own: for solvers that
         # derive anything beyond the plain (A, b) call -- a field-split solver such as blockamg raises
-        # without the field structure setModel supplies. NEST's equation system is built once per step here
+        # without the field structure setModel supplies. NEST's discrete system is built once per step here
         # rather than being rebuilt on connectivity changes, so one call per step is enough.
-        self.linSolver.setModel(self.equationSystemLayout.modelForLinearSolver, self.theDofManager)
+        self.linSolver.setModel(self.system.modelForLinearSolver, self.theDofManager)
 
         U = self.theDofManager.constructDofVector()
         P = self.theDofManager.constructDofVector()
@@ -477,7 +477,7 @@ class NEST(NIST):
                 - the scale factor for the next increment size
         """
 
-        constraints = model.constraints
+        constraints = self.system.constraints
 
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()

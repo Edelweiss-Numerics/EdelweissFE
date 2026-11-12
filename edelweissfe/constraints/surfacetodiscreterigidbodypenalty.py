@@ -174,7 +174,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     ------------------
     The constraint acts on the parent-face nodes of every slave facet (displacement), followed by the
     RP (displacement and rotation). This footprint does not depend on the contact search, so a search
-    never changes the equation system. The stiffness is one block per slave facet plus the shared RP
+    never changes the discrete system. The stiffness is one block per slave facet plus the shared RP
     block, see :mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`. A fixed rigid body is
     simply one whose RP carries Dirichlet conditions; the RP reaction is then the support force.
 

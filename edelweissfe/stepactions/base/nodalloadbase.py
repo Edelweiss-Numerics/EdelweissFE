@@ -73,7 +73,7 @@ class NodalLoadBase(LoadBase):
         on the node set; a dead load, so without a tangent. See
         :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
 
-        Only the nodes of the set that are part of the equation system are loaded (see
+        Only the nodes of the set that are part of the discrete system are loaded (see
         :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`): every node of the set in a finite
         element model, those in the active domain in a meshfree one.
 
@@ -90,9 +90,9 @@ class NodalLoadBase(LoadBase):
         timeStep
             The current time step.
         dofManager
-            The DOF manager of the equation system, which locates the degrees of freedom of the node set.
+            The DOF manager of the discrete system, which locates the degrees of freedom of the node set.
         """
 
         dofIndices, nodePositions = dofManager.locateFieldOnNodeSet(self.field, self.nodeSet)
-        # one row of the load per node of the set: those of the nodes in the equation system
+        # one row of the load per node of the set: those of the nodes in the discrete system
         P[dofIndices] -= self.getCurrentLoad(timeStep)[nodePositions].flatten()
