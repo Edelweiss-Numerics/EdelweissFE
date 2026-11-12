@@ -23,7 +23,7 @@ Indentations and blank lines have no effect.
     data, data, data, data
 
 
-See :doc:`inputsystem` for how a keyword's grammar is declared and how to add a new one.
+See :doc:`/developer/inputsystem` for how a keyword's grammar is declared and how to add a new one.
 
 The available input syntax is defined in ``fe/utils/inputfileparser.py``,
 and available keywords can be printed using
@@ -38,5 +38,5 @@ and available keywords can be printed using
 Keywords
 ********
 
-.. include:: keywords.rst
+All keywords and their options are listed in the :doc:`keyword reference <keywords>`.
 

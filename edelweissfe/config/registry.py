@@ -362,7 +362,7 @@ for _materialName, _materialDotted in {
 
 # The linsolver category: the types of *linearSolver (and of a *solver's linsolver=), each a class with the schema
 # of its data lines and the composed solver they define; see edelweissfe/linsolve/types.py and
-# doc/source/documentation/linsolvers.rst.
+# doc/source/analysis/linsolvers.rst.
 for _linsolverName, _linsolverClass in {
     "superlu": "SuperLU",
     "umfpack": "UMFPACK",

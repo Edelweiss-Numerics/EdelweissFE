@@ -135,8 +135,8 @@ Relevant module: ``edelweissfe.elements.contactsurfaceelement``
 
 Thin, material-less, volume-less elements (``Tria3ContactFacet``/``Line2ContactFacet``) sharing the
 ordinary displacement DOFs of a deformable body's boundary nodes, used as the master side of
-:doc:`node-to-deformable-surface contact <constraints>`. Not user-constructed directly -- see the
-:doc:`surfaceElementGenerator <generators>` generator.
+:doc:`node-to-deformable-surface contact </model/constraints>`. Not user-constructed directly -- see the
+:doc:`surfaceElementGenerator </model/generators>` generator.
 
 Because a facet has neither a material nor a state, its kernels, its internal energy and its state
 acceptance are all no-ops, and it reports ``hasKernels = False``. The model leaves such an entity out of its
@@ -170,7 +170,7 @@ tangent comes first in its arguments; the load methods ``computeDistributedLoad`
 
 An element carrying a material should also implement
 :meth:`~edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty`, through which the
-:doc:`changeMaterialProperty <stepactions>` step action changes a material property during an
+:doc:`changeMaterialProperty </analysis/stepactions>` step action changes a material property during an
 analysis. Unlike ``setMaterial``, it must keep the element's state: neither reset nor re-initialize the
 state variables, and keep the arrays holding them, which field outputs keep viewing.
 

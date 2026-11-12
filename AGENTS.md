@@ -106,7 +106,7 @@ maxInc=1.0, minInc=1e-8, maxNumInc=1000, maxIter=100
 >>dirichlet, name=left, nSet=left, field=displacement, 1=0, 2=0, 3=0
 ```
 
-Full keyword/syntax reference: `doc/source/documentation/syntax.rst` and `doc/source/documentation/keywords.rst`.
+Full keyword/syntax reference: `doc/source/syntax.rst` and `doc/source/keywords.rst`.
 
 ### Plugin-registry pattern for extensibility
 
@@ -193,8 +193,6 @@ for its defaults); Python: `getLinSolverByName(type, options)`.
 
 ### Documentation
 
-Sphinx docs live in `doc/source/documentation/*.rst`, one file per subsystem (elements, materials, solvers,
-linsolvers, constraints, contacttheory, rigidbodies, steps, stepactions, generators, fields, dofnumbering,
-parallelization, etc.) — check the relevant `.rst` file first when working on an unfamiliar subsystem,
-since these describe intended design/usage, not just API.
+Sphinx docs live in `doc/source/`, one directory per sidebar section (`model/`, `analysis/`, `output/`, `theory/`, `developer/`, plus `syntax.rst` and `keywords.rst`); what goes where is described in `CONTRIBUTING.md` (Documenting New Features).
+Check the relevant `.rst` file first when working on an unfamiliar subsystem, since these describe intended design/usage, not just API.
 

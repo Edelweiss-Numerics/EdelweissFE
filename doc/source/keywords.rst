@@ -1,3 +1,8 @@
+Keyword reference
+=================
+
+Every keyword of the input file with its options. The syntax of an input file is described in :doc:`syntax`.
+
 .. list-table:: ``*advancedmaterial`` : definition of an advanced material
     :width: 100%
     :widths: 25 25 40
@@ -176,7 +181,7 @@
       - type of the linear solver: custom, blockamg, pardiso, superlu, umfpack, klu, petsclu, mumps, panuapardiso
     * - ``data``
       - ``string``
-      - (optional) the options of the type, one key=value per line (see :doc:`linsolvers`)
+      - (optional) the options of the type, one key=value per line (see :doc:`/analysis/linsolvers`)
 
 .. list-table:: ``*material`` : definition of a material
     :width: 100%

@@ -6,7 +6,7 @@ This page documents the theory behind *marking* for the dynamic hanging-node
 how EdelweissFE decides **which** elements to refine at a topology check, with particular attention to
 gradient-enhanced (implicit-gradient) damage models. The mechanics of *how* an element is then
 subdivided -- octree children, curved-edge honouring, state transfer, and the exact hanging-node
-multi-point constraint -- are documented under :doc:`modelmodifiers`; this page is only about the
+multi-point constraint -- are documented under :doc:`/analysis/modelmodifiers`; this page is only about the
 refinement *criterion*.
 
 Every formula stated here is implemented literally in
@@ -61,7 +61,7 @@ sub-keyword of ``*modelModifier, type=hAdaptivity``. The available types are:
 Adaptivity under explicit dynamics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The explicit dynamic solver ``NED`` (:doc:`solvers`) also runs modifiers, but neither every
+The explicit dynamic solver ``NED`` (:doc:`/analysis/solvers`) also runs modifiers, but neither every
 increment nor at the same point in one, for reasons that are worth stating because they constrain
 how a marker may be configured.
 

@@ -24,12 +24,12 @@ vector :math:`\boldsymbol{P}` to the residual, and its tangent
   :math:`u` towards :math:`\bar{u}` adds :math:`P = k\,(u - \bar{u})` and :math:`K = k`; a Lagrange multiplier
   :math:`\boldsymbol{\lambda}` enforcing :math:`\boldsymbol{g}(\boldsymbol{u}) = \boldsymbol{0}` adds
   :math:`\boldsymbol{\lambda}^T \partial \boldsymbol{g} / \partial \boldsymbol{u}` to the rows of the nodes and
-  :math:`\boldsymbol{g}` to the rows of the multipliers. See :doc:`constraints` for writing one.
+  :math:`\boldsymbol{g}` to the rows of the multipliers. See :doc:`/model/constraints` for writing one.
 
 A solver sums the contributions in three loops of every iteration: ``computeElements`` over the elements,
 ``assembleLoads`` over the loads -- every load assembles its own contribution, wherever it acts (see
 :class:`~edelweissfe.stepactions.base.loadbase.LoadBase`) -- and ``assembleConstraints`` over the constraints of
-the discrete system (see :doc:`constraints`). Summed over all entities,
+the discrete system (see :doc:`/model/constraints`). Summed over all entities,
 
 .. math::
 
@@ -63,12 +63,12 @@ Why one rule? Because then :math:`\boldsymbol{K}` is always the derivative of ex
 same check catches a contribution whose sign alone is wrong: :math:`\boldsymbol{K}` then comes out as
 :math:`-\partial \boldsymbol{P} / \partial \boldsymbol{U}`. A contribution negated together with its tangent passes it,
 so ``tests/test_residual_tangent_convention.py`` checks every constraint this way and also checks the direction of the
-forces it exerts (see :doc:`constraints`); a dead load has no tangent, so there the sign of each element load is
+forces it exerts (see :doc:`/model/constraints`); a dead load has no tangent, so there the sign of each element load is
 checked against the load integrated independently.
 
 The elements' sum alone, :math:`\boldsymbol{f}_\mathrm{int}`, is what the quasi-static solvers report as the nodal
 result ``P`` of a field output, and the dynamic solvers add the inertial and damping forces to it
-(:doc:`nodefieldresults`): at a degree of freedom with a Dirichlet boundary condition and no load, it is the reaction
+(:doc:`/output/nodefieldresults`): at a degree of freedom with a Dirichlet boundary condition and no load, it is the reaction
 force. ``NED``'s net force :math:`\boldsymbol{R}` is its own state, and is not reported.
 
 .. _model-discrete-system:
@@ -168,7 +168,7 @@ their own loops:
      :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`, with the velocity and
      the acceleration of a dynamic solver,
      :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel` (see
-     :doc:`nodefieldresults`);
+     :doc:`/output/nodefieldresults`);
    * the model the linear solver is set up for.
 
 3. **Is anything to be updated before the elements are computed?** In every evaluation of the model -- every Newton
@@ -360,7 +360,7 @@ step, and the controller the change of its controlled quantity over the step, so
 exactly where it stopped. The load parameter advances only when an increment has converged, with its solution, so a
 cut back increment starts again from the load parameter of the last accepted one.
 
-The re-equilibration after a model change (``equilibrateAfterModelChange``, see :doc:`modelmodifiers`) is, under arc
+The re-equilibration after a model change (``equilibrateAfterModelChange``, see :doc:`/analysis/modelmodifiers`) is, under arc
 length control, an arc length increment of size zero: the controller asks for a change of zero, so the controlled
 quantity stays where the last accepted increment left it, and the load parameter is solved for, and with it the loads
 and the prescribed displacements it scales -- the counterpart of a zero-time increment under displacement control,
@@ -425,7 +425,7 @@ documentation above states what each one does; material points that belong to no
 A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is supported: ``V`` and ``A`` are
 carried onto new nodes by the node-field warm start, the mass and damping are reassembled on the
 refined mesh, and the acceleration is re-solved from equilibrium on the increment that follows --
-see :doc:`modelmodifiers`, "Refinement under a dynamic solver", for what is conserved exactly across
+see :doc:`/analysis/modelmodifiers`, "Refinement under a dynamic solver", for what is conserved exactly across
 such an event and what is not.
 
 Verified in ``tests/test_nid_newmark.py``, ``tests/test_nid_restart.py`` and
@@ -481,7 +481,7 @@ Both act on a prediction: a declaration of options -- the ``*solver`` datalines,
 switches either on with ``extrapolation=off`` is refused.
 
 The last accepted increments are checkpointed with the digest of their numbering. A step that continues from a
-restart checkpoint, resumed or fallen back to (see :doc:`restart`), builds its discrete system at its first
+restart checkpoint, resumed or fallen back to (see :doc:`/developer/restart`), builds its discrete system at its first
 increment, and extrapolates them only if the new numbering numbers the degrees of freedom alike: the numbering of a
 meshfree model, e.g., follows its active cells, which may have changed since the checkpoint was written.
 

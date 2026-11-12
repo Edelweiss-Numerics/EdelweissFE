@@ -1,7 +1,7 @@
 Field-split AMG: measurements behind the defaults
 =================================================
 
-The defaults of the field-split preconditioner (:doc:`blockamgtheory`) -- those of the components and of the
+The defaults of the field-split preconditioner (:doc:`/theory/blockamg`) -- those of the components and of the
 ``blockAMG()`` preset -- were chosen by measurement. This page collects those measurements, as the provenance of the
 defaults; the theory page explains the method without them. Most were taken on two captured models, a gradient-enhanced
 damage cylinder through its damage onset and a contact anchor model with many multi-point-constraint slaves, offline on
@@ -228,7 +228,7 @@ cycle; the default is now degree 8 (:ref:`measured-corner-node-two-level-smoothe
 Rebuilding the preconditioner for every solve
 ---------------------------------------------
 
-See :ref:`blockamg-per-field-amg` and the reuse rules on :doc:`blockamgtheory`.
+See :ref:`blockamg-per-field-amg` and the reuse rules on :doc:`/theory/blockamg`.
 
 Live, on the contact anchor model with many multi-point-constraint slaves, over a window of increments: two runs
 from the same checkpoint, the reuse rules of ``RebuildPolicy`` against ``reusePreconditioner=False``, a new
@@ -355,7 +355,7 @@ contact anchor model with many multi-point-constraint slaves):
   (same iterations with and without the stored zeros), and one whose Krylov solve reuses its preconditioner never has
   it -- so on a model with multi-point constraints the hierarchies can be reused
   (``reusePreconditioner=True``) without more settings; the former setup needed this set by hand (see the reuse rules
-  on :doc:`blockamgtheory`).
+  on :doc:`/theory/blockamg`).
 
 Measured live, from the same checkpoints, the defaults against the former defaults (no per-model settings in
 either run): the contact model's increments finished markedly faster; on the damage cylinder, the

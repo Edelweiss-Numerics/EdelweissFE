@@ -42,4 +42,4 @@ with properties, such as materials.
 """
 
 # No code: sections are resolved via the registry. The docstring above is rendered by Sphinx
-# (``doc/source/documentation/sections.rst``); do not delete this file.
+# (``doc/source/model/sections.rst``); do not delete this file.

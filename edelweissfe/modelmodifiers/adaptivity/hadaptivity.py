@@ -890,7 +890,7 @@ class ModelModifier(ModelModifierBase):
 
     def _resizeNodeFieldsAndWarmStart(self, model: FEModel, oldValues: dict, newValues: dict):
         """Resize the node fields to the new nodes, then write the warm-start values of the state
-        entries ``U``, ``V`` and ``A`` (see :doc:`/documentation/nodefieldresults`): the converged
+        entries ``U``, ``V`` and ``A`` (see :doc:`/output/nodefieldresults`): the converged
         value on a retained node, the interpolated value on a new one. The results ``dU`` and ``P``
         are not transferred: a new node holds zero until the next accepted increment writes them.
 

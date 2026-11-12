@@ -15,7 +15,7 @@ solution vectors and any multi-point-constraint transformation) is rebuilt first
 is written as two halves -- :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`,
 which decides and may read solution state, and
 :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`, which carries the
-decision out and may not. **See** :doc:`topologypipeline` **for the full contract, why it is split
+decision out and may not. **See** :doc:`/developer/topologypipeline` **for the full contract, why it is split
 that way, and what a new modifier must implement**; this page covers the individual modifiers.
 
 **Topological containers have stable identity.** :class:`~edelweissfe.sets.nodeset.NodeSet`,
@@ -52,7 +52,7 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
 
   The synchronous push notification that used to exist alongside this has been removed: with
   modifiers running to a fixed point, a per-mutation callback fires mid-pipeline and hands the
-  consumer a state that no longer exists by the time the solve begins. See :doc:`topologypipeline`.
+  consumer a state that no longer exists by the time the solve begins. See :doc:`/developer/topologypipeline`.
 
 ``hAdaptivity`` - Hanging-node h-adaptivity for HEX20
 -----------------------------------------------------
@@ -95,7 +95,7 @@ bisection), so pinning each hanging
 (slave) node to the coarse serendipity trace, :math:`u_s = \sum_a N_a(\xi_s)\, u_{m_a}`, is exact.
 The same field-independent weights apply to every field on the node (equal-order serendipity), so a
 single record per hanging node covers displacement and nonlocal damage alike. The constraint itself
-(``*constraint, type=hangingnode``) is documented under :doc:`constraints`.
+(``*constraint, type=hangingnode``) is documented under :doc:`/model/constraints`.
 
 **Vocabulary.** A *root element* is an element of the mesh before refinement; every refined element
 lies inside exactly one. The reference cube of a root carries an integer *reference lattice*, fine
@@ -171,7 +171,7 @@ fixed pre-refinement), ``fieldOutput`` (a boolean threshold on a ``perElement`` 
 Dörfler bulk marking -- for gradient-enhanced damage). The theory of error-estimator marking, the
 ``averaging`` vs ``spr`` recovery, and why a *reactive* ``recoveryError`` marker is best paired with
 a *predictive* ``fieldOutput`` marker ahead of a propagating front are all covered under
-:doc:`adaptivitytheory`.
+:doc:`/theory/adaptivity`.
 
 .. pprint:: modelmodifier:hadaptivity
     :caption: Options:
@@ -457,7 +457,7 @@ decision survives a checkpoint; :class:`~edelweissfe.models.femodel.FEModel` rec
 decision in :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.history` and replays it. An earlier
 design had each modifier serializing its own history and implementing its own replay, which is
 precisely how a resumed run came to rebuild a differently-numbered mesh -- two implementations of
-one mutation always drift. See :doc:`topologypipeline`.
+one mutation always drift. See :doc:`/developer/topologypipeline`.
 
 Implementing your own model modifiers
 -------------------------------------

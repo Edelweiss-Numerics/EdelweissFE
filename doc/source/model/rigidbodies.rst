@@ -6,7 +6,7 @@ A rigid body couples the motion of many surface (visualization) nodes to a singl
 and are never written to a node field. Instead, their current configuration is a pure function of
 the RP's kinematics, so the only unknowns a rigid body contributes to the global system are the RP
 displacement and (in 3D) rotation DOFs. Rigid bodies are consumed by contact constraints such as
-:doc:`surfacetodiscreterigidbodypenalty <constraints>` and are rendered by the output managers via
+:doc:`surfacetodiscreterigidbodypenalty </model/constraints>` and are rendered by the output managers via
 their surface nodes.
 
 .. contents::
@@ -33,7 +33,7 @@ where :math:`\mathrm{skew}(\mathbf{v})` is the skew-symmetric matrix with
 \exp(\boldsymbol{\theta})\exp(\delta\boldsymbol{\theta})` in general, linearizing any quantity with
 respect to :math:`\boldsymbol{\theta}_{RP}` requires the right Jacobian
 :math:`\mathbf{J}_r(\boldsymbol{\theta}_{RP})` of the exponential map (this is what makes the
-discrete-rigid-body contact tangent geometrically exact — see :doc:`constraints`).
+discrete-rigid-body contact tangent geometrically exact — see :doc:`/model/constraints`).
 
 A surface node with initial position offset :math:`\boldsymbol{\rho}_i =
 \mathbf{X}_i - \mathbf{X}_{RP}` relative to the RP moves rigidly to the current configuration
@@ -111,7 +111,7 @@ Creating a discrete rigid body
 Discrete rigid bodies are normally created from a surface mesh file (Exodus / STL / OBJ) with the
 ``discreterigidbodygenerator`` model generator, which loads the mesh, creates the RP and surface
 nodes, computes the mass properties, and registers the body in ``model.rigidBodies``. See
-:doc:`generators` for the generator options and an input-file example.
+:doc:`/model/generators` for the generator options and an input-file example.
 
 API
 ---

@@ -73,7 +73,7 @@ how often model modifiers may change the mesh mid-run, and must be a multiple of
 update only once, before the increment loop. ``contact-update-frequency`` is how often constraints
 whose connectivity is the outcome of a search re-run it; ``0`` disables that. The reasoning behind
 the latter two, and what they cost in accuracy, is documented under
-:doc:`/documentation/adaptivitytheory` and :doc:`/documentation/contacttheory` respectively.
+:doc:`/theory/adaptivity` and :doc:`/theory/contact` respectively.
 
 **Constraints.** Multi-point constraints are enforced by folding a slave's mass and force onto its
 masters (row-sum, mass-conserving) and slaving it kinematically, which leaves the critical time step
@@ -85,7 +85,7 @@ refused at validation rather than silently ignored.
 
 **The lumped mass is the mass of the start of the step.** The lumped operators are assembled once for the numbering,
 at the first increment of every step, from the elements as they are then, and kept until the next numbering. A change of
-a material property during the step (:doc:`/documentation/stepactions`, ``changeMaterialProperty``) takes effect on the
+a material property during the step (:doc:`/analysis/stepactions`, ``changeMaterialProperty``) takes effect on the
 mass at the next step, as it does on the stable time increment.
 
 **The discrete system.** It is built, like that of every solver, by
@@ -134,7 +134,7 @@ step.
 **The force it publishes.** The node field result ``P`` is, as in every solver, the internal force
 with the inertial and damping forces, :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M}
 \\boldsymbol{a} + \\boldsymbol{C} \\boldsymbol{v}`, without the loads and the constraints (see
-:doc:`/documentation/nodefieldresults`). The central difference makes the inertial and damping
+:doc:`/output/nodefieldresults`). The central difference makes the inertial and damping
 forces at the end of an increment exactly the net force :math:`\\boldsymbol{f}_\\mathrm{net}` the
 next velocity update divides by -- that update solves :math:`\\boldsymbol{M} (\\boldsymbol{v}_{n+3/2}
 - \\boldsymbol{v}_{n+1/2}) / \\Delta \\bar{t} + \\boldsymbol{C} (\\boldsymbol{v}_{n+3/2} +
@@ -167,7 +167,7 @@ increment's prescribed velocity sets it, and a multi-point-constraint slave take
 masters, as it takes its velocity. At the end of the step, the velocity is advanced by the half
 increment it lags behind (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`), so that the
 step leaves the velocity at its end time, as every solver does (see
-:doc:`/documentation/nodefieldresults`).
+:doc:`/output/nodefieldresults`).
 
 **The net force is solver state, and a step starts from the model's state.** The net force lives
 within one discrete system, and is never read back from the model. New locations after a change

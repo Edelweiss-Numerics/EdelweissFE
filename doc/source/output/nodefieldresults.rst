@@ -185,4 +185,4 @@ the DofNumbering does not number: a node field is read or written as a whole onl
 since its rows are addressed by position; on a node set, its rows are found by node, so that any node field of a
 numbered field can be read or written there (e.g. the node field of the model, while the discrete system numbers
 that of an active domain). A restart checkpoint holds every entry of every node field, and a
-checkpoint lacking one is refused (see :doc:`restart`).
+checkpoint lacking one is refused (see :doc:`/developer/restart`).

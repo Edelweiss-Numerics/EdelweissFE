@@ -6,7 +6,7 @@ EdelweissFE's implicit solvers produce -- displacement coupled to a scalar nonlo
 typically with penalty contact, tie constraints and adaptive refinement on top -- and the outer Krylov solve it
 preconditions.
 
-The method is a tree of components (:doc:`composedlinsolvers`), ``LGMRES(DiagonalScaling(Multiplicative([OnField(f,
+The method is a tree of components (:doc:`/analysis/composedlinsolvers`), ``LGMRES(DiagonalScaling(Multiplicative([OnField(f,
 M_f), ...])))``, and every step below is one of them, named in the heading of its section:
 :class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling` (the equilibration),
 :class:`~edelweissfe.linsolve.composition.combinators.OnField` (the field split),
@@ -22,12 +22,16 @@ optional ``amgcl`` extension (:mod:`edelweissfe.linsolve.amgcl.amgcl`).
 
 The preset :func:`~edelweissfe.linsolve.composition.presets.blockAMG` builds this tree with its defaults; it is the
 linear solver type ``blockamg`` (``linsolver=blockamg``, or a ``*linearSolver, type=blockamg`` block, see
-:doc:`linsolvers`). Each setting below is named where it lives: an argument of a component in a ``custom`` solver
+:doc:`/analysis/linsolvers`). Each setting below is named where it lives: an argument of a component in a ``custom`` solver
 script, and for the settings the preset exposes, a data line of ``type=blockamg``
 (:ref:`composed-presets`). The measurements behind the defaults are collected on their own page,
-:doc:`fieldsplitmeasurements`, so that this page reads as the method alone; the arguments and defaults of the
-components are on :doc:`composedlinsolversreference`.
+:doc:`/theory/fieldsplitmeasurements`, so that this page reads as the method alone; the arguments and defaults of the
+components are on :doc:`/analysis/composedlinsolversreference`.
 
+.. toctree::
+   :hidden:
+
+   fieldsplitmeasurements
 
 Why a field-split preconditioner
 --------------------------------
@@ -48,7 +52,7 @@ precondition **blockwise**: build one AMG hierarchy per *physical field*, combin
 Gauss--Seidel sweep, and use that sweep as the preconditioner of an outer Krylov solve over the full
 coupled system. Each field's operator is individually AMG-friendly -- elasticity for a displacement
 field, a screened-Poisson (Helmholtz) operator for a gradient-enhanced damage field (see
-:doc:`adaptivitytheory` for that operator) -- even though their monolithic coupling is not.
+:doc:`/theory/adaptivity` for that operator) -- even though their monolithic coupling is not.
 
 The field-split preconditioner buys reach, not necessarily speed.
 On the reference models AMGCL's smoothed aggregation converges, but not tightly, on the
@@ -1263,7 +1267,7 @@ Practical guidance
   the current ones, mostly 5--50, with the hardest damage-onset solves reaching the cap; counts
   triggering the warning threshold, or cap hits, repeatedly point at the preconditioner, not the
   tolerance.
-* Set ``OMP_NUM_THREADS`` for the AMGCL kernels as usual (see :doc:`parallelization`). Results are
+* Set ``OMP_NUM_THREADS`` for the AMGCL kernels as usual (see :doc:`/analysis/parallelization`). Results are
   reproducible at a fixed thread count up to last-bit summation order; across thread counts the
   hierarchies differ slightly (see :ref:`blockamg-chebyshev`), and lowering the
   power-iteration setting of the vector-field default makes that difference large.

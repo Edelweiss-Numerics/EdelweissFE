@@ -252,7 +252,7 @@ Reference
    :members:
 
 :class:`~edelweissfe.numerics.csrgeneratorv2.CSRGenerator` and the C++ engine behind it are described
-under :doc:`utils`; only the direct-scatter side is documented here.
+under :doc:`/developer/utils`; only the direct-scatter side is documented here.
 
 .. autoclass:: edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler
    :members:

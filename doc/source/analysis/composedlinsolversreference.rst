@@ -2,8 +2,8 @@ Composed linear solvers: reference
 ==================================
 
 The arguments, defaults and data lines of the components and of the adapter, for looking up; how to build a solver
-from them is on :doc:`composedlinsolvers`, the method they implement on :doc:`blockamgtheory`, and the classes and
-functions on :doc:`linsolveapi`.
+from them is on :doc:`/analysis/composedlinsolvers`, the method they implement on :doc:`/theory/blockamg`, and the classes and
+functions on :doc:`/developer/linsolveapi`.
 
 .. _composed-adapter:
 
@@ -14,7 +14,7 @@ The adapter
 ``x = solver(A, b)``, once per Newton iteration, for every type of linear solver. It finds what changed since the last
 call (the first solve, a new model, a resized system, a new sparsity pattern, a jump of the right-hand side that marks
 a new increment), hands the matrix down the tree, applies the root (to each column of ``b``, if it has several), and
-reports on the solve. Its settings are the data lines every type has (the table in :doc:`linsolvers`):
+reports on the solve. Its settings are the data lines every type has (the table in :doc:`/analysis/linsolvers`):
 
 .. code-block:: edelweiss
 

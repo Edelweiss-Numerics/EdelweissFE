@@ -1,8 +1,8 @@
 Linear solvers: Python API
 ==========================
 
-The classes and functions of the linear solvers. How to choose a linear solver is on :doc:`linsolvers`, how to compose
-one on :doc:`composedlinsolvers`, the arguments and data lines at a glance on :doc:`composedlinsolversreference`.
+The classes and functions of the linear solvers. How to choose a linear solver is on :doc:`/analysis/linsolvers`, how to compose
+one on :doc:`/analysis/composedlinsolvers`, the arguments and data lines at a glance on :doc:`/analysis/composedlinsolversreference`.
 
 The types and the configuration
 -------------------------------

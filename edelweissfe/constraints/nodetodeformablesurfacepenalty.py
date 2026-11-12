@@ -272,7 +272,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     penetration guard. Note that no measured benefit has been demonstrated for that option: a
     quadratic face under near-uniform pressure opens its corner gaps regardless, which makes the
     corner weight moot. See the :doc:`contact theory documentation
-    </documentation/contacttheory>`.
+    </theory/contact>`.
 
     With ``sliding=small`` (Abaqus-style small sliding), the closest-point projection of each
     slave onto the master surface -- assigned facet, *clamped* local coordinates (closed-domain
