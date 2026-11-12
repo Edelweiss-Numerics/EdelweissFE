@@ -52,7 +52,7 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
 
     Multi-point constraints are defined via the ``*constraint`` keyword like ordinary constraints,
     but live in :attr:`~edelweissfe.models.femodel.FEModel.multiPointConstraints` and stay outside
-    the DofManager and the constraint assembly loop entirely.
+    the numbering of the degrees of freedom and the constraint assembly loop entirely.
 
     A degree of freedom may be claimed as slave by at most one multi-point constraint of a model --
     the condensation operator rejects duplicate claims. Constraints that build their slave set
@@ -109,14 +109,14 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
         """
 
     @abstractmethod
-    def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
+    def getMultiPointConstraints(self, numbering) -> list[tuple[int, list[tuple[int, float]]]]:
         """Return the linear dependency records of this constraint in global degree-of-freedom
-        indices of the given DofManager.
+        indices of the given numbering.
 
         Parameters
         ----------
-        dofManager
-            The current :class:`~edelweissfe.numerics.dofmanager.DofManager`, used to resolve
+        numbering
+            The current :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, used to resolve
             (node, field, component) to global degree-of-freedom indices.
 
         Returns

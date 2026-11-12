@@ -475,11 +475,11 @@ class Preconditioner:
         pattern on almost every iteration."""
         return any(child.reusesPreconditioner for _, child in self.children())
 
-    def setModel(self, model, dofManager) -> None:
+    def setModel(self, model, numbering) -> None:
         """Take a new model (the first, or one after a change of the mesh), and hand it to the children. A component
         that derives something from the model (e.g. which dofs a marker selects) overrides this."""
         for _, child in self.children():
-            child.setModel(model, dofManager)
+            child.setModel(model, numbering)
 
     def finishSolve(self) -> None:
         """The solve is done: release what only this solve needed (e.g. the field blocks of its matrix, which the next

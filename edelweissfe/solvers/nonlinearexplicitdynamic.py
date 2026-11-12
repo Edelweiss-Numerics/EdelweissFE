@@ -188,7 +188,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
 from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
@@ -319,7 +319,7 @@ class NEDSchema:
 class ExplicitSystem:
     """Everything an explicit increment operates on that is sized by the current discrete system.
 
-    None of these are independent state: each is indexed by the :class:`DofManager` in force when it
+    None of these are independent state: each is indexed by the numbering and the locations in force when it
     was created, so the moment that system changes -- an h-adaptivity event creating nodes and
     elements, a contact constraint re-assigning its slave nodes to different master facets -- every
     one of them has to be rebuilt together, and any that is not becomes either a length mismatch or,
@@ -958,7 +958,7 @@ class NED(NonlinearSolverBase):
         """
 
         internalForce = self._internalForce
-        force = self.theDofManager.constructDofVector()
+        force = self.system.locations.constructDofVector()
         np.add(internalForce, self._netForce, out=force)
         for dirichlet in dirichlets:
             force[dirichlet.constrainedDofIndices] = internalForce[dirichlet.constrainedDofIndices]
@@ -1134,7 +1134,7 @@ class NED(NonlinearSolverBase):
             # One row per non-mechanical second-order field, kept out of the total: for a hyperbolic
             # non-local field the inertia is a time squared, so 0.5 * m * rate**2 is a volume.
             for fieldName in self.nonMechanicalSecondOrderFields:
-                indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+                indices = self.system.numbering.idcsOfFieldsInDofVector[fieldName]
                 energyRows.append(
                     [
                         fieldName,
@@ -1400,7 +1400,7 @@ class NED(NonlinearSolverBase):
         with no connectivity-update protocol at all -- ``updateConnectivity`` belongs to
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`, and only those
         constraints can ask for this rebuild -- and the dependency records they produce are a function of the node DOF
-        indices, which a constraint refresh leaves untouched. Should a multi-point constraint ever gain a
+        indices, which a change of the connectivity leaves untouched. Should a multi-point constraint ever gain a
         connectivity of its own, that argument fails and the transformation would have to be
         rebuilt here rather than kept.
 
@@ -1433,12 +1433,12 @@ class NED(NonlinearSolverBase):
         )
 
     def _restoreLumpedOperators(self) -> tuple[DofVector, DofVector]:
-        """Put the kept lumped operators back, into vectors carrying the refreshed entity mapping.
+        """Put the kept lumped operators back, into vectors on the new locations.
 
         The numbers are the ones :meth:`_assembleLumpedOperators` produced when it last ran. What
         that method additionally left on the solver -- which fields are first and which second
         order, and the DOF index sets of each -- is not restored because it was never invalidated:
-        a constraint refresh leaves the fields and their indices exactly as they were, so those
+        a change of the connectivity leaves the fields and their indices exactly as they were, so those
         attributes still describe this system.
 
         Returns
@@ -1449,17 +1449,17 @@ class NED(NonlinearSolverBase):
 
         cache = self._reusableOperators
 
-        # The transformation is indexed by the DOF layout, which the refresh did not move.
-        assert cache.mpcTransformation is None or cache.mpcTransformation.nDof == self.theDofManager.nDof
+        # The transformation is indexed by the numbering, which the change of the connectivity did not move.
+        assert cache.mpcTransformation is None or cache.mpcTransformation.nDof == self.system.numbering.nDof
         self.mpcTransformation = cache.mpcTransformation
 
-        M = self.theDofManager.constructDofVector()
+        M = self.system.locations.constructDofVector()
         M[:] = cache.lumpedMass
-        Minv = self.theDofManager.constructDofVector()
+        Minv = self.system.locations.constructDofVector()
         Minv[:] = cache.inverseLumpedMass
-        self._rawLumpedMass = self.theDofManager.constructDofVector()
+        self._rawLumpedMass = self.system.locations.constructDofVector()
         self._rawLumpedMass[:] = cache.rawLumpedMass
-        self._dampingRate = self.theDofManager.constructDofVector()
+        self._dampingRate = self.system.locations.constructDofVector()
         self._dampingRate[:] = cache.dampingRate
         self._lumpedMass = M
 
@@ -1498,8 +1498,8 @@ class NED(NonlinearSolverBase):
         self._kernelElements = {number: element for number, element in model.elements.items() if element.hasKernels}
 
         # initialize mass and damping matrices
-        M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix
-        Minv = self.theDofManager.constructDofVector()  # initialize inverse lumped mass matrix
+        M = self.system.locations.constructDofVector()  # initialize lumped mass matrix
+        Minv = self.system.locations.constructDofVector()  # initialize inverse lumped mass matrix
 
         M[:] = 0.0
         for el in model.elements.values():
@@ -1508,7 +1508,7 @@ class NED(NonlinearSolverBase):
             M[el] += Me
 
         # Each field's first-derivative coefficient: zero mechanically, the non-local viscosity always.
-        damping = self.theDofManager.constructDofVector()
+        damping = self.system.locations.constructDofVector()
         damping[:] = 0.0
         for el in model.elements.values():
             Ce = np.zeros(el.nDof)
@@ -1597,7 +1597,7 @@ class NED(NonlinearSolverBase):
         Minv[M != 0.0] = 1.0 / M[M != 0.0]
 
         # Damping rate alpha = C / M at second-order DOFs with nonzero (folded) inertia; zero elsewhere.
-        self._dampingRate = self.theDofManager.constructDofVector()
+        self._dampingRate = self.system.locations.constructDofVector()
         self._dampingRate[:] = 0.0
         integrating = self.ids_2nd[M[self.ids_2nd] > 0.0]
         self._dampingRate[integrating] = damping[integrating] / M[integrating]
@@ -1614,9 +1614,9 @@ class NED(NonlinearSolverBase):
 
         Called once before the increment loop, and again from inside it whenever a constraint reports
         that its DOF footprint changed -- one method for both, so the path every model takes and the
-        path only a contact model takes cannot drift apart. On that second path the DofManager is
-        refreshed rather than rebuilt and the lumped operators are kept; see
-        :meth:`_operatorsReusable`.
+        path only a contact model takes cannot drift apart. On that second path the discrete system gets
+        new locations (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`) rather than being
+        rebuilt, and the lumped operators are kept; see :meth:`_operatorsReusable`.
 
         Parameters
         ----------
@@ -1642,7 +1642,7 @@ class NED(NonlinearSolverBase):
         isRebuild = previous is not None
         verbosity = 2 if isRebuild else 0
 
-        # A connectivity-only rebuild refreshes the DofManager and keeps the lumped operators; see
+        # A connectivity-only rebuild makes new locations in the same numbering and keeps the lumped operators; see
         # _operatorsReusable(). Anything else builds from scratch.
         reuseOperators = isRebuild and self._operatorsReusable(model, step.actions)
 
@@ -1653,15 +1653,14 @@ class NED(NonlinearSolverBase):
                 self.identification,
                 verbosity,
             )
-            self.theDofManager.refreshConstraintIndices(model.activeConstraints())
+            self.system = self.system.withNewLocations()
         else:
             self.journal.message("Creating monolithic discrete system", self.identification, verbosity)
             # The numbering of the model's degrees of freedom, and how the state passes between the model and the
             # vectors; this solver evaluates the model's elements itself, and assembles no system matrix.
             self.system = model.buildDiscreteSystem()
-            self.theDofManager = self.system.dofManager
         self.journal.message(
-            "total size of discrete system: {:}".format(self.theDofManager.nDof),
+            "total size of discrete system: {:}".format(self.system.numbering.nDof),
             self.identification,
             verbosity,
         )
@@ -1698,14 +1697,14 @@ class NED(NonlinearSolverBase):
         self._inertia = lumpedMass * self._secondOrderMask
         self._damping = lumpedMass * (np.asarray(self._dampingRate) + (1.0 - self._secondOrderMask))
 
-        U = self.theDofManager.constructDofVector()
-        dU = self.theDofManager.constructDofVector()
-        V = self.theDofManager.constructDofVector()
-        A = self.theDofManager.constructDofVector()
+        U = self.system.locations.constructDofVector()
+        dU = self.system.locations.constructDofVector()
+        V = self.system.locations.constructDofVector()
+        A = self.system.locations.constructDofVector()
         # Zero unless carried over below or formed at the start of a step: see the module documentation, "The net force
         # is solver state, and a step starts from the model's state".
-        netForce = self.theDofManager.constructDofVector()
-        internalForce = self.theDofManager.constructDofVector()
+        netForce = self.system.locations.constructDofVector()
+        internalForce = self.system.locations.constructDofVector()
 
         if not isRebuild:
             # After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new
@@ -1769,7 +1768,7 @@ class NED(NonlinearSolverBase):
             The momentum, one entry per spatial component.
         """
 
-        return linearMomentum(np.asarray(mass) * np.asarray(V), self.theDofManager, self.linearMomentumFields, model)
+        return linearMomentum(np.asarray(mass) * np.asarray(V), self.system.numbering, self.linearMomentumFields, model)
 
     def _perFieldLumpedTotals(self) -> dict[str, float]:
         """The assembled lumped total of every first- and second-order field, each on its own.
@@ -1793,7 +1792,7 @@ class NED(NonlinearSolverBase):
 
         totals = {}
         for fieldName in self.firstOrderFields + self.secondOrderFields:
-            indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+            indices = self.system.numbering.idcsOfFieldsInDofVector[fieldName]
             totals[fieldName] = float(np.sum(self._rawLumpedMass[indices]))
         return totals
 
@@ -1803,7 +1802,7 @@ class NED(NonlinearSolverBase):
         Parameters
         ----------
         fieldNames
-            Names of fields present in the current DofManager.
+            Names of fields present in the current numbering.
 
         Returns
         -------
@@ -1814,7 +1813,7 @@ class NED(NonlinearSolverBase):
 
         indices = np.empty(0, dtype=int)
         for fieldName in fieldNames:
-            indices = np.r_[indices, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
+            indices = np.r_[indices, self.system.numbering.idcsOfFieldsInDofVector[fieldName]]
         return indices
 
     def _checkDerivedSchemeAgainstTheDeck(self):
@@ -1921,7 +1920,7 @@ class NED(NonlinearSolverBase):
         firstOrderFields = []
         secondOrderFields = []
 
-        for fieldName, indices in self.theDofManager.idcsOfFieldsInDofVector.items():
+        for fieldName, indices in self.system.numbering.idcsOfFieldsInDofVector.items():
             carriesInertia = np.asarray(inertia[indices]) != 0.0
             carriesDamping = np.asarray(damping[indices]) != 0.0
 

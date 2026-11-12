@@ -35,7 +35,7 @@ import numpy as np
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.stepactions.base.indirectdisplacementcontrolbase import (
     IndirectDisplacementControlBase,
@@ -192,13 +192,13 @@ class StepAction(IndirectDisplacementControlBase):
 
         self.updateStepAction(model.nodeSets[contractionNSetName], configuration.L)
 
-    def controlledDofIndices(self, dofManager: DofManager) -> np.ndarray:
+    def controlledDofIndices(self, numbering: DofNumbering) -> np.ndarray:
         """The indices of the in-plane displacements of the ring's nodes in the dof vector.
 
         Parameters
         ----------
-        dofManager
-            The dof manager of the discrete system.
+        numbering
+            The numbering of the degrees of freedom of the current discrete system.
 
         Returns
         -------
@@ -207,7 +207,7 @@ class StepAction(IndirectDisplacementControlBase):
         """
 
         return np.hstack(
-            [dofManager.idcsOfFieldVariablesInDofVector[n.fields["displacement"]][:2] for n in self.contractionNSet]
+            [numbering.idcsOfFieldVariablesInDofVector[n.fields["displacement"]][:2] for n in self.contractionNSet]
         )
 
     def controlledValuesOfModel(self) -> np.ndarray:
@@ -221,7 +221,7 @@ class StepAction(IndirectDisplacementControlBase):
 
         return np.hstack([n.fields["displacement"].values[:2] for n in self.contractionNSet])
 
-    def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, dofManager):
+    def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, numbering):
         """Called once an increment has converged; this controller keeps nothing from one increment to the next.
 
         Parameters
@@ -234,8 +234,8 @@ class StepAction(IndirectDisplacementControlBase):
             The increment of the load parameter.
         timeStep
             The current time step.
-        dofManager
-            The dof manager of the current discrete system.
+        numbering
+            The numbering of the degrees of freedom of the current discrete system.
         """
 
     def updateStepAction(self, contractionNSet: NodeSet, L: float):

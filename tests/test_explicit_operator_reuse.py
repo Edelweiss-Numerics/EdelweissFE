@@ -28,12 +28,12 @@
 
 """Keeping the lumped operators across a contact-connectivity rebuild must not change the answer.
 
-The unit tests in ``test_dofmanager_refresh.py`` pin the refreshed bookkeeping against a freshly
-constructed DofManager, but they never run a solver, so on their own they would pass even if the
+The unit tests in ``test_dof_numbering_and_locations.py`` pin the new locations against locations built
+from scratch, but they never run a solver, so on their own they would pass even if the
 solver reused an operator it had no business reusing. This drives the explicit solver over a real
 contact problem whose connectivity changes mid-run, twice:
 
-* once as shipped, where a connectivity change refreshes the constraints and keeps the operators,
+* once as shipped, where a connectivity change gives new locations and keeps the operators,
 * once with the reuse refused, where every such change rebuilds everything from scratch,
 
 and requires the two to agree to the last bit. Refusing the reuse is exactly the fallback the guard

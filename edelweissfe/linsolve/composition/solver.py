@@ -229,17 +229,17 @@ class ComposedLinearSolver(LinearSolver):
 
     # ----- what the nonlinear solver hands over -----
 
-    def setModel(self, model, dofManager) -> None:
+    def setModel(self, model, numbering) -> None:
         """Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built
         for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear
         solver builds the new discrete system before that."""
         self.root.forget()
-        super().setModel(model, dofManager)
+        super().setModel(model, numbering)
         self._coordinateCache.clear()
         self._midsideCornersCache.clear()
         self._modelChanged = True
         self.lastResidualNorm = None
-        self.root.setModel(model, dofManager)
+        self.root.setModel(model, numbering)
 
     def coordinatesOf(self, fieldName: str) -> "np.ndarray | None":
         """The node coordinates of a field in its dof order: given ones first, else the model's, else ``None``."""
@@ -555,7 +555,7 @@ class ComposedLinearSolver(LinearSolver):
         self._rootBeforeReload = self.root
         self.root = tree
         if self._model is not None:
-            self.root.setModel(self._model, self._dofManager)
+            self.root.setModel(self._model, self._numbering)
         self._reloaded = True
         self._log("warning", "{:}: the tree is replaced; it is set up on this solve:\n{:}".format(header, self.root))
 

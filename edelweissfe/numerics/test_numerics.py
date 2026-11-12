@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Unit tests for edelweissfe.numerics (DofVector, ScatterDofVector, VIJSystemMatrix, SystemMatrixContributorBase, DofManager).
+Unit tests for edelweissfe.numerics (DofVector, ScatterDofVector, VIJSystemMatrix, SystemMatrixContributorBase,
+DofNumbering, DofLocations).
 """
 
 import unittest

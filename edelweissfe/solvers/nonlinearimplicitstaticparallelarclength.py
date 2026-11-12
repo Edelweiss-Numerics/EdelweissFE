@@ -36,7 +36,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import SystemMatrixAssembly
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
@@ -413,9 +413,9 @@ class NISTPArcLength(NISTParallel):
             loadParameterAtStart=self.Lambda,
             timeStep=timeStep,
             referenceTimeStep=TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0),
-            deadLoad=self.theDofManager.constructDofVector(),
-            referenceLoad=self.theDofManager.constructDofVector(),
-            rightHandSides=np.tile(self.theDofManager.constructDofVector(), (2, 1)).T,
+            deadLoad=self.system.locations.constructDofVector(),
+            referenceLoad=self.system.locations.constructDofVector(),
+            rightHandSides=np.tile(self.system.locations.constructDofVector(), (2, 1)).T,
         )
         try:
             U_np, dU, P, iterationCounter, incrementResidualHistory = super().solveIncrement(
@@ -438,7 +438,7 @@ class NISTPArcLength(NISTParallel):
         self.Lambda += dLambda
         self._dLambdaOfConvergedAttempt = dLambda
 
-        self.arcLengthController.finishIncrement(U_n, dU, dLambda, timeStep, self.theDofManager)
+        self.arcLengthController.finishIncrement(U_n, dU, dLambda, timeStep, self.system.numbering)
 
         for stepActionType in stepActions.values():
             for action in stepActionType.values():
@@ -611,7 +611,7 @@ class NISTPArcLength(NISTParallel):
         ddU_f = increment.referenceCorrection
 
         ddU_0 = stepLength * ddU_0
-        ddLambda = self.arcLengthController.computeDDLambda(dU, ddU_0, ddU_f, increment.timeStep, self.theDofManager)
+        ddLambda = self.arcLengthController.computeDDLambda(dU, ddU_0, ddU_f, increment.timeStep, self.system.numbering)
 
         return ddU_0 + ddLambda * ddU_f, ddLambda
 

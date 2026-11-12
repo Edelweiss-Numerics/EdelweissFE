@@ -30,7 +30,8 @@ from abc import abstractmethod
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.stepactions.base.loadbase import LoadBase
@@ -67,14 +68,14 @@ class NodalLoadBase(LoadBase):
         U_np: DofVector,
         dU: DofVector,
         timeStep: TimeStep,
-        dofManager: DofManager,
+        locations: DofLocations,
     ):
         """Subtract the current node loads from the residual contribution at the degrees of freedom of the field
         on the node set; a dead load, so without a tangent. See
         :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
 
         Only the nodes of the set that are part of the discrete system are loaded (see
-        :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`): every node of the set in a finite
+        :meth:`~edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet`): every node of the set in a finite
         element model, those in the active domain in a meshfree one.
 
         Parameters
@@ -89,10 +90,10 @@ class NodalLoadBase(LoadBase):
             The global solution increment.
         timeStep
             The current time step.
-        dofManager
-            The DOF manager of the discrete system, which locates the degrees of freedom of the node set.
+        locations
+            The locations of the entities in the discrete system, from which the load finds where it acts.
         """
 
-        dofIndices, nodePositions = dofManager.locateFieldOnNodeSet(self.field, self.nodeSet)
+        dofIndices, nodePositions = locations.numbering.locateFieldOnNodeSet(self.field, self.nodeSet)
         # one row of the load per node of the set: those of the nodes in the discrete system
         P[dofIndices] -= self.getCurrentLoad(timeStep)[nodePositions].flatten()

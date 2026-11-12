@@ -110,11 +110,19 @@ A solver solves; what the discrete system is made of, the model says. ``NIST``, 
    :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. The solver keeps it as long as the numbering
    of the degrees of freedom it holds -- until the next rebuild -- and takes from it:
 
-   * the numbering of the degrees of freedom (the :class:`~edelweissfe.numerics.dofmanager.DofManager`). It also
-     locates the degrees of freedom of a field on a node set, those a Dirichlet boundary condition prescribes or a node
-     force loads (:meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`);
-   * the elements, a list of everything the solver computes like an element (``computeElements``);
-   * the constraints that take part in the discrete system, the active ones the DOF manager locates
+   * the numbering of the degrees of freedom (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.numbering`, a
+     :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, the *ID* array). It also locates the degrees of freedom
+     of a field on a node set, those a Dirichlet boundary condition prescribes or a node force loads
+     (:meth:`~edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet`);
+   * the locations of the entities in that numbering
+     (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.locations`, a
+     :class:`~edelweissfe.numerics.doflocations.DofLocations`, the *LM* array): the global indices of the local
+     degrees of freedom of every element and constraint. Numbering and locations are immutable: a contact search
+     leaves the numbering as it is, and gives a new discrete system with new locations on the same numbering
+     (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`);
+   * the elements, a list of everything the solver computes like an element (``computeElements``), the ones the
+     locations hold;
+   * the constraints that take part in the discrete system, the active ones the locations hold
      (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`). The solver evaluates exactly these
      (``assembleConstraints``), so that every constraint it evaluates has its rows in the system matrix, and every row
      of a constraint is filled; a solver never asks a constraint whether it is active. The loops that only validate or
@@ -429,7 +437,7 @@ and around rebuilds of the discrete system, both off by default:
   nodes, rebuilds the discrete system, and the increment starts from zero. With this option, it is extrapolated
   nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the one the last increments
   were accepted in (compared by the digests of the two numberings,
-  :attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): the last accepted increments are vectors of
+  :attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`): the last accepted increments are vectors of
   the same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
   ``extrapolateAfterModelChange`` for the increment that follows it).
 
@@ -556,7 +564,7 @@ Besides the element loop and the linear solve, the rows include the parts that c
 element is involved:
 
 * ``topology update``: the model modifiers (e.g. ``AMR``), then the ties and the contact catching up;
-* ``discrete system rebuild``, after a change (:class:`~edelweissfe.models.change.Change`): ``dof manager``,
+* ``discrete system rebuild``, after a change (:class:`~edelweissfe.models.change.Change`): ``numbering and locations``,
   ``linear solver setup``, ``system matrix pattern``, ``mpc transformation build`` and ``mpc dirichlet conflict
   check``;
 * ``mpc transform system matrix``: condensing the slave DOFs of the multi-point constraints out of the system;
@@ -607,8 +615,9 @@ no element, so the degree-of-freedom numbering and every element's indices stay 
 were -- and with them the lumped inertia, its inverse, the mass-proportional damping rate and the
 multi-point-constraint transformation, none of which is a function of the constraints' footprints.
 The solver therefore re-locates the constraints alone
-(:meth:`~edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices`) and keeps those
-operators, rather than constructing a new :class:`~edelweissfe.numerics.dofmanager.DofManager` and
+(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`: the same numbering, new
+:class:`~edelweissfe.numerics.doflocations.DofLocations`) and keeps those
+operators, rather than building a new discrete system and
 assembling them again over every element.
 
 That shortcut is only valid while everything the operators *are* a function of is unchanged, so it

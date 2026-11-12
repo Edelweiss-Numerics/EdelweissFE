@@ -10,7 +10,7 @@ elements, re-partitioning element/node sets and surfaces, and reallocating the s
 A modifier is declared with the ``*modelModifier`` keyword. At the start of every increment the
 solver runs **all** modifiers to a fixed point via
 :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`, then lets mesh-dependent consumers catch
-up, then solves; when the topology changed, the discrete system (DOF manager, sparsity pattern,
+up, then solves; when the topology changed, the discrete system (numbering, locations, sparsity pattern,
 solution vectors and any multi-point-constraint transformation) is rebuilt first. A modifier itself
 is written as two halves -- :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`,
 which decides and may read solution state, and
@@ -184,8 +184,8 @@ a *predictive* ``fieldOutput`` marker ahead of a propagating front are all cover
 Batching refinement across increments
 --------------------------------------
 
-Every refinement pass forces the solver to rebuild the discrete system (DOF manager, sparsity
-pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
+Every refinement pass forces the solver to rebuild the discrete system (numbering, locations,
+sparsity pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
 large model. Left unchecked, a marker whose criterion is crossed by elements one at a time --
 rather than in a single burst -- triggers that rebuild on every increment a lone element newly
 qualifies. ``minMarkedElements`` (default ``1``: refine as soon as anything is marked) raises the

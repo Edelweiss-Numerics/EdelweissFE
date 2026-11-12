@@ -276,7 +276,7 @@ class _SystemWithoutNodalInertia(DiscreteSystem):
         return np.zeros(0, dtype=int)
 
     def assembleLumpedMassOfEntitiesWithOwnInertia(self, forEachChunk):
-        return self.dofManager.constructDofVector()
+        return self.locations.constructDofVector()
 
     def carriersOfTheMotion(self):
         return set(self.model.motionHeldIn)
@@ -292,7 +292,7 @@ class _ModelWithoutNodalInertia(FEModel):
 
     def buildDiscreteSystem(self):
         system = super().buildDiscreteSystem()
-        return _SystemWithoutNodalInertia(self, system.dofManager, system.elements)
+        return _SystemWithoutNodalInertia(self, system.locations)
 
 
 def test_a_model_without_nodal_inertia_gets_no_mass_assembled():
@@ -364,14 +364,14 @@ class _SystemWithLumpedMassOfEntities(DiscreteSystem):
     """The discrete system of a model with entities that integrate their own inertia, which it does not model: their
     lumped mass lies on every displacement dof, ``lumpedMass`` each (zero is a lumped mass too, unlike none)."""
 
-    def __init__(self, model, dofManager, elements, lumpedMass: float):
-        super().__init__(model, dofManager, elements)
+    def __init__(self, model, locations, lumpedMass: float):
+        super().__init__(model, locations)
         self.lumpedMass = lumpedMass
 
     def assembleLumpedMassOfEntitiesWithOwnInertia(self, forEachChunk):
-        lumpedMass = self.dofManager.constructDofVector()
+        lumpedMass = self.locations.constructDofVector()
         lumpedMass[:] = 0.0
-        lumpedMass[self.dofManager.idcsOfFieldsInDofVector["displacement"]] = self.lumpedMass
+        lumpedMass[self.numbering.idcsOfFieldsInDofVector["displacement"]] = self.lumpedMass
         return lumpedMass
 
 
@@ -384,7 +384,7 @@ class _ModelWithLumpedMassOfEntities(FEModel):
 
     def buildDiscreteSystem(self):
         system = super().buildDiscreteSystem()
-        return _SystemWithLumpedMassOfEntities(self, system.dofManager, system.elements, self.lumpedMass)
+        return _SystemWithLumpedMassOfEntities(self, system.locations, self.lumpedMass)
 
 
 def test_the_lumped_mass_of_entities_enters_the_diagonal(monkeypatch):

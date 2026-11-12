@@ -27,7 +27,7 @@
 """The first increment of a step that continues from a restart checkpoint -- a resumed run, or a step that fell back to
 its latest checkpoint (``maxCheckpointFallbacks``) -- extrapolates the checkpoint's last accepted increments only if
 its rebuilt discrete system numbers the degrees of freedom as they are numbered. The checkpoint holds the digest of
-their numbering with them (``DofManager.dofNumberingDigest``).
+their numbering with them (``DofNumbering.digest``).
 
 In a material point model, the numbering follows the active cells, which may have changed since the checkpoint was
 written. Here, the plate's discrete system loses the Lagrange multipliers of a constraint instead: the vectors of the

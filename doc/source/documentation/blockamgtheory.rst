@@ -72,7 +72,7 @@ Nothing about the block layout is configured by hand. A sparse matrix does not c
 of which DOF belongs to which physical field, so it is pushed in from the model side:
 :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel` hands every registered linear solver the
 live :class:`~edelweissfe.models.femodel.FEModel` and
-:class:`~edelweissfe.numerics.dofmanager.DofManager`, and the base class derives from them the
+:class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, and the base class derives from them the
 ordered list of :class:`~edelweissfe.linsolve.base.FieldBlock` records -- field name, half-open DOF
 range ``[start, stop)``, and nodal dimension (3 for a 3D displacement field, 1 for a scalar damage
 field). The nonlinear solver calls it whenever the discrete system is (re)built: on the first solve,
@@ -81,7 +81,7 @@ and again after every adaptive-refinement or connectivity change, so the layout 
 Two consequences worth knowing:
 
 * The fields must **tile the DOF vector contiguously** in DOF order. They do, by construction, for
-  every model the DOF manager builds; a gap or overlap raises an error rather than being silently
+  every model the numbering is built for; a gap or overlap raises an error rather than being silently
   worked around. DOFs past the last node field (scalar variables) are folded into one trailing scalar
   block named ``scalar variables``. In EdelweissFE these are at present the Lagrange multipliers of
   constraints (rigid bodies, equal-value constraints), whose rows have a zero diagonal: such a system is
@@ -187,7 +187,7 @@ components that hold them:
                 |  MPC condensation      K <- T' K T + I_s     both size preserving:
                 |  Dirichlet elimination  row, column i -> e_i  DOF ordering unchanged
                 |
-                |  setModel(model, dofManager)  -- on a (re)build only
+                |  setModel(model, numbering)  -- on a (re)build only
                 |      -> field blocks, nodal dimensions, node coordinates
                 v
     (A, b) ---> the composed linear solver

@@ -36,7 +36,7 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
@@ -284,7 +284,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """
 
         for load in loads:
-            load.assembleLoad(P, K, U_np, dU, timeStep, self.theDofManager)
+            load.assembleLoad(P, K, U_np, dU, timeStep, self.system.locations)
 
         if K is not None:
             # the block of the last load
@@ -317,8 +317,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         The force buffer and the DOF indices of each constraint are kept in :attr:`_constraintForcePlans` (by
         constraint) and reused in every increment. They hold for the indices of the constraint they were made
-        for: whenever the DofManager locates the constraint anew -- a rebuilt discrete system, or one whose
-        constraints are re-located in place --, the constraint has indices of its own, its plan is made anew, and the
+        for: whenever the locations locate the constraint anew -- a rebuilt discrete system, or one with new
+        locations --, the constraint has indices of its own, its plan is made anew, and the
         constraint is told so
         (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation`).
 
@@ -349,7 +349,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         for constraint in constraints:
             # A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.
-            indices = P.entitiesInDofVector[constraint]
+            indices = self.system.locations[constraint]
             plan = self._constraintForcePlans.get(constraint)
             if plan is None or plan[1] is not indices:
                 # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
@@ -630,10 +630,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         nodesWithLargestResidual = {}
 
         spatialAveragedFluxes = self.convergenceCriterion.computeSpatialAveragedFluxes(
-            F, FConstraints, self.theDofManager
+            F, FConstraints, self.system.locations
         )
 
-        for field, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
+        for field, fieldIndices in self.system.numbering.idcsOfFieldsInDofVector.items():
             fieldConvergence = self.convergenceCriterion.checkField(
                 field,
                 R[fieldIndices],
@@ -643,7 +643,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 iterationCounter,
             )
 
-            nodesWithLargestResidual[field] = self.theDofManager.getNodeForIndexInDofVector(
+            nodesWithLargestResidual[field] = self.system.numbering.getNodeForIndexInDofVector(
                 range(len(R))[fieldIndices][fieldConvergence.indexOfLargestResidual]
             )
 
@@ -654,8 +654,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 convergedAtAll and fieldConvergence.correctionConverged and fieldConvergence.fluxResidualConverged
             )
 
-        if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            scalarVariableIndices = list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())
+        if self.system.numbering.idcsOfScalarVariablesInDofVector:
+            scalarVariableIndices = list(self.system.numbering.idcsOfScalarVariablesInDofVector.values())
             scalarVariablesConvergence = self.convergenceCriterion.checkScalarVariables(
                 R[scalarVariableIndices],
                 ddU[scalarVariableIndices] if ddU is not None else None,
@@ -856,7 +856,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """Return the global DOF indices prescribed by a single Dirichlet BC, and the positions of their nodes in its
         node set.
 
-        The DofManager knows every DOF of ``field`` on ``nSet``, laid out node
+        The numbering knows every DOF of ``field`` on ``nSet``, laid out node
         by node in a single flat array::
 
             [ node0: (u_x u_y u_z),  node1: (u_x u_y u_z),  ... ]
@@ -869,10 +869,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         (:meth:`~DirichletBase.getPrescribedIncrementOfConstrainedDofs`).
 
         Only the nodes of the set that are part of the discrete system count, see
-        :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`: all nodes of the set in a
+        :meth:`~edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet`: all nodes of the set in a
         finite element model, those in the active domain in a meshfree one.
         """
-        dofsOfFieldOnNodeSet, nodePositions = self.theDofManager.locateFieldOnNodeSet(dirichlet.field, dirichlet.nSet)
+        dofsOfFieldOnNodeSet, nodePositions = self.system.numbering.locateFieldOnNodeSet(
+            dirichlet.field, dirichlet.nSet
+        )
         perNodeDofs = dofsOfFieldOnNodeSet.reshape((-1, dirichlet.fieldSize))
 
         return perNodeDofs[:, dirichlet.components].flatten(), nodePositions
@@ -880,7 +882,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     def buildMPCTransformation(self, model: FEModel, stepActions: dict = None):
         """Collect the linear dependency records from all multi-point constraints of the model
         and assemble the master-slave condensation operator for the current discrete system.
-        Must be called whenever the DofManager is (re)built.
+        Must be called whenever the discrete system is (re)built.
 
         Parameters
         ----------
@@ -917,7 +919,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         transformation = MultiPointConstraintTransformation(
             records,
-            self.theDofManager.nDof,
+            self.system.numbering.nDof,
             useThreadedCondensation=self.options.get("useThreadedMPCCondensation", False),
         )
 
@@ -980,7 +982,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         dropped = {}
 
         for name, mpc in model.multiPointConstraints.items():
-            for record in mpc.getMultiPointConstraints(self.theDofManager):
+            for record in mpc.getMultiPointConstraints(self.system.numbering):
                 if record[0] in claimed:
                     if not mpc.mayYieldSlaveToEarlierClaim:
                         raise TopologyError(

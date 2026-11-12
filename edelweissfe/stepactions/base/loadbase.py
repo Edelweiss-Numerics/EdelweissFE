@@ -29,7 +29,8 @@
 from abc import abstractmethod
 from collections.abc import Callable
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -61,7 +62,7 @@ class LoadBase(StepActionBase):
         U_np: DofVector,
         dU: DofVector,
         timeStep: TimeStep,
-        dofManager: DofManager,
+        locations: DofLocations,
     ):
         """Add this load's residual contribution to ``P``, and its tangent to ``K``.
 
@@ -82,8 +83,8 @@ class LoadBase(StepActionBase):
             The global solution increment since the last converged state.
         timeStep
             The current time step.
-        dofManager
-            The DOF manager of the discrete system, which locates the degrees of freedom the load acts on.
+        locations
+            The locations of the entities in the discrete system, from which the load finds where it acts.
         """
 
     @abstractmethod

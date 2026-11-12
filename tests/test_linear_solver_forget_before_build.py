@@ -168,8 +168,8 @@ def test_a_new_model_forgets_the_tree_at_once_and_keeps_what_is_reused_on_purpos
     scratch = root._krylov
 
     model = SimpleNamespace(nodeFields={damage.name: SimpleNamespace(dimension=1, nodes=[])})
-    dofManager = SimpleNamespace(idcsOfFieldsInDofVector={damage.name: slice(0, n)})
-    solver.setModel(model, dofManager)
+    numbering = SimpleNamespace(idcsOfFieldsInDofVector={damage.name: slice(0, n)})
+    solver.setModel(model, numbering)
     assert amg.hierarchy is None
     # the scratch vectors of the Krylov solve are sized for the system, not built for its matrix
     assert root._krylov is scratch

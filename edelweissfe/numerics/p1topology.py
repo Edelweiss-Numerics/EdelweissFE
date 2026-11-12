@@ -128,7 +128,7 @@ def classifyElementTopology(element):
 def buildMidsideCorners(model, fieldName: str):
     """Classify every node of ``fieldName`` (a vector field, e.g. ``"displacement"``) as a corner
     or an exclusive midside, in the same order as ``model.nodeFields[fieldName].nodes`` (the
-    field's own DOF-vector row order, see ``DofManager._reserveSpaceForNodeFields``).
+    field's own DOF-vector row order, see ``DofNumbering._reserveSpaceForNodeFields``).
 
     Every element of the field is classified by the shape it declares (:func:`classifyElementTopology`); an element of
     a shape this module does not know is an error, never skipped. A node is a corner iff it is a corner node of *at

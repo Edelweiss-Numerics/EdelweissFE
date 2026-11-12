@@ -224,13 +224,13 @@ class SchurComplementCondensation:
 
     # ----- the condensed dofs -----
 
-    def setModel(self, model, dofManager) -> None:
+    def setModel(self, model, numbering) -> None:
         """Take the model and its dofs: check that what the markers read exists, and find the dofs of each node."""
         for marker in self._markers:
             marker.checkReferences(model)
         self._model = model
         self._candidateElements = RefineableElements(list(model.elements.values()))
-        indices = dofManager.idcsOfFieldVariablesInDofVector
+        indices = numbering.idcsOfFieldVariablesInDofVector
         self._dofsOfNode = {}
         for element in model.elements.values():
             for node in element.nodes:
@@ -815,11 +815,11 @@ class SchurComplement(Preconditioner):
         # the condensed dofs the child was built for (None: built on the whole matrix, or not built)
         self._builtForDofs = None
 
-    def setModel(self, model, dofManager) -> None:
-        self.condensation.setModel(model, dofManager)
+    def setModel(self, model, numbering) -> None:
+        self.condensation.setModel(model, numbering)
         self._builtForDofs = None
         self._messagesShown = set()
-        super().setModel(model, dofManager)
+        super().setModel(model, numbering)
 
     def _setUp(self, A, context: SetUpContext) -> None:
         self._condense(A, context, rebuild=True, change=None)

@@ -4,6 +4,8 @@
 :meth:`buildMPCTransformation` returns None, as for a model without multi-point constraints.
 """
 
+from types import SimpleNamespace
+
 import edelweissfe.utils.inputfileparser  # noqa: F401  bootstrap input language
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
@@ -16,11 +18,11 @@ class _FakeConstraint:
     def __init__(self, records):
         self._records = records
 
-    def getMultiPointConstraints(self, dofManager):
+    def getMultiPointConstraints(self, numbering):
         return list(self._records)
 
 
-class _DofManager:
+class _Numbering:
     nDof = 10
 
 
@@ -31,7 +33,7 @@ class _Host:
     supportsMPC = True
 
     def __init__(self):
-        self.theDofManager = _DofManager()
+        self.system = SimpleNamespace(numbering=_Numbering())
         self.options = {}
         self.journal = self
 

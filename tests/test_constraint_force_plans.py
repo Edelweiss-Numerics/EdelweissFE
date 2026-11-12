@@ -31,6 +31,8 @@ and the DOF indices of a constraint are made once per discrete system and reused
 for indices the constraint no longer has is never used. The tangent that a constraint's default explicit evaluation
 throws away is sized once per discrete system as well."""
 
+from types import SimpleNamespace
+
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
@@ -74,16 +76,25 @@ class _ListedUnitForceConstraint(_UnitForceConstraint):
         return np.arange(2, dtype=np.intc), np.arange(2, dtype=np.intc)
 
 
+class _Locations(SimpleNamespace):
+    """The locations the constraint forces read: ``locations[constraint]``, from a mapping."""
+
+    def __getitem__(self, entity):
+        return self.ofEntity[entity]
+
+
 class _Host:
-    """The minimum a solver must provide for :meth:`assembleConstraintForces`."""
+    """The minimum a solver must provide for :meth:`assembleConstraintForces`: a discrete system with locations."""
 
     _constraintForcePlans = None
+    system = None
 
     def assemble(self, constraints, P):
         return NonlinearSolverBase.assembleConstraintForces(self, constraints, P, P, P, None)
 
 
 def _forces(host, constraints, entitiesInDofVector):
+    host.system = SimpleNamespace(locations=_Locations(ofEntity=entitiesInDofVector))
     P = DofVector(4, entitiesInDofVector)
     return np.asarray(host.assemble(constraints, P))
 

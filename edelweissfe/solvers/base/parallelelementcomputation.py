@@ -30,7 +30,7 @@
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     chunked_iterable,
     getNumberOfWorkerThreads,
@@ -138,8 +138,8 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
     buffers, and write the chunk's forces back with one fancy-index.
 
     The plan is only valid for the element set and DOF layout it was built from. h-adaptivity
-    rebuilds the DofManager on every topology change, which produces a fresh
-    ``idcsOfHigherOrderEntitiesInDofVector`` dict and a fresh scatter layout, so identity of those
+    rebuilds the discrete system on every topology change, which produces a fresh
+    ``ofEntity`` dict of the locations and a fresh scatter layout, so identity of those
     mappings is what detects a stale plan. The element count and chunk size are compared as well:
     those would catch a rebuild that somehow preserved the mapping objects, and a stale plan here
     would silently gather the wrong degrees of freedom rather than fail.

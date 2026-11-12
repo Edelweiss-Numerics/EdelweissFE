@@ -53,7 +53,8 @@ from edelweissfe.elements.pointmass import PointMass
 from edelweissfe.helpers.inputfilehelpers import fillFEModelFromInputFile
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.numerics.systemmatrixassembly import (
     DirectCSRSystemMatrixAssembly,
     VIJSystemMatrixAssembly,
@@ -499,10 +500,12 @@ def test_one_slave_node_to_discrete_rigid_body_penalty_is_assembled_alike_on_bot
     model, constraint, U = _nodeToDiscreteRigidBodyCase(tmp_path, "gen_bottomLeftBack")
     assert countEntriesOfBlock(constraint) == constraint.nDof**2
 
-    dofManager = DofManager(model.nodeFields.values(), model.scalarVariables.values(), [], [constraint], [])
+    locations = DofLocations(
+        DofNumbering(model.nodeFields.values(), model.scalarVariables.values()), constraints=[constraint]
+    )
     assembled = []
     for assemblyType in (VIJSystemMatrixAssembly, DirectCSRSystemMatrixAssembly):
-        K = assemblyType(dofManager, 1)
+        K = assemblyType(locations, 1)
         K.beginAssembly()
         constraint.computeKernels(U, U, np.zeros(constraint.nDof), K[constraint], None)
         assembled.append(K.assembledMatrix().toarray())

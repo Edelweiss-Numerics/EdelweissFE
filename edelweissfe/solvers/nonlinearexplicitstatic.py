@@ -33,7 +33,7 @@ import numpy as np
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.timing import createTimingDict
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import (
     SystemMatrixAssembly,
     VIJSystemMatrixAssembly,
@@ -293,9 +293,8 @@ class NEST(NIST):
         self.journal.message("Creating monolithic discrete system", self.identification, 0)
         self.forgetDiscreteSystem()
         self.system = model.buildDiscreteSystem()
-        self.theDofManager = self.system.dofManager
         self.journal.message(
-            "total size of discrete system: {:}".format(self.theDofManager.nDof),
+            "total size of discrete system: {:}".format(self.system.numbering.nDof),
             self.identification,
             0,
         )
@@ -316,11 +315,11 @@ class NEST(NIST):
         # derive anything beyond the plain (A, b) call -- a field-split solver such as blockamg raises
         # without the field structure setModel supplies. NEST's discrete system is built once per step here
         # rather than being rebuilt on connectivity changes, so one call per step is enough.
-        self.linSolver.setModel(self.system.modelForLinearSolver, self.theDofManager)
+        self.linSolver.setModel(self.system.modelForLinearSolver, self.system.numbering)
 
-        U = self.theDofManager.constructDofVector()
-        P = self.theDofManager.constructDofVector()
-        dU = self.theDofManager.constructDofVector()
+        U = self.system.locations.constructDofVector()
+        P = self.system.locations.constructDofVector()
+        dU = self.system.locations.constructDofVector()
         K = self.createSystemMatrixAssembly(VIJSystemMatrixAssembly)
 
         self.readStateFromModel(U)
@@ -480,12 +479,12 @@ class NEST(NIST):
 
         constraints = self.system.constraints
 
-        R = self.theDofManager.constructDofVector()
-        F = self.theDofManager.constructDofVector()
-        PLoadsAndConstraints = self.theDofManager.constructDofVector()
-        U_np = self.theDofManager.constructDofVector()
-        dU_ = [self.theDofManager.constructDofVector() for i in range(self.rkStages)]
-        err = self.theDofManager.constructDofVector()
+        R = self.system.locations.constructDofVector()
+        F = self.system.locations.constructDofVector()
+        PLoadsAndConstraints = self.system.locations.constructDofVector()
+        U_np = self.system.locations.constructDofVector()
+        dU_ = [self.system.locations.constructDofVector() for i in range(self.rkStages)]
+        err = self.system.locations.constructDofVector()
         err[:] = 0.0
 
         dirichlets = stepActions["dirichlet"].values()

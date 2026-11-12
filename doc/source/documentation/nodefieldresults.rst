@@ -179,8 +179,8 @@ Using the entries in code
 
 The entries exist from the construction of a node field on, also in a model built programmatically; a resize (for
 instance, by adaptive mesh refinement) keeps all of them. Reading or writing an entry through the
-:class:`~edelweissfe.numerics.dofmanager.DofManager` refuses a name that is not one of the five, and a node field
-the DofManager does not number: a node field is read or written as a whole only by the DofManager that numbers it,
+:class:`~edelweissfe.numerics.dofnumbering.DofNumbering` refuses a name that is not one of the five, and a node field
+the DofNumbering does not number: a node field is read or written as a whole only by the DofNumbering that numbers it,
 since its rows are addressed by position; on a node set, its rows are found by node, so that any node field of a
 numbered field can be read or written there (e.g. the node field of the model, while the discrete system numbers
 that of an active domain). A restart checkpoint holds every entry of every node field, and a

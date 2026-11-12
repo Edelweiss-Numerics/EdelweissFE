@@ -43,6 +43,7 @@ state does not depend on the path, so every option that changes the iterations m
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -476,7 +477,7 @@ def test_the_line_search_scales_the_load_parameter_with_the_solution(tmp_path, m
 
     def assembleLoadsAtIncrementEnd(self, stepActions, U_np, dU, P, K, timeStep):
         controller = self.arcLengthController
-        controlled = controller.controlledDofIndices(self.theDofManager)
+        controlled = controller.controlledDofIndices(self.system.numbering)
         loadParameters.append(self.arcLengthIncrement.loadParameter)
         controllerResiduals.append(
             controller.cVector.dot(dU[controlled]) - timeStep.stepProgressIncrement * controller.changeOverStep
@@ -533,7 +534,7 @@ def test_every_trial_state_of_the_line_search_satisfies_the_controllers_equation
     dof1, dof2 = FieldVariableAtRest(), FieldVariableAtRest()
     opening = IndirectControl("opening", dof1, dof2, [0.0, -1.0], [0.0, 1.0], 0.5, None, Journal(verbose=False))
 
-    class DofManager:
+    class Numbering:
         """The degrees of freedom of the two field variables."""
 
         idcsOfFieldVariablesInDofVector = {dof1: np.array([0, 1]), dof2: np.array([2, 3])}
@@ -545,7 +546,7 @@ def test_every_trial_state_of_the_line_search_satisfies_the_controllers_equation
     target = timeStep.stepProgressIncrement * opening.changeOverStep
     solver = NISTPArcLength(loadConfiguration({}), Journal(verbose=False), arcLengthController="opening")
     solver.arcLengthController = opening
-    solver.theDofManager = DofManager()
+    solver.system = SimpleNamespace(numbering=Numbering())
     solver.arcLengthIncrement = ArcLengthIncrement(
         loadParameterAtStart=1.5,
         timeStep=timeStep,
@@ -717,7 +718,7 @@ def test_the_re_equilibration_after_a_model_change_holds_the_controlled_quantity
 
     def solveIncrement(self, U_n, dU, P, K, stepActions, model, timeStep, *args):
         controller = self.arcLengthController
-        controlled = controller.controlledDofIndices(self.theDofManager)
+        controlled = controller.controlledDofIndices(self.system.numbering)
         controlledQuantityAtStart = controller.cVector.dot(U_n[controlled])
         result = originalSolveIncrement(self, U_n, dU, P, K, stepActions, model, timeStep, *args)
         if timeStep.number == changeBeforeIncrement and timeStep.stepProgressIncrement == 0.0:
