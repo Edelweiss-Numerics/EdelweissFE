@@ -90,6 +90,9 @@ EdelweissFE does not want to ...
    :hidden:
    :caption: Developer guide
 
+   developer/architecture
+   developer/solverbase
+   developer/residualandtangent
    developer/inputsystem
    developer/jobs
    developer/models

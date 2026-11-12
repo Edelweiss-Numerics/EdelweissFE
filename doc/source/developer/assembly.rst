@@ -261,3 +261,8 @@ under :doc:`/developer/utils`; only the direct-scatter side is documented here.
 
 .. autoclass:: edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix
    :members:
+
+The condensation of the multi-point constraints, whose pattern fill-in enters the pattern of the assembly:
+
+.. autoclass:: edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation
+   :members:

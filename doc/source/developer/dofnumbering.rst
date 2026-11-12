@@ -3,52 +3,23 @@ Degrees of freedom: numbering and locations
 
 The ``edelweissfe.numerics`` package provides core data structures for global discrete systems in EdelweissFE.
 
-A discrete system has two lifetimes, and each has its own immutable object. The words below are used in the code, the
-docstrings and these pages in exactly this meaning.
+This page is the API reference of the numbering, the locations and what refers to them. The words *connectivity*,
+*numbering*, *location* and *indices*, the lifetimes of the two objects and what a change of the model makes new are
+told once, in :ref:`architecture-words` and :ref:`how-a-change-selects-the-path`. In short: the numbering is a
+:class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, the locations are a
+:class:`~edelweissfe.numerics.doflocations.DofLocations`, and neither is ever changed: a change makes a new one
+(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations` for new locations on the same numbering,
+:meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem` for a new numbering).
 
-.. list-table::
-   :header-rows: 1
-   :widths: 18 52 30
-
-   * - Word
-     - Meaning
-     - Object
-   * - connectivity
-     - Which nodes an entity touches (for a contact: which it couples now). The *IEN* array of the textbooks.
-     - the entities of the model
-   * - numbering
-     - The global index of every degree of freedom of a node field or a scalar variable. The *ID* array of Hughes --
-       but every degree of freedom is numbered, a prescribed one included.
-     - :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`
-   * - location of an entity
-     - The global indices of the entity's local degrees of freedom, ``locations[entity]``: never a position in
-       space. The *LM* array: the ID array applied to the IEN array.
-     - :class:`~edelweissfe.numerics.doflocations.DofLocations`
-   * - indices
-     - Any other set of global indices: a node set's, the Dirichlet degrees of freedom, the slaves of a multi-point
-       constraint.
-     - whoever uses them
-
-The numbering changes with the mesh, and when scalar variables (e.g. the Lagrange multipliers of constraints) enter or
-leave the discrete system. The locations change when the connectivity changes: a contact search couples other nodes,
-and the numbering stays. Neither object is ever changed: a change makes a new one. A new
-:class:`~edelweissfe.numerics.doflocations.DofLocations` on the same
-:class:`~edelweissfe.numerics.dofnumbering.DofNumbering` is what
-:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations` gives; a change of the numbering needs a
-new discrete system, built by the model.
-
-Every entity of the discrete system is located, and by one protocol, whatever it is: a finite element, a constraint,
-and, in EdelweissMeshfree, a cell, a cell element or a particle. The protocol is
-:class:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity`, which the Python entities derive
-from; the compiled wrappers of Marmot's elements, cells and particles are Cython extension types, which cannot derive
-from a Python class, and implement the same protocol without deriving (a test of each repository checks that every
-member is there). It declares what the locations read: the nodes the entity couples (``nodes``), the fields it couples on
-each of them (``fields``), the permutation of its local degrees of freedom (``dofIndicesPermutation``) and the scalar
-variables it owns (``scalarVariables``); whether its nodes change with the motion
-(``connectivityChangesWithMotion``), which decides what is counted again for new locations. What an entity computes is
-the business of its kind: the finite elements report their inertia, damping and critical time step, and the discrete
-system names the entities a solver asks for them at the nodes
-(:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`). An entity that couples a field its node does not
+Every entity of the discrete system is located by one protocol (:ref:`architecture-entities`): a finite element, a constraint, and,
+in EdelweissMeshfree, a cell, a cell element or a particle. The protocol,
+:class:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity`, declares what the locations
+read: the nodes the entity couples (``nodes``), the fields it couples on each of them (``fields``), the permutation of
+its local degrees of freedom (``dofIndicesPermutation``) and the scalar variables it owns (``scalarVariables``); and
+whether its nodes change with the motion (``connectivityChangesWithMotion``), which decides what is counted again for
+new locations. It does not declare inertia: which entities a solver asks for it is
+:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`. A test of each repository checks that
+the compiled wrappers, which cannot derive from it, have every member. An entity that couples a field its node does not
 have, or a scalar variable the numbering does not number, is an error of the model: it is reported, naming the entity
 and what is missing, when the locations are made.
 
