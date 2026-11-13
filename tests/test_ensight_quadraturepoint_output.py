@@ -44,7 +44,11 @@ import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.elements._hexa3dnodeordering import hexa8DNdXi
+from edelweissfe.journal.journal import Journal
 from edelweissfe.outputmanagers.ensight import (
+    EnsightConfigurationSchema,
+    EnsightSchema,
+    OutputManager,
     createQuadraturePointPartFromElementSet,
     createUnstructuredPartFromElementSet,
 )
@@ -74,10 +78,11 @@ all
 *fieldOutput
 >>perNode, name=displacement, elSet=all, field=displacement, result=U
 >>perElement, name=stress, elSet=all, result=stress, quadraturePoint={quadraturePoints}{function}
+>>perElement, name=strain, elSet=all, result=strain, quadraturePoint={quadraturePoints}
+{fieldOutputs}
 
 *output, type=ensight, name=ensight
->>perNode, fieldOutput=displacement
->>perQuadraturePoint, fieldOutput=stress
+{ensight}
 >>configuration, overwrite=yes
 
 {analyticalFields}
@@ -116,11 +121,25 @@ CASES = [
 ]
 
 
+ENSIGHT = """>>perNode, fieldOutput=displacement
+>>perQuadraturePoint, fieldOutput=stress
+>>perQuadraturePoint, fieldOutput=strain"""
+
+
 def _run(
-    tmp_path, monkeypatch, provider: str, elType: str, dim: int, quadraturePoints: str = None, function: str = None
+    tmp_path,
+    monkeypatch,
+    provider: str,
+    elType: str,
+    dim: int,
+    quadraturePoints: str = None,
+    function: str = None,
+    fieldOutputs: str = "",
+    ensight: str = ENSIGHT,
 ):
     """Run the deck in a temporary directory, which then holds the Ensight export; `function` is
-    the f(x) of the stress field output."""
+    the f(x) of the stress field output, `fieldOutputs` are further field outputs, and `ensight`
+    the definitions of the Ensight output manager."""
 
     if provider == "marmot":
         pytest.importorskip("edelweissfe.elements.marmotelement.element")
@@ -143,6 +162,8 @@ def _run(
         provider=provider,
         quadraturePoints=quadraturePoints or "0:{:}".format(2**dim),
         function=", f(x)='{:}'".format(function) if function else "",
+        fieldOutputs=fieldOutputs,
+        ensight=ensight,
         analyticalFields="\n".join(
             '*analyticalField, name=f{:}, type=scalarExpression\n"f(x,y,z)"="{:}*{:}"'.format(
                 i, axes[i], axes[(i + 1) % dim]
@@ -314,6 +335,11 @@ def test_quadrature_point_results_on_sub_elements(tmp_path, monkeypatch, provide
     assert list(stress) == ["all_QP"]
     assert np.allclose(stress["all_QP"][subShape][:, :dim], E * amplitudes * quadraturePoints[:, following], rtol=1e-5)
 
+    # a second result of the element set is written on the same part
+    strain = _readVariable(_lastFile("ensight/strain.var_*"), parts, 6)
+    assert list(strain) == ["all_QP"]
+    assert np.allclose(strain["all_QP"][subShape][:, :dim], amplitudes * quadraturePoints[:, following], rtol=1e-5)
+
     # node results are written on the sub-element part as well, interpolated to the added nodes
     displacement = _readVariable(_lastFile("ensight/displacement.var_*"), parts, 3)
     assert set(displacement) == {"all", "all_QP"}
@@ -352,14 +378,18 @@ def test_incomplete_quadrature_point_range_is_refused(tmp_path, monkeypatch, elT
         _run(tmp_path, monkeypatch, "edelweiss", elType, dim, quadraturePoints)
 
 
-class _StubElement:
-    """Just what the sub-element part needs of an element: a unit square with given quadrature points."""
+_UNIT_SQUARE = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+_UNIT_CUBE = [(*x, 0.0) for x in _UNIT_SQUARE] + [(*x, 1.0) for x in _UNIT_SQUARE]
 
-    def __init__(self, elNumber: int, ensightType: str, quadraturePoints: list):
-        corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+
+class _StubElement:
+    """Just what the sub-element part needs of an element: by default a unit square, with given
+    quadrature points."""
+
+    def __init__(self, elNumber: int, ensightType: str, quadraturePoints: list, corners: list = _UNIT_SQUARE):
         self.elNumber = elNumber
         self.ensightType = ensightType
-        self.visualizationNodes = [Node(4 * elNumber + i, np.array(x)) for i, x in enumerate(corners)]
+        self.visualizationNodes = [Node(8 * elNumber + i, np.array(x)) for i, x in enumerate(corners)]
         self._quadraturePoints = np.array(quadraturePoints)
 
     def getNumberOfQuadraturePoints(self) -> int:
@@ -381,12 +411,22 @@ _GAUSS_2X2 = [(0.5 + 0.5 * a / np.sqrt(3), 0.5 + 0.5 * b / np.sqrt(3)) for a in 
         ([_StubElement(1, "quad4", _GAUSS_2X2[:3])], "requires a Gauss rule"),
         # as many, but elsewhere
         ([_StubElement(1, "quad4", [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])], "requires a Gauss rule"),
+        # as many, but with coordinates of another dimension than the nodes
+        ([_StubElement(1, "quad4", [(*x, 0.0) for x in _GAUSS_2X2])], "requires a Gauss rule"),
         # as many, but two of them at the same Gauss point
         ([_StubElement(1, "quad4", _GAUSS_2X2[:3] + _GAUSS_2X2[:1])], "requires a Gauss rule"),
         # two rules in one element set
         (
             [_StubElement(1, "quad4", _GAUSS_2X2), _StubElement(2, "quad4", [(0.5, 0.5)])],
             "requires the same number of quadrature points in all elements",
+        ),
+        # quadrilaterals and hexahedra in one element set
+        (
+            [
+                _StubElement(1, "quad4", [(0.5, 0.5, 0.0)], _UNIT_CUBE[:4]),
+                _StubElement(2, "hexa8", [(0.5, 0.5, 0.5)], _UNIT_CUBE),
+            ],
+            "requires an element set of quadrilaterals only or of hexahedra only",
         ),
     ],
 )
@@ -418,6 +458,73 @@ def test_function_of_the_result_per_quadrature_point(tmp_path, monkeypatch):
 
     stress = _readVariable(_lastFile("ensight/stress.var_*"), parts, 1)["all_QP"]["hexa8"]
     assert np.allclose(stress[:, 0], E * AMPLITUDES[1] * quadraturePoints[:, 2], rtol=1e-5)
+
+
+def test_vector_result_in_2d_gets_a_third_component(tmp_path, monkeypatch):
+    """Ensight takes vectors with 3 components: two components per quadrature point in 2D get a zero."""
+
+    _run(tmp_path, monkeypatch, "edelweiss", "CPE4", 2, function="x[:, :, :2]")
+
+    parts = _readGeometry("ensight/geometry.geo_0000")
+    quadraturePoints, _ = _cellsOfSubElements(parts["all_QP"], "quad4", 2, 2)
+
+    stress = _readVariable(_lastFile("ensight/stress.var_*"), parts, 3)["all_QP"]["quad4"]
+    assert np.allclose(stress[:, :2], E * np.array(AMPLITUDES[:2]) * quadraturePoints[:, ::-1], rtol=1e-5)
+    assert not np.any(stress[:, 2])
+
+
+def test_node_results_of_a_node_set_stay_off_the_sub_element_part(tmp_path, monkeypatch):
+    """Only node results of the element set itself are written on its sub-element part."""
+
+    _run(
+        tmp_path,
+        monkeypatch,
+        "edelweiss",
+        "CPE8R",
+        2,
+        fieldOutputs=">>perNode, name=displacementLeft, nSet=gen_left, field=displacement, result=U",
+        ensight=ENSIGHT + "\n>>perNode, fieldOutput=displacementLeft",
+    )
+
+    parts = _readGeometry("ensight/geometry.geo_0000")
+    assert set(_readVariable(_lastFile("ensight/displacement.var_*"), parts, 3)) == {"all", "all_QP"}
+    (partOfNodeSet,) = _readVariable(_lastFile("ensight/displacementLeft.var_*"), parts, 3)
+    assert partOfNodeSet not in ("all", "all_QP")
+
+
+@pytest.mark.parametrize(
+    "ensight, message",
+    [
+        (">>perQuadraturePoint, fieldOutput=stress\n>>perQuadraturePoint, fieldOutput=stress", "more than once"),
+        (">>perElement, fieldOutput=stress\n>>perQuadraturePoint, fieldOutput=stress", "more than once"),
+        (">>perQuadraturePoint, fieldOutput=displacement", "requires an element field output"),
+    ],
+)
+def test_unsuitable_definition_is_refused(tmp_path, monkeypatch, ensight, message):
+    with pytest.raises(Exception, match=message):
+        _run(tmp_path, monkeypatch, "edelweiss", "CPE4", 2, ensight=ensight)
+
+
+def test_programmatic_quadrature_point_output(tmp_path, monkeypatch):
+    """A job created on an output manager set up in code, named after the field output by default."""
+
+    model, fieldOutputController = _run(tmp_path, monkeypatch, "edelweiss", "C3D8", 3)
+    stress = fieldOutputController.fieldOutputs["stress"]
+
+    configuration = EnsightSchema(configurations=(EnsightConfigurationSchema(overwrite=True),))
+    manager = OutputManager(
+        "programmatic", model, fieldOutputController, Journal(verbose=False), None, configuration=configuration
+    )
+    manager.createPerQuadraturePointOutput(stress)
+    with pytest.raises(Exception, match="more than once"):
+        manager.createPerQuadraturePointOutput(stress)
+
+    manager.initializeJob()
+    manager.writeOutput(model)
+
+    written = _readVariable("programmatic/stress.var_0000", _readGeometry("programmatic/geometry.geo_0000"), 6)
+    reference = _readVariable(_lastFile("ensight/stress.var_*"), _readGeometry("ensight/geometry.geo_0000"), 6)
+    assert np.array_equal(written["all_QP"]["hexa8"], reference["all_QP"]["hexa8"])
 
 
 @pytest.mark.parametrize(

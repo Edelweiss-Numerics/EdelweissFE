@@ -921,11 +921,12 @@ def createQuadraturePointPartFromElementSet(
             gaussPoints, breakpoints = _gaussSubdivision(n)
             cells = np.indices(dim * (n,)).reshape(dim, -1).T
             qpExpected = np.asarray(shapeFunctions(*gaussPoints[cells].T)).T @ X
-            qpCoordinates = np.reshape(element.getCoordinatesAtQuadraturePoints(), (nQp, -1))[:, :dim]
-            distances = np.linalg.norm(qpCoordinates[:, None, :] - qpExpected[None, :, :], axis=2)
-            nearest = distances.argmin(axis=1)
-            if distances.min(axis=1).max() <= 1e-8 * np.ptp(X, axis=0).max() and len(set(nearest)) == nQp:
-                cellOfQp = cells[nearest]
+            qpCoordinates = np.reshape(element.getCoordinatesAtQuadraturePoints(), (nQp, -1))
+            if qpCoordinates.shape == qpExpected.shape:
+                distances = np.linalg.norm(qpCoordinates[:, None, :] - qpExpected[None, :, :], axis=2)
+                nearest = distances.argmin(axis=1)
+                if distances.min(axis=1).max() <= 1e-8 * np.ptp(X, axis=0).max() and len(set(nearest)) == nQp:
+                    cellOfQp = cells[nearest]
         if cellOfQp is None:
             raise Exception(
                 "Quadrature point output on sub-elements requires a Gauss rule with the same number of quadrature "
@@ -1292,8 +1293,6 @@ class OutputManager(OutputManagerBase):
 
         elSet = fieldOutput.associatedSet
         nElements = len(elSet)
-        if not nElements:
-            raise Exception("Quadrature point output {:} requires a non-empty element set".format(name))
 
         basePart = self.elSetToEnsightPartMappings[elSet.name]
         if basePart not in self._quadraturePointParts:
