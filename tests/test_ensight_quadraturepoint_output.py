@@ -405,6 +405,9 @@ _GAUSS_2X2 = [(0.5 + 0.5 * a / np.sqrt(3), 0.5 + 0.5 * b / np.sqrt(3)) for a in 
 @pytest.mark.parametrize(
     "elements, message",
     [
+        ([], "requires a non-empty element set"),
+        # no quadrature points at all
+        ([_StubElement(1, "quad4", np.empty((0, 2)))], "requires a Gauss rule"),
         # not a quadrilateral or hexahedron
         ([_StubElement(1, "tria3", _GAUSS_2X2)], "requires Quad4, Quad8, Hexa8 or Hexa20 elements"),
         # not as many quadrature points as a rule with n points per direction has
@@ -434,6 +437,31 @@ def test_elements_without_a_sub_element_per_quadrature_point_are_refused(element
     basePart = createUnstructuredPartFromElementSet("set", elements, 1)
     with pytest.raises(Exception, match=message):
         createQuadraturePointPartFromElementSet("set", elements, basePart, 2)
+
+
+def test_quadratic_neighbor_lends_its_edge_midpoint():
+    """A Quad4 next to a Quad8 uses the Quad8's node at the midpoint of their common edge."""
+
+    # the unit squares [0, 1] and [1, 2] x [0, 1]; the Quad8 has its midside nodes after its corners
+    quad8 = [(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0), (1.5, 0.0), (2.0, 0.5), (1.5, 1.0), (1.0, 0.5)]
+    gauss = [(1 + x, y) for x, y in _GAUSS_2X2]
+    left = _StubElement(1, "quad4", _GAUSS_2X2)
+    right = _StubElement(2, "quad8", gauss, quad8)
+    right.visualizationNodes[:4:3] = left.visualizationNodes[1:3]
+
+    elements = [left, right]
+    basePart = createUnstructuredPartFromElementSet("set", elements, 1)
+    part, mapping = createQuadraturePointPartFromElementSet("set", elements, basePart, 2)
+
+    # the lattice of half the element size, 5 x 3 points, holds every node once
+    assert len(part.nodes) == 15
+    assert len(np.unique(part.nodeCoordinateArray, axis=0)) == 15
+    midpoint = right.visualizationNodes[7]
+    assert midpoint in part.nodes
+    baseNodes = list(basePart.nodes)
+    assert np.array_equal(
+        mapping.toarray()[part.nodes.index(midpoint)], np.eye(len(baseNodes))[baseNodes.index(midpoint)]
+    )
 
 
 def test_single_quadrature_point():
