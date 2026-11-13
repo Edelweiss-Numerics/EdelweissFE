@@ -37,7 +37,9 @@ from io import TextIOBase
 
 import h5py
 import numpy as np
+from scipy.sparse import csr_matrix
 
+from edelweissfe.elements._hexa3dnodeordering import hexa8N, hexa20N
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
@@ -56,6 +58,8 @@ from edelweissfe.utils.schema import schemaField, subKeywordField
 Output manager for Ensight exports.
 If loaded, it automatically exports all elSets as Ensight parts.
 For each part, perNode and perElement results can be exported, which are imported from fieldOutputs.
+perQuadraturePoint results are exported on an additional part ``<elSet>_QP``, which splits each element
+into one linear sub-element per quadrature point.
 
 """
 
@@ -78,6 +82,20 @@ class EnsightPerElementSchema:
 
     fieldOutput: str | None = schemaField(
         description="Name of the result, defined on an elSet (also for perNode results!)",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+
+
+@dataclass(frozen=True)
+class EnsightPerQuadraturePointSchema:
+    """The options of a single ``>>perQuadraturePoint`` block."""
+
+    fieldOutput: str | None = schemaField(
+        description="Name of an element result at all quadrature points of quadrilaterals (quadraturePoint=0:4) or "
+        "hexahedra (quadraturePoint=0:8) with 2 quadrature points per direction; written on a separate part, which "
+        "splits each element into linear sub-elements, one per quadrature point",
         dtype=str,
         default=None,
         required=True,
@@ -127,6 +145,10 @@ class EnsightSchema:
     )
     perElement: tuple[EnsightPerElementSchema, ...] = subKeywordField(
         description="Element-based Ensight export.", schema=EnsightPerElementSchema
+    )
+    perQuadraturePoint: tuple[EnsightPerQuadraturePointSchema, ...] = subKeywordField(
+        description="Quadrature point-based Ensight export on sub-elements.",
+        schema=EnsightPerQuadraturePointSchema,
     )
     configurations: tuple[EnsightConfigurationSchema, ...] = subKeywordField(
         description="", schema=EnsightConfigurationSchema, optionName="configuration"
@@ -768,6 +790,157 @@ def createUnstructuredPartFromElementSet(setName, elementSet: list, partID: int)
     return EnsightUnstructuredPart(setName, partID, partNodes.keys(), elementDict)
 
 
+# natural coordinates of the Hexa20 nodes (Abaqus/Marmot ordering): 8 corners, then the edge midpoints
+_hexa20NodeXi = np.array(
+    [
+        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+        [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+        [0, -1, -1], [1, 0, -1], [0, 1, -1], [-1, 0, -1],
+        [0, -1, 1], [1, 0, 1], [0, 1, 1], [-1, 0, 1],
+        [-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0],
+    ]
+)  # fmt: skip
+
+# natural coordinates of the Quad8 nodes: the bottom face of the Hexa20
+_quad8NodeXi = _hexa20NodeXi[[0, 1, 2, 3, 8, 9, 10, 11], :2]
+
+
+def _quad4N(xi, eta):
+    """Bilinear shape functions of the Quad4 element."""
+    return 0.25 * np.array([(1 - xi) * (1 - eta), (1 + xi) * (1 - eta), (1 + xi) * (1 + eta), (1 - xi) * (1 + eta)])
+
+
+def _quad8N(xi, eta):
+    """Serendipity shape functions of the Quad8 element."""
+    return 0.25 * np.array(
+        [
+            (1 - xi) * (1 - eta) * (-xi - eta - 1),
+            (1 + xi) * (1 - eta) * (xi - eta - 1),
+            (1 + xi) * (1 + eta) * (xi + eta - 1),
+            (1 - xi) * (1 + eta) * (-xi + eta - 1),
+            2 * (1 - xi**2) * (1 - eta),
+            2 * (1 + xi) * (1 - eta**2),
+            2 * (1 - xi**2) * (1 + eta),
+            2 * (1 - xi) * (1 - eta**2),
+        ]
+    )
+
+
+# ensight shape -> (natural coordinates of the nodes, shape functions, shape of the sub-elements)
+_quadraturePointSubdivisions = {
+    "quad4": (_quad8NodeXi[:4], _quad4N, "quad4"),
+    "quad8": (_quad8NodeXi, _quad8N, "quad4"),
+    "hexa8": (_hexa20NodeXi[:8], hexa8N, "hexa8"),
+    "hexa20": (_hexa20NodeXi, hexa20N, "hexa8"),
+}
+
+
+def createQuadraturePointPartFromElementSet(
+    setName: str, elementSet: list, basePart: EnsightUnstructuredPart, partID: int
+) -> tuple[EnsightUnstructuredPart, csr_matrix]:
+    """Splits each element of an element set at its natural coordinates 0 into one linear sub-element
+    per quadrature point of the 2x2 (Quad4, Quad8) or 2x2x2 (Hexa8, Hexa20) Gauss rule; sub-element g
+    of an element contains its quadrature point g, in whatever order the element numbers them.
+
+    The part's nodes are the nodes of the base part (same order), followed by the edge midpoint
+    nodes of linear elements and the face center nodes (both shared by neighboring elements) and the
+    element center nodes, placed by the element's interpolation.
+
+    Parameters
+    ----------
+    setName
+        The name of the element set.
+    elementSet
+        The elements, all quadrilaterals or all hexahedra.
+    basePart
+        The part of the element set, whose nodes come first.
+    partID
+        The id of this part.
+
+    Returns
+    -------
+    tuple[EnsightUnstructuredPart, csr_matrix]
+        The part, and the sparse matrix interpolating per-node results of the base part to the added nodes.
+    """
+
+    baseNodes = list(basePart.nodes)
+    baseIndices = {node: i for i, node in enumerate(baseNodes)}
+    nextLabel = int(basePart.nodeLabels.max()) + 1 if len(baseNodes) else 1
+
+    addedNodes = []
+    rows, cols, weights = [], [], []
+    sharedNodeIndices = {}
+    elementTree = {}
+    for element in elementSet:
+        if element.ensightType not in _quadraturePointSubdivisions:
+            raise Exception(
+                "Quadrature point output on sub-elements requires Quad4, Quad8, Hexa8 or Hexa20 elements, "
+                "element {:} is {:}".format(element.elNumber, element.ensightType)
+            )
+        nodeXi, shapeFunctions, subShape = _quadraturePointSubdivisions[element.ensightType]
+        dim = nodeXi.shape[1]
+        nCorners = 2**dim
+        cornerXi = nodeXi[:nCorners]
+        elNodes = element.visualizationNodes
+        nElNodes = len(elNodes)
+        elIndices = [baseIndices[node] for node in elNodes]
+        X = np.asarray([node.coordinates for node in elNodes])
+
+        # each quadrature point must be the Gauss point of the 2x2(x2) rule next to one of the corners
+        qpExpected = np.asarray(shapeFunctions(*(cornerXi.T / np.sqrt(3)))).T @ X
+        cornerOfQp = None
+        if element.getNumberOfQuadraturePoints() == nCorners:
+            qpCoordinates = np.reshape(element.getCoordinatesAtQuadraturePoints(), (nCorners, -1))[:, :dim]
+            distances = np.linalg.norm(qpCoordinates[:, None, :] - qpExpected[None, :, :], axis=2)
+            cornerOfQp = distances.argmin(axis=1)
+            if distances.min(axis=1).max() > 1e-8 * np.ptp(X, axis=0).max() or len(set(cornerOfQp)) != nCorners:
+                cornerOfQp = None
+        if cornerOfQp is None:
+            raise Exception(
+                "Quadrature point output on sub-elements requires the Gauss rule with 2 quadrature points per "
+                "direction (e.g. CPE4, CPE8R, C3D8, C3D20R), element {:} does not use it".format(element.elNumber)
+            )
+
+        # node indices of the lattice of natural coordinates -1, 0, 1; the element's own nodes first
+        lattice = np.full(dim * (3,), -1, dtype=int)
+        for i, xi in enumerate(nodeXi):
+            lattice[tuple(xi + 1)] = elIndices[i]
+        for xi in np.argwhere(lattice < 0) - 1:
+            # edge midpoints and face centers are shared with the neighbors: identify them by their corner nodes
+            key = None
+            if np.any(xi):
+                dims = np.flatnonzero(xi)
+                key = frozenset(elNodes[i] for i in range(nCorners) if np.all(cornerXi[i, dims] == xi[dims]))
+                if key in sharedNodeIndices:
+                    lattice[tuple(xi + 1)] = sharedNodeIndices[key]
+                    continue
+            N = np.asarray(shapeFunctions(*xi.astype(float)))
+            idx = len(baseNodes) + len(addedNodes)
+            addedNodes.append(Node(nextLabel, N @ X))
+            nextLabel += 1
+            rows += [len(addedNodes) - 1] * nElNodes
+            cols += elIndices
+            weights += list(N)
+            lattice[tuple(xi + 1)] = idx
+            if key is not None:
+                sharedNodeIndices[key] = idx
+
+        # the sub-element of a quadrature point spans from its corner to the center, its nodes ordered as the corners
+        subElements = elementTree.setdefault(subShape, {})
+        for g, s in enumerate(cornerXi[cornerOfQp]):
+            subElements[nCorners * element.elNumber + g] = [lattice[tuple((t + s) // 2 + 1)] for t in cornerXi]
+
+    if len(elementTree) > 1:
+        raise Exception(
+            "Quadrature point output on sub-elements requires an element set of quadrilaterals only or of "
+            "hexahedra only, element set {:} holds both".format(setName)
+        )
+
+    interpolation = csr_matrix((weights, (rows, cols)), shape=(len(addedNodes), len(baseNodes)))
+    part = EnsightUnstructuredPart(setName + "_QP", partID, baseNodes + addedNodes, elementTree)
+    return part, interpolation
+
+
 def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):
     """Construtcts an EnSight part for a node set. Since EnSight parts comprise nodes and elements, each node is assigned to a dummy point element.
 
@@ -857,6 +1030,7 @@ class OutputManager(OutputManagerBase):
         """
         perNodeDefs = configuration.perNode
         perElementDefs = configuration.perElement
+        perQuadraturePointDefs = configuration.perQuadraturePoint
         configurations = configuration.configurations
 
         self.name = name
@@ -877,9 +1051,12 @@ class OutputManager(OutputManagerBase):
         self.elSetToEnsightPartMappings = {}
         self.nSetToEnsightPartMappings = {}
         self.rigidBodyToEnsightPartMappings = {}
+        # base part -> (sub-element part, interpolation of per-node results to its added nodes)
+        self._quadraturePointParts = {}
 
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
+        self._transientPerQuadraturePointVariableJobs = {}
 
         self.exportName = name
 
@@ -914,6 +1091,7 @@ class OutputManager(OutputManagerBase):
         # store the definitions so parts + variable jobs can be rebuilt when the mesh changes (AMR)
         self._perNodeDefs = perNodeDefs
         self._perElementDefs = perElementDefs
+        self._perQuadraturePointDefs = perQuadraturePointDefs
         self._fieldOutputController = fieldOutputController
         self._configSetName = configSetName
         self._configIsNodeSet = configIsNodeSet
@@ -948,14 +1126,21 @@ class OutputManager(OutputManagerBase):
             name = fieldOutput.name.replace(" ", "_")
             self.createPerElementOutput(fieldOutput, self._configPart, name, transient=self._transientCfg)
 
+        for definition in self._perQuadraturePointDefs:
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
+            name = fieldOutput.name.replace(" ", "_")
+            self.createPerQuadraturePointOutput(fieldOutput, name)
+
     def _rebuildForMeshChange(self):
         """Rebuild geometry parts + variable jobs after an AMR mesh change, so both stay consistent
         with the current (refined) mesh."""
         self.elSetToEnsightPartMappings = {}
         self.nSetToEnsightPartMappings = {}
         self.rigidBodyToEnsightPartMappings = {}
+        self._quadraturePointParts = {}
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
+        self._transientPerQuadraturePointVariableJobs = {}
         self.geometryParts = self._createGeometryParts(1)
         self._resolveConfigPart()
         self._buildVariableJobs()
@@ -1019,6 +1204,71 @@ class OutputManager(OutputManagerBase):
             self._transientPerElementVariableJobs[variableJob["name"]].append(variableJob)
         else:
             raise Exception("Only transient per element outputs are supported!")
+
+    def createPerQuadraturePointOutput(self, fieldOutput: ElementFieldOutput, name: str = None):
+        """Create a per quadrature point output job, written per sub-element on a separate part
+        of the element set (created on first use). Per-node results of the element set are also
+        written on that part, interpolated to its added nodes.
+
+        Parameters
+        ----------
+        fieldOutput
+            The field output to export: a result at all quadrature points of quadrilaterals (0:4)
+            or hexahedra (0:8) with 2 quadrature points per direction.
+        name
+            The name of the output. If not specified, the name of the field output is taken.
+        """
+
+        if not name:
+            name = fieldOutput.name
+        if name in self._transientPerElementVariableJobs or name in self._transientPerQuadraturePointVariableJobs:
+            raise Exception("Ensight variable {:} is defined more than once".format(name))
+
+        if not isinstance(fieldOutput, ElementFieldOutput):
+            raise Exception("Quadrature point output {:} requires an element field output".format(name))
+
+        elSet = fieldOutput.associatedSet
+        nElements = len(elSet)
+        if not nElements:
+            raise Exception("Quadrature point output {:} requires a non-empty element set".format(name))
+
+        basePart = self.elSetToEnsightPartMappings[elSet.name]
+        if basePart not in self._quadraturePointParts:
+            partID = max(part.partNumber for part in self.geometryParts) + 1
+            subPart, interpolation = createQuadraturePointPartFromElementSet(elSet.name, elSet, basePart, partID)
+            self.geometryParts.append(subPart)
+            self._quadraturePointParts[basePart] = (subPart, interpolation)
+        subPart = self._quadraturePointParts[basePart][0]
+
+        # the sub-elements follow the quadrature points 0, 1, ... of each element
+        (subShape,) = subPart.elementTree.keys()
+        nQp = len(subPart.elementTree[subShape]) // nElements
+        if list(fieldOutput.quadraturePoints) != list(range(nQp)):
+            raise Exception(
+                "Quadrature point output {:} requires an element field output with quadraturePoint=0:{:}".format(
+                    name, nQp
+                )
+            )
+
+        result = np.asarray(fieldOutput.getLastResult())
+        if result.shape[0] != nElements or result.size % (nQp * nElements):
+            raise Exception(
+                "Variable {:} result shape {:} does not match {:} elements with {:} quadrature points".format(
+                    name, result.shape, nElements, nQp
+                )
+            )
+
+        varSize = result.size // (nQp * nElements)
+        if self.model.domainSize == 2 and varSize == 2:
+            varSize = 3
+
+        self._transientPerQuadraturePointVariableJobs[name] = {
+            "fieldOutput": fieldOutput,
+            "part": subPart,
+            "subShape": subShape,
+            "nSubElements": nQp * nElements,
+            "varSize": varSize,
+        }
 
     def createPerNodeOutput(
         self,
@@ -1166,6 +1416,9 @@ class OutputManager(OutputManagerBase):
                     "coordinates",
                     result,
                 )
+                if perNodeVariableJob["part"] in self._quadraturePointParts:
+                    subPart, interpolation = self._quadraturePointParts[perNodeVariableJob["part"]]
+                    resultsByParts[subPart.partNumber] = ("coordinates", np.vstack([result, interpolation @ result]))
             enSightVariable = EnsightPerNodeVariable(resultName, resultsByParts, perNodeVariableJob["varSize"])
             self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
             del enSightVariable
@@ -1189,6 +1442,18 @@ class OutputManager(OutputManagerBase):
                 resultsByParts[part.partNumber] = partResultsByElementShape
 
             enSightVariable = EnsightPerElementVariable(resultName, resultsByParts, perElementVariableJob["varSize"])
+            self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
+            del enSightVariable
+
+        # one value per sub-element: element by element, quadrature point by quadrature point
+        for resultName, job in self._transientPerQuadraturePointVariableJobs.items():
+            result = np.reshape(job["fieldOutput"].getLastResult(), (job["nSubElements"], -1))
+
+            if self.model.domainSize == 2 and result.shape[1] == 2:
+                result = self._make2DVector3D(result)
+
+            resultsByParts = {job["part"].partNumber: {job["subShape"]: result}}
+            enSightVariable = EnsightPerElementVariable(resultName, resultsByParts, job["varSize"])
             self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
             del enSightVariable
 
