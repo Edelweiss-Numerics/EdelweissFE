@@ -95,7 +95,9 @@ class StepAction(ArcLengthControllerBase):
 
     The dissipation constraint ``D(u) - D_n = dTau`` uses the dissipation ``D`` summed from the quadrature point
     result ``dissipation`` over ``elSet``, and is linearized consistently with the gradients of the elements'
-    dissipation wrt their dofs (``computeEnergyGradients``, which requires a material providing energy tangents).
+    dissipation wrt their dofs. The elements write these gradients in every evaluation of their kernels to buffers
+    assigned once (``assignEnergyGradientOutput``); this requires Marmot elements and materials that provide the
+    energy gradients, which is checked when the element set is assigned.
 
     With ``displacement``, an increment ends where the first of the dissipation increment ``dTau`` and the maximum
     nodal displacement increment ``dUMax`` is reached. The displacement limit governs the elastic range, where the
@@ -177,6 +179,10 @@ class StepAction(ArcLengthControllerBase):
         self.dULast = None
         # (node label, component) of each entry of dULast, to remap it after the dofs were renumbered (refinement)
         self.dULastKeys = None
+        # elements writing their energy gradients to the buffers, and the buffers' indices in the dof vector
+        self._gradientElements = []
+        self._gradientIdcs = None
+        self._gradientIdcsSource = None
 
         self.updateStepAction(elSet, dissipation, displacement, loadParameter, threshold)
 
@@ -247,17 +253,36 @@ class StepAction(ArcLengthControllerBase):
         self._buildElementViews()
 
     def _buildElementViews(self):
-        """Persistent views on the elements' dissipation and buffers for their energy gradients, for the current
-        members of the element set (rebuilt after a refinement changed the set)."""
+        """Persistent views on the elements' dissipation and the buffers their energy gradients are written to, for
+        the current members of the element set (rebuilt after a refinement changed the set)."""
+
+        elements = list(self.elSet)
+        for el in elements:
+            if not getattr(el, "providesEnergyGradients", False):
+                raise ValueError(
+                    f"{self.identification}: element {el.elNumber} ({el.elType}) provides no energy gradients"
+                )
 
         # persistent views on the trial state, updated by the elements in every iteration
         self._dissipationViews = [
             el.getResultArray("dissipation", qp, getPersistentView=True)
-            for el in self.elSet
+            for el in elements
             for qp in range(el.getNumberOfQuadraturePoints())
         ]
-        # buffers for the element energy gradients
-        self._gradientBuffers = {el: (np.empty(el.nDof), np.empty(el.nDof)) for el in self.elSet}
+
+        # elements that left the set stop writing to the old buffers
+        for el in set(self._gradientElements).difference(elements):
+            el.assignEnergyGradientOutput(None, None)
+
+        # one contiguous buffer per gradient; each element writes to its slice in every kernel evaluation
+        offsets = np.cumsum([0] + [el.nDof for el in elements])
+        self._dElasticEnergy_dQ = np.zeros(offsets[-1])
+        self._dDissipation_dQ = np.zeros(offsets[-1])
+        for el, begin, end in zip(elements, offsets[:-1], offsets[1:]):
+            el.assignEnergyGradientOutput(self._dElasticEnergy_dQ[begin:end], self._dDissipation_dQ[begin:end])
+        self._gradientElements = elements
+        self._gradientIdcs = None
+
         self._recordSetVersion(self.elSet)
 
     def _refreshIfElementsChanged(self):
@@ -275,18 +300,19 @@ class StepAction(ArcLengthControllerBase):
     def computeDissipationGradient(self, dofManager: DofManager) -> np.ndarray:
         """The gradient of the dissipated energy of the current (trial) state wrt the solution vector.
 
-        Interim solution: the elements' gradients are assembled here in a second (serial) pass over the elements,
-        after the solver's element loop. Once the energy gradients are an output of the element evaluation in Marmot
-        (interface change, see MarmotElement::computeEnergyGradients), they should be assembled in the solver's
-        element loop together with the residual.
+        The elements wrote their gradients in the last evaluation of their kernels; only the scatter remains.
         """
 
         self._refreshIfElementsChanged()
-        gradient = np.zeros(dofManager.nDof)
-        for el, (dElasticEnergy_dQ, dDissipation_dQ) in self._gradientBuffers.items():
-            el.computeEnergyGradients(dElasticEnergy_dQ, dDissipation_dQ)
-            gradient[dofManager.idcsOfElementsInDofVector[el]] += dDissipation_dQ
-        return gradient
+        idcsOfElements = dofManager.idcsOfElementsInDofVector
+        if self._gradientIdcs is None or self._gradientIdcsSource is not idcsOfElements:
+            # the dof manager renews the map when it renumbers the dofs; its entries may be index arrays or slices
+            allIdcs = np.arange(dofManager.nDof)
+            self._gradientIdcs = np.concatenate(
+                [allIdcs[idcsOfElements[el]] for el in self._gradientElements] + [np.empty(0, dtype=int)]
+            )
+            self._gradientIdcsSource = idcsOfElements
+        return np.bincount(self._gradientIdcs, weights=self._dDissipation_dQ, minlength=dofManager.nDof)
 
     @staticmethod
     def _displacementIdcs(dofManager: DofManager) -> np.ndarray:
