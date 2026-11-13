@@ -28,6 +28,9 @@
 """
 (Parallel) Arc length solver, based on the approach of Jirásek/Bažant 2001: the Newton iterations of the NISTParallel
 solver, with the load parameter as an unknown of every increment besides the solution.
+
+Besides the loads, the load parameter can drive material properties (strength reduction): under arc length control,
+the ``changematerialproperty`` actions of the step are evaluated at the load parameter instead of the step time.
 """
 
 from dataclasses import dataclass
@@ -102,6 +105,15 @@ class ArcLengthIncrement:
     #: :math:`\\boldsymbol{R}_0`, of the dead load and of the reference load scaled by the load parameter of the
     #: iterate, and the reference load alone, :math:`\\boldsymbol{R}_f`.
     rightHandSides: np.ndarray
+    #: The model tree, in which the driven material properties are changed.
+    model: FEModel | None = None
+    #: The step actions that change material properties in this step: they follow the load parameter.
+    drivenProperties: tuple = ()
+    #: The derivative of the internal forces of the evaluated state with respect to the load parameter, which the
+    #: driven material properties cause; it enters :math:`\\boldsymbol{R}_f` besides the reference load.
+    sensitivityOfInternalForces: DofVector | None = None
+    #: The element fluxes of the perturbed state; unused.
+    fluxesOfPerturbedState: DofVector | None = None
     #: The correction of the solution :math:`\\boldsymbol{R}_f` causes, :math:`\\Delta\\Delta \\boldsymbol{U}_f`, of the
     #: last linear solve.
     referenceCorrection: np.ndarray | None = None
@@ -139,6 +151,15 @@ class NISTPArcLength(NISTParallel):
     leaves by an exception before). A cut back increment therefore starts again from the load parameter of the last
     accepted one.
 
+    Material properties can follow the load parameter as well, e.g. for a strength reduction: under arc length control,
+    the ``changematerialproperty`` actions of the step are evaluated at the load parameter instead of the step time, in
+    every evaluation of the elements (:meth:`assembleInternalForces`). The internal forces then depend on the load
+    parameter, and their derivative with respect to it enters :math:`R_f` besides the reference load,
+    :math:`R_f = f_\\mathrm{ref} - \\partial f_\\mathrm{int} / \\partial \\lambda`. It is a forward difference of the
+    internal forces for a load parameter perturbed by :attr:`loadParameterPerturbation`, which costs a second
+    evaluation of the elements. A material has to check its yield condition also for a strain increment of zero: the
+    yield surface may shrink onto a stress state at rest.
+
     The re-equilibration after a model change (option ``equilibrateAfterModelChange``) is an arc length increment of
     size zero, solved by :meth:`solveIncrement` like any other: the controller's equation asks for a change of zero, so
     the controlled quantity stays where the last accepted increment left it, and the load parameter is solved for, and
@@ -171,6 +192,9 @@ class NISTPArcLength(NISTParallel):
         "dLambdaOfLastIncrement": float,
         "dLambdaOfIncrementBeforeLast": float,
     }
+
+    #: Perturbation of the load parameter for the derivative of the internal forces with respect to it.
+    loadParameterPerturbation = 1e-6
 
     def __init__(self, jobInfo, journal, **kwargs):
         #: The load parameter of the current step, reached by its last converged increment.
@@ -409,6 +433,9 @@ class NISTPArcLength(NISTParallel):
         if stepProgressAtIncrementStart > 0.0 and self.checkConditionalStop():
             raise ConditionalStop
 
+        # material properties of this step follow the load parameter instead of the step time
+        drivenProperties = tuple(action for action in stepActions["changematerialproperty"].values() if action.active)
+
         self.arcLengthIncrement = ArcLengthIncrement(
             loadParameterAtStart=self.Lambda,
             timeStep=timeStep,
@@ -416,7 +443,12 @@ class NISTPArcLength(NISTParallel):
             deadLoad=self.theDofManager.constructDofVector(),
             referenceLoad=self.theDofManager.constructDofVector(),
             rightHandSides=np.tile(self.theDofManager.constructDofVector(), (2, 1)).T,
+            model=model,
+            drivenProperties=drivenProperties,
         )
+        if drivenProperties:
+            self.arcLengthIncrement.sensitivityOfInternalForces = self.theDofManager.constructDofVector()
+            self.arcLengthIncrement.fluxesOfPerturbedState = self.theDofManager.constructDofVector()
         try:
             U_np, dU, P, iterationCounter, incrementResidualHistory = super().solveIncrement(
                 U_n,
@@ -442,7 +474,8 @@ class NISTPArcLength(NISTParallel):
 
         for stepActionType in stepActions.values():
             for action in stepActionType.values():
-                action.applyAtIncrementStart(model, timeStep)
+                if action not in drivenProperties:
+                    action.applyAtIncrementStart(model, timeStep)
 
         self.journal.message(
             "Current load parameter: lambda={:6.2e}, last increment: dLambda={:6.2e}".format(self.Lambda, dLambda),
@@ -451,6 +484,82 @@ class NISTPArcLength(NISTParallel):
         )
 
         return U_np, dU, P, iterationCounter, incrementResidualHistory
+
+    def applyStepActionsAtIncrementStart(self, model: FEModel, timeStep: TimeStep, stepActions: dict):
+        """Apply the step actions at the start of an increment, see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtIncrementStart`.
+        Under arc length control, the step actions that change material properties are left out: they follow the load
+        parameter, not the step time (:meth:`assembleInternalForces`).
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        timeStep
+            The time step.
+        stepActions
+            The active step actions.
+        """
+
+        if self.arcLengthIncrement is None:
+            return super().applyStepActionsAtIncrementStart(model, timeStep, stepActions)
+
+        for stepActionType in stepActions.values():
+            for action in stepActionType.values():
+                if action not in self.arcLengthIncrement.drivenProperties:
+                    action.applyAtIncrementStart(model, timeStep)
+
+    def assembleInternalForces(
+        self, U_np: DofVector, dU: DofVector, P: DofVector, K: SystemMatrixAssembly, F: DofVector, timeStep: TimeStep
+    ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
+        """Assemble the internal forces of the model at a trial state, and their tangent, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`. With material properties that
+        follow the load parameter, they are set to their values at the load parameter of the evaluated state before,
+        and the derivative of the internal forces with respect to the load parameter is computed for
+        :meth:`solveForCorrection`, as a forward difference.
+
+        Parameters
+        ----------
+        U_np
+            The trial solution.
+        dU
+            The trial solution increment.
+        P
+            The internal forces, augmented.
+        K
+            The tangent being assembled.
+        F
+            The accumulated absolute element fluxes, the reference of the convergence test, augmented.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,SystemMatrixAssembly,DofVector]
+            The internal forces, the tangent and the accumulated element fluxes.
+        """
+
+        increment = self.arcLengthIncrement
+        if increment is None or not increment.drivenProperties:
+            return super().assembleInternalForces(U_np, dU, P, K, F, timeStep)
+
+        h = self.loadParameterPerturbation
+        sensitivity = increment.sensitivityOfInternalForces
+        sensitivity[:] = increment.fluxesOfPerturbedState[:] = 0.0
+
+        # the perturbed state first, so that the elements are left in the state of the evaluated load parameter
+        for action in increment.drivenProperties:
+            action.applyAtTime(increment.model, increment.loadParameter + h)
+        super().assembleInternalForces(U_np, dU, sensitivity, K.discarded(), increment.fluxesOfPerturbedState, timeStep)
+
+        for action in increment.drivenProperties:
+            action.applyAtTime(increment.model, increment.loadParameter)
+        P, K, F = super().assembleInternalForces(U_np, dU, P, K, F, timeStep)
+
+        sensitivity -= P
+        sensitivity /= h
+
+        return P, K, F
 
     def extrapolateLastIncrement(
         self,
@@ -569,6 +678,9 @@ class NISTPArcLength(NISTParallel):
 
         R_0[:] = R
         R_f[:] = -increment.referenceLoad
+        if increment.drivenProperties:
+            # the derivative of the out-of-balance force with respect to the load parameter, via the internal forces
+            R_f -= increment.sensitivityOfInternalForces
         for dirichlet in dirichlets:
             R_0[dirichlet.constrainedDofIndices] = 0.0
         R_f = self.applyDirichletToResidual(increment.referenceTimeStep, R_f, dirichlets)
@@ -611,7 +723,9 @@ class NISTPArcLength(NISTParallel):
         ddU_f = increment.referenceCorrection
 
         ddU_0 = stepLength * ddU_0
-        ddLambda = self.arcLengthController.computeDDLambda(dU, ddU_0, ddU_f, increment.timeStep, self.theDofManager)
+        ddLambda = self.arcLengthController.computeDDLambda(
+            dU, ddU_0, ddU_f, increment.timeStep, self.theDofManager, increment.loadParameterIncrement
+        )
 
         return ddU_0 + ddLambda * ddU_f, ddLambda
 
