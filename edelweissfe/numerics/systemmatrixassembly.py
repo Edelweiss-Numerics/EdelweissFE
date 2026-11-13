@@ -232,6 +232,63 @@ class ScaledSystemMatrixBlocks(_ScratchSystemMatrixBlocks):
         self._target.flush()
 
 
+class _DiscardedBlocksOfWorker(_ScratchSystemMatrixBlocks):
+    """The blocks of one worker of :class:`DiscardedSystemMatrixBlocks`: handed out as a scratch array, committed
+    nowhere."""
+
+    def __init__(self, target: "SystemMatrixAssembly"):
+        super().__init__()
+        self._target = target
+
+    def numberOfEntriesInBlock(self, entity) -> int:
+        return self._target.numberOfEntriesInBlock(entity)
+
+    def _commit(self, entity, values: np.ndarray):
+        pass
+
+
+class DiscardedSystemMatrixBlocks(SystemMatrixBlocks):
+    """Blocks that enter no matrix: they stand in for a :class:`SystemMatrixAssembly` where the entities are evaluated
+    for their residual contributions only, and the assembly being built must stay as it is. Every worker writes into a
+    scratch array of its own, as with :meth:`SystemMatrixAssembly.blocksOfWorker`.
+
+    The arc length method evaluates the elements at a perturbed load parameter this way, see
+    :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength`.
+
+    Parameters
+    ----------
+    target
+        The assembly the blocks stand in for, which knows the sizes of the blocks.
+    """
+
+    def __init__(self, target: "SystemMatrixAssembly"):
+        #: How many threads may write blocks at the same time.
+        self.numberOfWorkers = target.numberOfWorkers
+        self._blocksOfWorkers = [_DiscardedBlocksOfWorker(target) for _ in range(target.numberOfWorkers)]
+
+    def blocksOfWorker(self, worker: int) -> SystemMatrixBlocks:
+        """The blocks worker thread ``worker`` writes into, see :meth:`SystemMatrixAssembly.blocksOfWorker`.
+
+        Parameters
+        ----------
+        worker
+            The number of the worker.
+
+        Returns
+        -------
+        SystemMatrixBlocks
+            The blocks of this worker.
+        """
+
+        return self._blocksOfWorkers[worker]
+
+    def __getitem__(self, entity) -> np.ndarray:
+        return self._blocksOfWorkers[0][entity]
+
+    def flush(self):
+        self._blocksOfWorkers[0].flush()
+
+
 class SystemMatrixAssembly(SystemMatrixBlocks):
     """The system matrix of an implicit solver while its entities assemble it, and the CSR matrix it becomes.
 
@@ -531,6 +588,17 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
         """
 
         return ScaledSystemMatrixBlocks(self, factor)
+
+    def discarded(self) -> DiscardedSystemMatrixBlocks:
+        """Blocks that do not enter this matrix, see :class:`DiscardedSystemMatrixBlocks`.
+
+        Returns
+        -------
+        DiscardedSystemMatrixBlocks
+            The discarded blocks.
+        """
+
+        return DiscardedSystemMatrixBlocks(self)
 
     def __getitem__(self, entity) -> np.ndarray:
         return self.blocksOfWorker(0)[entity]

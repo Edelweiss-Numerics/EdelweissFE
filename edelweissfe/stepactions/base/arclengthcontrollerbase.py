@@ -57,7 +57,13 @@ class ArcLengthControllerBase(StepActionBase):
 
     @abstractmethod
     def computeDDLambda(
-        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, dofManager: DofManager
+        self,
+        dU: DofVector,
+        ddU_0: DofVector,
+        ddU_f: DofVector,
+        timeStep: TimeStep,
+        dofManager: DofManager,
+        dLambda: float,
     ) -> float:
         """Compute the correction of the load parameter in the current Newton iteration.
 
@@ -75,6 +81,9 @@ class ArcLengthControllerBase(StepActionBase):
             ``timeStep.stepProgressIncrement`` its size, so it starts at their difference.
         dofManager
             The dof manager of the current equation system.
+        dLambda
+            The current increment of the load parameter, for a controller whose equation involves the load parameter
+            itself.
 
         Returns
         -------

@@ -58,6 +58,14 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
     is linear in the correction of the load parameter :math:`\\Delta\\Delta\\lambda`, which :meth:`computeDDLambda`
     solves it for.
 
+    With a weight of the load parameter :math:`c_\\lambda` (``cLambda``), the controlled quantity is
+    :math:`q + c_\\lambda \\, \\lambda`: the increment of the load parameter of the iterate,
+    :math:`\\Delta\\lambda + \\Delta\\Delta\\lambda`, enters the left-hand side of the equation times
+    :math:`c_\\lambda`. This keeps the equation regular while the controlled degrees of freedom do not respond to the
+    load parameter -- in a strength reduction, as long as no point yields -- where the load parameter then advances by
+    :math:`\\Delta L / c_\\lambda` over the step. The load parameter of a step starts from zero, so the target of a
+    declaration is the one of :math:`q` as without the weight.
+
     The target ``L`` of a declaration -- the construction of the controller, or its re-declaration in a later step,
     which updates it -- is, with ``absolute``, the value of :math:`q` at the end of the step: the change of the step is
     :math:`\\Delta L = L - q`, with :math:`q` of the model when the controller is declared, i.e. of the state the step
@@ -76,6 +84,8 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
     absolute
         Whether the target ``L`` of a declaration is the value of the controlled quantity at the end of the step, or its
         change over the step. Fixed at construction: a re-declaration cannot change it.
+    cLambda
+        The weight of the load parameter in the controlled quantity. Fixed at construction.
     """
 
     #: The change of the controlled quantity over the step, :math:`\\Delta L`, which a declaration derives from its
@@ -86,8 +96,10 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
     #: :meth:`controlledDofIndices` and :meth:`controlledValuesOfModel`.
     cVector: np.ndarray
 
-    def __init__(self, name: str, absolute: bool):
+    def __init__(self, name: str, absolute: bool, cLambda: float = 0.0):
         self.name = name
+        #: The weight of the load parameter in the controlled quantity.
+        self.cLambda = cLambda
         #: Whether the target ``L`` of a declaration is the value of the controlled quantity at the end of the step.
         self.absolute = absolute
         #: The change of the controlled quantity over the step, :math:`\\Delta L`; see :meth:`declareTarget`.
@@ -145,7 +157,13 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
         self.changeOverStep = L - self.controlledQuantity() if self.absolute else L
 
     def computeDDLambda(
-        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, dofManager: DofManager
+        self,
+        dU: DofVector,
+        ddU_0: DofVector,
+        ddU_f: DofVector,
+        timeStep: TimeStep,
+        dofManager: DofManager,
+        dLambda: float,
     ) -> float:
         """The correction of the load parameter that makes the corrected increment change the controlled quantity by the
         share of the increment, :math:`\\Delta p \\, \\Delta L`; see
@@ -163,6 +181,8 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
             The increment being solved, whose size :math:`\\Delta p` is ``timeStep.stepProgressIncrement``.
         dofManager
             The dof manager of the current equation system.
+        dLambda
+            The current increment of the load parameter, which enters with the weight ``cLambda``.
 
         Returns
         -------
@@ -174,4 +194,6 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
 
         dL = timeStep.stepProgressIncrement * self.changeOverStep
 
-        return (dL - self.cVector.dot(dU[idcs] + ddU_0[idcs])) / self.cVector.dot(ddU_f[idcs])
+        return (dL - self.cVector.dot(dU[idcs] + ddU_0[idcs]) - self.cLambda * dLambda) / (
+            self.cVector.dot(ddU_f[idcs]) + self.cLambda
+        )

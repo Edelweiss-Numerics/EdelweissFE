@@ -729,6 +729,14 @@ The elements keep their state: a changed property affects how the state evolves 
 the state accumulated so far (stress, plastic strain, damage, ...) is neither reset nor
 re-initialized. Properties an element was assigned individually (``materialParameterFromField``) are
 kept, apart from the changed one.
+
+With ``relative=True`` the function of time is a factor instead of the value itself: every element's
+property is its value at the start of the step times ``f(t)``, so a property varying from element to
+element (``materialParameterFromField``) keeps its spatial variation while it is driven.
+
+Under an active arc length controller of the ``NISTPArcLength`` solver, the function is evaluated
+at the increase of the load parameter since the start of the step instead of the step time, see
+:mod:`edelweissfe.solvers.nonlinearimplicitstaticparallelarclength`.
 < changematerialproperty > Stepaction to change material properties.
   required arguments
     [name] Name of the step action. (<class 'str'>)
@@ -736,6 +744,7 @@ kept, apart from the changed one.
     [index] The index of the property in the material properties vector (<class 'int'>)
   optional arguments
     [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+    [relative] f(t) is a factor on the value of the property at the start of the step, per element (<class 'bool'>, default = False)
 < changematerialproperty > Stepaction to change material properties.
   required arguments
     [name] Name of the step action. (<class 'str'>)
@@ -743,6 +752,7 @@ kept, apart from the changed one.
     [index] The index of the property in the material properties vector (<class 'int'>)
   optional arguments
     [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+    [relative] f(t) is a factor on the value of the property at the start of the step, per element (<class 'bool'>, default = False)
 ===== module documentation: edelweissfe.stepactions.dirichlet =====
 < dirichlet > Standard Dirichlet boundary condition.
   required arguments
@@ -886,6 +896,7 @@ Initialize materials to an geostatic stress state
   optional arguments
     [exportCVector] File to export the computed c vector (<class 'str'>, default = )
     [absolute] Use absolute formulation (<class 'bool'>, default = True)
+    [cLambda] Weight of the load parameter in the controlled quantity (<class 'float'>, default = 0.0)
 < indirectcontrol > Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.
   required arguments
     [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
@@ -897,6 +908,7 @@ Initialize materials to an geostatic stress state
   optional arguments
     [exportCVector] File to export the computed c vector (<class 'str'>, default = )
     [absolute] Use absolute formulation (<class 'bool'>, default = True)
+    [cLambda] Weight of the load parameter in the controlled quantity (<class 'float'>, default = 0.0)
 ===== module documentation: edelweissfe.stepactions.initializematerial =====
 Let materials initialize themselves (e.g., state vars depending on material parameters...) !
 < initializematerial > Standard distributed load, applied on a surface set.

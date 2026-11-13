@@ -193,11 +193,7 @@ class VonMisesMaterial(BaseHypoElasticMaterial):
             Current time step size."""
 
         Ei = self._Ei
-        # handle zero strain increment
-        if np.linalg.norm(dStrain) < 10**-14:
-            dStress_dStrain[:] = Ei
-            return
-        # elastic predictor
+        # elastic predictor; a zero strain increment yields as well, if the yield stress was reduced
         trialStress = stress + dStrain @ Ei
         # deviatoric stress
         devStress = deviatoric(trialStress)

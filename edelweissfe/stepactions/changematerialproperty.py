@@ -34,10 +34,20 @@ The elements keep their state: a changed property affects how the state evolves 
 the state accumulated so far (stress, plastic strain, damage, ...) is neither reset nor
 re-initialized. Properties an element was assigned individually (``materialParameterFromField``) are
 kept, apart from the changed one.
+
+With ``relative=True`` the function of time is a factor instead of the value itself: every element's
+property is its value at the start of the step times ``f(t)``, so a property varying from element to
+element (``materialParameterFromField``) keeps its spatial variation while it is driven.
+
+Under an active arc length controller of the ``NISTPArcLength`` solver, the function is evaluated
+at the increase of the load parameter since the start of the step instead of the step time, see
+:mod:`edelweissfe.solvers.nonlinearimplicitstaticparallelarclength`.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
+
+import numpy as np
 
 from edelweissfe.stepactions.base.amplitude import amplitudeFromExpression
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
@@ -82,6 +92,11 @@ class ChangeMaterialPropertySchema:
         default=None,
         optionName="f(t)",
     )
+    relative: bool | None = schemaField(
+        description="f(t) is a factor on the value of the property at the start of the step, per element",
+        dtype=bool,
+        default=False,
+    )
 
 
 class StepAction(StepActionBase):
@@ -116,18 +131,25 @@ class StepAction(StepActionBase):
         this material are looked up in the model handed to :meth:`applyAtIncrementStart`.
     journal
         The journal object for logging.
+    relative
+        If True, ``f_t`` yields a factor on the value the property has at the start of the step, for
+        every element individually, instead of the value itself. Fixed at construction time.
     """
 
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = ChangeMaterialPropertySchema
 
-    #: Whether this action still acts: it switches itself off at the end of its step.
-    checkpointedState = {"active": bool}
+    #: Whether this action still acts (it switches itself off at the end of its step), and the values
+    #: a relative change refers to.
+    checkpointedState = {"active": bool, "_referenceValues": np.ndarray, "_referenceRecordValue": float}
 
-    def __init__(self, name, material, index: int, f_t: Callable[[float], float], model, journal):
+    def __init__(
+        self, name, material, index: int, f_t: Callable[[float], float], model, journal, relative: bool = False
+    ):
         self.name = name
         self.theMaterial = material
         self.theIndex = int(index)
+        self.relative = relative
 
         self._journal = journal
 
@@ -180,13 +202,14 @@ class StepAction(StepActionBase):
             f_t,
             model,
             journal,
+            relative=configuration.relative,
         )
 
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
         """Update from a parsed ``>>changeMaterialProperty`` definition re-declared in a later step.
 
-        The re-declared ``material`` and ``index`` are ignored: only the property function can be
-        replaced, and the action is armed again.
+        The re-declared ``material``, ``index`` and ``relative`` are ignored: only the property
+        function can be replaced, and the action is armed again.
 
         Parameters
         ----------
@@ -223,6 +246,10 @@ class StepAction(StepActionBase):
 
         self.active = True
 
+        # a relative change refers to the values at the start of the step, collected on first use
+        self._referenceValues = np.empty(0)
+        self._referenceRecordValue = 0.0
+
         if f_t is not None:
             self.f_t = f_t
 
@@ -251,27 +278,89 @@ class StepAction(StepActionBase):
         if not self.active:
             return
 
-        theCurrentProperty = self.f_t(timeStep.stepTime)
         self._journal.message(
-            "Changing property[{:}] of material {:} to {:}".format(
-                self.theIndex, self._materialLabel(), theCurrentProperty
+            "Changing property[{:}] of material {:} {:} {:}".format(
+                self.theIndex,
+                self._materialLabel(),
+                "by the factor" if self.relative else "to",
+                self.f_t(timeStep.stepTime),
             ),
             self.name,
         )
 
+        self.applyAtTime(model, timeStep.stepTime)
+
+    def applyAtTime(self, model, time: float):
+        """Change the actual properties to their values at a given time.
+
+        Also the entry point for a solver driving the property by another quantity than the step
+        time, e.g. the load parameter of an arc length method.
+
+        Parameters
+        ----------
+        model
+            The current state of the model.
+        time
+            The argument the property function is evaluated at.
+        """
+
+        if not self.active:
+            return
+
+        elements = [
+            el
+            for section in model.sections.values()
+            if self._sectionUsesThisMaterial(section)
+            for elSet in section.elSets
+            for el in elSet
+        ]
+
+        f = self.f_t(time)
+
+        if self.relative:
+            if self._referenceValues.size == 0:
+                self._referenceValues = np.array([self._propertyOfElement(el) for el in elements])
+                self._referenceRecordValue = float(self._propertyVector()[self.theIndex])
+            elif self._referenceValues.size != len(elements):
+                # the reference values of new elements are unknown, their current ones are already changed
+                raise NotImplementedError(
+                    f"changeMaterialProperty '{self.name}': a relative change does not support a change of "
+                    "the elements using the material during the step (e.g., mesh refinement)."
+                )
+            values = f * self._referenceValues
+            recordValue = f * self._referenceRecordValue
+        else:
+            values = np.full(len(elements), f)
+            recordValue = f
+
         # The model's material record carries the current value as well, e.g., for elements a Marmot
         # material is assigned to later on, by mesh refinement.
-        self._propertyVector()[self.theIndex] = theCurrentProperty
+        self._propertyVector()[self.theIndex] = recordValue
 
-        for section in model.sections.values():
-            if not self._sectionUsesThisMaterial(section):
-                continue
+        for el, value in zip(elements, values):
+            # Not a re-assignment of the section: that would hand the element a new material
+            # along with new, zeroed state variables, wiping its state at every increment.
+            el.updateMaterialProperty(self.theIndex, value)
 
-            for elSet in section.elSets:
-                for el in elSet:
-                    # Not a re-assignment of the section: that would hand the element a new material
-                    # along with new, zeroed state variables, wiping its state at every increment.
-                    el.updateMaterialProperty(self.theIndex, theCurrentProperty)
+    def _propertyOfElement(self, el) -> float:
+        """The current value of the driven property of an element.
+
+        Parameters
+        ----------
+        el
+            The element.
+
+        Returns
+        -------
+        float
+            The entry of the element's own property vector (Marmot elements), or of its material
+            instance (edelweiss elements).
+        """
+
+        if hasattr(el, "_materialProperties"):
+            return float(el._materialProperties[self.theIndex])
+
+        return float(el.material.materialProperties[self.theIndex])
 
     def _materialLabel(self) -> str:
         """The name of the driven material, for logging.

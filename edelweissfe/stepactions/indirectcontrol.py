@@ -92,6 +92,9 @@ class IndirectControlSchema:
     )
     exportCVector: str | None = schemaField(description="File to export the computed c vector", dtype=str, default="")
     absolute: bool | None = schemaField(description="Use absolute formulation", dtype=bool, default=True)
+    cLambda: float | None = schemaField(
+        description="Weight of the load parameter in the controlled quantity", dtype=float, default=0.0
+    )
 
 
 class StepAction(IndirectDisplacementControlBase):
@@ -134,6 +137,9 @@ class StepAction(IndirectDisplacementControlBase):
         Whether ``L`` is the value of the controlled quantity at the end of the step, or its change
         over the step. Fixed at construction time: a later step re-declaring this action cannot
         change the formulation.
+    cLambda
+        The weight of the load parameter in the controlled quantity, see the base class. Fixed at
+        construction time.
     """
 
     identification = "IndirectControl"
@@ -152,8 +158,9 @@ class StepAction(IndirectDisplacementControlBase):
         model: FEModel,
         journal: Journal,
         absolute: bool = True,
+        cLambda: float = 0.0,
     ):
-        super().__init__(name, absolute)
+        super().__init__(name, absolute, cLambda)
         self.journal = journal
         self.model = model
 
@@ -183,6 +190,7 @@ class StepAction(IndirectDisplacementControlBase):
             model,
             journal,
             absolute=configuration.absolute,
+            cLambda=configuration.cLambda,
         )
 
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):

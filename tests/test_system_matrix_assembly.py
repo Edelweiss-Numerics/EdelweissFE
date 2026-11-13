@@ -200,6 +200,30 @@ def test_scaled_blocks_enter_scaled(assemblyType):
     np.testing.assert_allclose(_assemble(assemblyType, 2, factor=0.3), _reference(factor=0.3), rtol=1e-14, atol=1e-14)
 
 
+@pytest.mark.parametrize("assemblyType", [VIJSystemMatrixAssembly, DirectCSRSystemMatrixAssembly])
+@pytest.mark.parametrize("numberOfWorkers", [1, 3])
+def test_discarded_blocks_enter_no_matrix(assemblyType, numberOfWorkers):
+    entities, dofManager, blocks = _model()
+    K = assemblyType(dofManager, numberOfWorkers)
+    K.beginAssembly()
+    _writeBlocks(K, entities, blocks, numberOfWorkers)
+
+    discarded = K.discarded()
+    assert discarded.numberOfWorkers == numberOfWorkers
+
+    # every entity writes its block once more, on the workers as the element loop does ...
+    _writeBlocks(discarded, entities, blocks, numberOfWorkers)
+    # ... and in the calling thread: each block is a zeroed scratch array of the shape of the entity's block
+    for entity in entities:
+        block = discarded[entity]
+        assert block.shape == entity.shapeBlock(np.zeros(K.numberOfEntriesInBlock(entity))).shape
+        assert not block.any()
+        block += 1e10
+    discarded.flush()
+
+    np.testing.assert_allclose(K.assembledMatrix().toarray(), _reference(), rtol=1e-14, atol=1e-14)
+
+
 def _modelWithOneSlaveRigidBodyContact():
     """Elements on twelve degrees of freedom, and one rigid body contact on nine of them whose block has exactly
     nDof**2 entries."""
