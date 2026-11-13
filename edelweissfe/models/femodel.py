@@ -39,6 +39,7 @@ import numpy as np
 from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.change import Change
 from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.modelchange import TopologyRecord
 from edelweissfe.models.topologypipeline import TopologyPipeline
@@ -423,36 +424,76 @@ class FEModel:
 
         return [constraint for constraint in self.constraints.values() if constraint.active]
 
-    def updateConnectivity(self) -> bool:
-        """Bring the coupling of the degrees of freedom up to date with the converged state, before an increment: which
-        nodes the entities of the discrete system couple. Called by the solvers' topology update at the start of every
-        increment and of every retry after a cutback, before the increment is proposed (see
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`). If it
-        reports a change, an implicit solver rebuilds its discrete system (:meth:`buildDiscreteSystem`).
-
-        In a finite element model, the elements keep their nodes, and only a constraint may change the nodes it
-        couples: a contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves
-        its material points through a background grid, and its particles carry their kernel functions along: it
-        reassigns them here first, then lets its constraints follow.
-
-        Only the constraints that are switched on are located anew
-        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,
-        so that they can find themselves within reach again. A constraint switched off from outside rests until it is
-        switched on again, and is located anew at the start of the next increment then.
-
-        A change of the coupling is not a change of the mesh: it neither moves nodes nor creates them, so a solver
-        rebuilds its discrete system, but does not re-equilibrate (``equilibrateAfterModelChange``).
+    def activeScalarVariables(self) -> list:
+        """The scalar variables (e.g. Lagrange multipliers) of the active constraints, constraint by constraint: the
+        scalar variables that are numbered in the discrete system (see :meth:`activeConstraints`).
 
         Returns
         -------
-        bool
-            True if a coupling changed, so that the discrete system has to be rebuilt.
+        list[ScalarVariable]
+            The scalar variables.
         """
 
+        return [
+            scalarVariable for constraint in self.activeConstraints() for scalarVariable in constraint.scalarVariables
+        ]
+
+    def updateConnectivity(self) -> Change:
+        """Bring the connectivity up to date with the converged state, before an increment, and say what that changed
+        in the discrete system: which nodes the entities couple, and which entities take part. Called by the solvers'
+        topology update at the start of every increment and of every retry after a cutback, before the increment is
+        proposed (see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), and by
+        an explicit solver at its ``contact-update-frequency``.
+
+        In a finite element model, the elements keep their nodes, and only a constraint may change what it couples: a
+        contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves its
+        material points through a background grid, and its particles carry their kernel functions along: it reassigns
+        them here first, then lets its constraints follow.
+
+        Only the constraints that are switched on are updated
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,
+        so that they can find themselves within reach again. A constraint switched off from outside rests until it is
+        switched on again, and is updated at the start of the next increment then. The comparison of which constraints
+        take part starts with this call, so it holds only if ``active`` is switched from outside between steps, never
+        between two calls within a step (a ``modelupdate`` takes effect before the step begins, which starts from a new
+        discrete system). A constraint reports only that its
+        nodes changed (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity`), and sets
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach`; the model compares which
+        constraints take part, and which scalar variables they bring, before and after, and classifies the change:
+
+        * a constraint took part or does not any more, or couples other nodes, and the scalar variables of the active
+          constraints are the same: :attr:`~edelweissfe.models.change.Change.LOCATIONS`;
+        * the scalar variables of the active constraints changed: :attr:`~edelweissfe.models.change.Change.NUMBERING`;
+        * neither: :attr:`~edelweissfe.models.change.Change.NONE`.
+
+        A constraint that is switched on but out of reach is updated too, and a change of its nodes is reported
+        whether or not it takes part: the answer is then :attr:`~edelweissfe.models.change.Change.LOCATIONS`, so a
+        solver rebuilds for a constraint that has no rows.
+
+        A change of the connectivity is not a change of the mesh: it neither moves nodes nor creates them
+        (:attr:`~edelweissfe.models.change.Change.MESH` is the topology update's to report), so a solver does not
+        re-equilibrate after it (``equilibrateAfterModelChange``).
+
+        Returns
+        -------
+        Change
+            What changed.
+        """
+
+        scalarVariablesBefore = self.activeScalarVariables()
+        activeBefore = self.activeConstraints()
+
         # A list, not a generator in any(): every constraint must update, not just those up to the first change.
-        return any(
+        nodesChanged = any(
             [constraint.updateConnectivity(self) for constraint in self.constraints.values() if constraint.switchedOn]
         )
+
+        if self.activeScalarVariables() != scalarVariablesBefore:
+            return Change.NUMBERING
+        if nodesChanged or self.activeConstraints() != activeBefore:
+            return Change.LOCATIONS
+        return Change.NONE
 
     def setNewmarkParametersOfEntities(self, beta: float, gamma: float):
         """Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by
@@ -477,7 +518,7 @@ class FEModel:
         """Build the discrete system of the model as it is now: number its degrees of freedom, and say which elements
         and which constraints contribute to it, see :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. Called
         by a solver whenever it (re)builds its discrete system: at the start of a step, and after the topology update
-        reported a change of the mesh or of the coupling (:meth:`updateConnectivity`).
+        reported a change that needs one (:class:`~edelweissfe.models.change.Change`).
 
         The discrete system of a finite element model holds the node fields, the elements, and the active constraints
         with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see
@@ -494,7 +535,7 @@ class FEModel:
 
         dofManager = DofManager(
             self.nodeFields.values(),
-            [scalarVariable for constraint in constraints for scalarVariable in constraint.scalarVariables],
+            self.activeScalarVariables(),
             self.elements.values(),
             constraints,
             self.nodeSets.values(),

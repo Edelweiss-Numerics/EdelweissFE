@@ -79,12 +79,31 @@ What the solver asks the model
 A solver solves; what the discrete system is made of, the model says. ``NIST``, ``NISTParallel`` and
 ``NISTPArcLength`` ask the model three questions, and know nothing of their own about what a model consists of:
 
-1. **Has the coupling of the degrees of freedom changed?** At the start of every increment, and of every retry after a
-   cutback, the topology update calls :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`, before the
-   increment is proposed. If a coupling changed, the solver rebuilds its discrete system before it solves the
-   increment. A change of the coupling is not a change of the mesh: no node moves or appears, so the solver does not
-   re-equilibrate after it (``equilibrateAfterModelChange``), and it keeps its prediction if the rebuilt system numbers
-   the degrees of freedom as before (``extrapolateAcrossConnectivityChange``).
+1. **What has changed?** At the start of every increment, and of every retry after a cutback, the topology update
+   (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`) runs the
+   model modifiers, lets the mesh-dependent consumers catch up, and calls
+   :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`, before the increment is proposed. The answer is one
+   :class:`~edelweissfe.models.change.Change`, the same for every solver. The model classifies what its entities report
+   (``NONE``, ``LOCATIONS``, ``NUMBERING``), and the topology update adds ``MESH``:
+
+   * ``NONE``: the discrete system stands.
+   * ``LOCATIONS``: an entity couples other nodes, or takes part or not (a contact constraint paired anew, or leaving
+     reach), but the numbering of the degrees of freedom stands.
+   * ``NUMBERING``: the scalar variables of the active constraints changed, e.g. a constraint with Lagrange multipliers
+     left reach; in a meshfree model, also the nodes of the active domain.
+   * ``MESH``: a model modifier changed the mesh (e.g. h-adaptivity), or a mesh-dependent consumer (a tie or contact
+     surface) caught up on a changed mesh: it refreshes only when nodes or elements did change.
+
+   The implicit solvers rebuild their discrete system before they solve the increment on any change, and keep it if
+   there is none. Only a change of the mesh makes them re-equilibrate (``equilibrateAfterModelChange``): a change of the
+   locations or of the numbering moves no node and creates none. A prediction survives a change of the connectivity only
+   with ``extrapolateAcrossConnectivityChange``, and only if the rebuilt system numbers the degrees of freedom as before;
+   after a change of the mesh, never. The explicit solver ``NED`` asks the same question at the start of its step and
+   after the topology checks, and, every ``contact-update-frequency`` increments, of
+   :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity` alone. It asks it only if a
+   constraint of the model searches as the bodies move
+   (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.connectivityChangesWithMotion`, e.g. a contact);
+   the same attribute is what makes ``NEST``, which never updates the connectivity, refuse such a constraint.
 
 2. **What is the discrete system made of?** Whenever the solver (re)builds its discrete system, it calls
    :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`, which returns the discrete system, a
@@ -537,7 +556,7 @@ Besides the element loop and the linear solve, the rows include the parts that c
 element is involved:
 
 * ``topology update``: the model modifiers (e.g. ``AMR``), then the ties and the contact catching up;
-* ``discrete system rebuild``, after a change of the mesh or of a constraint's DOF footprint: ``dof manager``,
+* ``discrete system rebuild``, after a change (:class:`~edelweissfe.models.change.Change`): ``dof manager``,
   ``linear solver setup``, ``system matrix pattern``, ``mpc transformation build`` and ``mpc dirichlet conflict
   check``;
 * ``mpc transform system matrix``: condensing the slave DOFs of the multi-point constraints out of the system;
@@ -596,7 +615,7 @@ That shortcut is only valid while everything the operators *are* a function of i
 is taken only after checking the element set, the multi-point constraints, the node count and the
 scalar variables against what was recorded when they were last assembled, and only when no step
 action changes a material property mid-step. Anything that does not match falls back to a full
-build. A topology change -- a mesh refinement -- is not a connectivity change and never takes this
+build. A change of the mesh -- a refinement -- is no change of the locations and never takes this
 path at all: it builds the system from scratch.
 
 Work per increment outside the elements

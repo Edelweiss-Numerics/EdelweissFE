@@ -322,6 +322,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = NodeToDeformableSurfacePenaltySchema
 
+    #: The contact searches for the surface it touches.
+    connectivityChangesWithMotion = True
+
     def __init__(
         self,
         name: str,
@@ -465,11 +468,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     def updateConnectivity(self, model: FEModel) -> bool:
         """Re-assign each slave node to its single closest facet, based on the last converged
         configuration. Called once per increment by the solver, before the discrete system is
-        (re)built. Reconciles against a mesh mutation (e.g. an AMR refinement of either surface's
-        source solid elements) first, at this natural per-increment tick -- see
+        (re)built. A mesh mutation (e.g. an AMR refinement of either surface's source solid
+        elements) has been reconciled before, by the topology update -- see
         :class:`~edelweissfe.models.meshdependent.MeshDependent`."""
-
-        # refreshed by TopologyPipeline.refreshMeshDependents; nothing extra to do at this tick
 
         slaveCoords = currentNodeCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
         facetCoords = [

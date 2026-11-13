@@ -200,6 +200,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = SurfaceToDiscreteRigidBodyPenaltySchema
 
+    #: The contact searches for the closest triangles as the bodies move, though the nodes it couples stay.
+    connectivityChangesWithMotion = True
+
     #: Journal sender tag.
     identification = "RigidSurfaceContact"
 

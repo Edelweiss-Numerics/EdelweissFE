@@ -39,6 +39,7 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.linsolve import createLinearSolver
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.systemmatrixassembly import (
@@ -466,6 +467,9 @@ class NIST(NonlinearSolverBase):
         self.dofNumberingOfLastIncrement = None
         #: The convergence criterion of the current step, created when the step begins (None before).
         self.convergenceCriterion = None
+        #: What the topology update changed at the start of the increment, which the increment reacts on (see
+        #: :meth:`prepareIncrement`).
+        self._change = Change.NONE
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply an override of this solver's options, see
@@ -574,8 +578,7 @@ class NIST(NonlinearSolverBase):
         self.convergenceCriterion = convergenceCriterion
 
         # The discrete system (DofManager, VIJ pattern, CSR pattern, system matrix assembly) is (re)built lazily in the
-        # first increment, and whenever the topology update reports a change of the mesh or of a constraint's DOF
-        # footprint.
+        # first increment, and whenever the topology update reports a change (see Change).
         self.forgetDiscreteSystem()
 
         if self.options["systemMatrixAssembly"] not in self.systemMatrixAssemblies:
@@ -652,13 +655,12 @@ class NIST(NonlinearSolverBase):
         # Before the topology update, so that its messages head this increment's block.
         self.journal.printSeperationLine()
 
-        topologyUpdate = self.updateTopologyAndConnectivity(model, step, offerModelModifiers=not isRetry)
-        self._modelHasChanged = topologyUpdate.topologyChanged
-        self._connectivityHasChanged = topologyUpdate.meshDependentsRefreshed or topologyUpdate.connectivityChanged
+        self._change = self.updateTopologyAndConnectivity(model, step, offerModelModifiers=not isRetry)
 
     def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
         """Solve the increment by Newton's method, rebuilding the discrete system first if the topology
-        update changed the model, and re-equilibrating a changed model first if so configured; see
+        update changed anything (:class:`~edelweissfe.models.change.Change`), and re-equilibrating a changed mesh first
+        if so configured; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
 
         Parameters
@@ -683,8 +685,7 @@ class NIST(NonlinearSolverBase):
         maxIter = step.maxIter
         maxGrowingIter = step.maxGrowIter
         cutbackFactor = step.cutbackFactor
-        modelHasChanged = self._modelHasChanged
-        connectivityHasChanged = self._connectivityHasChanged
+        change = self._change
 
         # The header of this increment's block; all messages below are nested one level deeper.
         self.journal.message(
@@ -705,7 +706,7 @@ class NIST(NonlinearSolverBase):
                 self.identification,
             )
 
-        if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
+        if change >= Change.LOCATIONS or self.theDofManager is None:
             with performancetiming.timeit("discrete system rebuild"):
                 self.forgetDiscreteSystem()
                 # The model says what its discrete system is made of: the numbering of the degrees of freedom, the
@@ -765,7 +766,7 @@ class NIST(NonlinearSolverBase):
 
                 # The last accepted increments are vectors of the discrete system they were solved in: this increment
                 # extrapolates them only if the rebuilt system numbers the degrees of freedom alike.
-                if not self.predictionSurvivesRebuild(modelHasChanged, connectivityHasChanged):
+                if not self.predictionSurvivesRebuild(change):
                     self.prevTimeStep = None
                 self._U, self._dU, self._P, self._K = U, dU, P, K
         # the discrete system of this increment, just built or kept from the last one
@@ -783,7 +784,7 @@ class NIST(NonlinearSolverBase):
 
         self.tableHeaderWritten = False
 
-        if modelHasChanged and equilibrateAfterModelChange:
+        if change == Change.MESH and equilibrateAfterModelChange:
             # Settle the refined mesh at the LAST converged load: a time step with zero step-progress
             # and time increment holds all loads and yields a zero Dirichlet increment.
             equilibrationTimeStep = TimeStep(
@@ -972,14 +973,14 @@ class NIST(NonlinearSolverBase):
 
         return 1
 
-    def predictionSurvivesRebuild(self, modelHasChanged: bool, connectivityHasChanged: bool) -> bool:
+    def predictionSurvivesRebuild(self, change: Change) -> bool:
         """Whether this increment may extrapolate the last accepted increments after the discrete system was rebuilt.
         They are vectors of the discrete system they were solved in, so they fit the rebuilt one only if it numbers the
         degrees of freedom alike, which the digests of the two numberings tell
         (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`; the one of the last accepted
         increments is :attr:`dofNumberingOfLastIncrement`):
 
-        * after a change of the topology (e.g., a mesh refinement), never;
+        * after a change of the mesh (e.g., a mesh refinement), never;
         * after a change of the connectivity alone (e.g., a contact search), only with
           ``extrapolateAcrossConnectivityChange``, and only if the numbering is unchanged;
         * at the first increment of a step that continues from a restart checkpoint -- resumed, or fallen back to --
@@ -989,10 +990,8 @@ class NIST(NonlinearSolverBase):
 
         Parameters
         ----------
-        modelHasChanged
-            Whether the topology update changed the model.
-        connectivityHasChanged
-            Whether it changed the connectivity alone.
+        change
+            What the topology update changed (:class:`~edelweissfe.models.change.Change`).
 
         Returns
         -------
@@ -1000,9 +999,9 @@ class NIST(NonlinearSolverBase):
             True if the prediction may extrapolate the last accepted increments.
         """
 
-        if self.prevTimeStep is None or modelHasChanged:
+        if self.prevTimeStep is None or change == Change.MESH:
             return False
-        if connectivityHasChanged and not self.options["extrapolateAcrossConnectivityChange"]:
+        if change >= Change.LOCATIONS and not self.options["extrapolateAcrossConnectivityChange"]:
             return False
 
         return self.dofNumberingOfLastIncrement == self.theDofManager.dofNumberingDigest
@@ -1031,7 +1030,7 @@ class NIST(NonlinearSolverBase):
         else:
             self.timeStepOfIncrementBeforeLast, self.dUOfIncrementBeforeLast = None, None
         # After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.
-        if self._modelHasChanged and not self.options["extrapolateAfterModelChange"]:
+        if self._change == Change.MESH and not self.options["extrapolateAfterModelChange"]:
             self.prevTimeStep = None
         else:
             self.prevTimeStep = timeStep

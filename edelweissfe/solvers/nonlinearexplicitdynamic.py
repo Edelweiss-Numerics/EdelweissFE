@@ -186,7 +186,7 @@ import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
-from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
@@ -538,12 +538,10 @@ class NED(NonlinearSolverBase):
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
 
-        # Constraints whose DOF footprint is the outcome of a search, i.e. contact.
-        self._dynamicConnectivityConstraints = [
-            constraint
-            for constraint in model.constraints.values()
-            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity
-        ]
+        # Whether a constraint couples other nodes as the bodies move, e.g. contact, which the periodic update is for.
+        self._modelConnectivityChangesWithMotion = any(
+            constraint.connectivityChangesWithMotion for constraint in model.constraints.values()
+        )
 
         # Modifiers that can still act once the analysis is running.
         self._liveTopologyModifiers = [
@@ -618,11 +616,10 @@ class NED(NonlinearSolverBase):
         momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
         kineticBefore = self.kineticEnergy(V)
 
-        topologyUpdate = self.updateTopologyAndConnectivity(model, step)
-        meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
-        connectivityChanged = topologyUpdate.connectivityChanged
+        change = self.updateTopologyAndConnectivity(model, step)
+        meshChanged = change == Change.MESH
 
-        if meshChanged or connectivityChanged:
+        if change > Change.NONE:
             # A connectivity-only change carries solution, velocity and net force over to the new system; a
             # mesh change reads solution and velocity from the model, and starts the net force at zero (see
             # buildExplicitSystem).
@@ -729,15 +726,20 @@ class NED(NonlinearSolverBase):
         )
 
         if (
-            self._dynamicConnectivityConstraints
+            self._modelConnectivityChangesWithMotion
             and contactUpdateFrequency
             and timeStep.number > 0
             and timeStep.number % contactUpdateFrequency == 0
             and not topologyCheckDueThisIncrement
         ):
-            connectivityChanged = self.updateConstraintConnectivity(model)
+            # Throttled: a node-to-surface search is O(slaves x facets) in Python, which is affordable once per
+            # increment of an implicit analysis -- amortised over a Newton loop and a linear solve -- and not tens
+            # of thousands of times. An explicit time step is tiny: between two searches a node moves
+            # ``V * dT * frequency``, orders of magnitude below a facet dimension.
+            with performancetiming.timeit("constraint connectivity"):
+                change = model.updateConnectivity()
 
-            if connectivityChanged:
+            if change > Change.NONE:
                 self.journal.message("Constraint connectivity changed", self.identification, 2)
                 self._buildSystem(self.buildExplicitSystem(model, step, previous=theSystem))
                 theSystem, Minv = self._explicitSystem, self._Minv
@@ -1382,41 +1384,6 @@ class NED(NonlinearSolverBase):
         self.system.writeResultsToModel(U, dU, P)
         self.system.writeVelocityAndAccelerationToModel(V, A)
 
-    @performancetiming.timeit("constraint connectivity")
-    def updateConstraintConnectivity(self, model: FEModel) -> bool:
-        """Let the constraints whose connectivity is the outcome of a search re-run that search.
-
-        Only the constraints in :attr:`_dynamicConnectivityConstraints` that are switched on are ticked
-        (see :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the caller ticks them only every
-        ``contact-update-frequency`` increments. Both matter: a node-to-surface
-        search is O(slaves x facets) in Python, which is affordable once per increment of an implicit
-        analysis -- where it is amortised over a Newton loop and a linear solve -- and not affordable
-        tens of thousands of times. What makes throttling defensible rather than merely cheap is that
-        an explicit time step is tiny: between two searches a node moves ``V * dT * frequency``,
-        orders of magnitude below a facet dimension. The caller reports the motion actually
-        accumulated so that this can be checked against a given model instead of assumed.
-
-        Parameters
-        ----------
-        model
-            The model tree.
-
-        Returns
-        -------
-        bool
-            Whether any constraint's DOF footprint changed, i.e. whether the discrete system has to
-            be rebuilt.
-        """
-
-        # as the model does: a constraint switched off from outside rests, and is not located anew
-        return any(
-            [
-                constraint.updateConnectivity(model)
-                for constraint in self._dynamicConnectivityConstraints
-                if constraint.switchedOn
-            ]
-        )
-
     def _operatorsReusable(self, model: FEModel, stepActions: dict) -> bool:
         """Whether the kept lumped operators still describe this model, so that a rebuild may keep
         them and re-locate the constraints alone.
@@ -1432,9 +1399,8 @@ class NED(NonlinearSolverBase):
         (:class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`)
         with no connectivity-update protocol at all -- ``updateConnectivity`` belongs to
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`, and only those
-        constraints are collected into ``_dynamicConnectivityConstraints`` and can ask for this
-        rebuild -- and the dependency records they produce are a function of the node DOF indices,
-        which a constraint refresh leaves untouched. Should a multi-point constraint ever gain a
+        constraints can ask for this rebuild -- and the dependency records they produce are a function of the node DOF
+        indices, which a constraint refresh leaves untouched. Should a multi-point constraint ever gain a
         connectivity of its own, that argument fails and the transformation would have to be
         rebuilt here rather than kept.
 

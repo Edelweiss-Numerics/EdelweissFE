@@ -234,6 +234,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = SurfaceToDeformableSurfacePenaltySchema
 
+    #: The contact searches for the surface it touches.
+    connectivityChangesWithMotion = True
+
     #: Journal sender tag: short and class-level, so that the fixed-width sender column never truncates it.
     identification = "SurfaceContact"
 

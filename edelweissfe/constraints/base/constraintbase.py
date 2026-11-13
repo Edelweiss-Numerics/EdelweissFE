@@ -55,10 +55,20 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
 
     #: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:
     #: e.g. a contact constraint whose partner is far away is not, and takes no part in the discrete system then (see
-    #: :attr:`active`). A constraint sets it there, and reports a change of :attr:`active` as a change of its
-    #: connectivity, so that the solver rebuilds its discrete system. A constraint that does not check stays within
+    #: :attr:`active`). A constraint sets it there; the model sees the change of :attr:`active` itself (see
+    #: :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). A constraint that does not check stays within
     #: reach.
     withinReach: bool = True
+
+    #: Whether :meth:`updateConnectivity` must be called again and again as the bodies move, because it searches
+    #: whether or not its nodes change: a contact constraint searches for the surface it touches and couples what it
+    #: finds, the rigid-body surface contact finds the closest triangles anew but keeps the nodes it couples, and the
+    #: nodes of a meshfree constraint follow its particles. A solver that never updates the connectivity cannot evaluate
+    #: such a constraint (``NEST`` refuses it), and an explicit solver updates it only every
+    #: ``contact-update-frequency`` increments. Declared True by every constraint whose :meth:`updateConnectivity`
+    #: searches; a constraint with fixed nodes and nothing to search, or one that is only refreshed after a change of the
+    #: mesh (:class:`~edelweissfe.models.meshdependent.MeshDependent`), leaves it False.
+    connectivityChangesWithMotion: bool = False
 
     #: Whether this constraint is switched on from outside; see :attr:`switchedOn`.
     _switchedOn: bool = True
@@ -90,6 +100,11 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         Setting it switches the constraint on or off from outside, e.g. by a ``modelupdate`` step action at the start
         of a step. A switch-off from outside lasts until the constraint is switched on again from outside, whatever the
         constraint finds in reach; switched on again, it takes part while it is within reach.
+
+        A solver evaluates exactly the constraints that took part when its discrete system was built, and the model
+        sees a change of ``active`` only through the constraints it updates itself
+        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). Therefore ``active`` is switched from outside
+        only between steps, by a ``modelupdate`` before the step begins, which starts from a new discrete system.
 
         Returns
         -------
@@ -186,11 +201,13 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
     def updateConnectivity(self, model: FEModel) -> bool:
         """Called once at the start of every increment, before the global discrete system is
         (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
-        contact pairs) and declare whether its ``nodes``/``fieldsOnNodes``/``nDof`` footprint has
-        changed since the last call.
+        contact pairs) and declare whether the nodes it couples (``nodes``/``fieldsOnNodes``/``nDof``) have
+        changed since the last call. A constraint that is not always within reach also sets
+        :attr:`withinReach` here; it does not report the change of :attr:`active` itself, the model compares it (see
+        :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`).
 
         The default implementation does nothing and reports no change, which is correct for every
-        constraint whose DOF footprint is fixed at construction (i.e. every constraint that does
+        constraint whose nodes are fixed at construction (i.e. every constraint that does
         not override this method).
 
         Parameters
@@ -201,8 +218,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         Returns
         -------
         bool
-            True if this constraint's contribution to the global system has changed and the
-            discrete system must be rebuilt before the next Newton solve.
+            True if the nodes this constraint couples have changed.
         """
 
         return False

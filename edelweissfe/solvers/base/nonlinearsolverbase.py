@@ -28,13 +28,13 @@
 
 import dataclasses
 from abc import ABC, abstractmethod
-from typing import NamedTuple
 
 import numpy as np
 from numpy import ndarray
 from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.mpctransformation import (
@@ -57,18 +57,6 @@ from edelweissfe.utils.schema import (
     fieldSchemaMeta,
     optionNames,
 )
-
-
-class TopologyUpdate(NamedTuple):
-    """What changed in one topology update, see :meth:`NonlinearSolverBase.updateTopologyAndConnectivity`."""
-
-    topologyChanged: bool
-    """A model modifier (e.g. AMR) changed the mesh."""
-    meshDependentsRefreshed: bool
-    """A mesh-dependent consumer (e.g. a tie or contact surface) was rebuilt on the changed mesh."""
-    connectivityChanged: bool
-    """The coupling of the degrees of freedom changed, e.g. a constraint after a contact search; see
-    :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`."""
 
 
 class NonlinearSolverBase(OptionSchemaProvider, ABC):
@@ -187,16 +175,25 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         return updatedNames
 
     @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step, offerModelModifiers: bool = True) -> TopologyUpdate:
-        """Run the topology update, then let every mesh-dependent consumer catch up on it.
+    def updateTopologyAndConnectivity(self, model: FEModel, step, offerModelModifiers: bool = True) -> Change:
+        """Run the topology update, then let every mesh-dependent consumer catch up on it, and say what changed.
 
         Two phases. First, the model modifiers plan and apply to a fixed point inside one topology
         window (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`). Second, the pure
         readers of the settled model catch up, once, on the net change: the tie and contact surfaces,
-        then the coupling of the degrees of freedom, which the model brings up to date itself
+        then the connectivity, which the model brings up to date itself
         (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`; the constraints of a finite
         element model, e.g. a contact search). They may not create or delete elements: the topology
         window is closed by then, so an attempt raises.
+
+        One :class:`~edelweissfe.models.change.Change` comes out of it, the same for every solver:
+
+        * :attr:`~edelweissfe.models.change.Change.MESH` if the model modifiers changed the mesh, or if a
+          mesh-dependent consumer caught up (e.g. a tie or contact surface rebuilt on a mesh that changed in a way that
+          concerns it). A consumer refreshes only when the topology version advanced, i.e. when nodes or elements did
+          change, so its catching up is a change of the mesh whoever made it, and its changed records (e.g. the
+          multi-point constraints of a tie) are sized by that mesh.
+        * Otherwise the model's answer.
 
         Parameters
         ----------
@@ -210,14 +207,17 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         Returns
         -------
-        TopologyUpdate
-            What changed; the solver decides from it whether to rebuild its discrete system.
+        Change
+            What changed; the solver decides from it how much of its discrete system to renew.
         """
 
-        topologyChanged = model.topology.update(step) if offerModelModifiers else False
+        meshChanged = model.topology.update(step) if offerModelModifiers else False
         meshDependentsRefreshed = model.topology.refreshMeshDependents()
-        connectivityChanged = model.updateConnectivity()
-        return TopologyUpdate(topologyChanged, meshDependentsRefreshed, connectivityChanged)
+        change = model.updateConnectivity()
+
+        if meshChanged or meshDependentsRefreshed:
+            return Change.MESH
+        return change
 
     @staticmethod
     def collectLoads(stepActions: dict) -> list[LoadBase]:

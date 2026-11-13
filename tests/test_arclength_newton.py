@@ -52,6 +52,7 @@ from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import PlaneSectionSchema, Section
@@ -712,7 +713,7 @@ def test_the_re_equilibration_after_a_model_change_holds_the_controlled_quantity
             # the cantilever presses on the floor at y = -0.1
             assert tipDisplacement(model) < -0.1
             model.constraints["floor"].penalty *= 4.0
-            self._modelHasChanged = True
+            self._change = Change.MESH
 
     def solveIncrement(self, U_n, dU, P, K, stepActions, model, timeStep, *args):
         controller = self.arcLengthController
