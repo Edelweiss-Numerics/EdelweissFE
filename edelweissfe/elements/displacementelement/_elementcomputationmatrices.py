@@ -135,6 +135,8 @@ def computeNOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int, 
 
     N = np.zeros([nInt, nNodes])
     if dim == 2:
+        # the 2D Jacobian and B operator take eta along the first and xi along the second natural direction
+        xi, eta = eta, xi
         if nNodes == 4:  # Quad4
             for i in range(nInt):
                 N[i] = (
