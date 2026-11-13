@@ -116,6 +116,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">getFieldSize</span><span class="p">,</span> <span class="n">phenomena</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.fields.nodefield</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeField</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.change</span><span class="w"> </span><span class="kn">import</span> <span class="n">Change</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.discretesystem</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteSystem</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.modelchange</span><span class="w"> </span><span class="kn">import</span> <span class="n">TopologyRecord</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.topologypipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">TopologyPipeline</span>
@@ -517,38 +518,81 @@
         <span class="k">return</span> <span class="p">[</span><span class="n">constraint</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">active</span><span class="p">]</span></div>
 
 
-<div class="viewcode-block" id="FEModel.updateConnectivity">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.updateConnectivity">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">updateConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Bring the coupling of the degrees of freedom up to date with the converged state, before an increment: which</span>
-<span class="sd">        nodes the entities of the discrete system couple. Called by the solvers' topology update at the start of every</span>
-<span class="sd">        increment and of every retry after a cutback, before the increment is proposed (see</span>
-<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`). If it</span>
-<span class="sd">        reports a change, an implicit solver rebuilds its discrete system (:meth:`buildDiscreteSystem`).</span>
-
-<span class="sd">        In a finite element model, the elements keep their nodes, and only a constraint may change the nodes it</span>
-<span class="sd">        couples: a contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves</span>
-<span class="sd">        its material points through a background grid, and its particles carry their kernel functions along: it</span>
-<span class="sd">        reassigns them here first, then lets its constraints follow.</span>
-
-<span class="sd">        Only the constraints that are switched on are located anew</span>
-<span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,</span>
-<span class="sd">        so that they can find themselves within reach again. A constraint switched off from outside rests until it is</span>
-<span class="sd">        switched on again, and is located anew at the start of the next increment then.</span>
-
-<span class="sd">        A change of the coupling is not a change of the mesh: it neither moves nodes nor creates them, so a solver</span>
-<span class="sd">        rebuilds its discrete system, but does not re-equilibrate (``equilibrateAfterModelChange``).</span>
+<div class="viewcode-block" id="FEModel.activeScalarVariables">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.activeScalarVariables">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">activeScalarVariables</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The scalar variables (e.g. Lagrange multipliers) of the active constraints, constraint by constraint: the</span>
+<span class="sd">        scalar variables that are numbered in the discrete system (see :meth:`activeConstraints`).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        bool</span>
-<span class="sd">            True if a coupling changed, so that the discrete system has to be rebuilt.</span>
+<span class="sd">        list[ScalarVariable]</span>
+<span class="sd">            The scalar variables.</span>
 <span class="sd">        """</span>
 
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">scalarVariable</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">()</span> <span class="k">for</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="n">constraint</span><span class="o">.</span><span class="n">scalarVariables</span>
+        <span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="FEModel.updateConnectivity">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.updateConnectivity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Change</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Bring the connectivity up to date with the converged state, before an increment, and say what that changed</span>
+<span class="sd">        in the discrete system: which nodes the entities couple, and which entities take part. Called by the solvers'</span>
+<span class="sd">        topology update at the start of every increment and of every retry after a cutback, before the increment is</span>
+<span class="sd">        proposed (see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), and by</span>
+<span class="sd">        an explicit solver at its ``contact-update-frequency``.</span>
+
+<span class="sd">        In a finite element model, the elements keep their nodes, and only a constraint may change what it couples: a</span>
+<span class="sd">        contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves its</span>
+<span class="sd">        material points through a background grid, and its particles carry their kernel functions along: it reassigns</span>
+<span class="sd">        them here first, then lets its constraints follow.</span>
+
+<span class="sd">        Only the constraints that are switched on are updated</span>
+<span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,</span>
+<span class="sd">        so that they can find themselves within reach again. A constraint switched off from outside rests until it is</span>
+<span class="sd">        switched on again, and is updated at the start of the next increment then. The comparison of which constraints</span>
+<span class="sd">        take part starts with this call, so it holds only if ``active`` is switched from outside between steps, never</span>
+<span class="sd">        between two calls within a step (a ``modelupdate`` takes effect before the step begins, which starts from a new</span>
+<span class="sd">        discrete system). A constraint reports only that its</span>
+<span class="sd">        nodes changed (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity`), and sets</span>
+<span class="sd">        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach`; the model compares which</span>
+<span class="sd">        constraints take part, and which scalar variables they bring, before and after, and classifies the change:</span>
+
+<span class="sd">        * a constraint took part or does not any more, or couples other nodes, and the scalar variables of the active</span>
+<span class="sd">          constraints are the same: :attr:`~edelweissfe.models.change.Change.LOCATIONS`;</span>
+<span class="sd">        * the scalar variables of the active constraints changed: :attr:`~edelweissfe.models.change.Change.NUMBERING`;</span>
+<span class="sd">        * neither: :attr:`~edelweissfe.models.change.Change.NONE`.</span>
+
+<span class="sd">        A constraint that is switched on but out of reach is updated too, and a change of its nodes is reported</span>
+<span class="sd">        whether or not it takes part: the answer is then :attr:`~edelweissfe.models.change.Change.LOCATIONS`, so a</span>
+<span class="sd">        solver rebuilds for a constraint that has no rows.</span>
+
+<span class="sd">        A change of the connectivity is not a change of the mesh: it neither moves nodes nor creates them</span>
+<span class="sd">        (:attr:`~edelweissfe.models.change.Change.MESH` is the topology update's to report), so a solver does not</span>
+<span class="sd">        re-equilibrate after it (``equilibrateAfterModelChange``).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Change</span>
+<span class="sd">            What changed.</span>
+<span class="sd">        """</span>
+
+        <span class="n">scalarVariablesBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeScalarVariables</span><span class="p">()</span>
+        <span class="n">activeBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">()</span>
+
         <span class="c1"># A list, not a generator in any(): every constraint must update, not just those up to the first change.</span>
-        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span>
+        <span class="n">nodesChanged</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span>
             <span class="p">[</span><span class="n">constraint</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">switchedOn</span><span class="p">]</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeScalarVariables</span><span class="p">()</span> <span class="o">!=</span> <span class="n">scalarVariablesBefore</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Change</span><span class="o">.</span><span class="n">NUMBERING</span>
+        <span class="k">if</span> <span class="n">nodesChanged</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">()</span> <span class="o">!=</span> <span class="n">activeBefore</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Change</span><span class="o">.</span><span class="n">LOCATIONS</span>
+        <span class="k">return</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span></div>
 
 
 <div class="viewcode-block" id="FEModel.setNewmarkParametersOfEntities">
@@ -579,7 +623,7 @@
 <span class="w">        </span><span class="sd">"""Build the discrete system of the model as it is now: number its degrees of freedom, and say which elements</span>
 <span class="sd">        and which constraints contribute to it, see :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. Called</span>
 <span class="sd">        by a solver whenever it (re)builds its discrete system: at the start of a step, and after the topology update</span>
-<span class="sd">        reported a change of the mesh or of the coupling (:meth:`updateConnectivity`).</span>
+<span class="sd">        reported a change that needs one (:class:`~edelweissfe.models.change.Change`).</span>
 
 <span class="sd">        The discrete system of a finite element model holds the node fields, the elements, and the active constraints</span>
 <span class="sd">        with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see</span>
@@ -596,7 +640,7 @@
 
         <span class="n">dofManager</span> <span class="o">=</span> <span class="n">DofManager</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="p">[</span><span class="n">scalarVariable</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span> <span class="k">for</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="n">constraint</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">activeScalarVariables</span><span class="p">(),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
             <span class="n">constraints</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">nodeSets</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>

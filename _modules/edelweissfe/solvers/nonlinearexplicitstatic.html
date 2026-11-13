@@ -109,7 +109,6 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.timing</span><span class="w"> </span><span class="kn">import</span> <span class="n">createTimingDict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -321,8 +320,10 @@
 <div class="viewcode-block" id="NEST.validateModelCapabilities">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.validateModelCapabilities">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">validateModelCapabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Refuse, on top of the base checks, a constraint that is switched on and needs its connectivity updated in</span>
-<span class="sd">        every increment, i.e. a contact, which searches for what it touches: this solver never performs the update. A</span>
+<span class="w">        </span><span class="sd">"""Refuse, on top of the base checks, a constraint that is switched on and whose connectivity changes with the</span>
+<span class="sd">        motion</span>
+<span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.connectivityChangesWithMotion`), e.g. a</span>
+<span class="sd">        contact, which searches for what it touches: this solver never updates the connectivity. A</span>
 <span class="sd">        constraint switched off from outside</span>
 <span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it rests,</span>
 <span class="sd">        and takes no part in the step.</span>
@@ -336,11 +337,11 @@
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">validateModelCapabilities</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">constraintName</span><span class="p">,</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">switchedOn</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span><span class="o">.</span><span class="n">updateConnectivity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">ConstraintBase</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">switchedOn</span> <span class="ow">and</span> <span class="n">constraint</span><span class="o">.</span><span class="n">connectivityChangesWithMotion</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"Constraint '</span><span class="si">{</span><span class="n">constraintName</span><span class="si">}</span><span class="s2">' requires a dynamic connectivity update "</span>
-                    <span class="sa">f</span><span class="s2">"(contact) every increment, which </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="si">}</span><span class="s2"> never performs -- "</span>
-                    <span class="s2">"contact is not currently supported with this solver."</span>
+                    <span class="sa">f</span><span class="s2">"Constraint '</span><span class="si">{</span><span class="n">constraintName</span><span class="si">}</span><span class="s2">' has a connectivity that changes with the motion "</span>
+                    <span class="sa">f</span><span class="s2">"(e.g. contact), which </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="si">}</span><span class="s2"> never updates -- "</span>
+                    <span class="s2">"such a constraint is not currently supported with this solver."</span>
                 <span class="p">)</span></div>
 
 

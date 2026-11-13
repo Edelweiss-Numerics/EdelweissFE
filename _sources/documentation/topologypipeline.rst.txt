@@ -44,7 +44,11 @@ One increment, three phases
 
 Phase 1 is :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`, phase 2 is
 :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents`. The solver calls both, in that
-order, before every solve.
+order, before every solve, and then asks the model for the change of the connectivity
+(:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). What comes out is one
+:class:`~edelweissfe.models.change.Change`: ``MESH`` if phase 1 changed the mesh or a mesh-dependent consumer caught up
+in phase 2 (it refreshes only when the topology version advanced, i.e. when nodes or elements did change), else what
+the model answers. The same for every solver.
 
 
 Why rounds
@@ -269,7 +273,7 @@ increment with the net change.
             if not change.touchesSurface(self.mySurface):
                 return False                 # not my business
             self.rebuildCachedGeometry(model)
-            return True                      # my DOF footprint changed
+            return True                      # what I couple changed
 
 Registration is the freshness guarantee, not ceremony: a consumer that is not registered is never
 told. That matters most for consumers the solver does not otherwise tick -- multi-point constraints

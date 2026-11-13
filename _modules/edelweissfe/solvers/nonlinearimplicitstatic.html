@@ -116,6 +116,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.linsolve</span><span class="w"> </span><span class="kn">import</span> <span class="n">createLinearSolver</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.change</span><span class="w"> </span><span class="kn">import</span> <span class="n">Change</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -551,6 +552,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The convergence criterion of the current step, created when the step begins (None before).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: What the topology update changed at the start of the increment, which the increment reacts on (see</span>
+        <span class="c1">#: :meth:`prepareIncrement`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_change</span> <span class="o">=</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span>
 
 <div class="viewcode-block" id="NIST.applyOptionsOverride">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyOptionsOverride">[docs]</a>
@@ -673,8 +677,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="n">convergenceCriterion</span>
 
         <span class="c1"># The discrete system (DofManager, VIJ pattern, CSR pattern, system matrix assembly) is (re)built lazily in the</span>
-        <span class="c1"># first increment, and whenever the topology update reports a change of the mesh or of a constraint's DOF</span>
-        <span class="c1"># footprint.</span>
+        <span class="c1"># first increment, and whenever the topology update reports a change (see Change).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">:</span>
@@ -757,16 +760,15 @@
         <span class="c1"># Before the topology update, so that its messages head this increment's block.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
 
-        <span class="n">topologyUpdate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">offerModelModifiers</span><span class="o">=</span><span class="ow">not</span> <span class="n">isRetry</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_modelHasChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">topologyChanged</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_connectivityHasChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">meshDependentsRefreshed</span> <span class="ow">or</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">connectivityChanged</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">offerModelModifiers</span><span class="o">=</span><span class="ow">not</span> <span class="n">isRetry</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NIST.attemptIncrement">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.attemptIncrement">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">attemptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Solve the increment by Newton's method, rebuilding the discrete system first if the topology</span>
-<span class="sd">        update changed the model, and re-equilibrating a changed model first if so configured; see</span>
+<span class="sd">        update changed anything (:class:`~edelweissfe.models.change.Change`), and re-equilibrating a changed mesh first</span>
+<span class="sd">        if so configured; see</span>
 <span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.</span>
 
 <span class="sd">        Parameters</span>
@@ -791,8 +793,7 @@
         <span class="n">maxIter</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">maxIter</span>
         <span class="n">maxGrowingIter</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">maxGrowIter</span>
         <span class="n">cutbackFactor</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">cutbackFactor</span>
-        <span class="n">modelHasChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modelHasChanged</span>
-        <span class="n">connectivityHasChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connectivityHasChanged</span>
+        <span class="n">change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_change</span>
 
         <span class="c1"># The header of this increment's block; all messages below are nested one level deeper.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
@@ -813,7 +814,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">modelHasChanged</span> <span class="ow">or</span> <span class="n">connectivityHasChanged</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;=</span> <span class="n">Change</span><span class="o">.</span><span class="n">LOCATIONS</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"discrete system rebuild"</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
                 <span class="c1"># The model says what its discrete system is made of: the numbering of the degrees of freedom, the</span>
@@ -873,7 +874,7 @@
 
                 <span class="c1"># The last accepted increments are vectors of the discrete system they were solved in: this increment</span>
                 <span class="c1"># extrapolates them only if the rebuilt system numbers the degrees of freedom alike.</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictionSurvivesRebuild</span><span class="p">(</span><span class="n">modelHasChanged</span><span class="p">,</span> <span class="n">connectivityHasChanged</span><span class="p">):</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictionSurvivesRebuild</span><span class="p">(</span><span class="n">change</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span>
         <span class="c1"># the discrete system of this increment, just built or kept from the last one</span>
@@ -891,7 +892,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">tableHeaderWritten</span> <span class="o">=</span> <span class="kc">False</span>
 
-        <span class="k">if</span> <span class="n">modelHasChanged</span> <span class="ow">and</span> <span class="n">equilibrateAfterModelChange</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span> <span class="ow">and</span> <span class="n">equilibrateAfterModelChange</span><span class="p">:</span>
             <span class="c1"># Settle the refined mesh at the LAST converged load: a time step with zero step-progress</span>
             <span class="c1"># and time increment holds all loads and yields a zero Dirichlet increment.</span>
             <span class="n">equilibrationTimeStep</span> <span class="o">=</span> <span class="n">TimeStep</span><span class="p">(</span>
@@ -1101,14 +1102,14 @@
 
 <div class="viewcode-block" id="NIST.predictionSurvivesRebuild">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">predictionSurvivesRebuild</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">modelHasChanged</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">connectivityHasChanged</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predictionSurvivesRebuild</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">Change</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Whether this increment may extrapolate the last accepted increments after the discrete system was rebuilt.</span>
 <span class="sd">        They are vectors of the discrete system they were solved in, so they fit the rebuilt one only if it numbers the</span>
 <span class="sd">        degrees of freedom alike, which the digests of the two numberings tell</span>
 <span class="sd">        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`; the one of the last accepted</span>
 <span class="sd">        increments is :attr:`dofNumberingOfLastIncrement`):</span>
 
-<span class="sd">        * after a change of the topology (e.g., a mesh refinement), never;</span>
+<span class="sd">        * after a change of the mesh (e.g., a mesh refinement), never;</span>
 <span class="sd">        * after a change of the connectivity alone (e.g., a contact search), only with</span>
 <span class="sd">          ``extrapolateAcrossConnectivityChange``, and only if the numbering is unchanged;</span>
 <span class="sd">        * at the first increment of a step that continues from a restart checkpoint -- resumed, or fallen back to --</span>
@@ -1118,10 +1119,8 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        modelHasChanged</span>
-<span class="sd">            Whether the topology update changed the model.</span>
-<span class="sd">        connectivityHasChanged</span>
-<span class="sd">            Whether it changed the connectivity alone.</span>
+<span class="sd">        change</span>
+<span class="sd">            What the topology update changed (:class:`~edelweissfe.models.change.Change`).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1129,9 +1128,9 @@
 <span class="sd">            True if the prediction may extrapolate the last accepted increments.</span>
 <span class="sd">        """</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">modelHasChanged</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
-        <span class="k">if</span> <span class="n">connectivityHasChanged</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAcrossConnectivityChange"</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;=</span> <span class="n">Change</span><span class="o">.</span><span class="n">LOCATIONS</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAcrossConnectivityChange"</span><span class="p">]:</span>
             <span class="k">return</span> <span class="kc">False</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">dofNumberingDigest</span></div>
@@ -1163,7 +1162,7 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
         <span class="c1"># After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modelHasChanged</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAfterModelChange"</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAfterModelChange"</span><span class="p">]:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="n">timeStep</span>

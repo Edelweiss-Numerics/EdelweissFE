@@ -7,6 +7,16 @@ Models
 .. automodule:: edelweissfe.models.femodel
    :members:
 
+``Change`` - What a model changed before an increment
+-----------------------------------------------------
+
+The answer of ``FEModel.updateConnectivity`` and of the solvers' topology update, ordered by how much of the discrete
+system it invalidates. See :ref:`model-discrete-system`.
+
+.. automodule:: edelweissfe.models.change
+   :members:
+   :member-order: bysource
+
 ``DiscreteSystem`` - What the discrete system of a model is made of
 -------------------------------------------------------------------------
 

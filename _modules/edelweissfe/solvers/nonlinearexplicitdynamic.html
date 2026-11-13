@@ -263,7 +263,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">carriesKineticEnergy</span><span class="p">,</span> <span class="n">carriesLinearMomentum</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.change</span><span class="w"> </span><span class="kn">import</span> <span class="n">Change</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.mpctransformation</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiPointConstraintTransformation</span>
@@ -625,12 +625,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_warnedAboutMissingInternalEnergy</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warnedAboutMissingExternalWork</span> <span class="o">=</span> <span class="kc">False</span>
 
-        <span class="c1"># Constraints whose DOF footprint is the outcome of a search, i.e. contact.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicConnectivityConstraints</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="n">constraint</span>
-            <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span><span class="o">.</span><span class="n">updateConnectivity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">ConstraintBase</span><span class="o">.</span><span class="n">updateConnectivity</span>
-        <span class="p">]</span>
+        <span class="c1"># Whether a constraint couples other nodes as the bodies move, e.g. contact, which the periodic update is for.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_modelConnectivityChangesWithMotion</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">constraint</span><span class="o">.</span><span class="n">connectivityChangesWithMotion</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="p">)</span>
 
         <span class="c1"># Modifiers that can still act once the analysis is running.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_liveTopologyModifiers</span> <span class="o">=</span> <span class="p">[</span>
@@ -708,11 +706,10 @@
         <span class="n">momentumBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">secondOrderMomentum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
         <span class="n">kineticBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kineticEnergy</span><span class="p">(</span><span class="n">V</span><span class="p">)</span>
 
-        <span class="n">topologyUpdate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
-        <span class="n">meshChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">topologyChanged</span> <span class="ow">or</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">meshDependentsRefreshed</span>
-        <span class="n">connectivityChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">connectivityChanged</span>
+        <span class="n">change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+        <span class="n">meshChanged</span> <span class="o">=</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span>
 
-        <span class="k">if</span> <span class="n">meshChanged</span> <span class="ow">or</span> <span class="n">connectivityChanged</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
             <span class="c1"># A connectivity-only change carries solution, velocity and net force over to the new system; a</span>
             <span class="c1"># mesh change reads solution and velocity from the model, and starts the net force at zero (see</span>
             <span class="c1"># buildExplicitSystem).</span>
@@ -825,15 +822,20 @@
         <span class="p">)</span>
 
         <span class="k">if</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicConnectivityConstraints</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_modelConnectivityChangesWithMotion</span>
             <span class="ow">and</span> <span class="n">contactUpdateFrequency</span>
             <span class="ow">and</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">&gt;</span> <span class="mi">0</span>
             <span class="ow">and</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">%</span> <span class="n">contactUpdateFrequency</span> <span class="o">==</span> <span class="mi">0</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">topologyCheckDueThisIncrement</span>
         <span class="p">):</span>
-            <span class="n">connectivityChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateConstraintConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+            <span class="c1"># Throttled: a node-to-surface search is O(slaves x facets) in Python, which is affordable once per</span>
+            <span class="c1"># increment of an implicit analysis -- amortised over a Newton loop and a linear solve -- and not tens</span>
+            <span class="c1"># of thousands of times. An explicit time step is tiny: between two searches a node moves</span>
+            <span class="c1"># ``V * dT * frequency``, orders of magnitude below a facet dimension.</span>
+            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"constraint connectivity"</span><span class="p">):</span>
+                <span class="n">change</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">()</span>
 
-            <span class="k">if</span> <span class="n">connectivityChanged</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Constraint connectivity changed"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildExplicitSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="n">theSystem</span><span class="p">))</span>
                 <span class="n">theSystem</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span>
@@ -1512,44 +1514,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="NED.updateConstraintConnectivity">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.updateConstraintConnectivity">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"constraint connectivity"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">updateConstraintConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Let the constraints whose connectivity is the outcome of a search re-run that search.</span>
-
-<span class="sd">        Only the constraints in :attr:`_dynamicConnectivityConstraints` that are switched on are ticked</span>
-<span class="sd">        (see :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the caller ticks them only every</span>
-<span class="sd">        ``contact-update-frequency`` increments. Both matter: a node-to-surface</span>
-<span class="sd">        search is O(slaves x facets) in Python, which is affordable once per increment of an implicit</span>
-<span class="sd">        analysis -- where it is amortised over a Newton loop and a linear solve -- and not affordable</span>
-<span class="sd">        tens of thousands of times. What makes throttling defensible rather than merely cheap is that</span>
-<span class="sd">        an explicit time step is tiny: between two searches a node moves ``V * dT * frequency``,</span>
-<span class="sd">        orders of magnitude below a facet dimension. The caller reports the motion actually</span>
-<span class="sd">        accumulated so that this can be checked against a given model instead of assumed.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        bool</span>
-<span class="sd">            Whether any constraint's DOF footprint changed, i.e. whether the discrete system has to</span>
-<span class="sd">            be rebuilt.</span>
-<span class="sd">        """</span>
-
-        <span class="c1"># as the model does: a constraint switched off from outside rests, and is not located anew</span>
-        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="n">constraint</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicConnectivityConstraints</span>
-                <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">switchedOn</span>
-            <span class="p">]</span>
-        <span class="p">)</span></div>
-
-
     <span class="k">def</span><span class="w"> </span><span class="nf">_operatorsReusable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Whether the kept lumped operators still describe this model, so that a rebuild may keep</span>
 <span class="sd">        them and re-locate the constraints alone.</span>
@@ -1565,9 +1529,8 @@
 <span class="sd">        (:class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`)</span>
 <span class="sd">        with no connectivity-update protocol at all -- ``updateConnectivity`` belongs to</span>
 <span class="sd">        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`, and only those</span>
-<span class="sd">        constraints are collected into ``_dynamicConnectivityConstraints`` and can ask for this</span>
-<span class="sd">        rebuild -- and the dependency records they produce are a function of the node DOF indices,</span>
-<span class="sd">        which a constraint refresh leaves untouched. Should a multi-point constraint ever gain a</span>
+<span class="sd">        constraints can ask for this rebuild -- and the dependency records they produce are a function of the node DOF</span>
+<span class="sd">        indices, which a constraint refresh leaves untouched. Should a multi-point constraint ever gain a</span>
 <span class="sd">        connectivity of its own, that argument fails and the transformation would have to be</span>
 <span class="sd">        rebuilt here rather than kept.</span>
 

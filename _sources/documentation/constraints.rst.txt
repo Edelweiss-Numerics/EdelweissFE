@@ -556,9 +556,17 @@ behind. Two states decide it, and ``active`` is true while both are:
   ``testfiles/marmot/PenaltyBasedIndirectControl``. A switch-off from outside lasts until the constraint is switched
   on again from outside.
 * ``withinReach``: the constraint finds itself within reach of what it constrains, in its ``updateConnectivity``.
-  A contact constraint whose partner is out of reach sets it to false, and reports the change of ``active`` as a
-  change of its connectivity, so that the solver rebuilds its discrete system. A constraint that does not check stays
+  A contact constraint whose partner is out of reach sets it to false. It does not report the change of ``active``: the
+  model compares which constraints take part before and after, and tells the solver (a
+  :class:`~edelweissfe.models.change.Change`, see :ref:`model-discrete-system`). A constraint that does not check stays
   within reach.
+
+A constraint reports from ``updateConnectivity`` only whether the nodes it couples changed. A constraint that
+searches as the bodies move, e.g. a contact, which searches for the surface it touches, declares it with
+``connectivityChangesWithMotion = True``, whether or not the nodes it couples change with the search (the rigid-body
+surface contact finds its closest triangles anew and keeps its nodes): it has to be updated again and again, so a solver
+that never updates the connectivity (``NEST``) refuses it, and ``NED`` updates it only every
+``contact-update-frequency`` increments. A constraint with fixed nodes and nothing to search leaves it False.
 
 So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part
 while it is within reach. Switched off from outside, a constraint rests: the model does not locate it anew in

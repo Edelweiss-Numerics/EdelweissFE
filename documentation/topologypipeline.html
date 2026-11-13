@@ -168,7 +168,11 @@ model modifier, or before writing anything that caches data derived from the mes
 </div>
 <p>Phase 1 is <a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.update" title="edelweissfe.models.topologypipeline.TopologyPipeline.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>, phase 2 is
 <a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshMeshDependents()</span></code></a>. The solver calls both, in that
-order, before every solve.</p>
+order, before every solve, and then asks the model for the change of the connectivity
+(<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a>). What comes out is one
+<a class="reference internal" href="models.html#edelweissfe.models.change.Change" title="edelweissfe.models.change.Change"><code class="xref py py-class docutils literal notranslate"><span class="pre">Change</span></code></a>: <code class="docutils literal notranslate"><span class="pre">MESH</span></code> if phase 1 changed the mesh or a mesh-dependent consumer caught up
+in phase 2 (it refreshes only when the topology version advanced, i.e. when nodes or elements did change), else what
+the model answers. The same for every solver.</p>
 <section id="why-rounds">
 <h3>Why rounds<a class="headerlink" href="#why-rounds" title="Link to this heading"></a></h3>
 <p>Modifiers depend on each other. Refinement invalidates a tied surface’s facets; a deposition
@@ -354,7 +358,7 @@ increment with the net change.</p>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">change</span><span class="o">.</span><span class="n">touchesSurface</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mySurface</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">False</span>                 <span class="c1"># not my business</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">rebuildCachedGeometry</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">True</span>                      <span class="c1"># my DOF footprint changed</span>
+        <span class="k">return</span> <span class="kc">True</span>                      <span class="c1"># what I couple changed</span>
 </pre></div>
 </div>
 <p>Registration is the freshness guarantee, not ceremony: a consumer that is not registered is never
