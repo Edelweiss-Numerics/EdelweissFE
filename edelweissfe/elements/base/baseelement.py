@@ -61,6 +61,38 @@ class BaseElement(BaseNodeCouplingEntity, SystemMatrixContributorBase):
     def hasMaterial(self) -> str:
         """Flag to check if a material was assigned to this element."""
 
+    @property
+    @abstractmethod
+    def ensightType(self) -> str:
+        """The shape of the element in Ensight Gold notation.
+        Valid types are:
+        point
+        bar2
+        bar3
+        tria3
+        tria6
+        quad4
+        quad8
+        tetra4
+        tetra10
+        pyramid5
+        pyramid13
+        penta6
+        penta15
+        hexa8
+        hexa20
+        nsided
+        nfaced
+        """
+
+    @property
+    @abstractmethod
+    def visualizationNodes(self) -> list[Node]:
+        """The nodes for visualization. Commonly, these are the same as the nodes of the element.
+        However, in some cases, the visualization nodes are different from the nodes of the element, e.g., in case of
+        mixed formulations.
+        """
+
     @abstractmethod
     def __init__(self, elementType: str, elNumber: int):
         """Finite elements in EdelweissFE should be derived from this

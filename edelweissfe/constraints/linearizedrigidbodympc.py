@@ -164,7 +164,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         return [self.rp]
 
     @property
-    def fieldsOnNodes(self) -> list:
+    def fields(self) -> list:
         return [["displacement", "rotation"]]
 
     def getMultiPointConstraints(self, numbering) -> list:

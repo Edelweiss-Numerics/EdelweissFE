@@ -160,7 +160,7 @@ def test_a_constraint_declares_the_state_it_carries():
             return []
 
         @property
-        def fieldsOnNodes(self):
+        def fields(self):
             return []
 
         @property

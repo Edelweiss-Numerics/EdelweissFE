@@ -26,12 +26,15 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 import numpy as np
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
+    BaseNodeCouplingEntity,
+)
 from edelweissfe.numerics.systemmatrixcontributor import (
     SystemMatrixContributorBase,
     countEntriesOfBlock,
@@ -42,7 +45,7 @@ from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
+class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixContributorBase):
     #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block
     #: the constraint has in the discrete system it is evaluated in; None until its first evaluation there (see
     #: :meth:`prepareExplicitEvaluation`).
@@ -59,16 +62,6 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
     #: :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). A constraint that does not check stays within
     #: reach.
     withinReach: bool = True
-
-    #: Whether :meth:`updateConnectivity` must be called again and again as the bodies move, because it searches
-    #: whether or not its nodes change: a contact constraint searches for the surface it touches and couples what it
-    #: finds, the rigid-body surface contact finds the closest triangles anew but keeps the nodes it couples, and the
-    #: nodes of a meshfree constraint follow its particles. A solver that never updates the connectivity cannot evaluate
-    #: such a constraint (``NEST`` refuses it), and an explicit solver updates it only every
-    #: ``contact-update-frequency`` increments. Declared True by every constraint whose :meth:`updateConnectivity`
-    #: searches; a constraint with fixed nodes and nothing to search, or one that is only refreshed after a change of the
-    #: mesh (:class:`~edelweissfe.models.meshdependent.MeshDependent`), leaves it False.
-    connectivityChangesWithMotion: bool = False
 
     #: Whether this constraint is switched on from outside; see :attr:`switchedOn`.
     _switchedOn: bool = True
@@ -189,9 +182,21 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         """The nodes this constraint is acting on."""
 
     @property
+    def nNodes(self) -> int:
+        """The number of nodes this constraint is acting on."""
+
+        return len(self.nodes)
+
+    @property
     @abstractmethod
-    def fieldsOnNodes(self) -> list:
+    def fields(self) -> list:
         """The fields on the nodes this constraint is acting on."""
+
+    @property
+    def dofIndicesPermutation(self) -> None:
+        """None: the layout of a constraint is nodewise, followed by its scalar variables."""
+
+        return None
 
     @property
     @abstractmethod
@@ -201,7 +206,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
     def updateConnectivity(self, model: FEModel) -> bool:
         """Called once at the start of every increment, before the global discrete system is
         (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
-        contact pairs) and declare whether the nodes it couples (``nodes``/``fieldsOnNodes``/``nDof``) have
+        contact pairs) and declare whether the nodes it couples (``nodes``/``fields``/``nDof``) have
         changed since the last call. A constraint that is not always within reach also sets
         :attr:`withinReach` here; it does not report the change of :attr:`active` itself, the model compares it (see
         :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`).

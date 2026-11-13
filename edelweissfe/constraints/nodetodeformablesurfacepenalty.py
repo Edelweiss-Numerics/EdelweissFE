@@ -426,7 +426,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._normalForceCurrent = np.zeros(self.nSlaves)
 
         self._nodes = []
-        self._fieldsOnNodes = []
+        self._fields = []
         self._nDof = 0
 
         self.totalNormalForce = 0.0
@@ -458,8 +458,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
@@ -542,20 +542,20 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._assignedFacetIdx = newAssignment
 
         newNodes = []
-        newFieldsOnNodes = []
+        newFields = []
         for s in range(self.nSlaves):
             newNodes.append(self.slaveNodes[s])
-            newFieldsOnNodes.append(["displacement"])
+            newFields.append(["displacement"])
             if newAssignment[s] is not None:
                 facetNodes = self.facetElements[newAssignment[s]].nodes
                 newNodes.extend(facetNodes)
-                newFieldsOnNodes.extend([["displacement"]] * len(facetNodes))
+                newFields.extend([["displacement"]] * len(facetNodes))
 
         if newNodes != self._nodes:
             hasChanged = True
 
         self._nodes = newNodes
-        self._fieldsOnNodes = newFieldsOnNodes
+        self._fields = newFields
         self._nDof = sum(self.nDim for _ in newNodes)
 
         return hasChanged

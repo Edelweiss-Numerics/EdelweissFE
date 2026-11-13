@@ -160,7 +160,7 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
         return []
 
     @property
-    def fieldsOnNodes(self) -> list:
+    def fields(self) -> list:
         """The fields this constraint needs on each of :attr:`nodes`, as for
-        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes`."""
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.fields`."""
         return []

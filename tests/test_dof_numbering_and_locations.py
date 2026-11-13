@@ -63,12 +63,11 @@ class _FakeConstraint:
 
     #: a dense block, like an element's
     couplesAllItsDofs = True
-
-    name = "fakeConstraint"
+    dofIndicesPermutation = None
 
     def __init__(self, nodes, fieldsPerNode):
         self.nodes = nodes
-        self.fieldsOnNodes = [fieldsPerNode for _ in nodes]
+        self.fields = [fieldsPerNode for _ in nodes]
         self.scalarVariables = []
         # a 2D displacement field: two degrees of freedom per node and field
         self.nDof = 2 * len(nodes) * len(fieldsPerNode)
@@ -82,6 +81,8 @@ class _FakeEntity:
     node ``fieldsOfSecondNode`` for the second), no permutation of its degrees of freedom, and its DOF count."""
 
     dofIndicesPermutation = None
+    scalarVariables = []
+    connectivityChangesWithMotion = False
 
     def __init__(self, nodes, fieldsPerNode, fieldsOfSecondNode=None):
         self.nodes = nodes
@@ -89,6 +90,12 @@ class _FakeEntity:
         if fieldsOfSecondNode is not None:
             self.fields[1] = fieldsOfSecondNode
         self.nDof = 2 * len(nodes) * len(fieldsPerNode)
+
+
+class _MovingEntity(_FakeEntity):
+    """An element whose nodes change with the motion, as a particle's do."""
+
+    connectivityChangesWithMotion = True
 
 
 def _buildTwoElementModel():
@@ -181,11 +188,11 @@ def test_new_locations_with_no_constraints_at_all():
     assert relocated.constraints == []
 
 
-def test_moved_further_entities_are_located_anew_and_the_others_keep_their_locations():
+def test_moved_elements_are_located_anew_and_the_others_keep_their_locations():
     model, n = _buildTwoElementModel()
-    moving = _FakeEntity([n[0], n[1]], ["displacement"])
+    moving = _MovingEntity([n[0], n[1]], ["displacement"])
     resting = _FakeEntity([n[4], n[5]], ["displacement"])
-    locations = DofLocations(_numbering(model), [], [], [moving, resting])
+    locations = DofLocations(_numbering(model), [moving, resting])
     indicesOfResting = locations[resting]
 
     moving.nodes = [n[2], n[3]]
@@ -195,6 +202,29 @@ def test_moved_further_entities_are_located_anew_and_the_others_keep_their_locat
     assert relocated[resting] is indicesOfResting
     np.testing.assert_array_equal(locations[moving], [0, 1, 2, 3])
     assert relocated.elements == [moving, resting]
+
+
+def test_an_entity_is_located_by_its_protocol_whatever_kind_it_is():
+    """Nodes, fields, permutation and scalar variables are all the locations read: an element that owns a scalar variable
+    is located like a constraint that does, and a constraint with a permutation like an element."""
+    model, n = _buildTwoElementModel()
+    scalarVariable = ScalarVariable("lambda_0")
+    numbering = DofNumbering(model.nodeFields.values(), [scalarVariable], model.nodeSets.values())
+
+    element = _FakeEntity([n[0], n[1]], ["displacement"])
+    element.scalarVariables = [scalarVariable]
+    constraint = _FakeConstraint([n[0], n[1]], ["displacement"])
+    constraint.dofIndicesPermutation = np.array([3, 2, 1, 0])
+    both = _FakeEntity([n[0], n[1]], ["displacement"])
+    both.scalarVariables = [scalarVariable]
+    both.dofIndicesPermutation = np.array([3, 2, 1, 0])
+
+    locations = DofLocations(numbering, [element, both], [constraint])
+
+    np.testing.assert_array_equal(locations[element], [0, 1, 2, 3, 12])
+    np.testing.assert_array_equal(locations[constraint], [3, 2, 1, 0])
+    # the permutation orders the nodal part, the scalar variable follows it
+    np.testing.assert_array_equal(locations[both], [3, 2, 1, 0, 12])
 
 
 def test_the_discrete_system_of_the_model_leaves_out_an_element_without_kernels_and_the_nodes_only_it_touches(
@@ -251,9 +281,14 @@ def test_the_accumulated_flux_count_is_that_of_the_elements_with_kernels(monkeyp
     )
 
 
-def test_the_flux_counts_of_the_elements_are_counted_once_for_all_locations_made_from_them(monkeypatch):
+def test_the_flux_counts_of_the_elements_with_fixed_nodes_are_counted_once_for_a_numbering(monkeypatch):
+    """The entities whose nodes stay are counted once, whatever new locations are made; the constraints, and the
+    entities whose nodes change with the motion, are counted for every new locations."""
     model, n = _buildTwoElementModel()
-    locations = _locations(model, [_FakeConstraint([n[0], n[5]], ["displacement"])])
+    moving = _MovingEntity([n[0], n[1]], ["displacement"])
+    locations = DofLocations(
+        _numbering(model), [*model.elements.values(), moving], [_FakeConstraint([n[0], n[5]], ["displacement"])]
+    )
     entitiesCounted = []
     count = DofLocations._accumulateNodalFluxesFieldwise
     monkeypatch.setattr(
@@ -263,21 +298,31 @@ def test_the_flux_counts_of_the_elements_are_counted_once_for_all_locations_made
     )
 
     locations.nAccumulatedNodalFluxesFieldwise
-    assert entitiesCounted == [2, 0, 1], "the elements, the further entities, the constraints"
+    assert entitiesCounted == [2, 1, 1], "the elements with fixed nodes, the moving elements, the constraints"
     entitiesCounted.clear()
 
-    relocated = locations.withNewLocationsOf([_FakeConstraint([n[2], n[3], n[4]], ["displacement"])])
+    moving.nodes = [n[2], n[3], n[4]]
+    moving.fields = [["displacement"]] * 3
+    relocated = locations.withNewLocationsOf([_FakeConstraint([n[2], n[3], n[4]], ["displacement"])], [moving])
     relocated.nAccumulatedNodalFluxesFieldwise
-    assert entitiesCounted == [1], "only the constraints are counted again"
+    assert entitiesCounted == [1, 1], "only the moving elements and the constraints are counted again"
+    assert relocated.nAccumulatedNodalFluxesFieldwise == {"displacement": 2 * (8 + 3 + 3)}
 
 
 def test_a_moved_entity_must_be_located_already():
     model, n = _buildTwoElementModel()
     resting = _FakeEntity([n[4], n[5]], ["displacement"])
-    locations = DofLocations(_numbering(model), [], [], [resting])
+    locations = DofLocations(_numbering(model), [resting])
 
-    with pytest.raises(ValueError, match="not located"):
-        locations.withNewLocationsOf([], [_FakeEntity([n[0], n[1]], ["displacement"])])
+    with pytest.raises(ValueError, match="not an element located"):
+        locations.withNewLocationsOf([], [_MovingEntity([n[0], n[1]], ["displacement"])])
+
+    with pytest.raises(ValueError, match="connectivity changes with the motion"):
+        locations.withNewLocationsOf([], [resting])
+
+    constraint = _FakeConstraint([n[0]], ["displacement"])
+    with pytest.raises(ValueError, match="not an element located"):
+        DofLocations(_numbering(model), [resting], [constraint]).withNewLocationsOf([constraint], [constraint])
 
 
 def test_an_entity_that_couples_a_field_its_node_does_not_have_is_an_error():
@@ -289,7 +334,7 @@ def test_an_entity_that_couples_a_field_its_node_does_not_have_is_an_error():
     with pytest.raises(ValueError, match=entityClass + r" coupling the nodes \[1, 2\].*node 2 has no field 'pressure'"):
         DofLocations(numbering, [_FakeEntity([n[0], n[1]], ["displacement"], ["displacement", "pressure"])])
 
-    constraintClass = rf"{re.escape(_FakeConstraint.__module__)}\._FakeConstraint 'fakeConstraint'"
+    constraintClass = rf"{re.escape(_FakeConstraint.__module__)}\._FakeConstraint"
     with pytest.raises(
         ValueError, match=constraintClass + r" coupling the nodes \[1\].*node 1 has no field 'pressure'"
     ):

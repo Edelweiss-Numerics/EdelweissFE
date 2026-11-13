@@ -264,7 +264,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._referenceCoords = np.array([n.coordinates for n in self.slaveNodes])
 
         self._nodes = self.slaveNodes + [self.rpNode]
-        self._fieldsOnNodes = [["displacement"]] * self.nSlaves + [["displacement", "rotation"]]
+        self._fields = [["displacement"]] * self.nSlaves + [["displacement", "rotation"]]
         self._nDof = self.nSlaves * self.nDim + self.rprpDof
 
         # Local DOF index blocks, in the order [slave_0, slave_1, ..., RP displacement, RP rotation].
@@ -289,8 +289,8 @@ class Constraint(ConstraintBase, MeshDependent):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:

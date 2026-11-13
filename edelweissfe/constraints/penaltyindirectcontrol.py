@@ -191,7 +191,7 @@ class Constraint(ConstraintBase, MeshDependent):
         AMR) since the last increment."""
         self._nodes = list(self.loadNSet) + list(self.constrainedNSet)
 
-        self._fieldsOnNodes = [
+        self._fields = [
             [
                 self.theField,
             ]
@@ -219,8 +219,8 @@ class Constraint(ConstraintBase, MeshDependent):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:

@@ -132,7 +132,7 @@ their own loops:
    :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity` alone; it can only be answered with new locations, as
    it refuses constraints with scalar variables. It asks it only if a
    constraint of the model searches as the bodies move
-   (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.connectivityChangesWithMotion`, e.g. a contact);
+   (:attr:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion`, e.g. a contact);
    the same attribute is what makes ``NEST``, which never updates the connectivity, refuse such a constraint.
 
 2. **What is the discrete system made of?** Whenever the solver (re)builds its discrete system, it calls

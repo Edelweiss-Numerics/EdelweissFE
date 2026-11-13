@@ -193,7 +193,7 @@ class FEModel:
         """
 
         for constraint in itertools.chain(self.constraints.values(), self.multiPointConstraints.values()):
-            for node, nodeFields in zip(constraint.nodes, constraint.fieldsOnNodes):
+            for node, nodeFields in zip(constraint.nodes, constraint.fields):
                 for field in nodeFields:
                     if field not in node.fields:
                         node.fields[field] = FieldVariable(node, field)
