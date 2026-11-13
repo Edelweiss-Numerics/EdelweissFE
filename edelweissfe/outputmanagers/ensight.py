@@ -1250,10 +1250,11 @@ class OutputManager(OutputManagerBase):
                 )
             )
 
+        # an f(x) of the field output may reduce the components, but has to keep one entry per quadrature point
         result = np.asarray(fieldOutput.getLastResult())
-        if result.shape[0] != nElements or result.size % (nQp * nElements):
+        if result.shape[:2] != (nElements, nQp):
             raise Exception(
-                "Variable {:} result shape {:} does not match {:} elements with {:} quadrature points".format(
+                "Variable {:} result shape {:} does not start with {:} elements and {:} quadrature points".format(
                     name, result.shape, nElements, nQp
                 )
             )

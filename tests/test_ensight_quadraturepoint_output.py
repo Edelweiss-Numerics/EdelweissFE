@@ -67,7 +67,7 @@ all
 
 *fieldOutput
 >>perNode, name=displacement, elSet=all, field=displacement, result=U
->>perElement, name=stress, elSet=all, result=stress, quadraturePoint={quadraturePoints}
+>>perElement, name=stress, elSet=all, result=stress, quadraturePoint={quadraturePoints}{function}
 
 *output, type=ensight, name=ensight
 >>perNode, fieldOutput=displacement
@@ -94,8 +94,11 @@ CASES = [
 ]
 
 
-def _run(tmp_path, monkeypatch, provider: str, elType: str, dim: int, quadraturePoints: str = None):
-    """Run the deck in a temporary directory, which then holds the Ensight export."""
+def _run(
+    tmp_path, monkeypatch, provider: str, elType: str, dim: int, quadraturePoints: str = None, function: str = None
+):
+    """Run the deck in a temporary directory, which then holds the Ensight export; `function` is
+    the f(x) of the stress field output."""
 
     if provider == "marmot":
         pytest.importorskip("edelweissfe.elements.marmotelement.element")
@@ -117,6 +120,7 @@ def _run(tmp_path, monkeypatch, provider: str, elType: str, dim: int, quadrature
         elType=elType,
         provider=provider,
         quadraturePoints=quadraturePoints or "0:{:}".format(2**dim),
+        function=", f(x)='{:}'".format(function) if function else "",
         analyticalFields="\n".join(
             '*analyticalField, name=f{:}, type=scalarExpression\n"f(x,y,z)"="{:}*{:}"'.format(
                 i, axes[i], axes[(i + 1) % dim]
@@ -218,6 +222,16 @@ def _lastFile(pattern: str) -> str:
     return sorted(glob.glob(pattern))[-1]
 
 
+def _quadraturePointsOfSubElements(part: dict, subShape: str, dim: int) -> np.ndarray:
+    """The Gauss point each sub-element contains: at 1/sqrt(3) of the element's half length from the
+    element center, the centroid of the sub-element being at 1/2."""
+
+    spacing = np.array(LENGTHS[:dim]) / np.array(DIVISIONS[:dim])
+    centroids = part["coordinates"][:, :dim][part["elements"][subShape]].mean(axis=1)
+    elementCenters = (np.floor(centroids / spacing) + 0.5) * spacing
+    return elementCenters + (centroids - elementCenters) * 2 / np.sqrt(3)
+
+
 @pytest.mark.parametrize("provider, elType, dim", CASES, ids=lambda v: str(v))
 def test_quadrature_point_results_on_sub_elements(tmp_path, monkeypatch, provider, elType, dim):
     model, _ = _run(tmp_path, monkeypatch, provider, elType, dim)
@@ -258,10 +272,8 @@ def test_quadrature_point_results_on_sub_elements(tmp_path, monkeypatch, provide
         volumes = 8 * np.linalg.det(np.einsum("in,enj->eij", hexa8DNdXi(0.0, 0.0, 0.0), X))
     assert np.allclose(volumes, np.prod(spacing / 2))
 
-    # each sub-element carries the stress at the Gauss point it contains: at 1/sqrt(3) of the element's
-    # half length from the element center, the centroid of the sub-element being at 1/2
-    elementCenters = (np.floor(centroids / spacing) + 0.5) * spacing
-    quadraturePoints = elementCenters + (centroids - elementCenters) * 2 / np.sqrt(3)
+    # each sub-element carries the stress at the Gauss point it contains
+    quadraturePoints = _quadraturePointsOfSubElements(part, subShape, dim)
 
     stress = _readVariable(_lastFile("ensight/stress.var_*"), parts, 6)
     assert list(stress) == ["all_QP"]
@@ -301,6 +313,34 @@ def test_sub_element_of_each_quadrature_point_of_the_element(tmp_path, monkeypat
 def test_unsupported_quadrature_point_output_is_refused(tmp_path, monkeypatch, elType, dim, quadraturePoints, message):
     with pytest.raises(Exception, match=message):
         _run(tmp_path, monkeypatch, "edelweiss", elType, dim, quadraturePoints)
+
+
+def test_function_of_the_result_per_quadrature_point(tmp_path, monkeypatch):
+    """An f(x) of the field output which keeps one entry per quadrature point: a stress component."""
+
+    _run(tmp_path, monkeypatch, "edelweiss", "C3D8", 3, function="x[:, :, 1]")
+
+    parts = _readGeometry("ensight/geometry.geo_0000")
+    quadraturePoints = _quadraturePointsOfSubElements(parts["all_QP"], "hexa8", 3)
+
+    stress = _readVariable(_lastFile("ensight/stress.var_*"), parts, 1)["all_QP"]["hexa8"]
+    assert np.allclose(stress[:, 0], E * AMPLITUDES[1] * quadraturePoints[:, 2], rtol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "elType, dim, function",
+    [
+        # reduced over the quadrature points
+        ("C3D8", 3, "np.mean(x, axis=1)"),
+        ("CPE4", 2, "np.max(x, axis=1)"),
+        # the same number of values in another layout
+        ("C3D8", 3, "np.swapaxes(x, 1, 2)"),
+        ("CPE4", 2, "x.reshape(len(x), -1)"),
+    ],
+)
+def test_result_not_laid_out_per_quadrature_point_is_refused(tmp_path, monkeypatch, elType, dim, function):
+    with pytest.raises(Exception, match="does not start with .* elements and .* quadrature points"):
+        _run(tmp_path, monkeypatch, "edelweiss", elType, dim, function=function)
 
 
 AMR_DECK = """
