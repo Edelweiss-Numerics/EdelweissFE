@@ -10,7 +10,7 @@ elements, re-partitioning element/node sets and surfaces, and reallocating the s
 A modifier is declared with the ``*modelModifier`` keyword. At the start of every increment the
 solver runs **all** modifiers to a fixed point via
 :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`, then lets mesh-dependent consumers catch
-up, then solves; when the topology changed, the equation system (DOF manager, sparsity pattern,
+up, then solves; when the topology changed, the discrete system (DOF manager, sparsity pattern,
 solution vectors and any multi-point-constraint transformation) is rebuilt first. A modifier itself
 is written as two halves -- :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan`,
 which decides and may read solution state, and
@@ -41,7 +41,7 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
   :class:`~edelweissfe.utils.fieldoutput.ElementFieldOutput` for examples. This needs no
   registration and therefore has no observer lifecycle to leak.
 * **Registered mesh dependent** -- for derived *geometry* that must be regenerated before the next
-  equation-system rebuild (facet-based contact and tie; see below), a component registers itself via
+  discrete system rebuild (facet-based contact and tie; see below), a component registers itself via
   :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent` and implements
   :meth:`~edelweissfe.models.meshdependent.MeshDependent.refresh`. Once per increment, after every
   modifier has settled, :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents` hands it
@@ -184,7 +184,7 @@ a *predictive* ``fieldOutput`` marker ahead of a propagating front are all cover
 Batching refinement across increments
 --------------------------------------
 
-Every refinement pass forces the solver to rebuild the equation system (DOF manager, sparsity
+Every refinement pass forces the solver to rebuild the discrete system (DOF manager, sparsity
 pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
 large model. Left unchecked, a marker whose criterion is crossed by elements one at a time --
 rather than in a single burst -- triggers that rebuild on every increment a lone element newly
@@ -193,7 +193,7 @@ bar: a refinement pass happens only if one evaluation of the markers marks at le
 ``minMarkedElements`` eligible elements. Marks are not carried over to later evaluations -- they are
 a function of the current state only, which is what keeps a restarted run identical to an
 uninterrupted one. This trades refinement latency (a marked element may stay on the coarse mesh
-until enough elements qualify at once) for fewer, larger equation-system rebuilds.
+until enough elements qualify at once) for fewer, larger discrete system rebuilds.
 
 .. literalinclude:: ../../../testfiles/marmot/AMR_MinMarkedElements/test.inp
     :language: edelweiss
@@ -241,7 +241,7 @@ everything except ``<var1>`` (projected) and ``<var2>`` (reset to its initial va
 Predictor after a refinement
 ----------------------------
 
-On the increment in which the mesh is mutated the solver already rebuilds the equation system and
+On the increment in which the mesh is mutated the solver already rebuilds the discrete system and
 starts from a zero predictor. The *following* increment, however, extrapolates from that increment's
 solution increment, which conflates the load advance with the one-off warm-start/remesh settling
 transient -- a questionable predictor when refining into a softening zone. The ``NISTSolver`` option
@@ -305,7 +305,7 @@ does have one -- but it also holds an acceleration, and an *interpolated* accele
 equilibrium with the mass just reassembled on the refined mesh. So ``NID`` re-solves the
 acceleration from equilibrium on the increment after a topology change, with the same machinery a
 step start uses; ``computeInitialAcceleration=False`` keeps the interpolated one instead. A rebuild
-of the equation system that is *not* a topology change -- a contact constraint re-reporting its
+of the discrete system that is *not* a topology change -- a contact constraint re-reporting its
 connectivity -- moves no node and does not trigger it.
 
 ``NID`` ignores ``equilibrateAfterModelChange``: that option's re-equilibration increment is a
@@ -320,7 +320,7 @@ constraint works out of the box: the modifier keeps the relevant ``*surface`` de
 with the refined child faces, and the constraint -- a :class:`~edelweissfe.models.meshdependent.
 MeshDependent` -- regenerates its facets from it. :mod:`~edelweissfe.constraints.
 nodetodeformablesurfacepenalty` notices via :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changesSince`
-at its own next connectivity update (a pull, since that tick already runs before the equation
+at its own next connectivity update (a pull, since that tick already runs before the discrete
 system is rebuilt); a tie has no such early tick of its own (its only hook is called *from inside*
 that rebuild, too late to safely swap in new facet elements), so it reconciles via the model's push
 notification instead. Either way, no separate wiring is needed. A model with both solid elements to

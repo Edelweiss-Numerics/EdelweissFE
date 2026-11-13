@@ -87,7 +87,7 @@ def localEntriesOfSubBlocks(subBlocks: list[tuple[np.ndarray, np.ndarray]]) -> t
 
 def countEntriesOfBlock(entity) -> int:
     """The number of values of the block of ``entity``: ``nDof**2`` for a dense block, else the number of entries it
-    lists in its ``localEntriesOfBlock``. An assembly counts once per equation system and stores where each block
+    lists in its ``localEntriesOfBlock``. An assembly counts once per discrete system and stores where each block
     begins and ends.
 
     Parameters
@@ -209,7 +209,7 @@ class SystemMatrixContributorBase:
 
 @dataclass(frozen=True)
 class SystemMatrixEntities:
-    """The entities of an equation system as the direct CSR assembly reads them: flat arrays, the counterpart of the
+    """The entities of a discrete system as the direct CSR assembly reads them: flat arrays, the counterpart of the
     C++ struct of the same name in ``_csrcore.h``.
 
     Entity ``e`` has the global DOF list ``dofs[dofStart[e] : dofStart[e + 1]]``. A dense block (``couplesAllItsDofs``)

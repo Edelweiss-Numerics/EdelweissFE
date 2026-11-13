@@ -352,7 +352,7 @@ An Abaqus-style tie constraint bonding a slave surface rigidly to a deformable m
 Unlike the penalty- and Lagrange-multiplier-based constraints above, the tie is enforced by
 master-slave DOF elimination (multi-point constraint condensation): each slave node's
 displacement is constrained to the frozen facet-linear interpolation of its closest master facet,
-:math:`u_s = \sum_a N_a \, u_{m_a}`, and the slave DOFs are condensed out of the equation system
+:math:`u_s = \sum_a N_a \, u_{m_a}`, and the slave DOFs are condensed out of the system of equations
 -- exact enforcement, no penalty parameter, no additional DOFs, zero added stiffness. The same
 mechanism serves the implicit solvers (system matrix transformation
 :math:`\tilde{K} = T^T K \, T + I_s`, the identity :math:`I_s` filling the structurally zero
@@ -367,7 +367,7 @@ The implicit solver's ``useThreadedMPCCondensation`` option (:doc:`solvers`, ``N
 :math:`T^T K T + I_s` in place, with an OpenMP-threaded kernel
 (:class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`), instead of with SciPy's
 single-threaded CSR routines, which build a second matrix: the system matrix is held once, not twice.
-For this, the CSR pattern of :math:`K` gains, once per equation system, the entries where a master
+For this, the CSR pattern of :math:`K` gains, once per discrete system, the entries where a master
 collects the couplings of its slaves
 (:meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`);
 the slave columns of :math:`K` become stored zeros in turn. Only the rows a constraint touches are
@@ -516,7 +516,7 @@ Implementing your own constraints
 ---------------------------------
 
 Subclass from the constraint base class in module ``edelweissfe.constraints.base.constraintbase``
-and implement its ``computeKernels``. A constraint enters the equation system like an element does
+and implement its ``computeKernels``. A constraint enters the discrete system like an element does
 (see :ref:`residual-and-tangent-convention`): it adds its residual contribution :math:`\mathbf{P}`
 -- the negative of the force it exerts on its nodes -- and the tangent
 :math:`\mathbf{K} = \partial \mathbf{P} / \partial \mathbf{U}`. Two examples:
@@ -546,9 +546,9 @@ as well:
 .. automodule:: edelweissfe.utils.residualtangentcheck
     :members:
 
-A constraint takes part in the equation system while it is ``active``. A constraint that is not active gets no
+A constraint takes part in the discrete system while it is ``active``. A constraint that is not active gets no
 degrees of freedom, the solvers do not evaluate it, and its scalar variables -- the Lagrange multipliers of
-``equalvaluelagrangian``, say -- leave the equation system with it, so that they leave no unknowns without an equation
+``equalvaluelagrangian``, say -- leave the discrete system with it, so that they leave no unknowns without an equation
 behind. Two states decide it, and ``active`` is true while both are:
 
 * ``switchedOn``: the constraint is **switched on from outside**. Setting ``active`` switches it, e.g. a
@@ -557,7 +557,7 @@ behind. Two states decide it, and ``active`` is true while both are:
   on again from outside.
 * ``withinReach``: the constraint finds itself within reach of what it constrains, in its ``updateConnectivity``.
   A contact constraint whose partner is out of reach sets it to false, and reports the change of ``active`` as a
-  change of its connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays
+  change of its connectivity, so that the solver rebuilds its discrete system. A constraint that does not check stays
   within reach.
 
 So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part

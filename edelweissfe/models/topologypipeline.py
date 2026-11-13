@@ -338,7 +338,7 @@ class TopologyPipeline:
         Returns
         -------
         bool
-            True if the topology changed, so the solver rebuilds its equation system.
+            True if the topology changed, so the solver rebuilds its discrete system.
 
         Raises
         ------

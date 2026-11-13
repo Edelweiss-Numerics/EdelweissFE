@@ -49,7 +49,7 @@ Master-slave condensation (Abaqus-style DOF elimination) of linear multi-point c
 .. math::
     u_s = \\sum_a N_a \\, u_{m_a}
 
-expressed as a full-size square transformation, so the equation system keeps its size ``nDof`` and
+expressed as a full-size square transformation, so the discrete system keeps its size ``nDof`` and
 every consumer of the DOF vector layout (Dirichlet indices, convergence checks, node-field
 write-back, field outputs) remains untouched.
 
@@ -140,7 +140,7 @@ def _flattenChainedRecords(
 
 class MultiPointConstraintTransformation:
     """The assembled master-slave condensation operator for all linear multi-point constraints of
-    an equation system.
+    a discrete system.
 
     Parameters
     ----------
@@ -150,7 +150,7 @@ class MultiPointConstraintTransformation:
         :class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`
         instances of a model.
     nDof
-        The total size of the equation system.
+        The total size of the discrete system.
     useThreadedCondensation
         Condense the system matrix in place, with the OpenMP-threaded kernel of
         :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`, instead of with SciPy's
@@ -217,7 +217,7 @@ class MultiPointConstraintTransformation:
 
     @property
     def nEliminatedDof(self) -> int:
-        """The number of slave DOFs eliminated from the equation system."""
+        """The number of slave DOFs eliminated from the system of equations."""
 
         return len(self.slaveDofIndices)
 

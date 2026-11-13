@@ -1,7 +1,7 @@
 Theory: the field-split AMG preconditioner
 ==========================================
 
-This page explains a *field-split* algebraic-multigrid preconditioner for the coupled multi-field equation systems
+This page explains a *field-split* algebraic-multigrid preconditioner for the coupled multi-field systems of equations
 EdelweissFE's implicit solvers produce -- displacement coupled to a scalar nonlocal (gradient-enhanced) damage field,
 typically with penalty contact, tie constraints and adaptive refinement on top -- and the outer Krylov solve it
 preconditions.
@@ -75,7 +75,7 @@ live :class:`~edelweissfe.models.femodel.FEModel` and
 :class:`~edelweissfe.numerics.dofmanager.DofManager`, and the base class derives from them the
 ordered list of :class:`~edelweissfe.linsolve.base.FieldBlock` records -- field name, half-open DOF
 range ``[start, stop)``, and nodal dimension (3 for a 3D displacement field, 1 for a scalar damage
-field). The nonlinear solver calls it whenever the equation system is (re)built: on the first solve,
+field). The nonlinear solver calls it whenever the discrete system is (re)built: on the first solve,
 and again after every adaptive-refinement or connectivity change, so the layout tracks the mesh.
 
 Two consequences worth knowing:

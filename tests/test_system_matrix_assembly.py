@@ -416,7 +416,7 @@ def test_a_copy_on_the_same_pattern_has_values_of_its_own(assemblyType, numberOf
 @pytest.mark.parametrize("assemblyType", _ASSEMBLIES)
 @pytest.mark.parametrize("numberOfWorkers", [1, 3])
 def test_a_copy_from_a_part_of_the_pattern_is_zero_elsewhere(assemblyType, numberOfWorkers):
-    """A matrix on a part of the pattern (as the mass of the equation system before a contact search widened the
+    """A matrix on a part of the pattern (as the mass of the discrete system before a contact search widened the
     pattern), with a stored zero outside the pattern, and a duplicate entry, which is summed."""
     _, dofManager, _ = _sparseModel()
     K = assemblyType(dofManager, numberOfWorkers)

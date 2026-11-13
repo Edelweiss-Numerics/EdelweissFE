@@ -27,7 +27,7 @@
 #  ---------------------------------------------------------------------
 
 """
-This module contains important classes for describing the global equation system by means of a sparse system.
+This module contains important classes for describing the global discrete system by means of a sparse system.
 """
 
 import hashlib
@@ -51,7 +51,7 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 class DofManager:
     """
-    The DofManager coordinates the global equation system structure.
+    The DofManager coordinates the global discrete system structure.
 
     Specifically, `DofManager`:
      * Analyzes the simulation domain (nodes, scalar variables, elements, constraints, and node sets).
@@ -222,7 +222,7 @@ class DofManager:
     def dofNumberingDigest(self) -> str:
         """A digest, a hexadecimal string, of what decides the index of every degree of freedom: for every field, its
         name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and
-        the names of the scalar variables, which follow, in the order they are numbered. Two equation systems with the
+        the names of the scalar variables, which follow, in the order they are numbered. Two discrete systems with the
         same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other --
         e.g., before and after a rebuild caused by a contact search, which changes the coupling of the degrees of
         freedom but not their numbering. The scalar variables are named, not counted: they are those of the
@@ -576,8 +576,8 @@ class DofManager:
         """Where the degrees of freedom of a field on the nodes of a node set lie in the DofVector, e.g. those a
         Dirichlet boundary condition prescribes, or those a node force acts on.
 
-        Only the nodes whose field is part of this equation system count. In a finite element model, these are all
-        nodes of the set that carry the field. A model whose equation system covers a part of its nodes only -- the
+        Only the nodes whose field is part of this discrete system count. In a finite element model, these are all
+        nodes of the set that carry the field. A model whose discrete system covers a part of its nodes only -- the
         active domain of a material point method model, the nodes in the support of an RKPM model's particles --
         leaves the other nodes of a set out. Values given per node of the set (the prescribed values of a boundary
         condition, the forces of a node force) are then selected by the positions of the remaining nodes in the set,
@@ -588,7 +588,7 @@ class DofManager:
         Parameters
         ----------
         field
-            The name of the field, one of this equation system.
+            The name of the field, one of this discrete system.
         nodeSet
             The node set.
 
@@ -625,7 +625,7 @@ class DofManager:
         idcsOfFieldVariables = self.idcsOfFieldVariablesInDofVector
 
         # The indices of the field on the nodes of the set, skipping a node without the field or with a field variable
-        # that is not part of this equation system (whose lookup gives None).
+        # that is not part of this discrete system (whose lookup gives None).
         indicesPerNode = [
             indices for node in nodeSet if (indices := idcsOfFieldVariables.get(node.fields.get(field))) is not None
         ]
@@ -661,7 +661,7 @@ class DofManager:
         return DofVector(self.nDof, self.idcsOfHigherOrderEntitiesInDofVector)
 
     def getNodeForIndexInDofVector(self, index: int) -> Node:
-        """Find the node for a given index in the equuation system.
+        """Find the node for a given index in the discrete system.
 
         Parameters
         ----------
@@ -706,16 +706,16 @@ class DofManager:
             )
         numberedNodeField = self.numberedNodeFields.get(nodeField.name)
         if numberedNodeField is None:
-            raise ValueError("this equation system does not number the node field '{:}'".format(nodeField.name))
+            raise ValueError("this discrete system does not number the node field '{:}'".format(nodeField.name))
         if wholeField and nodeField is not numberedNodeField:
             raise ValueError(
-                "this equation system numbers another node field '{:}' than the one given: a node field is read or "
+                "this discrete system numbers another node field '{:}' than the one given: a node field is read or "
                 "written as a whole only by the DofManager that numbers it".format(nodeField.name)
             )
 
     def _locateNodeFieldOnNodeSet(self, nodeField: NodeField, nodeSet: NodeSet) -> tuple[np.ndarray, list]:
         """Where the values of a NodeField on the nodes of a node set lie, in the DofVector and in the NodeField: the
-        nodes of the set whose field is part of this equation system (see :meth:`locateFieldOnNodeSet`).
+        nodes of the set whose field is part of this discrete system (see :meth:`locateFieldOnNodeSet`).
 
         Parameters
         ----------
@@ -754,7 +754,7 @@ class DofManager:
             The entry of the NodeField to write, one of
             :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
         nodeSet
-            The NodeSet to write: its nodes whose field is part of this equation system (see
+            The NodeSet to write: its nodes whose field is part of this discrete system (see
             :meth:`locateFieldOnNodeSet`); the other rows of the NodeField keep their values. If None, all nodes of the
             NodeField are written.
 
@@ -803,7 +803,7 @@ class DofManager:
             The entry of the NodeField to read, one of
             :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
         NodeSet
-            The NodeSet to consider: its nodes whose field is part of this equation system (see
+            The NodeSet to consider: its nodes whose field is part of this discrete system (see
             :meth:`locateFieldOnNodeSet`). If None, all nodes of the NodeField are considered.
 
         Returns
@@ -832,9 +832,9 @@ class DofManager:
         return dofVector
 
     def writeScalarVariablesToDofVector(self, dofVector: DofVector) -> DofVector:
-        """Write the values of the scalar variables of this equation system to their locations in a given
+        """Write the values of the scalar variables of this discrete system to their locations in a given
         DofVector. Only the scalar variables this DofManager numbers are written: those of a constraint that is
-        switched off are not part of the equation system.
+        switched off are not part of the discrete system.
 
         Parameters
         ----------
@@ -853,7 +853,7 @@ class DofManager:
         return dofVector
 
     def writeDofVectorToScalarVariables(self, dofVector: DofVector):
-        """Set the values of the scalar variables of this equation system from their locations in a given
+        """Set the values of the scalar variables of this discrete system from their locations in a given
         DofVector; the counterpart of :meth:`writeScalarVariablesToDofVector`. A scalar variable this DofManager
         does not number keeps its value.
 

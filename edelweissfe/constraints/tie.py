@@ -173,7 +173,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         u_s = \\sum_a N_a \\, u_{m_a}.
 
     The constraint records are collected by the solver and enforced by condensing the slave DOFs
-    out of the equation system (see
+    out of the system of equations (see
     :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`) -- the
     identical mechanism serves the implicit solvers (system matrix transformation) and explicit
     dynamics (mass/force folding onto the masters, direct kinematic slaving). The enforcement is

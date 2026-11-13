@@ -57,7 +57,7 @@ from edelweissfe.utils.inputfileparser import parseInputFile
 #: THESE rather than whatever is currently on the class -- wrapping the previous run's wrapper
 #: would chain them, and the second run would then also record into the first run's lists.
 _TRUE_REUSABLE = NED._operatorsReusable
-_TRUE_BUILD = NED.buildEquationSystem
+_TRUE_BUILD = NED.buildExplicitSystem
 
 #: One way each to make the recorded model description disagree with the live model.
 _PERTURBATIONS = {
@@ -176,7 +176,7 @@ def _run(tmp_path, monkeypatch, refuseReuse: bool):
         return system
 
     monkeypatch.setattr(NED, "_operatorsReusable", countingReusable)
-    monkeypatch.setattr(NED, "buildEquationSystem", recordingBuild)
+    monkeypatch.setattr(NED, "buildExplicitSystem", recordingBuild)
 
     model, _ = finiteElementSimulation(parseInputFile(_deckFile(tmp_path)), verbose=False, suppressPlots=True)
 

@@ -2,7 +2,7 @@
 ** Winkler L-panel, variant 3 of 3: blockamg (as variant 2) plus live h-adaptivity. Refinement runs
 ** ahead of the crack: every concrete element whose plastic hardening variable alphaP exceeds 0.1 is
 ** split into 2x2x2 children (one level), in batches of at least 20 marked elements (fewer rebuilds of
-** the equation system); the hanging nodes of the refined elements are constrained. Refining while the
+** the discrete system); the hanging nodes of the refined elements are constrained. Refining while the
 ** elements are still nearly elastic keeps the transferred state close to equilibrium -- refining only
 ** at alphaP > 0.8, inside already softening elements, disturbs it enough to force cutbacks.
 ** The finer crack band gives a lower load-displacement curve than variants 1 and 2.

@@ -99,7 +99,7 @@ class BodyLoadBase(LoadBase):
         timeStep
             The current time step.
         dofManager
-            The DOF manager of the equation system.
+            The DOF manager of the discrete system.
         """
 
         time = timeStep.totalTime

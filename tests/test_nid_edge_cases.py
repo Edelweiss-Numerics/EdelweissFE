@@ -42,7 +42,7 @@ import pytest
 # tests/ carries no __init__.py, so pytest's default (prepend) import mode puts this directory on
 # sys.path and sibling test modules import by their bare module name -- same convention as
 # test_nid_restart.py.
-from test_model_equation_system import _solve, _strip
+from test_model_discrete_system import _solve, _strip
 from test_nid_newmark import (
     BETA,
     FORCE,
@@ -61,7 +61,7 @@ from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
-from edelweissfe.models.equationsystemlayout import EquationSystemLayout
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
@@ -267,10 +267,10 @@ def test_the_explicit_static_solver_gives_the_entities_no_inertia(tmp_path, monk
     assert given == [(0.0, 0.0)]
 
 
-class _LayoutWithoutNodalInertia(EquationSystemLayout):
-    """The layout of a model none of whose nodes carries a mass the solver integrates: as in a model whose entities
-    carry the inertia and integrate it themselves (``inertia=entities``). It reports the motion of these entities where
-    the model says, and their lumped mass as zero: they lie nowhere."""
+class _SystemWithoutNodalInertia(DiscreteSystem):
+    """The discrete system of a model none of whose nodes carries a mass the solver integrates: as in a model whose
+    entities carry the inertia and integrate it themselves (``inertia=entities``). It reports the motion of these
+    entities where the model says, and their lumped mass as zero: they lie nowhere."""
 
     def dofsWithNodalInertia(self, fieldNames):
         return np.zeros(0, dtype=int)
@@ -283,16 +283,16 @@ class _LayoutWithoutNodalInertia(EquationSystemLayout):
 
 
 class _ModelWithoutNodalInertia(FEModel):
-    """A finite element model that answers with :class:`_LayoutWithoutNodalInertia`, and holds the motion of entities
+    """A finite element model that answers with :class:`_SystemWithoutNodalInertia`, and holds the motion of entities
     that integrate their own inertia (which it does not model) in the given places."""
 
     def __init__(self, dimension, motionHeldIn=()):
         super().__init__(dimension)
         self.motionHeldIn = motionHeldIn
 
-    def buildEquationSystem(self):
-        layout = super().buildEquationSystem()
-        return _LayoutWithoutNodalInertia(self, layout.dofManager, layout.elements)
+    def buildDiscreteSystem(self):
+        system = super().buildDiscreteSystem()
+        return _SystemWithoutNodalInertia(self, system.dofManager, system.elements)
 
 
 def test_a_model_without_nodal_inertia_gets_no_mass_assembled():
@@ -345,7 +345,7 @@ def test_a_step_refuses_to_start_where_the_motion_of_the_entities_is_not_taken_f
 
 def test_inertia_at_the_nodes_is_refused_for_a_model_without_entities_that_integrate_their_own():
     """inertia=nodes integrates the inertia of the entities that integrate their own at the nodes; a finite element
-    model has none (its layout assembles no lumped mass of them), so the option means nothing there and is refused."""
+    model has none (its system assembles no lumped mass of them), so the option means nothing there and is refused."""
 
     journal = Journal(verbose=False)
     solverClass = functools.partial(NonlinearImplicitDynamic, inertia="nodes")
@@ -360,9 +360,9 @@ _ELEMENT_MASS = 0.25
 _LUMPED_MASS_OF_ENTITIES = 0.5
 
 
-class _LayoutWithLumpedMassOfEntities(EquationSystemLayout):
-    """The layout of a model with entities that integrate their own inertia, which it does not model: their lumped mass
-    lies on every displacement dof, ``lumpedMass`` each (zero is a lumped mass too, unlike none)."""
+class _SystemWithLumpedMassOfEntities(DiscreteSystem):
+    """The discrete system of a model with entities that integrate their own inertia, which it does not model: their
+    lumped mass lies on every displacement dof, ``lumpedMass`` each (zero is a lumped mass too, unlike none)."""
 
     def __init__(self, model, dofManager, elements, lumpedMass: float):
         super().__init__(model, dofManager, elements)
@@ -376,20 +376,20 @@ class _LayoutWithLumpedMassOfEntities(EquationSystemLayout):
 
 
 class _ModelWithLumpedMassOfEntities(FEModel):
-    """A finite element model that answers with :class:`_LayoutWithLumpedMassOfEntities`."""
+    """A finite element model that answers with :class:`_SystemWithLumpedMassOfEntities`."""
 
     def __init__(self, dimension, lumpedMass: float):
         super().__init__(dimension)
         self.lumpedMass = lumpedMass
 
-    def buildEquationSystem(self):
-        layout = super().buildEquationSystem()
-        return _LayoutWithLumpedMassOfEntities(self, layout.dofManager, layout.elements, self.lumpedMass)
+    def buildDiscreteSystem(self):
+        system = super().buildDiscreteSystem()
+        return _SystemWithLumpedMassOfEntities(self, system.dofManager, system.elements, self.lumpedMass)
 
 
 def test_the_lumped_mass_of_entities_enters_the_diagonal(monkeypatch):
     """inertia=nodes: the lumped mass of the entities that integrate their own inertia enters the diagonal of the
-    mass (``SystemMatrixAssembly.addLumpedMatrix``), on both assemblies. A stub layout here; the real coverage is in
+    mass (``SystemMatrixAssembly.addLumpedMatrix``), on both assemblies. A stub system here; the real coverage is in
     EdelweissMeshfree, whose particles are such entities. Run once with a lumped mass of zero and once with
     ``_LUMPED_MASS_OF_ENTITIES``: the masses assembled differ by exactly that on the diagonal of the displacement
     dofs, and nowhere else."""

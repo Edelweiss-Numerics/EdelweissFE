@@ -118,7 +118,7 @@ class HAdaptivitySchema:
     minMarkedElements: int = schemaField(
         description=(
             "Minimum number of eligible elements one evaluation of the markers must mark for a "
-            "refinement pass to happen; with fewer, nothing is refined and no equation system is "
+            "refinement pass to happen; with fewer, nothing is refined and no discrete system is "
             "rebuilt. Marks are not carried over to later evaluations: they are a function of the "
             "current state only. Individual markers may cap their own marks (e.g. "
             "'maxRefinedFraction') or expand them (e.g. 'halo') before this count is taken. Default 1 "

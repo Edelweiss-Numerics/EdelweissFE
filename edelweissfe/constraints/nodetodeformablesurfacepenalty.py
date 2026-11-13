@@ -234,10 +234,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     contact's triangulated master surface didn't need a curvature term either. Unlike that rigid
     case, though, each facet's nodes are ordinary displacement DOFs of a deformable body, and
     different facets have disjoint DOFs -- so the set of candidate master facets must be kept in
-    sync with the actual equation system rather than fixed once for the whole analysis.
+    sync with the actual discrete system rather than fixed once for the whole analysis.
 
     This constraint implements :meth:`updateConnectivity`, called once per increment (before the
-    equation system is (re)built, see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST`),
+    discrete system is (re)built, see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST`),
     re-assigning each slave node to its single closest facet (within ``searchDistance``, if given)
     based on the last converged configuration -- mirroring the pattern already used by
     EdelweissMeshfree's ``NonlinearQuasistaticSolver``/``DiscreteRigidBodyPenaltyContact`` for
@@ -464,7 +464,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def updateConnectivity(self, model: FEModel) -> bool:
         """Re-assign each slave node to its single closest facet, based on the last converged
-        configuration. Called once per increment by the solver, before the equation system is
+        configuration. Called once per increment by the solver, before the discrete system is
         (re)built. Reconciles against a mesh mutation (e.g. an AMR refinement of either surface's
         source solid elements) first, at this natural per-increment tick -- see
         :class:`~edelweissfe.models.meshdependent.MeshDependent`."""

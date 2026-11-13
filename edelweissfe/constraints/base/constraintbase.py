@@ -44,7 +44,7 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
     #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block
-    #: the constraint has in the equation system it is evaluated in; None until its first evaluation there (see
+    #: the constraint has in the discrete system it is evaluated in; None until its first evaluation there (see
     #: :meth:`prepareExplicitEvaluation`).
     _discardedTangentScratch = None
 
@@ -54,9 +54,9 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
     checkpointedState: dict | None = None
 
     #: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:
-    #: e.g. a contact constraint whose partner is far away is not, and takes no part in the equation system then (see
+    #: e.g. a contact constraint whose partner is far away is not, and takes no part in the discrete system then (see
     #: :attr:`active`). A constraint sets it there, and reports a change of :attr:`active` as a change of its
-    #: connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays within
+    #: connectivity, so that the solver rebuilds its discrete system. A constraint that does not check stays within
     #: reach.
     withinReach: bool = True
 
@@ -82,9 +82,9 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
 
     @property
     def active(self) -> bool:
-        """Whether this constraint takes part in the equation system: while it is :attr:`switchedOn` and
+        """Whether this constraint takes part in the discrete system, while it is :attr:`switchedOn` and
         :attr:`withinReach`. A constraint that does not take part gets no degrees of freedom and adds nothing to the
-        residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the equation system with it, so
+        residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the discrete system with it, so
         that they leave no empty rows behind.
 
         Setting it switches the constraint on or off from outside, e.g. by a ``modelupdate`` step action at the start
@@ -94,7 +94,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         Returns
         -------
         bool
-            Whether the constraint takes part in the equation system.
+            Whether the constraint takes part in the discrete system.
         """
 
         return self._switchedOn and self.withinReach
@@ -184,7 +184,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         """The total number of degrees of freedom this constraint is associated with."""
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        """Called once at the start of every increment, before the global equation system is
+        """Called once at the start of every increment, before the global discrete system is
         (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
         contact pairs) and declare whether its ``nodes``/``fieldsOnNodes``/``nDof`` footprint has
         changed since the last call.
@@ -202,7 +202,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         -------
         bool
             True if this constraint's contribution to the global system has changed and the
-            equation system must be rebuilt before the next Newton solve.
+            discrete system must be rebuilt before the next Newton solve.
         """
 
         return False
@@ -267,14 +267,14 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         self.scalarVariables = scalarVariables
 
     def prepareExplicitEvaluation(self):
-        """Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt
+        """Called by an explicit solver whenever the constraint is located anew in its discrete system (a rebuilt
         one, or one whose constraints are re-located), before it evaluates the constraint there with
         :meth:`computeKernelsExplicit`.
 
         This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation
         sizes it, once, for the block the constraint has now. The size is the number of entries of the block
         (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists
-        its entries means building the list: once per equation system, not in every increment. A constraint that
+        its entries means building the list: once per discrete system, not in every increment. A constraint that
         evaluates its forces without a tangent needs nothing here.
 
         A solver that evaluates constraints itself, rather than through
@@ -297,7 +297,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear
         system and so has no use for a tangent. This default calls :meth:`computeKernels` with a
         scratch tangent that is thrown away, so that every constraint also works in an explicit
-        analysis; the scratch is sized once per equation system: a solver that evaluates constraints itself calls
+        analysis; the scratch is sized once per discrete system: a solver that evaluates constraints itself calls
         :meth:`prepareExplicitEvaluation` whenever the constraint is located anew.
         A constraint whose tangent is costly overrides it, e.g. through
         :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.
@@ -314,7 +314,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
             The current time step.
         """
 
-        # The discarded tangent buffer is sized once per equation system, and re-zeroed in every increment.
+        # The discarded tangent buffer is sized once per discrete system, and re-zeroed in every increment.
         scratch = self._discardedTangentScratch
         if scratch is None:
             scratch = self._discardedTangentScratch = np.zeros(countEntriesOfBlock(self))

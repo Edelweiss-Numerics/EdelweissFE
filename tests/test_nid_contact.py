@@ -28,7 +28,7 @@
 """``NID`` under contact: reusing the mass and the damping across a connectivity-only rebuild.
 
 A contact constraint changes its connectivity as the bodies approach and slide, and the parent
-solver builds a new equation system every time it does. Reassembling the mass and the damping on
+solver builds a new discrete system every time it does. Reassembling the mass and the damping on
 each of those rebuilds would be a full element loop per increment for operators that cannot have
 changed -- no node moved, no element changed -- so ``NID`` copies the mass onto the sparsity pattern of the new
 system and keeps the damping instead (``_reuseMassAndDamping``). What has to hold:

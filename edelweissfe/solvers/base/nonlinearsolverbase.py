@@ -101,7 +101,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     mpcTransformation = None
 
     #: The layout of the iteration table that :meth:`checkConvergence` writes, one column per field; set up
-    #: by the solver whenever it (re)builds its equation system.
+    #: by the solver whenever it (re)builds its discrete system.
     convergenceTable: ConvergenceTable | None = None
 
     #: Whether the header of the iteration table is written in this attempt of the increment: it comes with the
@@ -109,7 +109,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: above the table, not inside it.
     tableHeaderWritten: bool = False
 
-    #: The force buffer of each constraint, by name, with the DOF indices it was made for, which
+    #: The force buffer of each constraint, by constraint, with the DOF indices it was made for, which
     #: :meth:`assembleConstraintForces` reuses from increment to increment as long as the constraint has these indices.
     _constraintForcePlans: dict | None = None
 
@@ -211,7 +211,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         Returns
         -------
         TopologyUpdate
-            What changed; the solver decides from it whether to rebuild its equation system.
+            What changed; the solver decides from it whether to rebuild its discrete system.
         """
 
         topologyChanged = model.topology.update(step) if offerModelModifiers else False
@@ -295,15 +295,13 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     @performancetiming.timeit("assemble constraints")
     def assembleConstraintForces(
         self,
-        constraints: dict,
+        constraints: list,
         U_np: DofVector,
         dU: DofVector,
         P: DofVector,
         timeStep: TimeStep,
     ) -> DofVector:
-        """Evaluate every active constraint and add its residual contribution to the given vector; a constraint
-        that is switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is
-        skipped.
+        """Evaluate the constraints of the discrete system and add their residual contributions to the given vector.
 
         The explicit counterpart of
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same
@@ -318,8 +316,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         refuses it in its ``validateModelCapabilities``.
 
         The force buffer and the DOF indices of each constraint are kept in :attr:`_constraintForcePlans` (by
-        constraint name) and reused in every increment. They hold for the indices of the constraint they were made
-        for: whenever the DofManager locates the constraint anew -- a rebuilt equation system, or one whose
+        constraint) and reused in every increment. They hold for the indices of the constraint they were made
+        for: whenever the DofManager locates the constraint anew -- a rebuilt discrete system, or one whose
         constraints are re-located in place --, the constraint has indices of its own, its plan is made anew, and the
         constraint is told so
         (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation`).
@@ -327,7 +325,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         Parameters
         ----------
         constraints
-            The constraints of the model, by name.
+            The constraints of the discrete system
+            (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`).
         U_np
             The current solution vector.
         dU
@@ -343,24 +342,20 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The augmented residual contribution vector.
         """
 
-        # Per-constraint buffers and index plans, made once per equation system.
+        # Per-constraint buffers and index plans, made once per discrete system.
         if self._constraintForcePlans is None:
             self._constraintForcePlans = {}
         PPlain = P.asPlainArray()
 
-        for name, constraint in constraints.items():
-            # a constraint that is switched off has no place in the equation system
-            if not constraint.active:
-                continue
-
+        for constraint in constraints:
             # A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.
             indices = P.entitiesInDofVector[constraint]
-            plan = self._constraintForcePlans.get(name)
+            plan = self._constraintForcePlans.get(constraint)
             if plan is None or plan[1] is not indices:
                 # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
                 # facet), since fancy-indexed += would drop repeated contributions.
                 plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
-                self._constraintForcePlans[name] = plan
+                self._constraintForcePlans[constraint] = plan
                 constraint.prepareExplicitEvaluation()
 
             Pc, _, namesDofMoreThanOnce = plan
@@ -566,7 +561,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         timeStep
             The current time step.
         R
-            The residual vector of the global equation system to be modified.
+            The residual vector of the global discrete system to be modified.
         dirichlets
             The list of dirichlet boundary conditions.
 
@@ -698,7 +693,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
     @performancetiming.timeit("linear solve")
     def linearSolve(self, A: csr_matrix, b: DofVector) -> ndarray:
-        """Solve the linear equation system.
+        """Solve the linear system of equations.
 
         Parameters
         ----------
@@ -841,7 +836,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """Determine, up front, which global DOFs each Dirichlet BC constrains.
 
         Called at the start of every increment, before its iterations: the numbering of the degrees of freedom may
-        have changed since the last increment -- a rebuild of the equation system after a change of the mesh or of the
+        have changed since the last increment -- a rebuild of the discrete system after a change of the mesh or of the
         coupling, or a new active domain of a meshfree model, which locates a node set anew. The result
         is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, together with the
         positions of their nodes in the BC's node set (:attr:`~DirichletBase.constrainedNodePositions`),
@@ -873,7 +868,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         stays node-major, matching the prescribed values of these nodes
         (:meth:`~DirichletBase.getPrescribedIncrementOfConstrainedDofs`).
 
-        Only the nodes of the set that are part of the equation system count, see
+        Only the nodes of the set that are part of the discrete system count, see
         :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`: all nodes of the set in a
         finite element model, those in the active domain in a meshfree one.
         """
@@ -884,7 +879,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
     def buildMPCTransformation(self, model: FEModel, stepActions: dict = None):
         """Collect the linear dependency records from all multi-point constraints of the model
-        and assemble the master-slave condensation operator for the current equation system.
+        and assemble the master-slave condensation operator for the current discrete system.
         Must be called whenever the DofManager is (re)built.
 
         Parameters
@@ -950,7 +945,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             # the node set may have grown in place (adaptive refinement): let the BC catch up first
             dirichlet.reconcileIfSetChanged()
             indices, nodePositions = self._constrainedDofsOf(dirichlet)
-            # the prescribed values of the nodes that are part of the equation system, one row per node of the set
+            # the prescribed values of the nodes that are part of the discrete system, one row per node of the set
             values = np.asarray(dirichlet.delta)[nodePositions].flatten()
             if indices.shape != values.shape:
                 raise ValueError(

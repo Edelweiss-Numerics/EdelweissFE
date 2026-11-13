@@ -151,7 +151,7 @@ class LinearSolver:
     def setModel(self, model, dofManager) -> None:
         """Receive the live model and DOF manager this solver is being asked to solve for.
 
-        Called by the nonlinear solver whenever the equation system is (re)built -- i.e. on the first
+        Called by the nonlinear solver whenever the discrete system is (re)built -- i.e. on the first
         solve and again after any AMR/connectivity change. The default implementation derives and
         stores the per-field DOF-block structure (name, DOF range, nodal dimension) any field-split
         solver needs -- equivalent to calling :meth:`setFieldStructure` with those blocks -- and keeps
@@ -168,7 +168,7 @@ class LinearSolver:
             The live :class:`~edelweissfe.models.femodel.FEModel`.
         dofManager
             The live :class:`~edelweissfe.numerics.dofmanager.DofManager` describing the current
-            equation system's layout.
+            discrete system's numbering.
         """
         self._model = model
         self._dofManager = dofManager

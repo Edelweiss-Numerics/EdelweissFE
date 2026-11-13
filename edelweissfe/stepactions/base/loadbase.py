@@ -83,7 +83,7 @@ class LoadBase(StepActionBase):
         timeStep
             The current time step.
         dofManager
-            The DOF manager of the equation system, which locates the degrees of freedom the load acts on.
+            The DOF manager of the discrete system, which locates the degrees of freedom the load acts on.
         """
 
     @abstractmethod

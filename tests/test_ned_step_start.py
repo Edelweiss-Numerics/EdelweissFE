@@ -108,7 +108,7 @@ _RELEASED_UNDER_ITS_WEIGHT = """
 
 @pytest.fixture
 def fixedTimeIncrement(monkeypatch):
-    """Every equation system's stable time increment is replaced by the fixed one (with a courant number of 1)."""
+    """Every discrete system's stable time increment is replaced by the fixed one (with a courant number of 1)."""
 
     monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, model, U: _TIME_INCREMENT)
 

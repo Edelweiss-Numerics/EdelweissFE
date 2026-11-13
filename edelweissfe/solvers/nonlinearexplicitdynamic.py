@@ -28,7 +28,7 @@
 #  ---------------------------------------------------------------------
 """The nonlinear explicit dynamic solver.
 
-An increment solves no equation system. Second-order fields are advanced by central differences
+An increment solves no linear system. Second-order fields are advanced by central differences
 (a leapfrog, with the velocity staggered half an increment behind the displacement), first-order
 fields -- a nonlocal damage field, for instance -- by forward Euler, and both divide by a **lumped**
 mass, so the cost of an increment is one element pass plus vector arithmetic. There is no linear
@@ -155,7 +155,7 @@ step leaves the velocity at its end time, as every solver does (see
 :doc:`/documentation/nodefieldresults`).
 
 **The net force is solver state, and a step starts from the model's state.** The net force lives
-within one equation system, and is never read back from the model. A rebuild after a change of a
+within one discrete system, and is never read back from the model. A rebuild after a change of a
 constraint's connectivity carries it over by numbering, and a resumed step takes it from its
 checkpoint. After a mesh change it starts at zero: re-evaluating it would run the constitutive law
 off-cycle and write into the material state, and zero is an O(dT) error for one increment. At the
@@ -317,7 +317,7 @@ class NEDSchema:
 
 @dataclass
 class ExplicitSystem:
-    """Everything an explicit increment operates on that is sized by the current equation system.
+    """Everything an explicit increment operates on that is sized by the current discrete system.
 
     None of these are independent state: each is indexed by the :class:`DofManager` in force when it
     was created, so the moment that system changes -- an h-adaptivity event creating nodes and
@@ -372,7 +372,7 @@ class _ReusableExplicitOperators:
     A rebuild asked for by a constraint's connectivity re-assigns which nodes that constraint
     couples, and touches nothing the lumped inertia, its inverse, the mass-proportional damping
     rate or the multi-point-constraint transformation are a function of -- so those are exactly
-    what they were, and :meth:`NED.buildEquationSystem` keeps them here instead of assembling
+    what they were, and :meth:`NED.buildExplicitSystem` keeps them here instead of assembling
     them again.
 
     The recorded model description is what :meth:`NED._operatorsReusable` checks before it does,
@@ -480,24 +480,25 @@ class NED(NonlinearSolverBase):
         #: checkpointed one, since the checkpointed velocity already carries the half-step offset.
         self.prevTimeStep = None
         #: The net force of the last completed increment, which the next velocity update divides by; a
-        #: vector of the current equation system. None between steps, so that the first build of a step
+        #: vector of the current discrete system. None between steps, so that the first build of a step
         #: can tell a resumed step (whose checkpoint holds it) from a cold one, which forms it from the
         #: state of the model (see :meth:`formNetForceOfTheModelsState`).
         self._netForce = None
-        #: The inertia and the damping of every degree of freedom of the current equation system, the
-        #: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see buildEquationSystem.
+        #: The inertia and the damping of every degree of freedom of the current discrete system, the
+        #: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see buildExplicitSystem.
         self._inertia = None
         self._damping = None
         #: The elements the increment loop evaluates (those with kernels, i.e. without contact
-        #: facets); filled by :meth:`buildEquationSystem`. None, not {}, so an unbuilt system fails.
+        #: facets); filled by :meth:`buildExplicitSystem`. None, not {}, so an unbuilt system fails.
         self._kernelElements = None
         #: Lumped operators kept across a connectivity-only rebuild; see
         #: :class:`_ReusableExplicitOperators`.
         self._reusableOperators = None
-        #: What the model's current equation system is made of (see
-        #: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`): the numbering of its degrees of
-        #: freedom, and how the state and the results pass between the model and the vectors of the increments.
-        self.equationSystemLayout = None
+        #: What the model's current discrete system is made of (see
+        #: :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`): the numbering of its degrees of
+        #: freedom, its constraints, and how the state and the results pass between the model and the vectors of the
+        #: increments.
+        self.system = None
 
     def beginStep(
         self,
@@ -507,7 +508,7 @@ class NED(NonlinearSolverBase):
         outputmanagers: dict[str, OutputManagerBase],
     ):
         """Start the step; see
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. The equation
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. The discrete
         system is built by the first :meth:`prepareIncrement`.
 
         Parameters
@@ -551,18 +552,18 @@ class NED(NonlinearSolverBase):
             if modifier.initiatesTopologyChanges and not modifier.actsOnlyAtSimulationStart
         ]
 
-        # Step actions before the equation system, matching NIST: nothing they do depends on it.
+        # Step actions before the discrete system, matching NIST: nothing they do depends on it.
         self.applyStepActionsAtStepStart(model, step)
 
-        self._system = None
+        self._explicitSystem = None
 
     def prepareIncrement(self, step, model: FEModel, isRetry: bool):
-        """The topology update, when due, and the equation system; see
+        """The topology update, when due, and the discrete system; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement`.
 
         The topology update is due at the start of the step, and after every
         ``topology-check-frequency``-th increment. At the start of the step it runs before anything
-        sized by the equation system exists, so the mesh is final before the lumped mass, the
+        sized by the discrete system exists, so the mesh is final before the lumped mass, the
         multi-point-constraint condensation and the critical time step are derived from it. It runs
         here, before the next increment is proposed, because a refinement may lower the stable time
         increment that increment has to use.
@@ -582,14 +583,14 @@ class NED(NonlinearSolverBase):
             # hAdaptivity's initialOnly markers) and the first contact search.
             self.updateTopologyAndConnectivity(model, step)
 
-        if self._system is None:
+        if self._explicitSystem is None:
             # The net force of the checkpoint on a resumed step, None on a cold one.
             resumedNetForce = self._netForce
-            self._buildSystem(self.buildEquationSystem(model, step))
+            self._buildSystem(self.buildExplicitSystem(model, step))
             if resumedNetForce is not None:
                 if len(resumedNetForce) != len(self._netForce):
                     raise ValueError(
-                        "The checkpoint holds a net force of {:} entries, but the equation system rebuilt from "
+                        "The checkpoint holds a net force of {:} entries, but the discrete system rebuilt from "
                         "the resumed model has {:}.".format(len(resumedNetForce), len(self._netForce))
                     )
                 self._netForce[:] = resumedNetForce
@@ -598,7 +599,7 @@ class NED(NonlinearSolverBase):
                 self._energyAtStepStart = self.energyOfTheModelsState()
             # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.
             if step.timeStepper.enforcedTimeIncrement is None:
-                step.timeStepper.enforceTimeIncrement(self._system.criticalTimeStep)
+                step.timeStepper.enforceTimeIncrement(self._explicitSystem.criticalTimeStep)
 
         # --- h-adaptivity, mid-run ----------------------------------------------------------------
         # After every topology-check-frequency-th increment, i.e. after its output: the marker reads the
@@ -612,7 +613,7 @@ class NED(NonlinearSolverBase):
         ):
             return
 
-        theSystem, V = self._system, self._V
+        theSystem, V = self._explicitSystem, self._V
         lumpedTotalsBefore = self._perFieldLumpedTotals()
         momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
         kineticBefore = self.kineticEnergy(V)
@@ -624,9 +625,9 @@ class NED(NonlinearSolverBase):
         if meshChanged or connectivityChanged:
             # A connectivity-only change carries solution, velocity and net force over to the new system; a
             # mesh change reads solution and velocity from the model, and starts the net force at zero (see
-            # buildEquationSystem).
-            self._buildSystem(self.buildEquationSystem(model, step, previous=None if meshChanged else theSystem))
-            theSystem = self._system
+            # buildExplicitSystem).
+            self._buildSystem(self.buildExplicitSystem(model, step, previous=None if meshChanged else theSystem))
+            theSystem = self._explicitSystem
 
         V = self._V
 
@@ -644,15 +645,15 @@ class NED(NonlinearSolverBase):
                 step.timeStepper.enforceTimeIncrement(theSystem.criticalTimeStep)
 
     def _buildSystem(self, theSystem):
-        """Adopt a (re)built equation system, and the vectors the increments work on.
+        """Adopt a (re)built explicit system, and the vectors the increments work on.
 
         Parameters
         ----------
         theSystem
-            The equation system.
+            The explicit system, see :meth:`buildExplicitSystem`.
         """
 
-        self._system = theSystem
+        self._explicitSystem = theSystem
         self._Minv = theSystem.Minv
         self._U, self._dU, self._V, self._A = theSystem.U, theSystem.dU, theSystem.V, theSystem.A
         self._netForce, self._internalForce = theSystem.netForce, theSystem.internalForce
@@ -694,7 +695,7 @@ class NED(NonlinearSolverBase):
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
         topologyCheckFrequency = self.options["topology-check-frequency"]
-        theSystem, Minv = self._system, self._Minv
+        theSystem, Minv = self._explicitSystem, self._Minv
         U, dU, V, netForce, internalForce = self._U, self._dU, self._V, self._netForce, self._internalForce
 
         if timeStep.number % self.options["output-frequency"] == 0:
@@ -738,8 +739,8 @@ class NED(NonlinearSolverBase):
 
             if connectivityChanged:
                 self.journal.message("Constraint connectivity changed", self.identification, 2)
-                self._buildSystem(self.buildEquationSystem(model, step, previous=theSystem))
-                theSystem, Minv = self._system, self._Minv
+                self._buildSystem(self.buildExplicitSystem(model, step, previous=theSystem))
+                theSystem, Minv = self._explicitSystem, self._Minv
                 U, dU, V, netForce, internalForce = (
                     self._U,
                     self._dU,
@@ -850,7 +851,7 @@ class NED(NonlinearSolverBase):
         Parameters
         ----------
         dirichlets
-            The Dirichlet boundary conditions of the step, located on the current equation system.
+            The Dirichlet boundary conditions of the step, located on the current discrete system.
         timeIncrement
             The time increment just completed.
 
@@ -876,7 +877,7 @@ class NED(NonlinearSolverBase):
     def formNetForceOfTheModelsState(self, dirichlets):
         """Form the net force a cold step starts from: that of the state the model holds,
         :math:`\\boldsymbol{f}_\\mathrm{net} = \\boldsymbol{M} \\boldsymbol{a}_0 + \\boldsymbol{C} \\boldsymbol{v}_0`,
-        from its velocity and acceleration, read with the solution when the equation system was built, and the lumped
+        from its velocity and acceleration, read with the solution when the discrete system was built, and the lumped
         operators; nothing is evaluated (see the module documentation, "The net force is solver state, and a step
         starts from the model's state"). Zero on a degree of freedom with a prescribed motion, which has no equation of
         motion, and on a multi-point-constraint slave, whose inertia and damping are folded onto its masters.
@@ -896,7 +897,7 @@ class NED(NonlinearSolverBase):
     def energyOfTheModelsState(self) -> float:
         """The energy the model holds at the start of a cold step, which its energy balance starts from (see the module
         documentation, "Energy balance"): the kinetic energy of the model's velocity, read with the solution when the
-        equation system was built, and the internal (strain) energy the materials publish for the state the elements
+        discrete system was built, and the internal (strain) energy the materials publish for the state the elements
         hold. Nothing is evaluated.
 
         Returns
@@ -946,7 +947,7 @@ class NED(NonlinearSolverBase):
         Parameters
         ----------
         dirichlets
-            The Dirichlet boundary conditions of the step, located on the current equation system.
+            The Dirichlet boundary conditions of the step, located on the current discrete system.
 
         Returns
         -------
@@ -1011,7 +1012,7 @@ class NED(NonlinearSolverBase):
                 - the net force of this increment
         """
 
-        # only the entities that have kernels to evaluate; see buildEquationSystem()
+        # only the entities that have kernels to evaluate; see buildExplicitSystem()
         elements = self._kernelElements
         dirichlets = stepActions["dirichlet"].values()
         loads = self.collectLoads(stepActions)
@@ -1093,7 +1094,7 @@ class NED(NonlinearSolverBase):
         internalForce, psi = self.computeElements(elements, U_n, dU, internalForce, timeStep)
         netForce[:] = internalForce
         netForce, _ = self.assembleLoads(loads, U_n, dU, netForce, None, timeStep)
-        netForce = self.assembleConstraintForces(model.constraints, U_n, dU, netForce, timeStep)
+        netForce = self.assembleConstraintForces(self.system.constraints, U_n, dU, netForce, timeStep)
         netForce[:] = -netForce[:]
 
         # Fold slave forces onto their masters here, so the next increment's Dirichlet handling sees
@@ -1267,7 +1268,7 @@ class NED(NonlinearSolverBase):
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`.
         A constraint switched off from outside
         (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it takes no
-        part in the step, and its scalar variables leave the equation system with it. One that is switched on is
+        part in the step, and its scalar variables leave the discrete system with it. One that is switched on is
         refused even while it is out of reach: it may come within reach during the step.
 
         Parameters
@@ -1348,13 +1349,13 @@ class NED(NonlinearSolverBase):
 
     @performancetiming.timeit("write results to nodes")
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector | None, V: DofVector, A: DofVector | None):
-        """Write the results of an increment to the model, through the model's layout of the equation system: the
+        """Write the results of an increment to the model, through the discrete system: the
         solution, its increment and the internal, inertial and damping force to the node fields, and the solution to the
-        scalar variables (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`),
+        scalar variables (see :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`),
         then the velocity and the acceleration (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel`); the
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel`); the
         incremental degrees of freedom are set to zero first, from where the next increment starts them (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`).
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients`).
 
         Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity
         event can fall on any increment and its interpolation reads these entries, and a restart
@@ -1377,9 +1378,9 @@ class NED(NonlinearSolverBase):
             the model's as it is.
         """
 
-        self.equationSystemLayout.zeroIncrementalCoefficients(U)
-        self.equationSystemLayout.writeResultsToModel(U, dU, P)
-        self.equationSystemLayout.writeVelocityAndAccelerationToModel(V, A)
+        self.system.zeroIncrementalCoefficients(U)
+        self.system.writeResultsToModel(U, dU, P)
+        self.system.writeVelocityAndAccelerationToModel(V, A)
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:
@@ -1403,7 +1404,7 @@ class NED(NonlinearSolverBase):
         Returns
         -------
         bool
-            Whether any constraint's DOF footprint changed, i.e. whether the equation system has to
+            Whether any constraint's DOF footprint changed, i.e. whether the discrete system has to
             be rebuilt.
         """
 
@@ -1640,9 +1641,10 @@ class NED(NonlinearSolverBase):
 
         return M, Minv
 
-    @performancetiming.timeit("build equation system")
-    def buildEquationSystem(self, model: FEModel, step, previous: ExplicitSystem = None) -> ExplicitSystem:
-        """Build the equation system and everything sized by it.
+    @performancetiming.timeit("build discrete system")
+    def buildExplicitSystem(self, model: FEModel, step, previous: ExplicitSystem = None) -> ExplicitSystem:
+        """Build the explicit system, the operators and vectors sized by the discrete system, and the discrete system
+        itself (:attr:`system`).
 
         Called once before the increment loop, and again from inside it whenever a constraint reports
         that its DOF footprint changed -- one method for both, so the path every model takes and the
@@ -1668,7 +1670,7 @@ class NED(NonlinearSolverBase):
         Returns
         -------
         ExplicitSystem
-            The freshly built system.
+            The freshly built explicit system.
         """
 
         isRebuild = previous is not None
@@ -1687,13 +1689,13 @@ class NED(NonlinearSolverBase):
             )
             self.theDofManager.refreshConstraintIndices(model.activeConstraints())
         else:
-            self.journal.message("Creating monolithic equation system", self.identification, verbosity)
+            self.journal.message("Creating monolithic discrete system", self.identification, verbosity)
             # The numbering of the model's degrees of freedom, and how the state passes between the model and the
             # vectors; this solver evaluates the model's elements itself, and assembles no system matrix.
-            self.equationSystemLayout = model.buildEquationSystem()
-            self.theDofManager = self.equationSystemLayout.dofManager
+            self.system = model.buildDiscreteSystem()
+            self.theDofManager = self.system.dofManager
         self.journal.message(
-            "total size of eq. system: {:}".format(self.theDofManager.nDof),
+            "total size of discrete system: {:}".format(self.theDofManager.nDof),
             self.identification,
             verbosity,
         )
@@ -1742,11 +1744,11 @@ class NED(NonlinearSolverBase):
         if not isRebuild:
             # After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new
             # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
-            self.equationSystemLayout.readStateFromModel(U, V, A)
+            self.system.readStateFromModel(U, V, A)
         else:
             if previous.U.shape != U.shape:
                 raise RuntimeError(
-                    "The equation system was rebuilt with {:} degrees of freedom instead of {:}. Only "
+                    "The discrete system was rebuilt with {:} degrees of freedom instead of {:}. Only "
                     "a constraint's connectivity is expected to trigger a rebuild here, and that "
                     "cannot add or remove degrees of freedom -- so the solution and the velocity "
                     "cannot be carried across safely.".format(U.shape[0], previous.U.shape[0])
