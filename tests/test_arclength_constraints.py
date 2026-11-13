@@ -2,8 +2,8 @@
 
 A cantilever whose right edge is tied to a reference point RP (linearizedRigidBody) is pulled at RP, by NIST with a
 prescribed displacement of RP and by NISTPArcLength under indirect control (load at RP; linear elastic material) and
-under dissipation control (prescribed displacement of RP scaled by the load parameter; gradient-enhanced CDP, which
-provides the dissipation, loaded within its elastic range). The response is linear, so each arc length run ends in
+under dissipation control (prescribed displacement of RP scaled by the load parameter; von Mises, which provides the
+energy gradients, loaded within its elastic range). The response is linear, so each arc length run ends in
 the state of its NIST reference. With the constraint forces assembled into the internal instead of the external forces,
 the arc length solver diverged.
 """
@@ -17,7 +17,7 @@ import pytest
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils.inputfileparser import parseInputFile
 
-# within the elastic range of the CDP material (max. bending stress about 0.45 MPa)
+# within the elastic range of the von Mises material (yield stress 10 MPa, max. bending stress about 0.45 MPa)
 URP = -0.1
 
 MATERIALS = {
@@ -25,11 +25,10 @@ MATERIALS = {
         elType="CPE4\nelProvider=edelweiss",
         material="*material, name=linearelastic, id=theMaterial, provider=edelweiss\n30000.0, 0.2",
     ),
-    # E, nu, fcy, fcu, fbu, ftu, Df, Ah, Bh, Ch, Dh, As, epsilonF, l, m, omegaMax, derivativeMethod, dTThreshold, eta
-    "GCDP": dict(
-        elType="GCPE8R",
-        material="*material, name=GCDP, id=theMaterial\n"
-        "30000.0, 0.2, 10.0, 31.0, 36.0, 2.7, 0.85, 0.08, 0.003, 2.0, 1e-6, 0.75, 0.0051, 20.0, 1.0, 0.999, 0, 0.0, 0.0",
+    # E, nu, yield stress, linear hardening, exponential hardening and its rate
+    "vonMises": dict(
+        elType="CPE8R",
+        material="*material, name=VONMISES, id=theMaterial\n30000.0, 0.2, 10.0, 0.0, 0.0, 1.0",
     ),
 }
 
@@ -117,7 +116,7 @@ def test_indirect_control_with_a_rigid_body_constraint_matches_nist(tmp_path, re
 
 
 def test_dissipation_control_with_a_rigid_body_constraint_matches_nist(tmp_path, reference):
-    _assertSameState(_simulate(tmp_path, DISSIPATION, "GCDP"), reference["GCDP"])
+    _assertSameState(_simulate(tmp_path, DISSIPATION, "vonMises"), reference["vonMises"])
 
 
 # hanging nodes (multi-point constraint by DOF elimination): the AMR test case with GC3D20R elements and the AT2 phase
