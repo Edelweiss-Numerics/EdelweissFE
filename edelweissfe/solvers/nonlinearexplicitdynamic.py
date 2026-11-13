@@ -369,6 +369,7 @@ class NED(NonlinearSolverBase):
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "_netForce": np.ndarray,
+        "_numberingOfNetForce": str,
         "_externalWork": float,
         "_energyAtStepStart": float,
         # The energy-balance warnings are given once per step, not again after a resume.
@@ -432,6 +433,10 @@ class NED(NonlinearSolverBase):
         #: can tell a resumed step (whose checkpoint holds it) from a cold one, which forms it from the
         #: state of the model (see :meth:`formNetForceOfTheModelsState`).
         self._netForce = None
+        #: The digest of the numbering the net force is a vector of
+        #: (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`), which the checkpoint holds with it: a
+        #: resumed step takes the net force over only if its numbering is the one rebuilt from the resumed model.
+        self._numberingOfNetForce = None
         #: The inertia and the damping of every degree of freedom of the current discrete system, the
         #: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see
         #: :meth:`_assembleLumpedOperators`.
@@ -539,15 +544,11 @@ class NED(NonlinearSolverBase):
 
         if self.system is None:
             # The net force of the checkpoint on a resumed step, None on a cold one.
-            resumedNetForce = self._netForce
+            resumedNetForce, numberingOfResumedNetForce = self._netForce, self._numberingOfNetForce
             self.updateDiscreteSystem(model, Change.NONE)
             self.journal.printSeperationLine()
             if resumedNetForce is not None:
-                if len(resumedNetForce) != len(self._netForce):
-                    raise ValueError(
-                        "The checkpoint holds a net force of {:} entries, but the discrete system rebuilt from "
-                        "the resumed model has {:}.".format(len(resumedNetForce), len(self._netForce))
-                    )
+                self.checkNumberingOfRestartedVectors(numberingOfResumedNetForce)
                 self._netForce[:] = resumedNetForce
             else:
                 self.formNetForceOfTheModelsState(step.actions["dirichlet"].values())
@@ -1335,6 +1336,7 @@ class NED(NonlinearSolverBase):
         self.firstOrderFields, self.secondOrderFields = [], []
         self.linearMomentumFields, self.nonMechanicalSecondOrderFields = [], []
         self.ids_1st = self.ids_2nd = self.ids_mechanicalEnergy = None
+        self._numberingOfNetForce = None
 
     def onNewNumbering(self):
         """Build what is sized by the numbering of the new discrete system: the multi-point-constraint condensation,
@@ -1363,6 +1365,7 @@ class NED(NonlinearSolverBase):
         self._A = locations.constructDofVector()
         self._netForce = locations.constructDofVector()
         self._internalForce = locations.constructDofVector()
+        self._numberingOfNetForce = system.numbering.digest
 
         # After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new
         # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
