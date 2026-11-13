@@ -86,6 +86,8 @@ class BodyLoadBase(LoadBase):
     ):
         """Let every element of the element set add the residual contribution of the body force, the negative of
         the external load, and its tangent; see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
+        Only the elements that are located act: an element set may also hold entities the discrete system leaves
+        out, e.g. the contact facets of ``all``, which carry no material and have no block in the system matrix.
 
         Parameters
         ----------
@@ -108,6 +110,9 @@ class BodyLoadBase(LoadBase):
 
         force = self.getCurrentLoad(timeStep)
         for el in self.elementSet:
+            if el not in locations:
+                continue
+
             Pe = np.zeros(el.nDof)
             Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
 

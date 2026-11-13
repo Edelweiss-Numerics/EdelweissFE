@@ -320,11 +320,6 @@ class NEST(NIST):
         self.journal.message("Creating monolithic discrete system", self.identification, 0)
         self.forgetDiscreteSystem()
         self.updateDiscreteSystem(model, Change.NONE)
-        self.journal.message(
-            "total size of discrete system: {:}".format(self.system.numbering.nDof),
-            self.identification,
-            0,
-        )
 
         self.journal.printSeperationLine()
 

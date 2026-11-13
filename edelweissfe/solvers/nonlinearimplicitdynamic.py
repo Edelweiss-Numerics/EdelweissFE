@@ -1446,8 +1446,9 @@ class NonlinearImplicitDynamic(NIST):
 
         Entries coupling to a degree of freedom that is not integrated in time are zeroed in both
         (:meth:`_discardInertiaOfQuasiStaticFields`): the mass an element reports on a non-mechanical block (a
-        micro-inertia) belongs to a field this solver keeps quasi-static. Elements without kernels -- contact facets --
-        carry geometry, not a material, and are skipped.
+        micro-inertia) belongs to a field this solver keeps quasi-static. The elements are those the discrete system
+        names for it (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`): the elements
+        that carry kernels; the cells and particles of a meshfree model are not among them.
 
         Parameters
         ----------
@@ -1505,9 +1506,7 @@ class NonlinearImplicitDynamic(NIST):
             blocks.flush()
             return dampedDofs, dampingValues
 
-        chunks = mapChunksOnWorkers(
-            [el for el in model.elements.values() if el.hasKernels], assembleChunk, K.numberOfWorkers
-        )
+        chunks = mapChunksOnWorkers(self.system.elementsWithNodalInertia, assembleChunk, K.numberOfWorkers)
 
         # Seeded with empty arrays, so that a model without any damping still sums to zeros. Of float type in any case:
         # np.bincount gives integers for an empty input, even with weights.

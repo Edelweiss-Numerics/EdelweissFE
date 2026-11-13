@@ -82,7 +82,8 @@ class DofLocations:
     numbering : DofNumbering
         The numbering of the degrees of freedom the entities are located in.
     elements : list of BaseNodeCouplingEntity, optional
-        The list of Elements to locate.
+        The list of Elements to locate: those that take part in the discrete system, see
+        :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`.
     constraints : list of BaseNodeCouplingEntity, optional
         The list of Constraints to locate. Their scalar variables must be numbered.
     furtherEntities : list of BaseNodeCouplingEntity, optional
@@ -212,6 +213,51 @@ class DofLocations:
         """
 
         return entity in self.ofEntity
+
+    def checkEveryDofIsLocated(self, indicesRelatedByMultiPointConstraints: np.ndarray | None = None):
+        """Refuse a degree of freedom that no located entity touches. Such a degree of freedom has a number, but no row
+        in the system matrix: a node that only an entity without kernels touches (e.g. a contact facet) is such a node.
+        A solver cannot pin it with a Dirichlet boundary condition, nor integrate it, so the discrete system is not
+        built.
+
+        A multi-point constraint is no entity and owns no degrees of freedom, but a degree of freedom it relates, as
+        slave or as master (e.g. of the reference point of a rigid body), has its row through the condensation.
+
+        Parameters
+        ----------
+        indicesRelatedByMultiPointConstraints
+            The indices of the degrees of freedom that multi-point constraints relate; None for none.
+
+        Raises
+        ------
+        ValueError
+            If a degree of freedom of the numbering is in no location; the error names the node and the field.
+        """
+
+        touched = np.zeros(self.numbering.nDof, dtype=bool)
+        for indices in self.ofEntity.values():
+            touched[indices] = True
+        if indicesRelatedByMultiPointConstraints is not None:
+            touched[indicesRelatedByMultiPointConstraints] = True
+
+        untouched = np.flatnonzero(~touched)
+        if untouched.size == 0:
+            return
+
+        index = int(untouched[0])
+        for fieldName, fieldIndices in self.numbering.idcsOfFieldsInDofVector.items():
+            if fieldIndices.start <= index < fieldIndices.stop:
+                node = self.numbering.getNodeForIndexInDofVector(index)
+                raise ValueError(
+                    f"The field '{fieldName}' of node {node.label} is numbered, but no element and no constraint "
+                    f"that takes part in the discrete system couples it ({untouched.size} degrees of freedom in all "
+                    "are in no location): it would have no row in the system matrix. A node that only an entity "
+                    "without kernels touches, e.g. a contact facet, has none."
+                )
+        raise ValueError(
+            f"The degree of freedom {index} of a scalar variable is numbered, but no constraint couples it "
+            f"({untouched.size} degrees of freedom in all are in no location)."
+        )
 
     def withNewLocationsOf(self, constraints: list, movedEntities: list = None) -> "DofLocations":
         """The locations of the same entities in the same numbering, with the constraints, and the further entities

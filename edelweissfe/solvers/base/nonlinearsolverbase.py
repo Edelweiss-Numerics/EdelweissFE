@@ -266,17 +266,29 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 self.forgetDiscreteSystem()
                 with performancetiming.timeit("numbering and locations"):
                     self.system = model.buildDiscreteSystem()
+                self.journal.message(
+                    "discrete system built: {:} dof".format(self.system.numbering.nDof), self.identification, 2
+                )
                 self.onNewNumbering()
             else:
                 with performancetiming.timeit("numbering and locations"):
                     self.system = self.system.withNewLocations()
+            self.journal.message(
+                "locations of {:} entities in the numbering of {:} dof".format(
+                    len(self.system.locations.ofEntity), self.system.numbering.nDof
+                ),
+                self.identification,
+                2,
+            )
             self.onNewLocations()
 
     def forgetDiscreteSystem(self) -> None:
-        """Drop the discrete system, and everything that belongs to it, before the next one is built; a solver that
-        keeps more of it extends this."""
+        """Drop the discrete system, and everything that belongs to it, before the next one is built: the
+        multi-point-constraint condensation as well, which is a function of the numbering. A solver that keeps more of
+        it extends this."""
 
         self.system = None
+        self.mpcTransformation = None
 
     def onNewNumbering(self):
         """Everything that is sized by the numbering of the new discrete system, :attr:`system`, is built here, e.g. the
@@ -1189,6 +1201,17 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             )
 
         return [record for record in records if record[0] not in dropped]
+
+    def buildAndCheckMPCTransformation(self):
+        """Build the multi-point-constraint condensation of the new discrete system, :attr:`system`, as
+        :attr:`mpcTransformation`, and refuse a Dirichlet boundary condition of the step that prescribes a slave
+        degree of freedom. Called by the solvers that condense in :meth:`onNewNumbering`, with the actions of the step
+        (:attr:`_stepActions`) the condensation is reconciled with."""
+
+        with performancetiming.timeit("mpc transformation build"):
+            self.mpcTransformation = self.buildMPCTransformation(self.system.model, self._stepActions)
+        with performancetiming.timeit("mpc dirichlet conflict check"):
+            self.checkMPCDirichletConflicts(self.mpcTransformation, self._stepActions)
 
     def checkMPCDirichletConflicts(self, transformation, stepActions):
         """Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave

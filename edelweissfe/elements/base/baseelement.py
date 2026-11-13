@@ -379,9 +379,10 @@ class BaseElement(BaseNodeCouplingEntity, SystemMatrixContributorBase):
 
         Not every entity in the element container is a finite element. A contact facet is kept
         there for its nodes and its geometry alone: it has no material and no state, and its
-        kernels, its internal energy and its state acceptance are all no-ops. A solver that
-        touches every element on every increment may leave those out instead of calling into
-        them for nothing.
+        kernels, its internal energy and its state acceptance are all no-ops. The discrete system leaves
+        such an entity out (:meth:`~edelweissfe.models.femodel.FEModel.elementsWithKernels`): it has no block in the
+        system matrix, and no location, and no solver calls into it; a node has rows only through the elements that
+        carry kernels (see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`).
 
         Returns
         -------

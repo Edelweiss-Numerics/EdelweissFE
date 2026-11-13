@@ -44,6 +44,7 @@ from test_dof_numbering_and_locations import (
 from test_nid_contact import _DECK as _NID_CONTACT_DECK
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.journal.journal import Journal
 from edelweissfe.linsolve.composition.solver import ComposedLinearSolver
 from edelweissfe.models.change import Change
 from edelweissfe.numerics.doflocations import DofLocations
@@ -61,6 +62,8 @@ class _System:
     def __init__(self, record: list, origin: str):
         self.record = record
         self.origin = origin
+        self.numbering = SimpleNamespace(nDof=0)
+        self.locations = SimpleNamespace(ofEntity={})
 
     def withNewLocations(self):
         return _System(self.record, "new locations of " + self.origin)
@@ -69,9 +72,12 @@ class _System:
 class _Solver:
     """The part of a solver the update of the discrete system touches: it records what is called, in order."""
 
+    identification = "stub"
+
     def __init__(self, system=None):
         self.record = []
         self.system = system
+        self.journal = Journal(verbose=False)
 
     def forgetDiscreteSystem(self):
         self.record.append("forget")

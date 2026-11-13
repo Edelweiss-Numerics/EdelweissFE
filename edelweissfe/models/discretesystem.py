@@ -102,9 +102,10 @@ class DiscreteSystem:
     def elements(self) -> list:
         """Everything the solver computes like an element in every evaluation of the model, see
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`: the finite elements of the model that
-        have a location, and in a meshfree model its cells and particles as well. The entities the locations hold: a
-        solver computes exactly what has rows in the system matrix. A list, which a parallel solver hands out in slices
-        to its threads.
+        carry kernels (:attr:`~edelweissfe.elements.base.baseelement.BaseElement.hasKernels`), and in a meshfree model
+        its cells and particles as well. The entities the locations hold: a solver computes exactly what has rows in
+        the system matrix, for every solver, the explicit ones included. A list, which a parallel solver hands out in
+        slices to its threads.
 
         Returns
         -------
@@ -113,6 +114,21 @@ class DiscreteSystem:
         """
 
         return self.locations.elements
+
+    @property
+    def elementsWithNodalInertia(self) -> list:
+        """The entities whose inertia, damping and stable time increment a solver assembles element by element, at the
+        nodes (``NID``, ``NED``). In a finite element model, these are the :attr:`elements`; a meshfree model names its
+        finite elements only, since its cells and particles contribute nothing there, and the particles integrate
+        their own inertia (see :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`).
+
+        Returns
+        -------
+        list
+            The entities, in the order in which the solver computes them.
+        """
+
+        return self.elements
 
     @property
     def constraints(self) -> list:
