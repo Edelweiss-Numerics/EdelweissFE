@@ -31,8 +31,8 @@ nodes -- and the layout of that block.
 
 An entity knows its block only in its own numbering: row ``a`` and column ``b`` of the block are its ``a``-th and
 ``b``-th degree of freedom. Where these lie in the global system (the global DOF list of the entity, see
-:class:`~edelweissfe.numerics.dofmanager.DofManager`), and how the blocks are stored and summed, is the business of the
-system matrix assembly (:mod:`edelweissfe.numerics.systemmatrixassembly`).
+:class:`~edelweissfe.numerics.doflocations.DofLocations`), and how the blocks are stored and summed, is the business
+of the system matrix assembly (:mod:`edelweissfe.numerics.systemmatrixassembly`).
 """
 
 from dataclasses import dataclass

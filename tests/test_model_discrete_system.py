@@ -37,6 +37,8 @@ bit, the solution of a model that consists of these two elements only -- with ``
 loop of ``NISTParallel``.
 """
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -48,7 +50,8 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.change import Change
 from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
@@ -80,17 +83,17 @@ def test_a_node_set_is_located_on_its_nodes_in_the_discrete_system():
     nodes = _nodesWithDisplacement(range(1, 6))
     byLabel = {node.label: node for node in nodes}
     numbered = NodeField(_FIELD, 2, NodeSet("numbered", [byLabel[1], byLabel[3], byLabel[5]]))
-    dofManager = DofManager([numbered])
+    numbering = DofNumbering([numbered])
 
     nodeSet = NodeSet("mixed", [byLabel[label] for label in (5, 2, 1, 4, 3)])
-    dofIndices, nodePositions = dofManager.locateFieldOnNodeSet(_FIELD, nodeSet)
+    dofIndices, nodePositions = numbering.locateFieldOnNodeSet(_FIELD, nodeSet)
 
     # node 1 is numbered first (dofs 0, 1), node 3 second (2, 3), node 5 third (4, 5)
     np.testing.assert_array_equal(dofIndices, [4, 5, 0, 1, 2, 3])
     np.testing.assert_array_equal(nodePositions, [0, 2, 4])
 
     # a set of nodes outside the discrete system only
-    dofIndices, nodePositions = dofManager.locateFieldOnNodeSet(_FIELD, NodeSet("outside", [byLabel[2]]))
+    dofIndices, nodePositions = numbering.locateFieldOnNodeSet(_FIELD, NodeSet("outside", [byLabel[2]]))
     assert dofIndices.size == 0 and nodePositions.size == 0
 
 
@@ -115,7 +118,7 @@ def test_a_dirichlet_boundary_condition_prescribes_its_nodes_in_the_discrete_sys
             return np.array([[float(node.label)] for node in self.nSet])
 
     solver = NIST(loadConfiguration({}), Journal(verbose=False))
-    solver.theDofManager = DofManager([numbered])
+    solver.system = SimpleNamespace(numbering=DofNumbering([numbered]))
     dirichlet = _DistinctPerNode()
     solver.locateConstrainedDofs([dirichlet])
 
@@ -131,17 +134,17 @@ def test_a_node_force_loads_its_nodes_in_the_discrete_system():
     nodes = _nodesWithDisplacement(range(1, 5))
     model = FEModel(2)
     numbered = NodeField(_FIELD, 2, NodeSet("numbered", [nodes[0], nodes[2]]))
-    dofManager = DofManager([numbered])
+    locations = DofLocations(DofNumbering([numbered]))
 
     nodeForce = NodeForcesStepAction("pull", NodeSet("all", nodes), _FIELD, np.array([0.0, 1.5]), model, None)
-    P = dofManager.constructDofVector()
-    nodeForce.assembleLoad(P, None, None, None, TimeStep(1, 1.0, 1.0, 1.0, 1.0, 1.0), dofManager)
+    P = locations.constructDofVector()
+    nodeForce.assembleLoad(P, None, None, None, TimeStep(1, 1.0, 1.0, 1.0, 1.0, 1.0), locations)
 
     # a load enters the residual with the negative sign, at the nodes 1 and 3 only
     np.testing.assert_array_equal(P, [0.0, -1.5, 0.0, -1.5])
 
 
-def _twoFieldModel() -> tuple[FEModel, DofManager]:
+def _twoFieldModel() -> tuple[FEModel, DofLocations]:
     """A model of two nodes with two fields, displacement and rotation, and the numbering of both."""
     nodes = _nodesWithDisplacement((1, 2))
     for node in nodes:
@@ -149,20 +152,20 @@ def _twoFieldModel() -> tuple[FEModel, DofManager]:
     model = FEModel(2)
     model.nodeFields[_FIELD] = NodeField(_FIELD, 2, NodeSet("all", nodes))
     model.nodeFields["rotation"] = NodeField("rotation", 1, NodeSet("all", nodes))
-    return model, DofManager(model.nodeFields.values())
+    return model, DofLocations(DofNumbering(model.nodeFields.values()))
 
 
 def test_the_discrete_system_of_a_finite_element_model_reads_the_state_of_every_node():
-    model, dofManager = _twoFieldModel()
+    model, locations = _twoFieldModel()
     for value, entry in enumerate(NodeField.ENTRIES, start=1):
         for nodeField in model.nodeFields.values():
             nodeField[entry][:] = value
-    system = DiscreteSystem(model, dofManager, [])
+    system = DiscreteSystem(model, locations)
 
-    U, V, A = (dofManager.constructDofVector() for _ in range(3))
+    U, V, A = (locations.constructDofVector() for _ in range(3))
     system.readStateFromModel(U, V, A, dynamicFields=[_FIELD])
 
-    displacement, rotation = (dofManager.idcsOfFieldsInDofVector[name] for name in (_FIELD, "rotation"))
+    displacement, rotation = (locations.numbering.idcsOfFieldsInDofVector[name] for name in (_FIELD, "rotation"))
     np.testing.assert_array_equal(U, 1.0)
     # the velocity and the acceleration of the fields given only; the results dU and P are not read
     np.testing.assert_array_equal(V[displacement], 4.0)
@@ -172,20 +175,22 @@ def test_the_discrete_system_of_a_finite_element_model_reads_the_state_of_every_
 
 
 def test_the_discrete_system_of_a_finite_element_model_writes_the_results_to_every_node():
-    model, dofManager = _twoFieldModel()
+    model, locations = _twoFieldModel()
     for nodeField in model.nodeFields.values():
         nodeField["V"][:] = nodeField["A"][:] = -1.0
-    system = DiscreteSystem(model, dofManager, [])
+    system = DiscreteSystem(model, locations)
 
-    U = dofManager.constructDofVector()
-    U[:] = np.arange(dofManager.nDof)
+    U = locations.constructDofVector()
+    U[:] = np.arange(locations.numbering.nDof)
     # every node carries its total solution: nothing is incremental
     system.zeroIncrementalCoefficients(U)
-    np.testing.assert_array_equal(U, np.arange(dofManager.nDof))
+    np.testing.assert_array_equal(U, np.arange(locations.numbering.nDof))
 
     system.writeResultsToModel(U, 2 * U, 3 * U)
     for nodeField in model.nodeFields.values():
-        rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
+        rows = np.asarray(U)[locations.numbering.idcsOfFieldsInDofVector[nodeField.name]].reshape(
+            -1, nodeField.dimension
+        )
         for entry, factor in (("U", 1), ("dU", 2), ("P", 3)):
             np.testing.assert_array_equal(nodeField[entry], factor * rows)
         # passed no velocity and no acceleration, the system leaves them as they are
@@ -195,12 +200,16 @@ def test_the_discrete_system_of_a_finite_element_model_writes_the_results_to_eve
     # the velocity and the acceleration, the state of a solver that integrates in time, go their own way, to every field
     system.writeVelocityAndAccelerationToModel(4 * U, 5 * U)
     for nodeField in model.nodeFields.values():
-        rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
+        rows = np.asarray(U)[locations.numbering.idcsOfFieldsInDofVector[nodeField.name]].reshape(
+            -1, nodeField.dimension
+        )
         np.testing.assert_array_equal(nodeField["V"], 4 * rows)
         np.testing.assert_array_equal(nodeField["A"], 5 * rows)
     system.writeVelocityAndAccelerationToModel(None, 6 * U)
     for nodeField in model.nodeFields.values():
-        rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
+        rows = np.asarray(U)[locations.numbering.idcsOfFieldsInDofVector[nodeField.name]].reshape(
+            -1, nodeField.dimension
+        )
         np.testing.assert_array_equal(nodeField["V"], 4 * rows)
         np.testing.assert_array_equal(nodeField["A"], 6 * rows)
 
@@ -208,8 +217,8 @@ def test_the_discrete_system_of_a_finite_element_model_writes_the_results_to_eve
 class _SystemListingItsWrites(DiscreteSystem):
     """The discrete system of a finite element model that lists every entry written through its hook."""
 
-    def __init__(self, model, dofManager, elements):
-        super().__init__(model, dofManager, elements)
+    def __init__(self, model, locations):
+        super().__init__(model, locations)
         self.writes = []
 
     def writeEntryOfNodeField(self, dofVector, nodeField, entry):
@@ -218,11 +227,11 @@ class _SystemListingItsWrites(DiscreteSystem):
 
 
 def test_the_discrete_system_writes_the_state_of_a_quasi_static_solver_at_rest():
-    model, dofManager = _twoFieldModel()
+    model, locations = _twoFieldModel()
     for nodeField in model.nodeFields.values():
         for entry in NodeField.ENTRIES:
             nodeField[entry][:] = -1.0
-    system = _SystemListingItsWrites(model, dofManager, [])
+    system = _SystemListingItsWrites(model, locations)
 
     system.writeZeroVelocityAndAccelerationToModel()
     for nodeField in model.nodeFields.values():
@@ -236,31 +245,35 @@ def test_the_discrete_system_writes_the_state_of_a_quasi_static_solver_at_rest()
 
 
 def test_the_discrete_system_of_a_finite_element_model_has_the_inertia_at_the_nodes():
-    model, dofManager = _twoFieldModel()
-    system = DiscreteSystem(model, dofManager, [])
+    model, locations = _twoFieldModel()
+    system = DiscreteSystem(model, locations)
 
     # every node carries the mass the elements assemble
-    displacement = dofManager.idcsOfFieldsInDofVector[_FIELD]
+    displacement = locations.numbering.idcsOfFieldsInDofVector[_FIELD]
     np.testing.assert_array_equal(
         system.dofsWithNodalInertia([_FIELD]), np.arange(displacement.start, displacement.stop)
     )
-    np.testing.assert_array_equal(system.dofsWithNodalInertia([_FIELD, "rotation"]), np.arange(dofManager.nDof))
+    np.testing.assert_array_equal(
+        system.dofsWithNodalInertia([_FIELD, "rotation"]), np.arange(locations.numbering.nDof)
+    )
     # no entity with an inertia of its own, so no lumped mass of such entities, and no material points
     assert system.assembleLumpedMassOfEntitiesWithOwnInertia(lambda entities, work: work(entities)) is None
     assert system.materialPoints == []
 
 
 def test_the_discrete_system_writes_the_results_in_two_parts():
-    model, dofManager = _twoFieldModel()
-    system = DiscreteSystem(model, dofManager, [])
-    U = dofManager.constructDofVector()
-    U[:] = np.arange(dofManager.nDof)
+    model, locations = _twoFieldModel()
+    system = DiscreteSystem(model, locations)
+    U = locations.constructDofVector()
+    U[:] = np.arange(locations.numbering.nDof)
 
     # the increment on the system it was taken on, then the force on the system it is evaluated on
     system.writeResultsToModel(U, 2 * U, None)
     system.writeResultsToModel(U, None, 3 * U)
     for nodeField in model.nodeFields.values():
-        rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
+        rows = np.asarray(U)[locations.numbering.idcsOfFieldsInDofVector[nodeField.name]].reshape(
+            -1, nodeField.dimension
+        )
         np.testing.assert_array_equal(nodeField["dU"], 2 * rows)
         np.testing.assert_array_equal(nodeField["P"], 3 * rows)
 
@@ -273,21 +286,25 @@ class _FirstElementsSystem(DiscreteSystem):
     solution from increment to increment, and receive results; the other nodes of the model are left as they are, at
     zero."""
 
-    def __init__(self, model, dofManager, elements, nodesInSystem, nodeFieldsInSystem):
-        super().__init__(model, dofManager, elements)
+    def __init__(self, model, locations, nodesInSystem, nodeFieldsInSystem):
+        super().__init__(model, locations)
         self.nodesInSystem = nodesInSystem
         self.nodeFieldsInSystem = nodeFieldsInSystem
 
     def readEntryOfNodeField(self, dofVector, nodeField, entry):
         # straight from the model's node fields, at the nodes in the system
-        self.dofManager.writeNodeFieldToDofVector(dofVector, nodeField, entry, self.nodesInSystem)
+        self.numbering.writeNodeFieldToDofVector(dofVector, nodeField, entry, self.nodesInSystem)
 
     def writeEntryOfNodeField(self, dofVector, nodeField, entry):
         # straight into the model's node fields, at the nodes in the system: the other nodes keep their values
-        self.dofManager.writeDofVectorToNodeField(dofVector, nodeField, entry, self.nodesInSystem)
+        self.numbering.writeDofVectorToNodeField(dofVector, nodeField, entry, self.nodesInSystem)
 
     def updateMaterialPoints(self, dU, timeStep, forEachChunk):
         self.model.materialPointUpdates += 1
+
+    def withNewLocations(self):
+        self.model.newLocationsMade += 1
+        return super().withNewLocations()
 
 
 class _StripWithDiscreteSystemOnFirstElements(FEModel):
@@ -299,6 +316,7 @@ class _StripWithDiscreteSystemOnFirstElements(FEModel):
         self.nElementsInSystem = nElementsInSystem
         self.connectivityUpdates = 0
         self.discreteSystemBuilds = 0
+        self.newLocationsMade = 0
         self.materialPointUpdates = 0
 
     def updateConnectivity(self):
@@ -313,12 +331,9 @@ class _StripWithDiscreteSystemOnFirstElements(FEModel):
         nodeFieldsInSystem = {
             name: NodeField(name, nodeField.dimension, nodesInSystem) for name, nodeField in self.nodeFields.items()
         }
-        dofManager = DofManager(
-            nodeFieldsInSystem.values(),
-            elements=elements,
-            nodeSets=self.nodeSets.values(),
-        )
-        return _FirstElementsSystem(self, dofManager, elements, nodesInSystem, nodeFieldsInSystem)
+        numbering = DofNumbering(nodeFieldsInSystem.values(), nodeSets=self.nodeSets.values())
+        locations = DofLocations(numbering, elements)
+        return _FirstElementsSystem(self, locations, nodesInSystem, nodeFieldsInSystem)
 
 
 def _strip(model: FEModel, nElements: int) -> FEModel:
@@ -413,6 +428,8 @@ def test_a_discrete_system_on_a_part_of_the_model(solverClass, numThreads, worke
         np.testing.assert_array_equal(partialField[entry][outside], 0.0)
     assert np.abs(referenceField["U"]).max() > 0.0
 
-    # asked at every attempt of an increment, and rebuilt every time it reported a change
-    assert partial.connectivityUpdates == 5 and partial.discreteSystemBuilds == 5
+    # asked at every attempt of an increment; built once, and given new locations on its numbering every time it
+    # reported a change of the locations
+    assert partial.connectivityUpdates == 5
+    assert partial.discreteSystemBuilds == 1 and partial.newLocationsMade == 4
     assert partial.materialPointUpdates > partial.connectivityUpdates

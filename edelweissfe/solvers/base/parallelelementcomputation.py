@@ -30,7 +30,8 @@
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     chunked_iterable,
     getNumberOfWorkerThreads,
@@ -129,7 +130,7 @@ _chunksPerThread = 16
 _gatherPlanCache = None
 
 
-def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetMap: dict, chunkSize: int) -> list:
+def _chunkedGatherPlan(elements: dict, locations: DofLocations, scatterOffsetMap: dict, chunkSize: int) -> list:
     """Build, or reuse, the flat gather index plan for one chunking of the elements.
 
     Each chunk gets the concatenation of its elements' DOF indices, the offsets at which each
@@ -138,18 +139,18 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
     buffers, and write the chunk's forces back with one fancy-index.
 
     The plan is only valid for the element set and DOF layout it was built from. h-adaptivity
-    rebuilds the DofManager on every topology change, which produces a fresh
-    ``idcsOfHigherOrderEntitiesInDofVector`` dict and a fresh scatter layout, so identity of those
-    mappings is what detects a stale plan. The element count and chunk size are compared as well:
-    those would catch a rebuild that somehow preserved the mapping objects, and a stale plan here
+    rebuilds the discrete system on every topology change, and a change of the connectivity makes new locations
+    (locations are never changed), each with a fresh scatter layout, so identity of the locations and of the
+    layout is what detects a stale plan. The element count and chunk size are compared as well:
+    those would catch a rebuild that somehow preserved the objects, and a stale plan here
     would silently gather the wrong degrees of freedom rather than fail.
 
     Parameters
     ----------
     elements
         The elements to compute, in the order they will be chunked.
-    entitiesInDofVector
-        The entity-to-DOF-index mapping the plan is built against.
+    locations
+        The locations of the entities, the plan is built against.
     scatterOffsetMap
         The entity-to-``(offset, size)`` layout of the scatter buffer the forces are written to.
     chunkSize
@@ -169,7 +170,7 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
 
     if (
         cached is not None
-        and cached[0] is entitiesInDofVector
+        and cached[0] is locations
         and cached[1] == chunkSize
         and cached[2] == len(elements)
         # The plan stores positions into the scatter layout, so it is compared in its own right.
@@ -181,7 +182,7 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
 
     plan = []
     for chunk in chunked_iterable(elements.values(), chunkSize):
-        indicesPerElement = [entitiesInDofVector[element] for element in chunk]
+        indicesPerElement = [locations[element] for element in chunk]
         offsets = np.zeros(len(chunk) + 1, dtype=np.intp)
         np.cumsum([len(indices) for indices in indicesPerElement], out=offsets[1:])
 
@@ -191,7 +192,7 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
 
         plan.append((chunk, np.concatenate(indicesPerElement), offsets, scatterIndices))
 
-    _gatherPlanCache = (entitiesInDofVector, chunkSize, len(elements), plan, elements, scatterOffsetMap)
+    _gatherPlanCache = (locations, chunkSize, len(elements), plan, elements, scatterOffsetMap)
     return plan
 
 
@@ -228,10 +229,10 @@ def computeElementsInParallelForExplicit(
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
-    # One index plan serves both vectors only if they share the same entity mapping.
-    if dU.entitiesInDofVector is not Un1.entitiesInDofVector:
+    # One index plan serves both vectors only if they share the same locations.
+    if dU.locations is not Un1.locations:
         raise ValueError(
-            "The solution and increment vectors carry different entity mappings, so a shared "
+            "The solution and increment vectors are wrapped with different locations, so a shared "
             "gather plan cannot be used for both."
         )
 
@@ -270,7 +271,7 @@ def computeElementsInParallelForExplicit(
     chunk_size = (
         max(1, len(elements) // (numThreads * _chunksPerThread)) if numThreads > 1 else min(len(elements), 4000)
     )
-    plan = _chunkedGatherPlan(elements, Un1.entitiesInDofVector, scatter_P.offsetMap, chunk_size)
+    plan = _chunkedGatherPlan(elements, Un1.locations, scatter_P.offsetMap, chunk_size)
 
     if numThreads == 1:
         # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize

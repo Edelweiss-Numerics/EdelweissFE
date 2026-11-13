@@ -131,7 +131,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
 
 
 @dataclass
@@ -247,7 +248,7 @@ class ConvergenceCriterionBase(ABC):
 
     @abstractmethod
     def computeSpatialAveragedFluxes(
-        self, F: DofVector, FConstraints: DofVector, theDofManager: DofManager
+        self, F: DofVector, FConstraints: DofVector, locations: DofLocations
     ) -> dict[str, float]:
         """Compute the spatial average flux of every field.
 
@@ -257,8 +258,9 @@ class ConvergenceCriterionBase(ABC):
             The accumulated absolute element fluxes.
         FConstraints
             The accumulated absolute constraint fluxes.
-        theDofManager
-            The DofManager.
+        locations
+            The locations of the entities in the discrete system, which know the number of accumulated nodal fluxes of
+            every field, and whose numbering knows the indices of the fields.
 
         Returns
         -------
@@ -421,10 +423,10 @@ class LegacyConvergenceCriterion(ConvergenceCriterionBase):
 
         return correction < self.relativeFieldCorrectionTolerances[field] * largestIncrement
 
-    def computeSpatialAveragedFluxes(self, F, FConstraints, theDofManager):
+    def computeSpatialAveragedFluxes(self, F, FConstraints, locations):
         return {
-            field: np.linalg.norm(F[theDofManager.idcsOfFieldsInDofVector[field]], 1) / nDof
-            for field, nDof in theDofManager.nAccumulatedNodalFluxesFieldwise.items()
+            field: np.linalg.norm(F[locations.numbering.idcsOfFieldsInDofVector[field]], 1) / nDof
+            for field, nDof in locations.nAccumulatedNodalFluxesFieldwise.items()
         }
 
 
@@ -574,12 +576,12 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
     def checkScalarVariables(self, R, ddU, dU, iterationCounter):
         return self.scalarVariableCriterion.checkScalarVariables(R, ddU, dU, iterationCounter)
 
-    def computeSpatialAveragedFluxes(self, F, FConstraints, theDofManager):
+    def computeSpatialAveragedFluxes(self, F, FConstraints, locations):
         return {
             field: (
-                np.linalg.norm(F[theDofManager.idcsOfFieldsInDofVector[field]], 1)
-                + np.linalg.norm(FConstraints[theDofManager.idcsOfFieldsInDofVector[field]], 1)
+                np.linalg.norm(F[locations.numbering.idcsOfFieldsInDofVector[field]], 1)
+                + np.linalg.norm(FConstraints[locations.numbering.idcsOfFieldsInDofVector[field]], 1)
             )
             / nDof
-            for field, nDof in theDofManager.nAccumulatedNodalFluxesFieldwise.items()
+            for field, nDof in locations.nAccumulatedNodalFluxesFieldwise.items()
         }

@@ -32,8 +32,9 @@ import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.timing import createTimingDict
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import (
     SystemMatrixAssembly,
     VIJSystemMatrixAssembly,
@@ -234,6 +235,20 @@ class NEST(NIST):
         #: The linear solver, and the ``linsolver`` it was made for (see :meth:`selectLinearSolverForStep`).
         self.linSolver = None
         self.linSolverName = None
+        #: The last accepted increment, which the parent extrapolates from; this solver does not extrapolate.
+        self.prevTimeStep = None
+
+    def systemMatrixAssemblyType(self) -> type:
+        """The type of the assembly of the system matrix, see the parent: always the VIJ assembly, which this solver
+        has no option to choose from.
+
+        Returns
+        -------
+        type
+            :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`.
+        """
+
+        return VIJSystemMatrixAssembly
 
     def validateModelCapabilities(self, model: FEModel):
         """Refuse, on top of the base checks, a constraint that is switched on and whose connectivity changes with the
@@ -290,12 +305,23 @@ class NEST(NIST):
 
         model.setNewmarkParametersOfEntities(*self.newmarkParametersOfEntities())
 
+        self._stepActions = step.actions
+        # A step starts without a prediction; the discrete system of the step is built without one to keep.
+        self.prevTimeStep = None
+
+        # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited linearSolve()), so
+        # its linear solver needs the setModel the parent gives its own when the discrete system is built, see
+        # onNewNumbering(): a field-split solver such as blockamg raises without the field structure setModel
+        # supplies.
+        self.selectLinearSolverForStep()
+
+        # The discrete system is built once per step, and never changes: this solver has no topology update, and
+        # refuses what changes the connectivity.
         self.journal.message("Creating monolithic discrete system", self.identification, 0)
         self.forgetDiscreteSystem()
-        self.system = model.buildDiscreteSystem()
-        self.theDofManager = self.system.dofManager
+        self.updateDiscreteSystem(model, Change.NONE)
         self.journal.message(
-            "total size of discrete system: {:}".format(self.theDofManager.nDof),
+            "total size of discrete system: {:}".format(self.system.numbering.nDof),
             self.identification,
             0,
         )
@@ -309,25 +335,6 @@ class NEST(NIST):
         self.rkStages = self.options.get("runge-kutta-stages", 2)
 
         self.tol = self.options.get("runge-kutta-error-tolerance", 1e-3)
-
-        self.selectLinearSolverForStep()
-        # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited
-        # linearSolve()), so its linear solver needs the setModel NIST gives its own: for solvers that
-        # derive anything beyond the plain (A, b) call -- a field-split solver such as blockamg raises
-        # without the field structure setModel supplies. NEST's discrete system is built once per step here
-        # rather than being rebuilt on connectivity changes, so one call per step is enough.
-        self.linSolver.setModel(self.system.modelForLinearSolver, self.theDofManager)
-
-        U = self.theDofManager.constructDofVector()
-        P = self.theDofManager.constructDofVector()
-        dU = self.theDofManager.constructDofVector()
-        K = self.createSystemMatrixAssembly(VIJSystemMatrixAssembly)
-
-        self.readStateFromModel(U)
-
-        self._U, self._dU, self._P, self._K = U, dU, P, K
-
-        self.prevTimeStep = None
 
         self.applyStepActionsAtStepStart(model, step)
 
@@ -480,12 +487,12 @@ class NEST(NIST):
 
         constraints = self.system.constraints
 
-        R = self.theDofManager.constructDofVector()
-        F = self.theDofManager.constructDofVector()
-        PLoadsAndConstraints = self.theDofManager.constructDofVector()
-        U_np = self.theDofManager.constructDofVector()
-        dU_ = [self.theDofManager.constructDofVector() for i in range(self.rkStages)]
-        err = self.theDofManager.constructDofVector()
+        R = self.system.locations.constructDofVector()
+        F = self.system.locations.constructDofVector()
+        PLoadsAndConstraints = self.system.locations.constructDofVector()
+        U_np = self.system.locations.constructDofVector()
+        dU_ = [self.system.locations.constructDofVector() for i in range(self.rkStages)]
+        err = self.system.locations.constructDofVector()
         err[:] = 0.0
 
         dirichlets = stepActions["dirichlet"].values()

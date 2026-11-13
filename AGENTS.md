@@ -151,7 +151,7 @@ the `edelweissfe` CLI and `run_tests_edelweissfe`):
   (`edelweissfe/numerics/csrgeneratorv2.pyx`, C++ core in `_csrcore.h`). In-place assembly (`updateInPlace`) avoids reallocating sparsity patterns across iterations.
 - **Dirichlet BC Enforcement**: Optimized in `edelweissfe/solvers/base/dirichlet.pyx`. Off-diagonal entries are
   zeroed explicitly to preserve the CSR sparsity structure (avoiding costly `eliminate_zeros()` rebuilds) and allow
-  linear solvers to reuse symbolic factorizations. Dirichlet indices are memoized per BC/DofManager.
+  linear solvers to reuse symbolic factorizations. Dirichlet indices are memoized per BC/DofNumbering.
 
 #### Linear Solvers (`edelweissfe/linsolve/`)
 Every linear solver is a composed solver (`edelweissfe/linsolve/composition/`, a tree of components such as `LGMRES`,
@@ -194,7 +194,7 @@ for its defaults); Python: `getLinSolverByName(type, options)`.
 ### Documentation
 
 Sphinx docs live in `doc/source/documentation/*.rst`, one file per subsystem (elements, materials, solvers,
-linsolvers, constraints, contacttheory, rigidbodies, steps, stepactions, generators, fields, dofmanager,
+linsolvers, constraints, contacttheory, rigidbodies, steps, stepactions, generators, fields, dofnumbering,
 parallelization, etc.) — check the relevant `.rst` file first when working on an unfamiliar subsystem,
 since these describe intended design/usage, not just API.
 

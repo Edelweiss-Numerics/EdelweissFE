@@ -355,7 +355,7 @@ class AbqModelConstructor:
             constraint = constraintClass.fromConstraintDefinition(name, kwargs, model, journal=self.journal)
 
             # Multi-point (DOF-elimination) constraints contribute nothing to the load vector or
-            # system matrix and must stay outside the DofManager/assembly machinery.
+            # system matrix and must stay outside the numbering/assembly machinery.
             if issubclass(constraintClass, MultiPointConstraintBase):
                 model.multiPointConstraints[name] = constraint
             else:

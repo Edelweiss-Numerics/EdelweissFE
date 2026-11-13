@@ -230,35 +230,36 @@ def test_the_model_locates_a_constraint_out_of_reach_but_not_one_switched_off_fr
     assert constraint.timesLocated == 2 and constraint.active
 
 
-def test_the_system_holds_exactly_the_constraints_its_dof_manager_located():
+def test_the_system_holds_exactly_the_constraints_its_locations_hold():
     """The solver evaluates the constraints of the discrete system: they must be those that have rows in it."""
     model, constraint = _modelWithAPartnerConstraint()
 
     system = model.buildDiscreteSystem()
     assert system.constraints == [constraint]
-    assert set(system.dofManager.idcsOfConstraintsInDofVector) == {constraint}
+    assert system.locations[constraint] is not None
     with pytest.raises(AttributeError):
         system.constraints = []
 
     constraint.active = False
     system = model.buildDiscreteSystem()
-    assert system.constraints == [] and not system.dofManager.idcsOfConstraintsInDofVector
+    assert system.constraints == [] and constraint not in system.locations
 
 
-def test_the_system_follows_its_dof_manager_when_a_constraint_leaves_reach_and_returns():
+def test_the_system_follows_its_locations_when_a_constraint_leaves_reach_and_returns():
     model, constraint = _modelWithAPartnerConstraint()
     system = model.buildDiscreteSystem()
 
     constraint.partnerInReach = False
     assert model.updateConnectivity() == Change.LOCATIONS
-    system.dofManager.refreshConstraintIndices(model.activeConstraints())
-    assert system.constraints == [] and not system.dofManager.idcsOfConstraintsInDofVector
+    outOfReach = system.withNewLocations()
+    assert outOfReach.constraints == [] and constraint not in outOfReach.locations
+    assert outOfReach.numbering is system.numbering and system.constraints == [constraint], "a new system"
 
     constraint.partnerInReach = True
     assert model.updateConnectivity() == Change.LOCATIONS
-    system.dofManager.refreshConstraintIndices(model.activeConstraints())
-    assert system.constraints == [constraint]
-    assert set(system.dofManager.idcsOfConstraintsInDofVector) == {constraint}
+    back = outOfReach.withNewLocations()
+    assert back.constraints == [constraint]
+    assert back.locations[constraint] is not None
 
 
 class _ReachProbe(ConstraintBase):
@@ -328,8 +329,8 @@ maxInc=1, minInc=1e-12, maxNumInc=1000, maxIter=25, stepLength=0.02
 
 
 def test_the_explicit_dynamic_solver_evaluates_the_constraints_of_its_system(tmp_path, monkeypatch):
-    """A constraint that leaves reach is located out of the system in place (the DOF manager refreshes the indices of
-    the constraints): from then on the system holds no constraint, and the solver evaluates none."""
+    """A constraint that leaves reach is located out of the system (the solver makes new locations of the discrete
+    system, without the constraint): from then on the system holds no constraint, and the solver evaluates none."""
 
     monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, model, U: 2.0e-3)
 

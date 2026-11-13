@@ -98,13 +98,13 @@ while the tangent is assembled, both terms entering like the block of an element
 :meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addLumpedMatrix`): before the parent's
 multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act on the effective
 matrix without knowing it is one. Mass and damping are assembled in one loop over the elements (in chunks of elements
-on the assembly's worker threads, see :doc:`/documentation/parallelization`) when the discrete system is (re)built --
-at a step's start and after a topology change -- not per Newton iteration. A rebuild caused only by a constraint
-changing its connectivity (a contact candidate list, which can change on every increment) leaves the numbering of the
-degrees of freedom and every element where they were: the mass is then copied onto the sparsity pattern of the new
-system and the damping kept, rather than reassembled -- see :meth:`NonlinearImplicitDynamic._reuseMassAndDamping`. The
-one exception is a step that changes a material property mid-step (``>>changematerialproperty``), which invalidates
-the density and makes them reassemble every increment.
+on the assembly's worker threads, see :doc:`/documentation/parallelization`) when the discrete system gets a new
+numbering -- at a step's start and after a topology change -- not per Newton iteration. A constraint changing its
+connectivity (a contact candidate list, which can change on every increment) makes new locations on the same numbering
+and moves no node and touches no element: the mass is then copied onto the sparsity pattern of the new system and the
+damping kept, rather than reassembled -- see :meth:`NonlinearImplicitDynamic.onNewLocations`. The one exception is a
+step that changes a material property mid-step (``>>changematerialproperty``), which invalidates the density and makes
+them reassemble every increment.
 
 **Checks on the mass.** The assembled mass and damping are checked at runtime for non-finite
 entries, the damping for negative entries, and every time-integrated degree of freedom for a
@@ -210,7 +210,7 @@ supported. Three things make that work, and only the third is this solver's own:
   Nothing here interpolates anything itself.
 * The mass and the damping are not transferred at all: they are reassembled from the elements that
   now exist, because the parent rebuilds its
-  :class:`~edelweissfe.numerics.dofmanager.DofManager` on a topology change and everything bound to
+  :class:`~edelweissfe.models.discretesystem.DiscreteSystem` on a topology change and everything bound to
   it is rebuilt with it. There is therefore no re-lumping error of the kind an explicit solver has
   to account for -- the total mass is an assembly of the new mesh, not a redistribution of the old.
 * The interpolated acceleration is only as good as an interpolation of the *previous* mesh's
@@ -245,15 +245,17 @@ report as their lumped damping; elements without a consistent mass (the pure-Pyt
 library), which are refused at the first increment; material points that belong to no element (see above).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.sparse import csr_matrix, diags
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesLinearMomentum
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.dofnumbering import DofNumbering
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     forEachSliceInParallel,
     mapChunksOnWorkers,
@@ -346,14 +348,16 @@ class NIDSchema(NISTSchema):
 class _NewmarkSystem:
     """Everything the Newmark increment reads that is sized by the current discrete system.
 
-    Bound to the :class:`~edelweissfe.numerics.dofmanager.DofManager` it was assembled for: the
-    moment the parent rebuilds that manager, every entry here is stale together, so the whole
-    bundle is replaced rather than any part of it patched.
+    Bound to the :class:`~edelweissfe.models.discretesystem.DiscreteSystem` it was assembled for: the
+    moment the parent builds another one with a new numbering, every entry here is stale together, so the whole
+    bundle is dropped (:meth:`NonlinearImplicitDynamic.forgetDiscreteSystem`) and assembled anew by the next
+    increment; new locations on the same numbering move it onto them
+    (:meth:`NonlinearImplicitDynamic.onNewLocations`).
 
     Parameters
     ----------
-    dofManager
-        The manager these operators and vectors are indexed by.
+    system
+        The discrete system these operators and vectors are indexed by.
     dynamicDofs
         The degrees of freedom integrated in time -- those of the fields carrying a mass.
     dynamicFields
@@ -381,7 +385,7 @@ class _NewmarkSystem:
         current discrete system, read from the model when it was built.
     """
 
-    dofManager: DofManager
+    system: DiscreteSystem
     dynamicDofs: np.ndarray
     dynamicFields: list
     M: csr_matrix
@@ -609,7 +613,6 @@ class NonlinearImplicitDynamic(NIST):
         # >>options blocks may have changed them since construction.
         self._validateNewmarkParameters()
 
-        self._newmarkSystem = None
         self._conservationCheck.reset()
         #: Mass, momentum and kinetic energy after the last accepted increment of this step, or None.
         self._conservedAtLastAccept = None
@@ -742,7 +745,7 @@ class NonlinearImplicitDynamic(NIST):
             # No Newmark increment, so no force of this state is evaluated: the model keeps the force it holds (see
             # writeResultsToModel).
             self._currentIncrement = None
-            return U_n, dU, P, 0, {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
+            return U_n, dU, P, 0, {field: [] for field in self.system.numbering.idcsOfFieldsInDofVector}
 
         return super().solveIncrement(
             U_n, dU, P, K, stepActions, model, timeStep, prevTimeStep, extrapolation, maxIter, maxGrowingIter
@@ -781,8 +784,8 @@ class NonlinearImplicitDynamic(NIST):
             gamma=gamma,
             massFactor=1.0 / (beta * dT * dT),
             dampingFactor=gamma / (beta * dT),
-            V_np=self.theDofManager.constructDofVector(),
-            A_np=self.theDofManager.constructDofVector(),
+            V_np=self.system.locations.constructDofVector(),
+            A_np=self.system.locations.constructDofVector(),
         )
 
         if self._initialAccelerationPending:
@@ -939,13 +942,67 @@ class NonlinearImplicitDynamic(NIST):
         """
 
         self._dynamicFields = self._fieldsCarryingMass()
-        self._V = self.theDofManager.constructDofVector()
-        self._A = self.theDofManager.constructDofVector()
+        self._V = self.system.locations.constructDofVector()
+        self._A = self.system.locations.constructDofVector()
         self.system.readStateFromModel(U, self._V, self._A, self._dynamicFields)
 
         if self._carriersOfTheMotionToBeChecked:
             self._carriersOfTheMotionToBeChecked = False
             self._refuseMotionItDoesNotTakeOver()
+
+    def forgetDiscreteSystem(self) -> None:
+        """Drop the discrete system of the last build, as the parent does, with the Newmark system built for it: the
+        mass and the damping are gone before the next discrete system is built, never both at once. The mass, the
+        damping and the degrees of freedom integrated in time are assembled for the new numbering by the first
+        increment (see :meth:`_updateNewmarkSystem`); the velocity and the acceleration are read from the model with
+        the solution (see :meth:`readStateFromModel`).
+        """
+
+        super().forgetDiscreteSystem()
+        self._newmarkSystem = None
+
+    def onNewLocations(self):
+        """Build what is derived from the locations of the new discrete system, as the parent does, and move the
+        Newmark system onto them, if it has one: new locations on the same numbering move no node and touch no element,
+        so the degrees of freedom integrated in time, the damping and the values of the mass are the same, and so are
+        the velocity and the acceleration, which are wrapped with the new locations, the values kept. Only the mass has
+        to be copied onto the sparsity pattern of the new system matrix
+        (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`), instead of
+        being assembled from every element. The lumped mass of entities that integrate their own inertia at the nodes
+        (``inertia=nodes``) moves with the entities, and is assembled again.
+        """
+
+        super().onNewLocations()
+
+        locations = self.system.locations
+        self._V = self._V.onLocations(locations)
+        self._A = self._A.onLocations(locations)
+
+        newmarkSystem = self._newmarkSystem
+        if newmarkSystem is None:
+            return
+
+        if newmarkSystem.includesLumpedMassOfEntities:
+            self._newmarkSystem = None
+            return
+
+        M = newmarkSystem.M
+        if newmarkSystem.dynamicDofs.size:
+            M = self._K.copyOntoSparsityPattern(M)
+            self.journal.message(
+                "new locations on the same numbering: mass and damping kept, mass moved to the new pattern",
+                self.identification,
+                2,
+            )
+
+        self._newmarkSystem = replace(
+            newmarkSystem,
+            system=self.system,
+            M=M,
+            MRowBlocks=self._rowBlocks(M, _MASS_ROWS_PER_BLOCK),
+            V=self._V,
+            A=self._A,
+        )
 
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
         """Write the results of a converged increment to the model, as the parent does, with the velocity and the
@@ -973,7 +1030,7 @@ class NonlinearImplicitDynamic(NIST):
             internalInertialAndDampingForce = None
         else:
             newmarkSystem = increment.newmarkSystem
-            internalInertialAndDampingForce = self.theDofManager.constructDofVector()
+            internalInertialAndDampingForce = self.system.locations.constructDofVector()
             internalInertialAndDampingForce[:] = (
                 P + newmarkSystem.massTimes(self._A) + newmarkSystem.lumpedDamping * np.asarray(self._V)
             )
@@ -992,28 +1049,28 @@ class NonlinearImplicitDynamic(NIST):
 
     def _updateNewmarkSystem(self, model: FEModel, stepActions: dict) -> _NewmarkSystem:
         """The Newmark operators and state for the parent's current discrete system, assembled if
-        that system is new and reused otherwise.
+        that system has a new numbering and reused otherwise.
 
-        The parent rebuilds its :class:`~edelweissfe.numerics.dofmanager.DofManager` at the start
-        of a step and whenever the topology or a constraint's connectivity changes; the operators
-        are bound to that manager by identity and follow it. The velocity and acceleration are the
-        ones the rebuild has read from the model (see :meth:`readStateFromModel`). A step changing a
-        material property mid-step invalidates the density, so the operators are reassembled every
-        increment of such a step.
+        The parent builds a new :class:`~edelweissfe.models.discretesystem.DiscreteSystem` at the start
+        of a step and whenever the topology changes, with a new numbering: the operators of the discrete system it
+        forgets are dropped with it (:meth:`forgetDiscreteSystem`) and assembled lazily, here, by the first increment on
+        the new one; new locations on the same numbering move them onto themselves (:meth:`onNewLocations`). The velocity
+        and acceleration are the ones the new numbering has read from the model (see :meth:`readStateFromModel`). A step
+        changing a material property mid-step invalidates the density, so the operators are reassembled every increment
+        of such a step.
 
-        A rebuild that follows a recorded **topology change** -- a ``model.topology.history`` grown
+        A new numbering that follows a recorded **topology change** -- a ``model.topology.history`` grown
         since the last build, or since the step started -- additionally re-arms the
         initial-acceleration solve and reports what the change did to the conserved quantities (if
         there is a previous system to compare with) -- see the module docstring. A step boundary
-        rebuilds the manager too, but changes no topology, so it is not such a rebuild; and the
+        builds a new numbering too, but changes no topology, so it is not such a change; and the
         first increment of a resumed step that refines is, exactly as it was in the uninterrupted
         run.
 
-        It takes a grown history, not merely a rebuild: a rebuild triggered by a constraint
-        re-reporting its connectivity (a contact candidate list, which can tick on any increment)
-        has moved no node and interpolated nothing, so there is no stale acceleration to replace and
+        It takes a grown history, not merely a new numbering: a scalar variable entering the system has
+        moved no node and interpolated nothing, so there is no stale acceleration to replace and
         no conservation statement to make. Restarting the acceleration of the whole model on it
-        would be both wrong and, repeated per increment, expensive.
+        would be both wrong and, repeated, expensive.
 
         Parameters
         ----------
@@ -1025,20 +1082,20 @@ class NonlinearImplicitDynamic(NIST):
         Returns
         -------
         _NewmarkSystem
-            The system for the current DofManager.
+            The system for the current discrete system.
         """
 
         newmarkSystem = self._newmarkSystem
-        dofManagerChanged = newmarkSystem is None or newmarkSystem.dofManager is not self.theDofManager
+        newmarkSystemIsNew = newmarkSystem is None
 
         if (
-            not dofManagerChanged
+            not newmarkSystemIsNew
             and not stepActions["changematerialproperty"]
             and not newmarkSystem.includesLumpedMassOfEntities
         ):
             return newmarkSystem
 
-        if dofManagerChanged and self.system.materialPoints:
+        if newmarkSystemIsNew and self.system.materialPoints:
             raise NotImplementedError(
                 "The model has material points that belong to no element. {:} integrates the inertia the elements "
                 "report and that of the entities that integrate their own; such material points carry none, so there "
@@ -1046,7 +1103,7 @@ class NonlinearImplicitDynamic(NIST):
                 "NISTParallel).".format(self.identification)
             )
 
-        # Safe to advance here: a topology change always rebuilds the manager, so it is never skipped above.
+        # Safe to advance here: a topology change always builds a new discrete system, so it is never skipped above.
         topologyRecords = len(model.topology.history)
         topologyChanged = topologyRecords != self._topologyRecordsAtLastBuild
         self._topologyRecordsAtLastBuild = topologyRecords
@@ -1067,30 +1124,15 @@ class NonlinearImplicitDynamic(NIST):
         with performancetiming.timeit("newmark system setup"):
             dynamicDofs = self._locateDynamicDofs(dynamicFields, lumpedMassOfEntities)
 
-        reusedMassAndDamping = None
-        if (
-            dofManagerChanged
-            and newmarkSystem is not None
-            and newmarkSystem.dynamicDofs.size
-            and dynamicDofs.size
-            and not topologyChanged
-            and not stepActions["changematerialproperty"]
-            and lumpedMassOfEntities is None
-            and not newmarkSystem.includesLumpedMassOfEntities
-        ):
-            reusedMassAndDamping = self._reuseMassAndDamping(newmarkSystem)
-
         if not dynamicDofs.size:
             M, lumpedDamping, massByField = self._noMassAndDamping()
-        elif reusedMassAndDamping is not None:
-            M, lumpedDamping, massByField = reusedMassAndDamping
         else:
             M, lumpedDamping, massByField = self._assembleMassAndDamping(
                 model, dynamicDofs, dynamicFields, lumpedMassOfEntities
             )
 
         self._newmarkSystem = _NewmarkSystem(
-            dofManager=self.theDofManager,
+            system=self.system,
             dynamicDofs=dynamicDofs,
             dynamicFields=dynamicFields,
             M=M,
@@ -1103,7 +1145,7 @@ class NonlinearImplicitDynamic(NIST):
             A=self._A,
         )
 
-        if dofManagerChanged and topologyChanged:
+        if newmarkSystemIsNew and topologyChanged:
             if self._conservedAtLastAccept is not None:
                 with performancetiming.timeit("conservation report"):
                     self.reportTopologyChangeConservation(
@@ -1173,64 +1215,13 @@ class NonlinearImplicitDynamic(NIST):
             The empty mass, the zero lumped damping, and no mass by field.
         """
 
-        nDof = self.theDofManager.nDof
+        nDof = self.system.numbering.nDof
         return csr_matrix((nDof, nDof)), np.zeros(nDof), {}
-
-    @performancetiming.timeit("reuse mass and damping")
-    def _reuseMassAndDamping(self, newmarkSystem: _NewmarkSystem) -> tuple[csr_matrix, np.ndarray, dict] | None:
-        """The mass and the damping of ``newmarkSystem``, moved onto the discrete system of the current
-        :class:`~edelweissfe.numerics.dofmanager.DofManager` without reassembling them -- or None if that manager
-        differs from the old one in anything they depend on.
-
-        The parent builds a new manager whenever a constraint reports a change of its connectivity, which a contact
-        candidate list does on almost every increment. Such a change moves no node and touches no element: the
-        numbering of the degrees of freedom and the elements are where they were, and only the coupling the
-        constraints add to the sparsity pattern changes. Mass and damping are the elements' alone (a constraint carries
-        none), so they are unchanged: the mass only needs its values copied onto the sparsity pattern of the new
-        stiffness
-        (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`), and the
-        lumped damping, a vector of the unchanged numbering, is kept. That replaces a loop over every element and the
-        checks on the assembled mass.
-
-        Nothing about that is assumed beyond what the numbering tells: the digests of the two numberings
-        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`) and the two sets of elements are
-        compared, and anything that differs falls back to a full assembly. An element changes its nodes only in a
-        topology change, which is never reused (see :meth:`_updateNewmarkSystem`).
-
-        Parameters
-        ----------
-        newmarkSystem
-            The Newmark system of the previous manager.
-
-        Returns
-        -------
-        tuple[csr_matrix, np.ndarray, dict] | None
-            The mass on the sparsity pattern of the current stiffness, the lumped damping, and the mass by field
-            (unchanged, as the numbering is) -- or None if they have to be reassembled.
-        """
-
-        old = newmarkSystem.dofManager
-        new = self.theDofManager
-
-        if new.dofNumberingDigest != old.dofNumberingDigest:
-            return None
-        if new.idcsOfElementsInDofVector.keys() != old.idcsOfElementsInDofVector.keys():
-            return None
-
-        M = self._K.copyOntoSparsityPattern(newmarkSystem.M)
-
-        self.journal.message(
-            "constraint connectivity changed only: mass and damping reused, not reassembled",
-            self.identification,
-            2,
-        )
-
-        return M, newmarkSystem.lumpedDamping, newmarkSystem.massByField
 
     def _conservedQuantities(self, newmarkSystem: _NewmarkSystem, model: FEModel) -> _ConservedQuantities:
         """Total mass, linear momentum and kinetic energy of one Newmark system.
 
-        Read off that system's own :class:`~edelweissfe.numerics.dofmanager.DofManager`, so the
+        Read off that system's own :class:`~edelweissfe.models.discretesystem.DiscreteSystem`, so the
         same method measures the state before and after a rebuild without either one having to
         know about the other.
 
@@ -1263,12 +1254,12 @@ class NonlinearImplicitDynamic(NIST):
 
         return _ConservedQuantities(
             massByField=newmarkSystem.massByField,
-            momentum=linearMomentum(MV, newmarkSystem.dofManager, newmarkSystem.dynamicFields, model),
+            momentum=linearMomentum(MV, newmarkSystem.system.numbering, newmarkSystem.dynamicFields, model),
             kineticEnergy=0.5 * float(V @ MV),
         )
 
     @staticmethod
-    def _totalMassByField(M: csr_matrix, dofManager: DofManager, fieldNames: list, model: FEModel) -> dict:
+    def _totalMassByField(M: csr_matrix, numbering: DofNumbering, fieldNames: list, model: FEModel) -> dict:
         """Each field's own total assembled mass, never summed across fields.
 
         The row sums of the consistent mass over a field's slice count every spatial component of
@@ -1278,8 +1269,8 @@ class NonlinearImplicitDynamic(NIST):
         ----------
         M
             The consistent mass.
-        dofManager
-            The manager it is indexed by.
+        numbering
+            The numbering it is indexed by.
         fieldNames
             The fields whose inertia is a mass.
         model
@@ -1293,7 +1284,7 @@ class NonlinearImplicitDynamic(NIST):
 
         rowSums = np.asarray(M.sum(axis=1)).ravel()
         return {
-            fieldName: float(np.sum(rowSums[dofManager.idcsOfFieldsInDofVector[fieldName]]))
+            fieldName: float(np.sum(rowSums[numbering.idcsOfFieldsInDofVector[fieldName]]))
             / model.nodeFields[fieldName].dimension
             for fieldName in fieldNames
         }
@@ -1390,14 +1381,14 @@ class NonlinearImplicitDynamic(NIST):
         """
 
         dynamicFields = [
-            fieldName for fieldName in self.theDofManager.idcsOfFieldsInDofVector if carriesLinearMomentum(fieldName)
+            fieldName for fieldName in self.system.numbering.idcsOfFieldsInDofVector if carriesLinearMomentum(fieldName)
         ]
 
         if not dynamicFields:
             raise ValueError(
                 "No field of this model carries a mass (see phenomena.inertiaKind), so there is nothing "
                 "for {:} to integrate in time; it carries: {:}.".format(
-                    self.identification, ", ".join(self.theDofManager.idcsOfFieldsInDofVector) or "(no field)"
+                    self.identification, ", ".join(self.system.numbering.idcsOfFieldsInDofVector) or "(no field)"
                 )
             )
 
@@ -1423,13 +1414,13 @@ class NonlinearImplicitDynamic(NIST):
             Their indices in the dof vector, sorted.
         """
 
-        isDynamic = np.zeros(self.theDofManager.nDof, dtype=bool)
+        isDynamic = np.zeros(self.system.numbering.nDof, dtype=bool)
         isDynamic[self.system.dofsWithNodalInertia(dynamicFields)] = True
 
         if lumpedMassOfEntities is not None:
             hasLumpedMass = np.asarray(lumpedMassOfEntities) > 0.0
             for fieldName in dynamicFields:
-                indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+                indices = self.system.numbering.idcsOfFieldsInDofVector[fieldName]
                 isDynamic[indices] |= hasLumpedMass[indices]
 
         return np.flatnonzero(isDynamic)
@@ -1483,8 +1474,8 @@ class NonlinearImplicitDynamic(NIST):
         """
 
         K = self._K
-        dofsOfElement = self.theDofManager.idcsOfElementsInDofVector
-        nDof = self.theDofManager.nDof
+        locations = self.system.locations
+        nDof = self.system.numbering.nDof
 
         K.beginAssembly()
 
@@ -1509,7 +1500,7 @@ class NonlinearImplicitDynamic(NIST):
                 Ce = np.zeros(el.nDof)
                 el.computeLumpedDamping(Ce)
                 nonzero = np.flatnonzero(Ce)
-                dampedDofs.append(dofsOfElement[el][nonzero])
+                dampedDofs.append(locations[el][nonzero])
                 dampingValues.append(Ce[nonzero])
             blocks.flush()
             return dampedDofs, dampingValues
@@ -1555,7 +1546,7 @@ class NonlinearImplicitDynamic(NIST):
                 )
             )
 
-        massByField = self._totalMassByField(M, self.theDofManager, dynamicFields, model)
+        massByField = self._totalMassByField(M, self.system.numbering, dynamicFields, model)
         for fieldName, totalMass in massByField.items():
             self.journal.message(
                 "consistent mass assembled: field '{:}' carries a total mass of {:e}".format(fieldName, totalMass),
@@ -1614,10 +1605,10 @@ class NonlinearImplicitDynamic(NIST):
         if not affectedDofs.size:
             return
 
-        isAffected = np.zeros(self.theDofManager.nDof, dtype=bool)
+        isAffected = np.zeros(self.system.numbering.nDof, dtype=bool)
         isAffected[affectedDofs] = True
 
-        for fieldName, indices in self.theDofManager.idcsOfFieldsInDofVector.items():
+        for fieldName, indices in self.system.numbering.idcsOfFieldsInDofVector.items():
             if carriesLinearMomentum(fieldName) or fieldName in self._fieldsWarnedAboutDiscardedInertia:
                 continue
             if np.any(isAffected[indices]):
@@ -1675,10 +1666,10 @@ class NonlinearImplicitDynamic(NIST):
         dirichlets = stepActions["dirichlet"].values()
         loads = self.collectLoads(stepActions)
 
-        P = self.theDofManager.constructDofVector()
-        F = self.theDofManager.constructDofVector()
-        PLoadsAndConstraints = self.theDofManager.constructDofVector()
-        dU0 = self.theDofManager.constructDofVector()
+        P = self.system.locations.constructDofVector()
+        F = self.system.locations.constructDofVector()
+        PLoadsAndConstraints = self.system.locations.constructDofVector()
+        dU0 = self.system.locations.constructDofVector()
         # the tangent is not needed: assembled into the increment's own system matrix, which the Newton iterations
         # assemble anew
         K = self._K
@@ -1691,12 +1682,12 @@ class NonlinearImplicitDynamic(NIST):
         )
 
         # f_ext - f_int is the negative of the summed residual contributions, as in solveIncrement
-        R = self.theDofManager.constructDofVector()
+        R = self.system.locations.constructDofVector()
         R[:] = -P
         R -= PLoadsAndConstraints
         R -= newmarkSystem.lumpedDamping * np.asarray(newmarkSystem.V)
 
-        nDof = self.theDofManager.nDof
+        nDof = self.system.numbering.nDof
         isStatic = np.ones(nDof, dtype=bool)
         isStatic[newmarkSystem.dynamicDofs] = False
         R[isStatic] = 0.0
@@ -1717,9 +1708,9 @@ class NonlinearImplicitDynamic(NIST):
 
         newmarkSystem.A[:] = 0.0
         newmarkSystem.A[newmarkSystem.dynamicDofs] = A0[newmarkSystem.dynamicDofs]
-        # It completes the state the increment starts from: a rebuild before the increment is accepted -- a retry
-        # after a cutback whose contact search changes the connectivity -- reads it back from the model. Every field,
-        # as at acceptance: a field without a mass is at rest.
+        # It completes the state the increment starts from: a new numbering before the increment is accepted -- a retry
+        # after a cutback that changes the mesh -- reads it back from the model; new locations keep the vectors.
+        # Every field, as at acceptance: a field without a mass is at rest.
         self.system.writeVelocityAndAccelerationToModel(newmarkSystem.V, newmarkSystem.A)
 
         self.journal.message(

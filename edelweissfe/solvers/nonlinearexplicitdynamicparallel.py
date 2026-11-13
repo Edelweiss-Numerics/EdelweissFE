@@ -34,7 +34,7 @@ Parallel implementation of the NED solver.
 
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfThreads,
     reportThreadAvailability,

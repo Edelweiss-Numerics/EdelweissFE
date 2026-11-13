@@ -37,8 +37,8 @@ the information -- a solver that needs more than the default overrides it; every
 default that does nothing harmful.
 
 :meth:`setModel` hands a solver the live :class:`~edelweissfe.models.femodel.FEModel` and
-:class:`~edelweissfe.numerics.dofmanager.DofManager` it is solving for. Everything a solver may want is
-derivable from those two objects (the field layout from the ``DofManager``, node coordinates and element
+:class:`~edelweissfe.numerics.dofnumbering.DofNumbering` it is solving for. Everything a solver may want is
+derivable from those two objects (the field layout from the ``DofNumbering``, node coordinates and element
 topology from the ``FEModel``), so a solver that wants more than the default field-structure bookkeeping
 (e.g. the composed solver reading node coordinates for a rigid-body near null-space, or building a P1
 topology map) keeps the references and computes what it needs on its own schedule -- the driver need not
@@ -117,7 +117,7 @@ class LinearSolver:
     _journal = None
     _fieldStructure: "list[FieldBlock] | None" = None
     _model = None
-    _dofManager = None
+    _numbering = None
 
     #: Display name for this solver's own log lines; overridden by solvers with their own name.
     identification = "LinearSolver"
@@ -148,44 +148,56 @@ class LinearSolver:
         """
         self._journal = journal
 
-    def setModel(self, model, dofManager) -> None:
-        """Receive the live model and DOF manager this solver is being asked to solve for.
+    def setModel(self, model, numbering) -> None:
+        """Receive the live model and numbering of the degrees of freedom this solver is being asked to solve for.
 
-        Called by the nonlinear solver whenever the discrete system is (re)built -- i.e. on the first
-        solve and again after any AMR/connectivity change. The default implementation derives and
+        Called by the nonlinear solver whenever the discrete system gets a new numbering -- i.e. on the first
+        solve and again after a change of the mesh or of the scalar variables (a change of the connectivity alone
+        keeps the numbering, and is announced by :meth:`onNewMatrixPattern`). The default implementation derives and
         stores the per-field DOF-block structure (name, DOF range, nodal dimension) any field-split
         solver needs -- equivalent to calling :meth:`setFieldStructure` with those blocks -- and keeps
-        ``model``/``dofManager`` themselves on ``self._model``/``self._dofManager`` for a solver that
+        ``model``/``numbering`` themselves on ``self._model``/``self._numbering`` for a solver that
         wants to go further (e.g. node coordinates for a rigid-body near null-space, or a P1 topology
         map) without the driver having to know about it.
 
-        A solver overriding this should normally call ``super().setModel(model, dofManager)`` first to
+        A solver overriding this should normally call ``super().setModel(model, numbering)`` first to
         get the field-structure bookkeeping for free, then do whatever else it needs.
 
         Parameters
         ----------
         model
             The live :class:`~edelweissfe.models.femodel.FEModel`.
-        dofManager
-            The live :class:`~edelweissfe.numerics.dofmanager.DofManager` describing the current
-            discrete system's numbering.
+        numbering
+            The live :class:`~edelweissfe.numerics.dofnumbering.DofNumbering` of the current
+            discrete system.
         """
         self._model = model
-        self._dofManager = dofManager
+        self._numbering = numbering
         self._fieldStructure = [
             FieldBlock(fieldName, fieldIndices.start, fieldIndices.stop, model.nodeFields[fieldName].dimension)
-            for fieldName, fieldIndices in dofManager.idcsOfFieldsInDofVector.items()
+            for fieldName, fieldIndices in numbering.idcsOfFieldsInDofVector.items()
         ]
+
+    def onNewMatrixPattern(self) -> None:
+        """The sparsity pattern of the system matrix is about to change: a change of the connectivity (e.g. a contact
+        search, which couples other nodes) gives the discrete system new locations on the same numbering, and with them
+        a new pattern. Whatever this solver built for the old pattern (a hierarchy, a factorization) is of no use
+        for the new one and is dropped, before the nonlinear solver builds the new pattern, so that nothing is held
+        twice. What is bound to the model and the numbering (:meth:`setModel`) stays.
+
+        The default holds nothing bound to a pattern. A change of the numbering is a new pattern as well, and calls
+        this from :meth:`setModel`.
+        """
 
     def setFieldStructure(self, fields: "list[FieldBlock]") -> None:
         """Receive the ordered field blocks of the DOF vector directly (in DOF order), bypassing
         :meth:`setModel`.
 
         An escape hatch for a caller that knows the field-block layout but has no full
-        ``FEModel``/``DofManager`` to hand over -- e.g. an offline probe script driving a solver
+        ``FEModel``/``DofNumbering`` to hand over -- e.g. an offline probe script driving a solver
         directly on a captured ``(A, b)`` system. A live run goes through :meth:`setModel` instead,
         whose default implementation computes exactly this and stores it the same way; a solver that
-        only ever needs the field-block structure (not the model/dofManager references themselves)
+        only ever needs the field-block structure (not the model/numbering references themselves)
         does not need to care which path supplied it.
 
         Only field-split solvers (e.g. a composed solver with ``OnField`` corrections) read it; every

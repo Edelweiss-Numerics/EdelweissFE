@@ -30,7 +30,8 @@ from abc import abstractmethod
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.stepactions.base.loadbase import LoadBase
@@ -81,7 +82,7 @@ class BodyLoadBase(LoadBase):
         U_np: DofVector,
         dU: DofVector,
         timeStep: TimeStep,
-        dofManager: DofManager,
+        locations: DofLocations,
     ):
         """Let every element of the element set add the residual contribution of the body force, the negative of
         the external load, and its tangent; see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
@@ -98,8 +99,8 @@ class BodyLoadBase(LoadBase):
             The global solution increment.
         timeStep
             The current time step.
-        dofManager
-            The DOF manager of the discrete system.
+        locations
+            The locations of the entities in the discrete system, from which the load finds where it acts.
         """
 
         time = timeStep.totalTime

@@ -195,7 +195,9 @@ def test_a_sequence_of_solves_has_blockamgs_numbers_and_reuse_decisions(rigidBod
     name = "rigidBodyModesPerAggregate" if rigidBodyModesPerAggregate else "translations"
     composed = _composed(coordinates, fields, rigidBodyModesPerAggregate=rigidBodyModesPerAggregate)
     rebuilds = []
-    for (A_k, b_k), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
+    for (A_k, b_k, newPattern), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
+        if newPattern:
+            composed.onNewMatrixPattern()
         _assertSolve(composed, A_k, b_k, frozen, tight=False)
         rebuilds.append(composed.root.lastRebuildReason)
     assert [reason is not None for reason in rebuilds] == _REBUILT[name]
@@ -218,19 +220,20 @@ def test_a_solver_keeps_no_copy_of_the_last_matrix_between_solves():
 
 
 def _newtonLikeSequence(A, b, fields, seed: int = 7):
-    """New values (reused), a shrinking right-hand side, a jump (a new increment) and a new sparsity pattern."""
+    """New values (reused), a shrinking right-hand side, a jump (a new increment) and a new sparsity pattern, which the
+    nonlinear solver announces (:meth:`onNewMatrixPattern`) before the solve that has it: ``(A, b, announced)``."""
     rng = np.random.default_rng(seed)
     perturbation = sp.diags(1.0 + 0.05 * rng.standard_normal(A.shape[0]))
     first, last = fields[1].start, fields[1].stop - 1
     newEntries = sp.csr_matrix(([1e-6, 1e-6], ([first, last], [last, first])), shape=A.shape)
     sequence = [
-        (A, b),
-        ((perturbation @ A @ perturbation).tocsr(), 0.1 * b),
-        ((perturbation @ A @ perturbation).tocsr(), 0.01 * rng.standard_normal(A.shape[0])),
-        (A, 10.0 * b),
-        ((A + newEntries).tocsr(), b),
+        (A, b, False),
+        ((perturbation @ A @ perturbation).tocsr(), 0.1 * b, False),
+        ((perturbation @ A @ perturbation).tocsr(), 0.01 * rng.standard_normal(A.shape[0]), False),
+        (A, 10.0 * b, False),
+        ((A + newEntries).tocsr(), b, True),
     ]
-    for A_k, _ in sequence:
+    for A_k, _, _ in sequence:
         A_k.sort_indices()
     return sequence
 
@@ -290,7 +293,9 @@ def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_seque
         residualGapCompensation=ResidualGapCompensation() if gapCompensated else None,
         rigidBodyModesPerAggregate=False,
     )
-    for (A_k, b_k), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
+    for (A_k, b_k, newPattern), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
+        if newPattern:
+            composed.onNewMatrixPattern()
         _assertSolve(composed, A_k, b_k, frozen, tight=False)
     if gapCompensated:
         assert composed.root.inner.residualGapCompensation.gap == pytest.approx(_GAP[name], rel=1e-2)
@@ -356,11 +361,13 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path):
     )
     composed.setFieldStructure(fields)
     sequence = _newtonLikeSequence(A, b, fields)
-    for A_k, b_k in sequence:
+    for A_k, b_k, newPattern in sequence:
+        if newPattern:
+            composed.onNewMatrixPattern()
         composed(A_k, b_k)
     records = _manifest(tmp_path)
     assert len(records) == len(sequence)
-    for (A_k, b_k), frozen, record in zip(sequence, _MANIFEST, records):
+    for (A_k, b_k, _), frozen, record in zip(sequence, _MANIFEST, records):
         assert set(record) == _MANIFEST_KEYS
         solveCount, iterations, rebuilt, newIncrement, patternChanged, nnz, previousIterations = frozen
         assert (record["solveCount"], record["iterations"], record["rebuildReason"] is not None) == (

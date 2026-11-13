@@ -62,7 +62,7 @@ class DirichletBase(StepActionBase):
     #: The global DOF indices constrained by this BC, in node-major order. Populated at the start of every increment
     #: by the solver (see
     #: :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.locateConstrainedDofs`), as it depends
-    #: on the DofManager.
+    #: on the DofNumbering.
     constrainedDofIndices: np.ndarray = None
     #: The positions, in ``nSet``, of the nodes whose DOFs :attr:`constrainedDofIndices` holds: the nodes of the set
     #: that are part of the discrete system -- every node of the set in a finite element model, the nodes in the

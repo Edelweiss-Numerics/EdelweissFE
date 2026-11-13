@@ -32,7 +32,8 @@ from abc import abstractmethod
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.dofnumbering import DofNumbering
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.timesteppers.timestep import TimeStep
 
@@ -94,13 +95,13 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
         self.changeOverStep = 0.0
 
     @abstractmethod
-    def controlledDofIndices(self, dofManager: DofManager) -> np.ndarray:
+    def controlledDofIndices(self, numbering: DofNumbering) -> np.ndarray:
         """The indices of the controlled degrees of freedom in the dof vector of a discrete system.
 
         Parameters
         ----------
-        dofManager
-            The dof manager of the discrete system.
+        numbering
+            The numbering of the degrees of freedom of the current discrete system.
 
         Returns
         -------
@@ -145,7 +146,7 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
         self.changeOverStep = L - self.controlledQuantity() if self.absolute else L
 
     def computeDDLambda(
-        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, dofManager: DofManager
+        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, numbering: DofNumbering
     ) -> float:
         """The correction of the load parameter that makes the corrected increment change the controlled quantity by the
         share of the increment, :math:`\\Delta p \\, \\Delta L`; see
@@ -161,8 +162,8 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
             The correction of the solution caused by the reference load alone.
         timeStep
             The increment being solved, whose size :math:`\\Delta p` is ``timeStep.stepProgressIncrement``.
-        dofManager
-            The dof manager of the current discrete system.
+        numbering
+            The numbering of the degrees of freedom of the current discrete system.
 
         Returns
         -------
@@ -170,7 +171,7 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
             The correction of the load parameter.
         """
 
-        idcs = self.controlledDofIndices(dofManager)
+        idcs = self.controlledDofIndices(numbering)
 
         dL = timeStep.stepProgressIncrement * self.changeOverStep
 

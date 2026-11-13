@@ -43,7 +43,8 @@ from edelweissfe.models.change import Change
 from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.modelchange import TopologyRecord
 from edelweissfe.models.topologypipeline import TopologyPipeline
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfWorkerThreads,
     mapChunksInParallel,
@@ -531,17 +532,10 @@ class FEModel:
             The discrete system.
         """
 
-        constraints = self.activeConstraints()
+        numbering = DofNumbering(self.nodeFields.values(), self.activeScalarVariables(), self.nodeSets.values())
+        locations = DofLocations(numbering, self.elements.values(), self.activeConstraints())
 
-        dofManager = DofManager(
-            self.nodeFields.values(),
-            self.activeScalarVariables(),
-            self.elements.values(),
-            constraints,
-            self.nodeSets.values(),
-        )
-
-        return DiscreteSystem(self, dofManager, list(self.elements.values()))
+        return DiscreteSystem(self, locations)
 
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and

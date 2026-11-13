@@ -26,9 +26,14 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 import edelweissfe.numerics.dofvector
+
+if TYPE_CHECKING:
+    from edelweissfe.numerics.doflocations import DofLocations
 
 
 class ScatterDofVectorTemplate:
@@ -42,33 +47,32 @@ class ScatterDofVectorTemplate:
 
     Parameters
     ----------
-    entitiesInDofVector : dict
-        The dictionary mapping entities to their global index arrays in the `DofVector`.
+    locations : DofLocations
+        The locations of the entities, which map every entity to its global index array in the `DofVector`.
     nDof : int
         The total number of global degrees of freedom.
     """
 
-    def __init__(self, entitiesInDofVector: dict, nDof: int):
-        sizes = np.array([len(v) for v in entitiesInDofVector.values()], dtype=np.intc)
+    def __init__(self, locations: "DofLocations", nDof: int):
+        ofEntity = locations.ofEntity
+        sizes = np.array([len(v) for v in ofEntity.values()], dtype=np.intc)
         total_size = int(np.sum(sizes))
 
-        offsets = np.zeros(len(entitiesInDofVector) + 1, dtype=np.intc)
+        offsets = np.zeros(len(ofEntity) + 1, dtype=np.intc)
         np.cumsum(sizes, out=offsets[1:])
 
         # map entity -> (offset, size), such that a single lookup suffices for access
-        self.offsetMap = {
-            entity: (offset, size) for entity, offset, size in zip(entitiesInDofVector.keys(), offsets, sizes)
-        }
+        self.offsetMap = {entity: (offset, size) for entity, offset, size in zip(ofEntity.keys(), offsets, sizes)}
 
         self.globalIndices = np.empty(total_size, dtype=np.int32)
 
         current_offset = 0
-        for entity, indices in entitiesInDofVector.items():
+        for entity, indices in ofEntity.items():
             n = len(indices)
             self.globalIndices[current_offset : current_offset + n] = indices
             current_offset += n
 
-        self.entitiesInDofVector = entitiesInDofVector
+        self.locations = locations
         self.nDof = nDof
         self.totalSize = total_size
 
@@ -89,7 +93,7 @@ class ScatterDofVector(np.ndarray):
 
         obj._offset_map = template.offsetMap
         obj._global_indices = template.globalIndices
-        obj._entitiesInDofVector = template.entitiesInDofVector
+        obj._locations = template.locations
         obj._nDof = template.nDof
         #: Plain-ndarray alias of the same buffer; see __getitem__.
         obj._plainView = None
@@ -100,7 +104,7 @@ class ScatterDofVector(np.ndarray):
         if obj is None:
             return
         self._offset_map = getattr(obj, "_offset_map", None)
-        self._entitiesInDofVector = getattr(obj, "_entitiesInDofVector", None)
+        self._locations = getattr(obj, "_locations", None)
         self._nDof = getattr(obj, "_nDof", None)
         self._global_indices = getattr(obj, "_global_indices", None)
         self._plainView = None
@@ -184,8 +188,7 @@ class ScatterDofVector(np.ndarray):
         new_vec = super().copy(order).view(ScatterDofVector)
         if self._offset_map is not None:
             new_vec._offset_map = self._offset_map.copy()
-        if self._entitiesInDofVector is not None:
-            new_vec._entitiesInDofVector = self._entitiesInDofVector.copy()
+        new_vec._locations = self._locations
         if self._global_indices is not None:
             new_vec._global_indices = self._global_indices.copy()
         new_vec._nDof = self._nDof
@@ -220,6 +223,6 @@ class ScatterDofVector(np.ndarray):
         DofVector
             A new `DofVector` containing the accumulated entries.
         """
-        new_dof_vector = edelweissfe.numerics.dofvector.DofVector(self._nDof, self._entitiesInDofVector)
+        new_dof_vector = edelweissfe.numerics.dofvector.DofVector(self._nDof, self._locations)
         self.assembleInto(new_dof_vector, absolute=absolute)
         return new_dof_vector

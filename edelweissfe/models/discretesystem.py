@@ -30,12 +30,15 @@
 discrete system, see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem` and
 :ref:`model-discrete-system`."""
 
+import copy
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofnumbering import DofNumbering
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.timesteppers.timestep import TimeStep
 
 if TYPE_CHECKING:
@@ -44,13 +47,15 @@ if TYPE_CHECKING:
 
 
 class DiscreteSystem:
-    """The discrete system of a model: which degrees of freedom it has, which elements and which constraints contribute
-    to it, and how the solution passes between the model and the vectors a solver iterates on.
+    """The discrete system of a model: which degrees of freedom it has (its numbering), which elements and which
+    constraints contribute to it and where they are located in the numbering (its locations), and how the solution
+    passes between the model and the vectors a solver iterates on.
 
     A solver asks the model for it whenever it (re)builds its discrete system
     (:meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), and keeps it as long as the numbering of the
-    degrees of freedom it holds: until the next rebuild. The solver itself only solves; what the model is made of, the
-    discrete system says.
+    degrees of freedom it holds: until the next rebuild. A change of the connectivity that leaves the numbering as it is
+    only makes new locations, in a new discrete system (:meth:`withNewLocations`). A discrete system never changes. The
+    solver itself only solves; what the model is made of, the discrete system says.
 
     This class is the discrete system of a finite element model. A model made of other entities -- EdelweissMeshfree's
     material point and RKPM models, with their background cells and particles -- returns a discrete system derived from
@@ -60,46 +65,108 @@ class DiscreteSystem:
     ----------
     model
         The model.
-    dofManager
-        The numbering of the degrees of freedom, and the locations of the constraints that take part in the
-        discrete system.
-    elements
-        The elements, in the order in which the solver computes them.
+    locations
+        The locations of the elements and of the constraints that take part in the discrete system, in the numbering
+        of the degrees of freedom they are built on.
     """
 
-    def __init__(self, model: "FEModel", dofManager: DofManager, elements: list):
+    def __init__(self, model: "FEModel", locations: DofLocations):
         #: The model this discrete system belongs to.
         self.model = model
-        #: The numbering of the degrees of freedom of the discrete system; see
-        #: :class:`~edelweissfe.numerics.dofmanager.DofManager`.
-        self.dofManager = dofManager
-        #: Everything the solver computes like an element in every evaluation of the model, see
-        #: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`: the finite elements of the model,
-        #: and in a meshfree model its cells and particles as well. A list, which a parallel solver hands out in slices
-        #: to its threads.
-        self.elements = elements
+        #: The locations of the elements and of the constraints in the numbering of the degrees of freedom; see
+        #: :class:`~edelweissfe.numerics.doflocations.DofLocations`. They are replaced by new ones, never changed
+        #: (see :meth:`withNewLocations`).
+        self.locations = locations
         #: The model the linear solver is set up for (see :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`),
-        #: whose node fields are the ones the DOF manager numbers: here, the model itself.
+        #: whose node fields are the ones the numbering numbers: here, the model itself.
         self.modelForLinearSolver = model
         #: The material points that belong to no element, which :meth:`updateMaterialPoints` updates: none in a
         #: finite element model, whose elements evaluate the material at their own quadrature points.
         self.materialPoints = []
 
     @property
-    def constraints(self) -> list:
-        """The constraints that take part in the discrete system: the ones the DOF manager located, with their scalar
-        variables, when the discrete system was built or last located its constraints anew (see
-        :meth:`~edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices`). The solver evaluates exactly
-        these in every evaluation of the model, so that every constraint it evaluates has its rows in the system
-        matrix, and every row of a constraint is filled.
+    def numbering(self) -> DofNumbering:
+        """The numbering of the degrees of freedom of the discrete system, which says which node fields and scalar
+        variables have degrees of freedom, and the global index of each; see
+        :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`.
+
+        Returns
+        -------
+        DofNumbering
+            The numbering the locations are built on.
+        """
+
+        return self.locations.numbering
+
+    @property
+    def elements(self) -> list:
+        """Everything the solver computes like an element in every evaluation of the model, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`: the finite elements of the model that
+        have a location, and in a meshfree model its cells and particles as well. The entities the locations hold: a
+        solver computes exactly what has rows in the system matrix. A list, which a parallel solver hands out in slices
+        to its threads.
 
         Returns
         -------
         list
-            The constraints, in the order in which the DOF manager located them.
+            The elements, in the order in which the solver computes them.
         """
 
-        return list(self.dofManager.idcsOfConstraintsInDofVector)
+        return self.locations.elements
+
+    @property
+    def constraints(self) -> list:
+        """The constraints that take part in the discrete system, i.e. the ones the locations hold, with their scalar
+        variables, when the discrete system was built or last got new locations (see :meth:`withNewLocations`). The
+        solver evaluates exactly these in every evaluation of the model, so that every constraint it evaluates has its
+        rows in the system matrix, and every row of a constraint is filled.
+
+        Returns
+        -------
+        list
+            The constraints, in the order in which the locations hold them.
+        """
+
+        return self.locations.constraints
+
+    def withNewLocations(self) -> "DiscreteSystem":
+        """The discrete system after a change of the connectivity that leaves the numbering as it is, e.g. the contact
+        search of a constraint: the same numbering, and the locations of the constraints that are active now (see
+        :meth:`~edelweissfe.models.femodel.FEModel.activeConstraints`). The constraints must take part with the scalar
+        variables the numbering holds: a change of these needs a new numbering, built by
+        :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`.
+
+        This discrete system is not changed. The vectors of the solver refer to the locations they were wrapped with
+        (:meth:`~edelweissfe.numerics.doflocations.DofLocations.constructDofVector`), and the solver wraps them on the
+        locations of the returned discrete system, their values kept
+        (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`).
+
+        This is the one implementation. A discrete system that holds more than the numbering and the locations
+        extends :meth:`_newLocations`; whatever else it holds must not depend on the connectivity, or be read from
+        the locations, which the new discrete system holds.
+
+        Returns
+        -------
+        DiscreteSystem
+            A discrete system of the same model, with the same numbering and new locations.
+        """
+
+        relocated = copy.copy(self)
+        relocated.locations = self._newLocations()
+
+        return relocated
+
+    def _newLocations(self) -> DofLocations:
+        """The new locations of :meth:`withNewLocations`: the current ones, with the constraints that are active now
+        located anew. A discrete system with entities of further kinds (e.g. particles) locates these anew too.
+
+        Returns
+        -------
+        DofLocations
+            The new locations.
+        """
+
+        return self.locations.withNewLocationsOf(self.model.activeConstraints())
 
     def readStateFromModel(self, U: DofVector, V: DofVector = None, A: DofVector = None, dynamicFields: list = None):
         """Read the state the model carries from increment to increment into the vectors of a (re)built discrete
@@ -126,7 +193,7 @@ class DiscreteSystem:
 
         for nodeField in self.model.nodeFields.values():
             self.readEntryOfNodeField(U, nodeField, "U")
-        self.dofManager.writeScalarVariablesToDofVector(U)
+        self.numbering.writeScalarVariablesToDofVector(U)
 
         for nodeField in self._nodeFieldsWithVelocity(dynamicFields):
             if V is not None:
@@ -152,7 +219,7 @@ class DiscreteSystem:
             The entry, one of :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
         """
 
-        self.dofManager.writeNodeFieldToDofVector(dofVector, nodeField, entry)
+        self.numbering.writeNodeFieldToDofVector(dofVector, nodeField, entry)
 
     def zeroIncrementalCoefficients(self, U: DofVector):
         """Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a
@@ -197,7 +264,7 @@ class DiscreteSystem:
                 self.writeEntryOfNodeField(P, nodeField, "P")
             if dU is not None:
                 self.writeEntryOfNodeField(dU, nodeField, "dU")
-        self.dofManager.writeDofVectorToScalarVariables(U)
+        self.numbering.writeDofVectorToScalarVariables(U)
 
     def writeVelocityAndAccelerationToModel(self, V: DofVector | None, A: DofVector | None):
         """Write the velocity and the acceleration to the entries ``V`` and ``A`` of every node field, the one way a
@@ -230,7 +297,7 @@ class DiscreteSystem:
         the discrete system or not.
         """
 
-        zero = self.dofManager.constructDofVector()
+        zero = self.locations.constructDofVector()
         self.writeVelocityAndAccelerationToModel(zero, zero)
 
     def writeEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
@@ -253,7 +320,7 @@ class DiscreteSystem:
             The entry, one of :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
         """
 
-        self.dofManager.writeDofVectorToNodeField(dofVector, nodeField, entry)
+        self.numbering.writeDofVectorToNodeField(dofVector, nodeField, entry)
 
     def _nodeFieldsWithVelocity(self, dynamicFields: list | None) -> list:
         """The node fields of the model whose velocity and acceleration a solver reads.
@@ -294,9 +361,9 @@ class DiscreteSystem:
             The indices of the degrees of freedom in the vectors of the discrete system, sorted.
         """
 
-        isWithNodalInertia = np.zeros(self.dofManager.nDof, dtype=bool)
+        isWithNodalInertia = np.zeros(self.numbering.nDof, dtype=bool)
         for fieldName in fieldNames:
-            isWithNodalInertia[self.dofManager.idcsOfFieldsInDofVector[fieldName]] = True
+            isWithNodalInertia[self.numbering.idcsOfFieldsInDofVector[fieldName]] = True
 
         return np.flatnonzero(isWithNodalInertia)
 

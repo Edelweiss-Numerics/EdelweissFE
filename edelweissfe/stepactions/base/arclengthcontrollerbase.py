@@ -30,7 +30,8 @@
 
 from abc import abstractmethod
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.dofnumbering import DofNumbering
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 
@@ -57,7 +58,7 @@ class ArcLengthControllerBase(StepActionBase):
 
     @abstractmethod
     def computeDDLambda(
-        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, dofManager: DofManager
+        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, numbering: DofNumbering
     ) -> float:
         """Compute the correction of the load parameter in the current Newton iteration.
 
@@ -73,8 +74,8 @@ class ArcLengthControllerBase(StepActionBase):
         timeStep
             The increment being solved: ``timeStep.stepProgress`` is the progress of the step at its end, and
             ``timeStep.stepProgressIncrement`` its size, so it starts at their difference.
-        dofManager
-            The dof manager of the current discrete system.
+        numbering
+            The numbering of the degrees of freedom of the current discrete system.
 
         Returns
         -------
@@ -83,7 +84,7 @@ class ArcLengthControllerBase(StepActionBase):
         """
 
     @abstractmethod
-    def finishIncrement(self, U: DofVector, dU: DofVector, dLambda: float, timeStep: TimeStep, dofManager: DofManager):
+    def finishIncrement(self, U: DofVector, dU: DofVector, dLambda: float, timeStep: TimeStep, numbering: DofNumbering):
         """Called once an increment has converged, e.g. to report or to store the controlled quantity it reached.
 
         Parameters
@@ -96,6 +97,6 @@ class ArcLengthControllerBase(StepActionBase):
             The converged increment of the load parameter.
         timeStep
             The converged time step.
-        dofManager
-            The dof manager of the current discrete system.
+        numbering
+            The numbering of the degrees of freedom of the current discrete system.
         """

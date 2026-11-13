@@ -116,7 +116,8 @@ class ComposedLinearSolver(LinearSolver):
     Per call it finds what changed and hands it down the tree as a
     :class:`~edelweissfe.linsolve.composition.base.MatrixChange`: ``"first"`` (nothing built yet), ``"model"``
     (after :meth:`setModel`), ``"reload"`` (a new tree from a hot reload), ``"amr"`` (another field layout or size),
-    ``"pattern"`` (another number of stored entries, an O(1) proxy for the sparsity pattern), or only new values.
+    ``"pattern"`` (the nonlinear solver announced a new sparsity pattern, see :meth:`onNewMatrixPattern`), or only new
+    values.
     Whether a right-hand side jumped by more than ``residualGrowthFactor`` (a new increment) is passed along too; the
     Krylov solver decides what it means.
 
@@ -193,8 +194,8 @@ class ComposedLinearSolver(LinearSolver):
         self._reloaded = False
         self._coordinateCache = {}
         self._midsideCornersCache = {}
-        #: The stored entries of the last matrix: a new count is a new sparsity pattern.
-        self.lastNnz = None
+        #: Whether the sparsity pattern was announced to change since the last solve (:meth:`onNewMatrixPattern`).
+        self._patternChanged = False
         #: The right-hand side norm of the last solve, ``None`` before the first one and after a new model.
         self.lastResidualNorm = None
         self._fields = None
@@ -229,17 +230,24 @@ class ComposedLinearSolver(LinearSolver):
 
     # ----- what the nonlinear solver hands over -----
 
-    def setModel(self, model, dofManager) -> None:
+    def setModel(self, model, numbering) -> None:
         """Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built
-        for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear
-        solver builds the new discrete system before that."""
-        self.root.forget()
-        super().setModel(model, dofManager)
+        for the previous model is forgotten right away (:meth:`onNewMatrixPattern`): the tree is built anew at the next
+        solve, and the nonlinear solver builds the new discrete system before that."""
+        self.onNewMatrixPattern()
+        super().setModel(model, numbering)
         self._coordinateCache.clear()
         self._midsideCornersCache.clear()
         self._modelChanged = True
         self.lastResidualNorm = None
-        self.root.setModel(model, dofManager)
+        self.root.setModel(model, numbering)
+
+    def onNewMatrixPattern(self) -> None:
+        """Forget what the tree built for the old sparsity pattern (the hierarchies, the factorizations); the tree is
+        built anew at the next solve, for the reason ``"pattern"``. What is bound to the model -- the field layout, the
+        node coordinates -- stays."""
+        self.root.forget()
+        self._patternChanged = True
 
     def coordinatesOf(self, fieldName: str) -> "np.ndarray | None":
         """The node coordinates of a field in its dof order: given ones first, else the model's, else ``None``."""
@@ -337,7 +345,7 @@ class ComposedLinearSolver(LinearSolver):
             reason = "reload"
         elif fields != self._fields:
             reason = "amr"
-        elif A.nnz != self.lastNnz:
+        elif self._patternChanged:
             reason = "pattern"
         else:
             reason = None
@@ -393,11 +401,11 @@ class ComposedLinearSolver(LinearSolver):
         condensedDofs = self.root.condensedDofs()
         self.root.finishSolve()
 
-        patternChanged = self.lastNnz is not None and A.nnz != self.lastNnz
+        patternChanged = self._patternChanged
+        self._patternChanged = False
         self._fields = fields
         self._modelChanged = False
         self._reloaded = False
-        self.lastNnz = A.nnz
         self.lastResidualNorm = residualNorm
         if record is not None:
             self._report(record, change, time.time() - start)
@@ -555,7 +563,7 @@ class ComposedLinearSolver(LinearSolver):
         self._rootBeforeReload = self.root
         self.root = tree
         if self._model is not None:
-            self.root.setModel(self._model, self._dofManager)
+            self.root.setModel(self._model, self._numbering)
         self._reloaded = True
         self._log("warning", "{:}: the tree is replaced; it is set up on this solve:\n{:}".format(header, self.root))
 

@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 """What a topology change makes the implicit solvers rebuild, and what they now build in parallel:
 
-* the VIJ pattern of the DofManager is filled by the entities in chunks on the thread pool, and comes out bitwise the
+* the VIJ pattern of the DofLocations is filled by the entities in chunks on the thread pool, and comes out bitwise the
   serial one;
-* the DofManager locates its entities in the DofVector in chunks on the thread pool, in the order of the entities and as
-  a single thread does; an entity that couples a field its nodes do not have is left out, and an entity that is faulty
-  in any other way raises, for few entities as for many;
+* the DofLocations locate their entities in the DofVector in chunks on the thread pool, in the order of the entities and
+  as a single thread does; an entity that couples a field its nodes do not have, and an entity that is faulty in any
+  other way, raise, for few entities as for many;
 * the element result collectors of the field outputs gather the result arrays of the elements in chunks on the thread
   pool, in the order of the elements.
 
@@ -17,17 +17,21 @@ free threading.
 
 import numpy as np
 import pytest
-from test_dofmanager_refresh import _buildTwoElementModel, _dofManager, _FakeConstraint
+from test_dof_numbering_and_locations import (
+    _buildTwoElementModel,
+    _FakeConstraint,
+    _locations,
+)
 
-import edelweissfe.numerics.dofmanager as dofmanager
+import edelweissfe.numerics.doflocations as doflocations
 import edelweissfe.numerics.systemmatrixassembly as systemmatrixassembly
 from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
 from edelweissfe.numerics.systemmatrixassembly import VIJSystemMatrixAssembly
 from edelweissfe.utils.elementresultcollector import ElementResultCollector
 
 
-def _countChunks(monkeypatch, module=dofmanager) -> list:
-    """Make ``module`` (the DofManager's, unless given) note down into how many chunks each of its calls of
+def _countChunks(monkeypatch, module=doflocations) -> list:
+    """Make ``module`` (that of the locations, unless given) note down into how many chunks each of its calls of
     ``mapChunksInParallel`` splits its entities: the list returned gets one number per call."""
     chunkCounts = []
 
@@ -44,14 +48,14 @@ def test_the_vij_pattern_filled_on_the_thread_pool_is_the_serial_one_bitwise(mon
     model, n = _buildTwoElementModel()
     constraint = _FakeConstraint([n[0], n[5]], ["displacement"])
 
-    dofManager = _dofManager(model, [constraint])
+    locations = _locations(model, [constraint])
 
     workerThreads(1)
-    serial = VIJSystemMatrixAssembly(dofManager, 1)
+    serial = VIJSystemMatrixAssembly(locations, 1)
 
     workerThreads(4)
     chunkCounts = _countChunks(monkeypatch, systemmatrixassembly)
-    threaded = VIJSystemMatrixAssembly(dofManager, 1)
+    threaded = VIJSystemMatrixAssembly(locations, 1)
 
     assert chunkCounts and max(chunkCounts) > 1, "the entities were not split into several chunks"
     assert threaded.I.tobytes() == serial.I.tobytes()
@@ -60,7 +64,7 @@ def test_the_vij_pattern_filled_on_the_thread_pool_is_the_serial_one_bitwise(mon
 
 
 class _StubEntity:
-    """The face of an entity the DofManager locates: its nodes, the fields it couples on each of them, and the
+    """The face of an entity the locations locate: its nodes, the fields it couples on each of them, and the
     permutation of its dofs."""
 
     def __init__(self, nodes, fields, dofIndicesPermutation=None):
@@ -69,22 +73,22 @@ class _StubEntity:
         self.dofIndicesPermutation = dofIndicesPermutation
 
 
-def _dofManagerAndEntities(numEntities):
-    """A DofManager of the two-element model, and entities that all couple the displacement on the four nodes of its
+def _locationsAndEntities(numEntities):
+    """The locations of the two-element model, and entities that all couple the displacement on the four nodes of its
     first element."""
     model, n = _buildTwoElementModel()
     nodes = [n[0], n[1], n[4], n[5]]
     entities = [_StubEntity(nodes, [["displacement"] for _ in nodes]) for _ in range(numEntities)]
-    return _dofManager(model, []), entities
+    return _locations(model, []), entities
 
 
 def test_the_entities_located_on_the_thread_pool_are_the_serial_ones_in_order(monkeypatch, workerThreads):
-    dofManager, entities = _dofManagerAndEntities(600)  # not one of the few that are located in the calling thread
+    locations, entities = _locationsAndEntities(600)  # not one of the few that are located in the calling thread
 
     # The indices of the displacement of the entities' nodes, which is where an entity without a permutation is
     # located, and the orders the entities take their dofs in: as they are, reversed and rotated.
     unpermuted = np.concatenate(
-        [dofManager.idcsOfFieldVariablesInDofVector[node.fields["displacement"]] for node in entities[0].nodes]
+        [locations.numbering.idcsOfFieldVariablesInDofVector[node.fields["displacement"]] for node in entities[0].nodes]
     )
     inOrder = np.arange(len(unpermuted))
     permutations = [None, inOrder[::-1], np.roll(inOrder, 3)]
@@ -92,11 +96,11 @@ def test_the_entities_located_on_the_thread_pool_are_the_serial_ones_in_order(mo
         entity.dofIndicesPermutation = permutations[i % len(permutations)]
 
     workerThreads(1)
-    serial = dofManager._locateNodeCouplingEntitiesInDofVector(entities)
+    serial = locations._locateNodeCouplingEntities(entities)
 
     workerThreads(4)
     chunkCounts = _countChunks(monkeypatch)
-    pooled = dofManager._locateNodeCouplingEntitiesInDofVector(entities)
+    pooled = locations._locateNodeCouplingEntities(entities)
 
     assert chunkCounts and max(chunkCounts) > 1, "the entities were not split into several chunks"
     assert list(serial) == entities and list(pooled) == entities, "not the entities, in the order they were given"
@@ -108,25 +112,24 @@ def test_the_entities_located_on_the_thread_pool_are_the_serial_ones_in_order(mo
 
 @pytest.mark.parametrize("numThreads", [1, 4])
 @pytest.mark.parametrize("numEntities", [3, 600])
-def test_an_entity_coupling_a_field_its_nodes_do_not_have_is_left_out(numEntities, numThreads, workerThreads):
-    dofManager, entities = _dofManagerAndEntities(numEntities)
+def test_an_entity_coupling_a_field_its_nodes_do_not_have_raises(numEntities, numThreads, workerThreads):
+    locations, entities = _locationsAndEntities(numEntities)
     withoutLocation = entities[numEntities // 2]
     withoutLocation.fields = [["noSuchField"] for _ in withoutLocation.nodes]
 
     workerThreads(numThreads)
-    located = dofManager._locateNodeCouplingEntitiesInDofVector(entities)
-
-    assert list(located) == [entity for entity in entities if entity is not withoutLocation]
+    with pytest.raises(ValueError, match="has no field 'noSuchField'"):
+        locations._locateNodeCouplingEntities(entities)
 
 
 @pytest.mark.parametrize("numEntities", [3, 600])
-def test_an_entity_that_lists_no_fields_for_its_nodes_raises_instead_of_being_left_out(numEntities, workerThreads):
-    dofManager, entities = _dofManagerAndEntities(numEntities)
+def test_an_entity_that_lists_no_fields_for_its_nodes_raises(numEntities, workerThreads):
+    locations, entities = _locationsAndEntities(numEntities)
     entities[numEntities // 2].fields = []
 
     workerThreads(4)
     with pytest.raises(IndexError):
-        dofManager._locateNodeCouplingEntitiesInDofVector(entities)
+        locations._locateNodeCouplingEntities(entities)
 
 
 class _ElementWithResults:
