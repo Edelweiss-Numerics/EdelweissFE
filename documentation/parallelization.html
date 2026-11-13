@@ -141,7 +141,7 @@ splits such an operation into slices of the arrays, one call per slice; the resu
 serial one.</p>
 <p>A loop over independent entities, such as the elements that assemble the mass and the damping of the implicit
 dynamic solvers, the entities whose degrees of freedom the <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a>
-locates in the DOF vector, the entities that fill their parts of the VIJ pattern of the system matrix when the equation
+locates in the DOF vector, the entities that fill their parts of the VIJ pattern of the system matrix when the discrete
 system is rebuilt, or the elements whose result arrays a field output gathers, runs in chunks of consecutive entities,
 <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.parallelizationutilities.mapChunksInParallel" title="edelweissfe.numerics.parallelizationutilities.mapChunksInParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">mapChunksInParallel()</span></code></a>: each call handles a whole chunk, several
 chunks per thread let the pool balance chunks of unequal cost, and the results come back in the order of the entities,

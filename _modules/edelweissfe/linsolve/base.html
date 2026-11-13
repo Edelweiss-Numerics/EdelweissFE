@@ -235,7 +235,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Receive the live model and DOF manager this solver is being asked to solve for.</span>
 
-<span class="sd">        Called by the nonlinear solver whenever the equation system is (re)built -- i.e. on the first</span>
+<span class="sd">        Called by the nonlinear solver whenever the discrete system is (re)built -- i.e. on the first</span>
 <span class="sd">        solve and again after any AMR/connectivity change. The default implementation derives and</span>
 <span class="sd">        stores the per-field DOF-block structure (name, DOF range, nodal dimension) any field-split</span>
 <span class="sd">        solver needs -- equivalent to calling :meth:`setFieldStructure` with those blocks -- and keeps</span>
@@ -252,7 +252,7 @@
 <span class="sd">            The live :class:`~edelweissfe.models.femodel.FEModel`.</span>
 <span class="sd">        dofManager</span>
 <span class="sd">            The live :class:`~edelweissfe.numerics.dofmanager.DofManager` describing the current</span>
-<span class="sd">            equation system's layout.</span>
+<span class="sd">            discrete system's numbering.</span>
 <span class="sd">        """</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="o">=</span> <span class="n">model</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dofManager</span> <span class="o">=</span> <span class="n">dofManager</span>

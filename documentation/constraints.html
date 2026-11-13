@@ -148,7 +148,7 @@
 <span id="constraints"></span><h1>Constraints<a class="headerlink" href="#module-edelweissfe.config.constraints" title="Link to this heading"></a></h1>
 <p>Constraints are defined globally,
 and may be used for introducing additional scalar
-equations into the global equation system.</p>
+equations into the global discrete system.</p>
 <p>Example syntax:</p>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*constraint</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">rigidbody</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myRigigBody</span>
 <span class="nv">    nSet</span><span class="ow">=</span><span class="m">right</span>
@@ -1884,7 +1884,7 @@ upper_all
 Unlike the penalty- and Lagrange-multiplier-based constraints above, the tie is enforced by
 master-slave DOF elimination (multi-point constraint condensation): each slave node’s
 displacement is constrained to the frozen facet-linear interpolation of its closest master facet,
-<span class="math notranslate nohighlight">\(u_s = \sum_a N_a \, u_{m_a}\)</span>, and the slave DOFs are condensed out of the equation system
+<span class="math notranslate nohighlight">\(u_s = \sum_a N_a \, u_{m_a}\)</span>, and the slave DOFs are condensed out of the system of equations
 – exact enforcement, no penalty parameter, no additional DOFs, zero added stiffness. The same
 mechanism serves the implicit solvers (system matrix transformation
 <span class="math notranslate nohighlight">\(\tilde{K} = T^T K \, T + I_s\)</span>, the identity <span class="math notranslate nohighlight">\(I_s\)</span> filling the structurally zero
@@ -1898,7 +1898,7 @@ kinematic slaving – the critical time step is untouched).</p>
 <span class="math notranslate nohighlight">\(T^T K T + I_s\)</span> in place, with an OpenMP-threaded kernel
 (<code class="xref py py-class docutils literal notranslate"><span class="pre">MPCCondensation</span></code>), instead of with SciPy’s
 single-threaded CSR routines, which build a second matrix: the system matrix is held once, not twice.
-For this, the CSR pattern of <span class="math notranslate nohighlight">\(K\)</span> gains, once per equation system, the entries where a master
+For this, the CSR pattern of <span class="math notranslate nohighlight">\(K\)</span> gains, once per discrete system, the entries where a master
 collects the couplings of its slaves
 (<code class="xref py py-meth docutils literal notranslate"><span class="pre">condensedPatternFillIn()</span></code>);
 the slave columns of <span class="math notranslate nohighlight">\(K\)</span> become stored zeros in turn. Only the rows a constraint touches are
@@ -2376,7 +2376,7 @@ all
 <section id="implementing-your-own-constraints">
 <h2>Implementing your own constraints<a class="headerlink" href="#implementing-your-own-constraints" title="Link to this heading"></a></h2>
 <p>Subclass from the constraint base class in module <code class="docutils literal notranslate"><span class="pre">edelweissfe.constraints.base.constraintbase</span></code>
-and implement its <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>. A constraint enters the equation system like an element does
+and implement its <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>. A constraint enters the discrete system like an element does
 (see <a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>): it adds its residual contribution <span class="math notranslate nohighlight">\(\mathbf{P}\)</span>
 – the negative of the force it exerts on its nodes – and the tangent
 <span class="math notranslate nohighlight">\(\mathbf{K} = \partial \mathbf{P} / \partial \mathbf{U}\)</span>. Two examples:</p>
@@ -2508,9 +2508,9 @@ the constraint’s degrees of freedom.</p>
 </dl>
 </dd></dl>
 
-<p>A constraint takes part in the equation system while it is <code class="docutils literal notranslate"><span class="pre">active</span></code>. A constraint that is not active gets no
+<p>A constraint takes part in the discrete system while it is <code class="docutils literal notranslate"><span class="pre">active</span></code>. A constraint that is not active gets no
 degrees of freedom, the solvers do not evaluate it, and its scalar variables – the Lagrange multipliers of
-<code class="docutils literal notranslate"><span class="pre">equalvaluelagrangian</span></code>, say – leave the equation system with it, so that they leave no unknowns without an equation
+<code class="docutils literal notranslate"><span class="pre">equalvaluelagrangian</span></code>, say – leave the discrete system with it, so that they leave no unknowns without an equation
 behind. Two states decide it, and <code class="docutils literal notranslate"><span class="pre">active</span></code> is true while both are:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">switchedOn</span></code>: the constraint is <strong>switched on from outside</strong>. Setting <code class="docutils literal notranslate"><span class="pre">active</span></code> switches it, e.g. a
@@ -2519,7 +2519,7 @@ behind. Two states decide it, and <code class="docutils literal notranslate"><sp
 on again from outside.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">withinReach</span></code>: the constraint finds itself within reach of what it constrains, in its <code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>.
 A contact constraint whose partner is out of reach sets it to false, and reports the change of <code class="docutils literal notranslate"><span class="pre">active</span></code> as a
-change of its connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays
+change of its connectivity, so that the solver rebuilds its discrete system. A constraint that does not check stays
 within reach.</p></li>
 </ul>
 <p>So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part
@@ -2562,7 +2562,7 @@ defining
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-obj docutils literal notranslate"><span class="pre">active</span></code></a></dt><dd><p>Whether this constraint takes part in the equation system: while it is <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-attr docutils literal notranslate"><span class="pre">switchedOn</span></code></a> and <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach"><code class="xref py py-attr docutils literal notranslate"><span class="pre">withinReach</span></code></a>.</p>
+<dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-obj docutils literal notranslate"><span class="pre">active</span></code></a></dt><dd><p>Whether this constraint takes part in the discrete system, while it is <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-attr docutils literal notranslate"><span class="pre">switchedOn</span></code></a> and <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach"><code class="xref py py-attr docutils literal notranslate"><span class="pre">withinReach</span></code></a>.</p>
 </dd>
 <dt><strong>checkpointedState</strong></dt><dd></dd>
 <dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
@@ -2607,7 +2607,7 @@ defining
 <td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareExplicitEvaluation</span></code></a>()</p></td>
-<td><p>Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt one, or one whose constraints are re-located), before it evaluates the constraint there with <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>.</p></td>
+<td><p>Called by an explicit solver whenever the constraint is located anew in its discrete system (a rebuilt one, or one whose constraints are re-located), before it evaluates the constraint there with <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.setRestartData" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.setRestartData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code></a>(data)</p></td>
 <td><p>Restore the state <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.getRestartData" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> returned.</p></td>
@@ -2616,7 +2616,7 @@ defining
 <td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConnectivity</span></code></a>(model)</p></td>
-<td><p>Called once at the start of every increment, before the global equation system is (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based contact pairs) and declare whether its <code class="docutils literal notranslate"><span class="pre">nodes</span></code>/<code class="docutils literal notranslate"><span class="pre">fieldsOnNodes</span></code>/<code class="docutils literal notranslate"><span class="pre">nDof</span></code> footprint has changed since the last call.</p></td>
+<td><p>Called once at the start of every increment, before the global discrete system is (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based contact pairs) and declare whether its <code class="docutils literal notranslate"><span class="pre">nodes</span></code>/<code class="docutils literal notranslate"><span class="pre">fieldsOnNodes</span></code>/<code class="docutils literal notranslate"><span class="pre">nDof</span></code> footprint has changed since the last call.</p></td>
 </tr>
 </tbody>
 </table>
@@ -2713,7 +2713,7 @@ is also called with <code class="docutils literal notranslate"><span class="pre"
 <p>The counterpart of <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a> for an explicit solver, which solves no linear
 system and so has no use for a tangent. This default calls <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a> with a
 scratch tangent that is thrown away, so that every constraint also works in an explicit
-analysis; the scratch is sized once per equation system: a solver that evaluates constraints itself calls
+analysis; the scratch is sized once per discrete system: a solver that evaluates constraints itself calls
 <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareExplicitEvaluation()</span></code></a> whenever the constraint is located anew.
 A constraint whose tangent is costly overrides it, e.g. through
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ForcesOnlyExplicitEvaluation</span></code>.</p>
@@ -2762,13 +2762,13 @@ declared in <a class="reference internal" href="#edelweissfe.constraints.base.co
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation">
 <span class="sig-name descname"><span class="pre">prepareExplicitEvaluation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.prepareExplicitEvaluation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation" title="Link to this definition"></a></dt>
-<dd><p>Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt
+<dd><p>Called by an explicit solver whenever the constraint is located anew in its discrete system (a rebuilt
 one, or one whose constraints are re-located), before it evaluates the constraint there with
 <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>.</p>
 <p>This default forgets the tangent that <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a> throws away, so that the next evaluation
 sizes it, once, for the block the constraint has now. The size is the number of entries of the block
 (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock"><code class="xref py py-func docutils literal notranslate"><span class="pre">countEntriesOfBlock()</span></code></a>), which for a constraint that lists
-its entries means building the list: once per equation system, not in every increment. A constraint that
+its entries means building the list: once per discrete system, not in every increment. A constraint that
 evaluates its forces without a tangent needs nothing here.</p>
 <p>A solver that evaluates constraints itself, rather than through
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleConstraintForces()</span></code>, calls this
@@ -2790,7 +2790,7 @@ again on its own, and a block whose size has changed (a contact with other slave
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity">
 <span class="sig-name descname"><span class="pre">updateConnectivity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.updateConnectivity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity" title="Link to this definition"></a></dt>
-<dd><p>Called once at the start of every increment, before the global equation system is
+<dd><p>Called once at the start of every increment, before the global discrete system is
 (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
 contact pairs) and declare whether its <code class="docutils literal notranslate"><span class="pre">nodes</span></code>/<code class="docutils literal notranslate"><span class="pre">fieldsOnNodes</span></code>/<code class="docutils literal notranslate"><span class="pre">nDof</span></code> footprint has
 changed since the last call.</p>
@@ -2803,7 +2803,7 @@ not override this method).</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>True if this constraint’s contribution to the global system has changed and the
-equation system must be rebuilt before the next Newton solve.</p>
+discrete system must be rebuilt before the next Newton solve.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>bool</p>
@@ -2814,22 +2814,19 @@ equation system must be rebuilt before the next Newton solve.</p>
 <dl class="py property">
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.active">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">active</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="Link to this definition"></a></dt>
-<dd><p>while it is <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-attr docutils literal notranslate"><span class="pre">switchedOn</span></code></a> and
+<dd><p>Whether this constraint takes part in the discrete system, while it is <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-attr docutils literal notranslate"><span class="pre">switchedOn</span></code></a> and
 <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach"><code class="xref py py-attr docutils literal notranslate"><span class="pre">withinReach</span></code></a>. A constraint that does not take part gets no degrees of freedom and adds nothing to the
-residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the equation system with it, so
+residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the discrete system with it, so
 that they leave no empty rows behind.</p>
 <p>Setting it switches the constraint on or off from outside, e.g. by a <code class="docutils literal notranslate"><span class="pre">modelupdate</span></code> step action at the start
 of a step. A switch-off from outside lasts until the constraint is switched on again from outside, whatever the
 constraint finds in reach; switched on again, it takes part while it is within reach.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Whether the constraint takes part in the equation system.</p>
+<dd class="field-odd"><p>Whether the constraint takes part in the discrete system.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>bool</p>
-</dd>
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Whether this constraint takes part in the equation system</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2883,9 +2880,9 @@ step.</p>
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach">
 <span class="sig-name descname"><span class="pre">withinReach</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="Link to this definition"></a></dt>
 <dd><p>Whether this constraint is within reach of what it constrains, as it finds itself in <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a>:
-e.g. a contact constraint whose partner is far away is not, and takes no part in the equation system then (see
+e.g. a contact constraint whose partner is far away is not, and takes no part in the discrete system then (see
 <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>). A constraint sets it there, and reports a change of <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a> as a change of its
-connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays within
+connectivity, so that the solver rebuilds its discrete system. A constraint that does not check stays within
 reach.</p>
 </dd></dl>
 

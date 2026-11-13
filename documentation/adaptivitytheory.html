@@ -165,7 +165,7 @@ That update</p>
 <li><p>evaluates each configured <strong>marker</strong>, obtaining from each a <em>set</em> of elements to refine,</p></li>
 <li><p><strong>unions</strong> those sets (see <a class="reference internal" href="#multiple-markers"><span class="std std-ref">Reactive and predictive marking: why more than one marker</span></a>),</p></li>
 <li><p>keeps only elements below <code class="docutils literal notranslate"><span class="pre">maxLevel</span></code>,</p></li>
-<li><p>subdivides them, rebalances, transfers state, and rebuilds the equation system.</p></li>
+<li><p>subdivides them, rebalances, transfers state, and rebuilds the discrete system.</p></li>
 </ol>
 <p>A marker is a small object with a single responsibility – given the current model, return the set
 of elements it wants refined. The base class is
@@ -208,7 +208,7 @@ independent reasons: the marker refines on the last finalized field output, so a
 would decide on stale results; the velocity of a central-difference scheme is staggered half an
 increment behind the displacement, so the pairing of the two is unambiguous only <em>between</em>
 increments; and it keeps a topology change disjoint from the failure path, whose restore vectors
-are sized by the old equation system. Increment 0 is excluded deliberately – the time stepper
+are sized by the old discrete system. Increment 0 is excluded deliberately – the time stepper
 yields a zero-length increment first, before anything has been solved, and a marker evaluated
 there would refine on the initial condition.</p>
 <p><strong>What a refinement changes for an explicit run.</strong> Refining lowers the stable time increment, so
@@ -438,7 +438,7 @@ would leave a conforming band’s immediate surroundings coarse, e.g. <code clas
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">minMarkedElements</span></code></td>
 <td><p>int, default=1</p></td>
-<td><p>Minimum number of eligible elements one evaluation of the markers must mark for a refinement pass to happen; with fewer, nothing is refined and no equation system is rebuilt. Marks are not carried over to later evaluations: they are a function of the current state only. Individual markers may cap their own marks (e.g. ‘maxRefinedFraction’) or expand them (e.g. ‘halo’) before this count is taken. Default 1 refines as soon as any element is marked.</p></td>
+<td><p>Minimum number of eligible elements one evaluation of the markers must mark for a refinement pass to happen; with fewer, nothing is refined and no discrete system is rebuilt. Marks are not carried over to later evaluations: they are a function of the current state only. Individual markers may cap their own marks (e.g. ‘maxRefinedFraction’) or expand them (e.g. ‘halo’) before this count is taken. Default 1 refines as soon as any element is marked.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">splitFactor</span></code></td>
 <td><p>int, default=2</p></td>

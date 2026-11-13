@@ -162,7 +162,7 @@ model modifier, or before writing anything that caches data derived from the mes
 ╚═══════════════════════════════════════════════════════════════════════════╝
                                       │
 ╔══════════════════════════════════════▼════════════════════════════════════╗
-║ PHASE 3 — SOLVE   assemble the equation system and iterate to convergence  ║
+║ PHASE 3 — SOLVE   assemble the system of equations, iterate to convergence ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 </pre></div>
 </div>
@@ -188,7 +188,7 @@ naming both modifiers, the element, and the rounds they touched it in. Reacting 
 modifier’s change in a later round is fine; mutating the same element it mutated is not.</p>
 <p>An <code class="docutils literal notranslate"><span class="pre">apply</span></code> that returns an <em>empty</em>
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> counts as nothing having happened: it is not
-recorded in the history, it does not bump the version, and it does not trigger an equation-system
+recorded in the history, it does not bump the version, and it does not trigger a discrete system
 rebuild. Planning and then finding nothing left to do is a legitimate outcome, not a change.</p>
 </section>
 </section>
@@ -293,7 +293,7 @@ field variables on every node, resizing every NodeField, relinking every field v
 deferred to the end of the replay window and run once
 (<a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.changes" title="edelweissfe.models.topologypipeline.TopologyPipeline.changes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changes()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">deferFieldBookkeeping</span></code>). It
 is recomputed from the final mesh either way, so the result is the same; only the intermediate
-layouts, which no increment ever solves on, are skipped. The live per-increment window does not
+discrete systems, which no increment ever solves on, are skipped. The live per-increment window does not
 defer, and <code class="docutils literal notranslate"><span class="pre">apply</span></code> itself is unaware of the difference: it issues the same calls in both cases.</p>
 <p><strong>What a modifier carries between decisions</strong> is declared like every other component’s state, in
 <a class="reference internal" href="modelmodifiers.html#edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.checkpointedState" title="edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.checkpointedState"><code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code></a> –

@@ -172,7 +172,7 @@
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">countEntriesOfBlock</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""The number of values of the block of ``entity``: ``nDof**2`` for a dense block, else the number of entries it</span>
-<span class="sd">    lists in its ``localEntriesOfBlock``. An assembly counts once per equation system and stores where each block</span>
+<span class="sd">    lists in its ``localEntriesOfBlock``. An assembly counts once per discrete system and stores where each block</span>
 <span class="sd">    begins and ends.</span>
 
 <span class="sd">    Parameters</span>
@@ -306,7 +306,7 @@
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">SystemMatrixEntities</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The entities of an equation system as the direct CSR assembly reads them: flat arrays, the counterpart of the</span>
+<span class="w">    </span><span class="sd">"""The entities of a discrete system as the direct CSR assembly reads them: flat arrays, the counterpart of the</span>
 <span class="sd">    C++ struct of the same name in ``_csrcore.h``.</span>
 
 <span class="sd">    Entity ``e`` has the global DOF list ``dofs[dofStart[e] : dofStart[e + 1]]``. A dense block (``couplesAllItsDofs``)</span>

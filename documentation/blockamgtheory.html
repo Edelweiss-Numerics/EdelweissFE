@@ -133,7 +133,7 @@
              
   <section id="theory-the-field-split-amg-preconditioner">
 <h1>Theory: the field-split AMG preconditioner<a class="headerlink" href="#theory-the-field-split-amg-preconditioner" title="Link to this heading"></a></h1>
-<p>This page explains a <em>field-split</em> algebraic-multigrid preconditioner for the coupled multi-field equation systems
+<p>This page explains a <em>field-split</em> algebraic-multigrid preconditioner for the coupled multi-field systems of equations
 EdelweissFE’s implicit solvers produce – displacement coupled to a scalar nonlocal (gradient-enhanced) damage field,
 typically with penalty contact, tie constraints and adaptive refinement on top – and the outer Krylov solve it
 preconditions.</p>
@@ -197,7 +197,7 @@ live <a class="reference internal" href="models.html#edelweissfe.models.femodel.
 <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a>, and the base class derives from them the
 ordered list of <code class="xref py py-class docutils literal notranslate"><span class="pre">FieldBlock</span></code> records – field name, half-open DOF
 range <code class="docutils literal notranslate"><span class="pre">[start,</span> <span class="pre">stop)</span></code>, and nodal dimension (3 for a 3D displacement field, 1 for a scalar damage
-field). The nonlinear solver calls it whenever the equation system is (re)built: on the first solve,
+field). The nonlinear solver calls it whenever the discrete system is (re)built: on the first solve,
 and again after every adaptive-refinement or connectivity change, so the layout tracks the mesh.</p>
 <p>Two consequences worth knowing:</p>
 <ul class="simple">

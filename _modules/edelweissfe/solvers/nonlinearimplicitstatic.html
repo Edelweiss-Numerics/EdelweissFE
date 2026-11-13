@@ -209,7 +209,7 @@
     <span class="p">)</span>
     <span class="n">extrapolateAcrossConnectivityChange</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
-            <span class="s2">"Keep extrapolating across a rebuild of the equation system caused by a change of the connectivity alone "</span>
+            <span class="s2">"Keep extrapolating across a rebuild of the discrete system caused by a change of the connectivity alone "</span>
             <span class="s2">"(e.g., a contact search), as long as the rebuilt system numbers the degrees of freedom as before. Off: "</span>
             <span class="s2">"every rebuild starts the increment from a zero prediction."</span>
         <span class="p">),</span>
@@ -285,7 +285,7 @@
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
             <span class="s2">"Condense the multi-point-constraint system matrix, T^T K T + C, in place, with an "</span>
             <span class="s2">"OpenMP-threaded kernel, instead of with SciPy's single-threaded CSR routines, which build a "</span>
-            <span class="s2">"second matrix. The CSR pattern of K gains, once per equation system, the entries where a "</span>
+            <span class="s2">"second matrix. The CSR pattern of K gains, once per discrete system, the entries where a "</span>
             <span class="s2">"master collects the couplings of its slaves; the result does not depend on the number of "</span>
             <span class="s2">"threads. Explicit zeros (the slave columns among them) are pruned from a copy according to "</span>
             <span class="s2">"pruneCondensedMatrixZeros. Off by default."</span>
@@ -498,9 +498,9 @@
         <span class="s2">"abaqusInitialTimeAveragedFlux"</span><span class="p">:</span> <span class="mf">1e-2</span><span class="p">,</span>
     <span class="p">}</span>
 
-    <span class="c1">#: What the model's current equation system is made of (see</span>
-    <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), rebuilt with it; None until it is built.</span>
-    <span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1">#: What the model's current discrete system is made of (see</span>
+    <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), rebuilt with it; None until it is built.</span>
+    <span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="c1">#: The predictor's state between increments: the last accepted increment and its dU, for a quadratic</span>
     <span class="c1">#: extrapolation the accepted increment before it and its dU, and the digest of the numbering of the degrees of</span>
@@ -537,17 +537,17 @@
         <span class="c1">#: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The solution increment of the last accepted increment, kept for the predictor: a copy, since the working</span>
-        <span class="c1">#: increment of the equation system changes in every iteration, and the model's entry ``dU`` is a result,</span>
+        <span class="c1">#: increment of the discrete system changes in every iteration, and the model's entry ``dU`` is a result,</span>
         <span class="c1">#: which no solver reads back.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dUOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The accepted increment before :attr:`prevTimeStep`, kept for a quadratic extrapolation only (else None).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The solution increment of :attr:`timeStepOfIncrementBeforeLast`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dUOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted</span>
+        <span class="c1">#: The digest of the numbering of the degrees of freedom of the discrete system the last increment was accepted</span>
         <span class="c1">#: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dUOfLastIncrement` is a</span>
         <span class="c1">#: vector of it, and so is :attr:`dUOfIncrementBeforeLast`, which is kept only as long as the prediction</span>
-        <span class="c1">#: survives the rebuilds of the equation system (see :meth:`predictionSurvivesRebuild`).</span>
+        <span class="c1">#: survives the rebuilds of the discrete system (see :meth:`predictionSurvivesRebuild`).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The convergence criterion of the current step, created when the step begins (None before).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="kc">None</span>
@@ -616,7 +616,7 @@
 <span class="w">        </span><span class="sd">"""Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the</span>
 <span class="sd">        previous step if it names the same, else a new one.</span>
 
-<span class="sd">        A kept solver builds anew for the step's equation system (``setModel``) and frees what it built before. A new</span>
+<span class="sd">        A kept solver builds anew for the step's discrete system (``setModel``) and frees what it built before. A new</span>
 <span class="sd">        solver per step would leave the previous one to Python's cyclic garbage collector whenever its tree refers</span>
 <span class="sd">        back to itself (a function in a solver script, whose globals hold the tree), and the steps' matrices would</span>
 <span class="sd">        pile up."""</span>
@@ -629,13 +629,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setJournal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="NIST.forgetEquationSystem">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetEquationSystem">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">forgetEquationSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Drop the equation system of the last build -- the model's layout of it with the DOF manager, the system</span>
-<span class="sd">        matrix assembly and its CSR pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone</span>
-<span class="sd">        before the next one is built, never both at once."""</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
+<div class="viewcode-block" id="NIST.forgetDiscreteSystem">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetDiscreteSystem">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forgetDiscreteSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop the discrete system of the last build -- with its DOF manager, the system matrix assembly and its CSR</span>
+<span class="sd">        pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the next one is</span>
+<span class="sd">        built, never both at once."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="kc">None</span></div>
@@ -672,10 +672,10 @@
         <span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">startStep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="n">convergenceCriterion</span>
 
-        <span class="c1"># The equation system (DofManager, VIJ pattern, CSR pattern, system matrix assembly) is (re)built lazily in the</span>
+        <span class="c1"># The discrete system (DofManager, VIJ pattern, CSR pattern, system matrix assembly) is (re)built lazily in the</span>
         <span class="c1"># first increment, and whenever the topology update reports a change of the mesh or of a constraint's DOF</span>
         <span class="c1"># footprint.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">forgetEquationSystem</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -765,7 +765,7 @@
 <div class="viewcode-block" id="NIST.attemptIncrement">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.attemptIncrement">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">attemptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Solve the increment by Newton's method, rebuilding the equation system first if the topology</span>
+<span class="w">        </span><span class="sd">"""Solve the increment by Newton's method, rebuilding the discrete system first if the topology</span>
 <span class="sd">        update changed the model, and re-equilibrating a changed model first if so configured; see</span>
 <span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.</span>
 
@@ -814,15 +814,15 @@
             <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">modelHasChanged</span> <span class="ow">or</span> <span class="n">connectivityHasChanged</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"equation system rebuild"</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">forgetEquationSystem</span><span class="p">()</span>
-                <span class="c1"># The model says what its equation system is made of: the numbering of the degrees of freedom, the</span>
+            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"discrete system rebuild"</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
+                <span class="c1"># The model says what its discrete system is made of: the numbering of the degrees of freedom, the</span>
                 <span class="c1"># elements to compute, how the solution passes between the model and the vectors below.</span>
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"dof manager"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">dofManager</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildDiscreteSystem</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">dofManager</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                    <span class="s2">"eq. system rebuilt: </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
+                    <span class="s2">"discrete system rebuilt: </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
                     <span class="mi">2</span><span class="p">,</span>
                 <span class="p">)</span>
@@ -842,7 +842,7 @@
 
                 <span class="c1"># Re-pushed on every (re)build so the linear solver tracks the mesh across AMR.</span>
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"linear solver setup"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">modelForLinearSolver</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">modelForLinearSolver</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
 
                 <span class="n">presentVariableNames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 
@@ -871,12 +871,12 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">condensedPatternFillIn</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
                     <span class="p">)</span>
 
-                <span class="c1"># The last accepted increments are vectors of the equation system they were solved in: this increment</span>
+                <span class="c1"># The last accepted increments are vectors of the discrete system they were solved in: this increment</span>
                 <span class="c1"># extrapolates them only if the rebuilt system numbers the degrees of freedom alike.</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictionSurvivesRebuild</span><span class="p">(</span><span class="n">modelHasChanged</span><span class="p">,</span> <span class="n">connectivityHasChanged</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span>
-        <span class="c1"># the equation system of this increment, just built or kept from the last one</span>
+        <span class="c1"># the discrete system of this increment, just built or kept from the last one</span>
         <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span> <span class="o">=</span> <span class="p">{</span>
@@ -986,28 +986,28 @@
 <div class="viewcode-block" id="NIST.readStateFromModel">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.readStateFromModel">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Read the state the next increment starts from out of the model, into the vectors of the equation system just</span>
-<span class="sd">        (re)built: here, the solution, through the model's layout of the equation system (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel`). A solver that</span>
+<span class="w">        </span><span class="sd">"""Read the state the next increment starts from out of the model, into the vectors of the discrete system just</span>
+<span class="sd">        (re)built: here, the solution, through the discrete system (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel`). A solver that</span>
 <span class="sd">        integrates in time reads its velocity and acceleration as well.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        U</span>
-<span class="sd">            The solution vector of the equation system, zero, overwritten.</span>
+<span class="sd">            The solution vector of the discrete system, zero, overwritten.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NIST.writeResultsToModel">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeResultsToModel">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Write the results of a converged increment to the model, through the model's layout of the equation system:</span>
+<span class="w">        </span><span class="sd">"""Write the results of a converged increment to the model, through the discrete system:</span>
 <span class="sd">        the incremental degrees of freedom are set to zero first, from where the next increment starts them (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`), then the</span>
+<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients`), then the</span>
 <span class="sd">        solution, its increment and the force are written (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`), and the velocity</span>
+<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`), and the velocity</span>
 <span class="sd">        and the acceleration (see :meth:`writeVelocityAndAccelerationToModel`).</span>
 
 <span class="sd">        Parameters</span>
@@ -1021,8 +1021,8 @@
 <span class="sd">            leave the model's as it is.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">zeroIncrementalCoefficients</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">zeroIncrementalCoefficients</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">()</span></div>
 
 
@@ -1032,11 +1032,11 @@
 <span class="w">        </span><span class="sd">"""Write the velocity and the acceleration of a converged increment to the model, as part of</span>
 <span class="sd">        :meth:`writeResultsToModel`. A quasi-static solver does not integrate in time: the state it accepts is at</span>
 <span class="sd">        rest, with zero velocity and acceleration on every field (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel`),</span>
+<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel`),</span>
 <span class="sd">        so a dynamic step that follows starts from rest. A solver that integrates in time writes its own.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeZeroVelocityAndAccelerationToModel</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeZeroVelocityAndAccelerationToModel</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="NIST.createSystemMatrixAssembly">
@@ -1044,7 +1044,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">createSystemMatrixAssembly</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">assemblyType</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span> <span class="n">patternFillIn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SystemMatrixAssembly</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), with</span>
+<span class="w">        </span><span class="sd">"""The assembly of the system matrix of the discrete system just built (option ``systemMatrixAssembly``), with</span>
 <span class="sd">        its CSR pattern and :meth:`numberOfAssemblyWorkers` workers.</span>
 
 <span class="sd">        Parameters</span>
@@ -1068,9 +1068,9 @@
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">forEachChunk</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">work</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">],</span> <span class="kc">None</span><span class="p">]):</span>
 <span class="w">        </span><span class="sd">"""Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent</span>
-<span class="sd">        entities, other than the elements, that the model's equation system layout evaluates, e.g. the material points</span>
+<span class="sd">        entities, other than the elements, that the model's discrete system evaluates, e.g. the material points</span>
 <span class="sd">        of a meshfree model (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`). Here, one chunk of</span>
+<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`). Here, one chunk of</span>
 <span class="sd">        all entities, in the calling thread, as the elements are computed.</span>
 
 <span class="sd">        Parameters</span>
@@ -1102,8 +1102,8 @@
 <div class="viewcode-block" id="NIST.predictionSurvivesRebuild">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">predictionSurvivesRebuild</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">modelHasChanged</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">connectivityHasChanged</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</span>
-<span class="sd">        They are vectors of the equation system they were solved in, so they fit the rebuilt one only if it numbers the</span>
+<span class="w">        </span><span class="sd">"""Whether this increment may extrapolate the last accepted increments after the discrete system was rebuilt.</span>
+<span class="sd">        They are vectors of the discrete system they were solved in, so they fit the rebuilt one only if it numbers the</span>
 <span class="sd">        degrees of freedom alike, which the digests of the two numberings tell</span>
 <span class="sd">        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`; the one of the last accepted</span>
 <span class="sd">        increments is :attr:`dofNumberingOfLastIncrement`):</span>
@@ -1764,7 +1764,7 @@
             <span class="n">stepActions</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span>
         <span class="p">)</span>
         <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span>
         <span class="p">)</span>
 
         <span class="c1"># The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance</span>
@@ -2110,7 +2110,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">assembleAdditionalTerms</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Assemble terms of the equation system beyond the internal and external forces. Called</span>
+<span class="w">        </span><span class="sd">"""Assemble terms of the discrete system beyond the internal and external forces. Called</span>
 <span class="sd">        by :meth:`assembleResidualAndTangent` in every evaluation of the model, next to :meth:`computeElements`,</span>
 <span class="sd">        :meth:`assembleLoadsAtIncrementEnd` and :meth:`assembleConstraints`: right after the right-hand side</span>
 <span class="sd">        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see</span>
@@ -2195,9 +2195,9 @@
         <span class="bp">self</span><span class="p">,</span> <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Assemble the internal forces of the model at a trial state, and their tangent: those of the elements of its</span>
-<span class="sd">        equation system, see :meth:`computeElements`. First, the model updates the material points that belong to no</span>
+<span class="sd">        discrete system, see :meth:`computeElements`. First, the model updates the material points that belong to no</span>
 <span class="sd">        element, whose state the elements integrate (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`; nothing to do in a</span>
+<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`; nothing to do in a</span>
 <span class="sd">        finite element model).</span>
 
 <span class="sd">        The one evaluation of the elements of the solvers that derive from NIST: in every Newton iteration and for every</span>
@@ -2227,9 +2227,9 @@
 <span class="sd">        """</span>
 
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"material points"</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">updateMaterialPoints</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">updateMaterialPoints</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NIST.computeElements">
@@ -2249,8 +2249,8 @@
 <span class="sd">        :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`. Is called by</span>
 <span class="sd">        :meth:`assembleResidualAndTangent` in each iteration.</span>
 
-<span class="sd">        The elements are those of the model's equation system</span>
-<span class="sd">        (:attr:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements`): the finite elements, and</span>
+<span class="sd">        The elements are those of the model's discrete system</span>
+<span class="sd">        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elements`): the finite elements, and</span>
 <span class="sd">        whatever else contributes like an element -- in a meshfree model, its cells and particles.</span>
 
 <span class="sd">        Parameters</span>
@@ -2309,16 +2309,15 @@
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
         <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixAssembly</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Loop over all constraints, and evaluate the active ones: each adds its residual contribution and the</span>
-<span class="sd">        tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.</span>
-<span class="sd">        A constraint that is switched off (see</span>
-<span class="sd">        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is not part of the equation</span>
-<span class="sd">        system and is skipped. Is called by solveIncrement() in each iteration.</span>
+<span class="w">        </span><span class="sd">"""Evaluate the constraints of the discrete system: each adds its residual contribution and the tangent of</span>
+<span class="sd">        it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`. Is called by</span>
+<span class="sd">        solveIncrement() in each iteration.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        constraints</span>
-<span class="sd">            The list of constraints.</span>
+<span class="sd">            The constraints of the discrete system</span>
+<span class="sd">            (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`).</span>
 <span class="sd">        U_np</span>
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        dU</span>
@@ -2339,11 +2338,7 @@
 <span class="sd">            - The modified system matrix.</span>
 <span class="sd">        """</span>
 
-        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="c1"># a constraint that is switched off has no place in the equation system</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">constraint</span><span class="o">.</span><span class="n">active</span><span class="p">:</span>
-                <span class="k">continue</span>
-
+        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="p">:</span>
             <span class="n">Kc</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
             <span class="n">Pc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
 

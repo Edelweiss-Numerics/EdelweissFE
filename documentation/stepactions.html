@@ -1160,7 +1160,7 @@ see <a class="reference internal" href="output.html#module-edelweissfe.utils.che
 <section id="implementing-your-own-loads">
 <h2>Implementing your own loads<a class="headerlink" href="#implementing-your-own-loads" title="Link to this heading"></a></h2>
 <p>A load is a step action that derives from <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase" title="edelweissfe.stepactions.base.loadbase.LoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoadBase</span></code></a> and assembles its
-own contribution to the equation system in <code class="docutils literal notranslate"><span class="pre">assembleLoad</span></code>: the <em>negative</em> of the external load it applies, and the
+own contribution to the discrete system in <code class="docutils literal notranslate"><span class="pre">assembleLoad</span></code>: the <em>negative</em> of the external load it applies, and the
 tangent of that contribution, nonzero only for a load that follows the deformation (see
 <a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>). The solvers do not need to know what a load acts on; their <code class="docutils literal notranslate"><span class="pre">assembleLoads</span></code>
 only loops over the loads of the step and lets each assemble itself. They find the loads by this base class, whatever
@@ -1310,7 +1310,7 @@ None for an explicit solver, which needs no tangent.</p></li>
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment since the last converged state.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system, which locates the degrees of freedom the load acts on.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system, which locates the degrees of freedom the load acts on.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1386,7 +1386,7 @@ None for an explicit solver, which needs no tangent.</p></li>
 <dd><p>Subtract the current node loads from the residual contribution at the degrees of freedom of the field
 on the node set; a dead load, so without a tangent. See
 <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p>
-<p>Only the nodes of the set that are part of the equation system are loaded (see
+<p>Only the nodes of the set that are part of the discrete system are loaded (see
 <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>): every node of the set in a finite
 element model, those in the active domain in a meshfree one.</p>
 <dl class="field-list simple">
@@ -1397,7 +1397,7 @@ element model, those in the active domain in a meshfree one.</p>
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system, which locates the degrees of freedom of the node set.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system, which locates the degrees of freedom of the node set.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1500,7 +1500,7 @@ the external load, and its tangent; see <a class="reference internal" href="#ede
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1629,7 +1629,7 @@ the external load, and its tangent; see <a class="reference internal" href="#ede
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system.</p></li>
 </ul>
 </dd>
 </dl>

@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>edelweissfe.models.equationsystemlayout &mdash; EdelweissFE v22.07 documentation</title>
+  <title>edelweissfe.models.discretesystem &mdash; EdelweissFE v22.07 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
@@ -65,7 +65,7 @@
   <ul class="wy-breadcrumbs">
       <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
-      <li class="breadcrumb-item active">edelweissfe.models.equationsystemlayout</li>
+      <li class="breadcrumb-item active">edelweissfe.models.discretesystem</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -74,7 +74,7 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <h1>Source code for edelweissfe.models.equationsystemlayout</h1><div class="highlight"><pre>
+  <h1>Source code for edelweissfe.models.discretesystem</h1><div class="highlight"><pre>
 <span></span><span class="ch">#!/usr/bin/env python3</span>
 <span class="c1"># -*- coding: utf-8 -*-</span>
 <span class="c1">#  ---------------------------------------------------------------------</span>
@@ -103,9 +103,9 @@
 <span class="c1">#  the top level directory of EdelweissFE.</span>
 <span class="c1">#  ---------------------------------------------------------------------</span>
 
-<span class="sd">"""What the global equation system of a model is made of: the answer a model gives a solver that (re)builds its</span>
-<span class="sd">equation system, see :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem` and</span>
-<span class="sd">:ref:`model-equation-system`."""</span>
+<span class="sd">"""What the global discrete system of a model is made of: the answer a model gives a solver that (re)builds its</span>
+<span class="sd">discrete system, see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem` and</span>
+<span class="sd">:ref:`model-discrete-system`."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
@@ -120,35 +120,36 @@
     <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 
 
-<div class="viewcode-block" id="EquationSystemLayout">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">EquationSystemLayout</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The layout of the global equation system of a model: which degrees of freedom it has, which elements contribute</span>
+<div class="viewcode-block" id="DiscreteSystem">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DiscreteSystem</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The discrete system of a model: which degrees of freedom it has, which elements and which constraints contribute</span>
 <span class="sd">    to it, and how the solution passes between the model and the vectors a solver iterates on.</span>
 
-<span class="sd">    A solver asks the model for it whenever it (re)builds its equation system</span>
-<span class="sd">    (:meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), and keeps it as long as the numbering of the</span>
+<span class="sd">    A solver asks the model for it whenever it (re)builds its discrete system</span>
+<span class="sd">    (:meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), and keeps it as long as the numbering of the</span>
 <span class="sd">    degrees of freedom it holds: until the next rebuild. The solver itself only solves; what the model is made of, the</span>
-<span class="sd">    layout says.</span>
+<span class="sd">    discrete system says.</span>
 
-<span class="sd">    This class is the layout of a finite element model. A model made of other entities -- EdelweissMeshfree's material</span>
-<span class="sd">    point and RKPM models, with their background cells and particles -- returns a layout derived from it, which changes</span>
-<span class="sd">    what its methods do; the solver calls them the same way.</span>
+<span class="sd">    This class is the discrete system of a finite element model. A model made of other entities -- EdelweissMeshfree's</span>
+<span class="sd">    material point and RKPM models, with their background cells and particles -- returns a discrete system derived from</span>
+<span class="sd">    it, which changes what its methods do; the solver calls them the same way.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    model</span>
 <span class="sd">        The model.</span>
 <span class="sd">    dofManager</span>
-<span class="sd">        The numbering of the degrees of freedom.</span>
+<span class="sd">        The numbering of the degrees of freedom, and the locations of the constraints that take part in the</span>
+<span class="sd">        discrete system.</span>
 <span class="sd">    elements</span>
 <span class="sd">        The elements, in the order in which the solver computes them.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="s2">"FEModel"</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">elements</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
-        <span class="c1">#: The model this equation system belongs to.</span>
+        <span class="c1">#: The model this discrete system belongs to.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
-        <span class="c1">#: The numbering of the degrees of freedom of the equation system; see</span>
+        <span class="c1">#: The numbering of the degrees of freedom of the discrete system; see</span>
         <span class="c1">#: :class:`~edelweissfe.numerics.dofmanager.DofManager`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span> <span class="o">=</span> <span class="n">dofManager</span>
         <span class="c1">#: Everything the solver computes like an element in every evaluation of the model, see</span>
@@ -163,10 +164,26 @@
         <span class="c1">#: finite element model, whose elements evaluate the material at their own quadrature points.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">materialPoints</span> <span class="o">=</span> <span class="p">[]</span>
 
-<div class="viewcode-block" id="EquationSystemLayout.readStateFromModel">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel">[docs]</a>
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The constraints that take part in the discrete system: the ones the DOF manager located, with their scalar</span>
+<span class="sd">        variables, when the discrete system was built or last located its constraints anew (see</span>
+<span class="sd">        :meth:`~edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices`). The solver evaluates exactly</span>
+<span class="sd">        these in every evaluation of the model, so that every constraint it evaluates has its rows in the system</span>
+<span class="sd">        matrix, and every row of a constraint is filled.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The constraints, in the order in which the DOF manager located them.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfConstraintsInDofVector</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DiscreteSystem.readStateFromModel">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Read the state the model carries from increment to increment into the vectors of a (re)built equation</span>
+<span class="w">        </span><span class="sd">"""Read the state the model carries from increment to increment into the vectors of a (re)built discrete</span>
 <span class="sd">        system, from which the next increment starts (see the documentation page *Node field results*): the solution</span>
 <span class="sd">        ``U``, and, for a solver that integrates in time, the velocity ``V`` and the acceleration ``A``.</span>
 
@@ -178,11 +195,11 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        U</span>
-<span class="sd">            The solution vector of the equation system, zero, overwritten.</span>
+<span class="sd">            The solution vector of the discrete system, zero, overwritten.</span>
 <span class="sd">        V</span>
-<span class="sd">            The velocity vector of the equation system, zero, overwritten; None if the solver has none.</span>
+<span class="sd">            The velocity vector of the discrete system, zero, overwritten; None if the solver has none.</span>
 <span class="sd">        A</span>
-<span class="sd">            The acceleration vector of the equation system, zero, overwritten; None if the solver has none.</span>
+<span class="sd">            The acceleration vector of the discrete system, zero, overwritten; None if the solver has none.</span>
 <span class="sd">        dynamicFields</span>
 <span class="sd">            The names of the fields whose velocity and acceleration are read, e.g. those the solver integrates in time;</span>
 <span class="sd">            None for every field.</span>
@@ -199,20 +216,20 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">readEntryOfNodeField</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.readEntryOfNodeField">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.readEntryOfNodeField">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.readEntryOfNodeField">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">readEntryOfNodeField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="s2">"NodeField"</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Read one entry of one node field of the model into a vector of the equation system; every read of</span>
+<span class="w">        </span><span class="sd">"""Read one entry of one node field of the model into a vector of the discrete system; every read of</span>
 <span class="sd">        :meth:`readStateFromModel` goes through here, as every write goes through :meth:`writeEntryOfNodeField`.</span>
 
-<span class="sd">        In a finite element model, the equation system numbers every node of the field, and every node carries its</span>
-<span class="sd">        total solution and its velocity: the whole entry is read. A model whose equation system covers a part of its</span>
+<span class="sd">        In a finite element model, the discrete system numbers every node of the field, and every node carries its</span>
+<span class="sd">        total solution and its velocity: the whole entry is read. A model whose discrete system covers a part of its</span>
 <span class="sd">        nodes reads the entry on the nodes that carry it.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        dofVector</span>
-<span class="sd">            The vector of the equation system, overwritten on the degrees of freedom of the field.</span>
+<span class="sd">            The vector of the discrete system, overwritten on the degrees of freedom of the field.</span>
 <span class="sd">        nodeField</span>
 <span class="sd">            The node field of the model.</span>
 <span class="sd">        entry</span>
@@ -222,8 +239,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">dofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.zeroIncrementalCoefficients">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.zeroIncrementalCoefficients">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">zeroIncrementalCoefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a</span>
 <span class="sd">        converged increment, before its results are written to the model: these *incremental* degrees of freedom are</span>
@@ -240,16 +257,16 @@
 <span class="sd">        """</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.writeResultsToModel">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.writeResultsToModel">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Write the results of an accepted increment to the model, once (see the documentation page *Node field</span>
 <span class="sd">        results*): the solution ``U``, its increment ``dU`` and the force ``P`` to the entries of the same</span>
 <span class="sd">        names of the node fields, and the solution to the scalar variables. The velocity and the acceleration, the</span>
 <span class="sd">        state of a solver that integrates in time, go through :meth:`writeVelocityAndAccelerationToModel`.</span>
 
-<span class="sd">        A solver whose increment ends on another equation system than it started on writes in two parts, each through</span>
-<span class="sd">        the layout of the system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the</span>
+<span class="sd">        A solver whose increment ends on another discrete system than it started on writes in two parts, each through</span>
+<span class="sd">        the discrete system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the</span>
 <span class="sd">        kernel functions the particles reached at its start, and evaluates the force on those they reach at its end.</span>
 <span class="sd">        It passes None for the entries the other part writes.</span>
 
@@ -273,8 +290,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.writeVelocityAndAccelerationToModel">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.writeVelocityAndAccelerationToModel">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Write the velocity and the acceleration to the entries ``V`` and ``A`` of every node field, the one way a</span>
 <span class="sd">        solver that integrates in time passes them to the model: at acceptance, with :meth:`writeResultsToModel`, and</span>
@@ -296,39 +313,39 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">writeEntryOfNodeField</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.writeZeroVelocityAndAccelerationToModel">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.writeZeroVelocityAndAccelerationToModel">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeZeroVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Write zero to the entries ``V`` and ``A`` of every node field of the model, on every node: the state a</span>
 <span class="sd">        quasi-static solver leaves at acceptance. It does not integrate in time, so the state it accepts is at rest</span>
 <span class="sd">        (see the documentation page *Node field results*), and a dynamic step that follows starts from rest.</span>
 
-<span class="sd">        A zero velocity and a zero acceleration of the equation system, written as every velocity and acceleration</span>
-<span class="sd">        is, by :meth:`writeVelocityAndAccelerationToModel`. A layout covering a part of the nodes sets the entries to</span>
-<span class="sd">        zero on the others (see :meth:`writeEntryOfNodeField`), so the model is at rest on every node, inside the</span>
-<span class="sd">        equation system or not.</span>
+<span class="sd">        A zero velocity and a zero acceleration of the discrete system, written as every velocity and acceleration</span>
+<span class="sd">        is, by :meth:`writeVelocityAndAccelerationToModel`. A discrete system covering a part of the nodes sets the</span>
+<span class="sd">        entries to zero on the others (see :meth:`writeEntryOfNodeField`), so the model is at rest on every node, inside</span>
+<span class="sd">        the discrete system or not.</span>
 <span class="sd">        """</span>
 
         <span class="n">zero</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">zero</span><span class="p">,</span> <span class="n">zero</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.writeEntryOfNodeField">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.writeEntryOfNodeField">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeEntryOfNodeField">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeEntryOfNodeField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="s2">"NodeField"</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Write a vector of the equation system to one entry of one node field of the model; every write of</span>
+<span class="w">        </span><span class="sd">"""Write a vector of the discrete system to one entry of one node field of the model; every write of</span>
 <span class="sd">        :meth:`writeResultsToModel`, :meth:`writeVelocityAndAccelerationToModel` and</span>
 <span class="sd">        :meth:`writeZeroVelocityAndAccelerationToModel` goes through here, as every read goes through</span>
 <span class="sd">        :meth:`readEntryOfNodeField`.</span>
 
-<span class="sd">        In a finite element model, the equation system numbers every node of the field, so the whole entry is written.</span>
-<span class="sd">        A model whose equation system covers a part of its nodes writes the entry on these nodes, and sets it to zero</span>
+<span class="sd">        In a finite element model, the discrete system numbers every node of the field, so the whole entry is written.</span>
+<span class="sd">        A model whose discrete system covers a part of its nodes writes the entry on these nodes, and sets it to zero</span>
 <span class="sd">        on the others.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        dofVector</span>
-<span class="sd">            The vector of the equation system.</span>
+<span class="sd">            The vector of the discrete system.</span>
 <span class="sd">        nodeField</span>
 <span class="sd">            The node field of the model.</span>
 <span class="sd">        entry</span>
@@ -357,8 +374,8 @@
 
         <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span> <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="n">dynamicFields</span><span class="p">]</span>
 
-<div class="viewcode-block" id="EquationSystemLayout.dofsWithNodalInertia">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.dofsWithNodalInertia">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">dofsWithNodalInertia</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldNames</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The degrees of freedom of the given fields whose inertia is that of the nodes, i.e. the mass the elements</span>
 <span class="sd">        assemble: those the implicit dynamic solver integrates in time with its own Newmark scheme.</span>
@@ -376,7 +393,7 @@
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        np.ndarray</span>
-<span class="sd">            The indices of the degrees of freedom in the vectors of the equation system, sorted.</span>
+<span class="sd">            The indices of the degrees of freedom in the vectors of the discrete system, sorted.</span>
 <span class="sd">        """</span>
 
         <span class="n">isWithNodalInertia</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
@@ -386,8 +403,8 @@
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">isWithNodalInertia</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">assembleLumpedMassOfEntitiesWithOwnInertia</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
@@ -413,8 +430,8 @@
         <span class="k">return</span> <span class="kc">None</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.carriersOfTheMotion">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.carriersOfTheMotion">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">carriersOfTheMotion</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Where the model holds the motion of its entities that integrate their own inertia: ``"entities"`` if such</span>
 <span class="sd">        an entity carries a velocity or an acceleration in its own state, ``"nodes"`` if a node these entities couple</span>
@@ -433,8 +450,8 @@
         <span class="k">return</span> <span class="nb">set</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="EquationSystemLayout.updateMaterialPoints">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints">[docs]</a>
+<div class="viewcode-block" id="DiscreteSystem.updateMaterialPoints">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">updateMaterialPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span> <span class="kc">None</span><span class="p">]):</span>
 <span class="w">        </span><span class="sd">"""Bring the material points that belong to no element up to date with the trial solution increment, right</span>
 <span class="sd">        before the solver computes the elements. Called whenever ``NIST``, or a solver derived from it (``NEST``,</span>
@@ -446,7 +463,7 @@
 <span class="sd">        The loops over the entities belong to the solver, as the loop over the elements does: ``forEachChunk(entities,</span>
 <span class="sd">        work)`` calls ``work(chunk)`` for chunks that together hold all ``entities``, in the calling thread or on the</span>
 <span class="sd">        threads of a parallel solver (see :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`). A</span>
-<span class="sd">        layout loops through it over entities that are independent of each other.</span>
+<span class="sd">        discrete system loops through it over entities that are independent of each other.</span>
 
 <span class="sd">        A finite element model has no such material points: every element evaluates the material at its own quadrature</span>
 <span class="sd">        points, in :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`, so there is nothing to do</span>

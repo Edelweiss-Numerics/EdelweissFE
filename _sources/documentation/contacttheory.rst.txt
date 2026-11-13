@@ -921,7 +921,7 @@ the rotation to the slave nodes and to :math:`\boldsymbol{u}_{RP}`. The
 it plays no role for a fixed rigid body or in explicit runs.
 
 **Degrees of freedom.** The constraint acts on all parent-face nodes of the slave surface and on the
-RP. This footprint does not depend on the search, so a search never changes the equation system --
+RP. This footprint does not depend on the search, so a search never changes the discrete system --
 which matters on the explicit path, where the search runs every ``contact-update-frequency``
 increments. The stiffness consists of one block per slave facet plus the RP block they all share
 (:mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`). A fixed support is a rigid body
@@ -989,7 +989,7 @@ Solver integration
 
 The constraint participates in the implicit solution through three hooks:
 
-``updateConnectivity(model)`` (once per increment in an implicit analysis, before the equation system is (re)built)
+``updateConnectivity(model)`` (once per increment in an implicit analysis, before the discrete system is (re)built)
     Re-assigns every slave to its closest facet from the last converged configuration (clamped
     closest point for small sliding, centroid distance for finite sliding), refreshes the frozen
     projection data, rotates the frictional history into the new tangent plane, zeroes the
@@ -1055,7 +1055,7 @@ between two searches a slave node moves :math:`\|\boldsymbol{v}\| \, \Delta t \,
 magnitude below a facet dimension. This is reported rather than assumed -- on every search that
 changes the connectivity the solver prints the largest nodal motion accumulated since the previous
 one, so the configured frequency can be checked against a given model's facet size instead of
-trusted. A connectivity change rebuilds the equation system, but reuses the critical time step:
+trusted. A connectivity change rebuilds the discrete system, but reuses the critical time step:
 the mesh is unchanged, so the stability limit is unchanged, and recomputing it would cost a full
 element pass.
 

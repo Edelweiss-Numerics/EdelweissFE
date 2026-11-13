@@ -7,14 +7,14 @@ Models
 .. automodule:: edelweissfe.models.femodel
    :members:
 
-``EquationSystemLayout`` - What the equation system of a model is made of
+``DiscreteSystem`` - What the discrete system of a model is made of
 -------------------------------------------------------------------------
 
-What a model answers a solver that (re)builds its equation system: the numbering of the degrees of freedom, the
-elements to compute, and how the solution passes between the model and the solver's vectors. See
-:ref:`model-equation-system`.
+What a model answers a solver that (re)builds its discrete system: the numbering of the degrees of freedom, the
+elements and constraints to compute, and how the solution passes between the model and the solver's vectors. See
+:ref:`model-discrete-system`.
 
-.. automodule:: edelweissfe.models.equationsystemlayout
+.. automodule:: edelweissfe.models.discretesystem
    :members:
 
 ``TopologyPipeline`` - How the mesh may change during a run

@@ -104,7 +104,7 @@
 <span class="c1">#  ---------------------------------------------------------------------</span>
 
 <span class="sd">"""</span>
-<span class="sd">This module contains important classes for describing the global equation system by means of a sparse system.</span>
+<span class="sd">This module contains important classes for describing the global discrete system by means of a sparse system.</span>
 <span class="sd">"""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
@@ -130,7 +130,7 @@
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DofManager</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    The DofManager coordinates the global equation system structure.</span>
+<span class="sd">    The DofManager coordinates the global discrete system structure.</span>
 
 <span class="sd">    Specifically, `DofManager`:</span>
 <span class="sd">     * Analyzes the simulation domain (nodes, scalar variables, elements, constraints, and node sets).</span>
@@ -306,7 +306,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">dofNumberingDigest</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""A digest, a hexadecimal string, of what decides the index of every degree of freedom: for every field, its</span>
 <span class="sd">        name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and</span>
-<span class="sd">        the names of the scalar variables, which follow, in the order they are numbered. Two equation systems with the</span>
+<span class="sd">        the names of the scalar variables, which follow, in the order they are numbered. Two discrete systems with the</span>
 <span class="sd">        same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other --</span>
 <span class="sd">        e.g., before and after a rebuild caused by a contact search, which changes the coupling of the degrees of</span>
 <span class="sd">        freedom but not their numbering. The scalar variables are named, not counted: they are those of the</span>
@@ -666,8 +666,8 @@
 <span class="w">        </span><span class="sd">"""Where the degrees of freedom of a field on the nodes of a node set lie in the DofVector, e.g. those a</span>
 <span class="sd">        Dirichlet boundary condition prescribes, or those a node force acts on.</span>
 
-<span class="sd">        Only the nodes whose field is part of this equation system count. In a finite element model, these are all</span>
-<span class="sd">        nodes of the set that carry the field. A model whose equation system covers a part of its nodes only -- the</span>
+<span class="sd">        Only the nodes whose field is part of this discrete system count. In a finite element model, these are all</span>
+<span class="sd">        nodes of the set that carry the field. A model whose discrete system covers a part of its nodes only -- the</span>
 <span class="sd">        active domain of a material point method model, the nodes in the support of an RKPM model's particles --</span>
 <span class="sd">        leaves the other nodes of a set out. Values given per node of the set (the prescribed values of a boundary</span>
 <span class="sd">        condition, the forces of a node force) are then selected by the positions of the remaining nodes in the set,</span>
@@ -678,7 +678,7 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        field</span>
-<span class="sd">            The name of the field, one of this equation system.</span>
+<span class="sd">            The name of the field, one of this discrete system.</span>
 <span class="sd">        nodeSet</span>
 <span class="sd">            The node set.</span>
 
@@ -716,7 +716,7 @@
         <span class="n">idcsOfFieldVariables</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span>
 
         <span class="c1"># The indices of the field on the nodes of the set, skipping a node without the field or with a field variable</span>
-        <span class="c1"># that is not part of this equation system (whose lookup gives None).</span>
+        <span class="c1"># that is not part of this discrete system (whose lookup gives None).</span>
         <span class="n">indicesPerNode</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">indices</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodeSet</span> <span class="k">if</span> <span class="p">(</span><span class="n">indices</span> <span class="o">:=</span> <span class="n">idcsOfFieldVariables</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">)))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="p">]</span>
@@ -757,7 +757,7 @@
 <div class="viewcode-block" id="DofManager.getNodeForIndexInDofVector">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getNodeForIndexInDofVector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Node</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Find the node for a given index in the equuation system.</span>
+<span class="w">        </span><span class="sd">"""Find the node for a given index in the discrete system.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -803,16 +803,16 @@
             <span class="p">)</span>
         <span class="n">numberedNodeField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberedNodeFields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">numberedNodeField</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"this equation system does not number the node field '</span><span class="si">{:}</span><span class="s2">'"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"this discrete system does not number the node field '</span><span class="si">{:}</span><span class="s2">'"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">wholeField</span> <span class="ow">and</span> <span class="n">nodeField</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">numberedNodeField</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"this equation system numbers another node field '</span><span class="si">{:}</span><span class="s2">' than the one given: a node field is read or "</span>
+                <span class="s2">"this discrete system numbers another node field '</span><span class="si">{:}</span><span class="s2">' than the one given: a node field is read or "</span>
                 <span class="s2">"written as a whole only by the DofManager that numbers it"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
             <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_locateNodeFieldOnNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="n">NodeField</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">:</span> <span class="n">NodeSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Where the values of a NodeField on the nodes of a node set lie, in the DofVector and in the NodeField: the</span>
-<span class="sd">        nodes of the set whose field is part of this equation system (see :meth:`locateFieldOnNodeSet`).</span>
+<span class="sd">        nodes of the set whose field is part of this discrete system (see :meth:`locateFieldOnNodeSet`).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -853,7 +853,7 @@
 <span class="sd">            The entry of the NodeField to write, one of</span>
 <span class="sd">            :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
 <span class="sd">        nodeSet</span>
-<span class="sd">            The NodeSet to write: its nodes whose field is part of this equation system (see</span>
+<span class="sd">            The NodeSet to write: its nodes whose field is part of this discrete system (see</span>
 <span class="sd">            :meth:`locateFieldOnNodeSet`); the other rows of the NodeField keep their values. If None, all nodes of the</span>
 <span class="sd">            NodeField are written.</span>
 
@@ -905,7 +905,7 @@
 <span class="sd">            The entry of the NodeField to read, one of</span>
 <span class="sd">            :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
 <span class="sd">        NodeSet</span>
-<span class="sd">            The NodeSet to consider: its nodes whose field is part of this equation system (see</span>
+<span class="sd">            The NodeSet to consider: its nodes whose field is part of this discrete system (see</span>
 <span class="sd">            :meth:`locateFieldOnNodeSet`). If None, all nodes of the NodeField are considered.</span>
 
 <span class="sd">        Returns</span>
@@ -937,9 +937,9 @@
 <div class="viewcode-block" id="DofManager.writeScalarVariablesToDofVector">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Write the values of the scalar variables of this equation system to their locations in a given</span>
+<span class="w">        </span><span class="sd">"""Write the values of the scalar variables of this discrete system to their locations in a given</span>
 <span class="sd">        DofVector. Only the scalar variables this DofManager numbers are written: those of a constraint that is</span>
-<span class="sd">        switched off are not part of the equation system.</span>
+<span class="sd">        switched off are not part of the discrete system.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -961,7 +961,7 @@
 <div class="viewcode-block" id="DofManager.writeDofVectorToScalarVariables">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Set the values of the scalar variables of this equation system from their locations in a given</span>
+<span class="w">        </span><span class="sd">"""Set the values of the scalar variables of this discrete system from their locations in a given</span>
 <span class="sd">        DofVector; the counterpart of :meth:`writeScalarVariablesToDofVector`. A scalar variable this DofManager</span>
 <span class="sd">        does not number keeps its value.</span>
 

@@ -109,7 +109,7 @@ The model is first rebuilt from the same input file, then restored in this order
        is still to be computed (in a checkpoint written after the zero increment, it is: the first
        real increment computes it), the explicit solver's last increment, net force, accumulated
        external work and the energy at the start of its step. The resumed step extrapolates the last
-       accepted increments only if its first equation system numbers the degrees of freedom as they
+       accepted increments only if its first discrete system numbers the degrees of freedom as they
        are numbered (see :doc:`solvers`)
 
 Going back to a checkpoint within a run

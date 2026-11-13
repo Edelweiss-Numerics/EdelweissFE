@@ -298,7 +298,7 @@ plus the scaled mass, which agrees with gathering the sum to round-off.</p></li>
 <li><p><strong>The complete pattern.</strong> The multi-point-constraint condensation adds entries to the CSR pattern. The
 solver builds the condensation first and hands its
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">condensedPatternFillIn()</span></code> to the
-assembly, which adds the entries to its pattern before anything is mapped to it, whenever the equation system is
+assembly, which adds the entries to its pattern before anything is mapped to it, whenever the discrete system is
 (re)built. Both paths add them by the same merge.</p></li>
 </ul>
 <p>Every block of the direct path is a zeroed scratch array, so an entity that is handed its block twice in
@@ -413,7 +413,7 @@ scattered entry by entry.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system: the global DOF list of every entity.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system: the global DOF list of every entity.</p></li>
 <li><p><strong>numberOfWorkers</strong> (<em>int</em>) – How many threads may write blocks at the same time; one scratch array each.</p></li>
 <li><p><strong>patternFillIn</strong> (<em>Callable</em><em> | </em><em>None</em>) – As for <a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly" title="edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly"><code class="xref py py-class docutils literal notranslate"><span class="pre">VIJSystemMatrixAssembly</span></code></a>.</p></li>
 </ul>
@@ -603,7 +603,7 @@ only: one scratch array serves all entities.</p>
 <dd><p>The system matrix of an implicit solver while its entities assemble it, and the CSR matrix it becomes.</p>
 <p>One assembly per Newton iteration: <a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.beginAssembly" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.beginAssembly"><code class="xref py py-meth docutils literal notranslate"><span class="pre">beginAssembly()</span></code></a>, then every entity writes its block (<code class="docutils literal notranslate"><span class="pre">K[entity]</span></code>, or
 from a worker thread, <code class="docutils literal notranslate"><span class="pre">K.blocksOfWorker(worker)[entity]</span></code>), then <a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembledMatrix()</span></code></a> returns the global
-matrix. It is built per equation system, together with its CSR pattern, see
+matrix. It is built per discrete system, together with its CSR pattern, see
 <a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly"><code class="xref py py-meth docutils literal notranslate"><span class="pre">createSystemMatrixAssembly()</span></code></a>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">K[entity]</span></code> hands out the blocks of worker 0, for the entity loops in the calling thread.</p>
 <p>A term that is not the block of an entity, but a whole matrix on the sparsity pattern of the system matrix, enters
@@ -750,7 +750,7 @@ committed (an assembly that was abandoned must not leak into the next).</p>
 <dd><p>A copy of <code class="docutils literal notranslate"><span class="pre">matrix</span></code> on the sparsity pattern of the system matrix, the form <a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addMatrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addMatrix()</span></code></a> takes: a value
 array of its own, one value per entry of the pattern (zero where <code class="docutils literal notranslate"><span class="pre">matrix</span></code> has no entry), and the pattern
 arrays of the system matrix, shared, not copied. E.g., the mass a dynamic solver assembled through this
-assembly (<a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembledMatrix()</span></code></a>, whose values the next assembly overwrites), or the mass of the equation
+assembly (<a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembledMatrix()</span></code></a>, whose values the next assembly overwrites), or the mass of the discrete
 system before a rebuild, moved onto the pattern of the new one.</p>
 <p>The copy refuses to be changed structurally (see <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix" title="edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix"><code class="xref py py-class docutils literal notranslate"><span class="pre">AliasedCSRMatrix</span></code></a>):
 its pattern is the one of the system matrix. Its values may be changed in place. It keeps the pattern alive as
@@ -873,7 +873,7 @@ load on it) adds to what is there.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system: the global DOF list of every entity.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system: the global DOF list of every entity.</p></li>
 <li><p><strong>numberOfWorkers</strong> (<em>int</em>) – How many threads may write blocks at the same time.</p></li>
 <li><p><strong>patternFillIn</strong> (<em>Callable</em><em> | </em><em>None</em>) – Called with the CSR pattern (as a matrix of zeros) once it is derived; returns the entries no entity
 contributes that the pattern must have as well (e.g.

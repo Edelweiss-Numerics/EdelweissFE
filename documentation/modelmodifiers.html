@@ -147,7 +147,7 @@ elements, re-partitioning element/node sets and surfaces, and reallocating the s
 A modifier is declared with the <code class="docutils literal notranslate"><span class="pre">*modelModifier</span></code> keyword. At the start of every increment the
 solver runs <strong>all</strong> modifiers to a fixed point via
 <a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.update" title="edelweissfe.models.topologypipeline.TopologyPipeline.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>, then lets mesh-dependent consumers catch
-up, then solves; when the topology changed, the equation system (DOF manager, sparsity pattern,
+up, then solves; when the topology changed, the discrete system (DOF manager, sparsity pattern,
 solution vectors and any multi-point-constraint transformation) is rebuilt first. A modifier itself
 is written as two halves – <a class="reference internal" href="#edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan" title="edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan"><code class="xref py py-meth docutils literal notranslate"><span class="pre">plan()</span></code></a>,
 which decides and may read solution state, and
@@ -176,7 +176,7 @@ see <a class="reference internal" href="stepactions.html#module-edelweissfe.step
 <a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.ElementFieldOutput" title="edelweissfe.utils.fieldoutput.ElementFieldOutput"><code class="xref py py-class docutils literal notranslate"><span class="pre">ElementFieldOutput</span></code></a> for examples. This needs no
 registration and therefore has no observer lifecycle to leak.</p></li>
 <li><p><strong>Registered mesh dependent</strong> – for derived <em>geometry</em> that must be regenerated before the next
-equation-system rebuild (facet-based contact and tie; see below), a component registers itself via
+discrete system rebuild (facet-based contact and tie; see below), a component registers itself via
 <a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent" title="edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent"><code class="xref py py-meth docutils literal notranslate"><span class="pre">registerMeshDependent()</span></code></a> and implements
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">refresh()</span></code>. Once per increment, after every
 modifier has settled, <a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshMeshDependents()</span></code></a> hands it
@@ -636,7 +636,7 @@ a <em>predictive</em> <code class="docutils literal notranslate"><span class="pr
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">minMarkedElements</span></code></td>
 <td><p>int, default=1</p></td>
-<td><p>Minimum number of eligible elements one evaluation of the markers must mark for a refinement pass to happen; with fewer, nothing is refined and no equation system is rebuilt. Marks are not carried over to later evaluations: they are a function of the current state only. Individual markers may cap their own marks (e.g. ‘maxRefinedFraction’) or expand them (e.g. ‘halo’) before this count is taken. Default 1 refines as soon as any element is marked.</p></td>
+<td><p>Minimum number of eligible elements one evaluation of the markers must mark for a refinement pass to happen; with fewer, nothing is refined and no discrete system is rebuilt. Marks are not carried over to later evaluations: they are a function of the current state only. Individual markers may cap their own marks (e.g. ‘maxRefinedFraction’) or expand them (e.g. ‘halo’) before this count is taken. Default 1 refines as soon as any element is marked.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">splitFactor</span></code></td>
 <td><p>int, default=2</p></td>
@@ -688,7 +688,7 @@ a <em>predictive</em> <code class="docutils literal notranslate"><span class="pr
 <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/AMR_DynamicRefinement/test.inp</span></code></span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="c c-Singleline">** Dynamic h-adaptivity regression test -- exercises the full *modelModifier path end to end:</span>
 <span class="c c-Singleline">** marking -&gt; octree refinement -&gt; model mutation -&gt; nodal warm-start -&gt; quadrature-point state</span>
-<span class="c c-Singleline">** transfer -&gt; hanging-node MPC -&gt; equation-system rebuild -&gt; solve on the refined mesh.</span>
+<span class="c c-Singleline">** transfer -&gt; hanging-node MPC -&gt; discrete system rebuild -&gt; solve on the refined mesh.</span>
 <span class="c c-Singleline">** Two coarse C3D20 elements form a cantilever; bending concentrates stress at the fixed end,</span>
 <span class="c c-Singleline">** so the stress marker refines exactly one element (2 -&gt; 9 active, 13 hanging nodes), creating a</span>
 <span class="c c-Singleline">** 2:1 hanging interface that the MPC couples across the displacement field. (Multi-field</span>
@@ -773,7 +773,7 @@ all
 </section>
 <section id="batching-refinement-across-increments">
 <h2>Batching refinement across increments<a class="headerlink" href="#batching-refinement-across-increments" title="Link to this heading"></a></h2>
-<p>Every refinement pass forces the solver to rebuild the equation system (DOF manager, sparsity
+<p>Every refinement pass forces the solver to rebuild the discrete system (DOF manager, sparsity
 pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
 large model. Left unchecked, a marker whose criterion is crossed by elements one at a time –
 rather than in a single burst – triggers that rebuild on every increment a lone element newly
@@ -782,7 +782,7 @@ bar: a refinement pass happens only if one evaluation of the markers marks at le
 <code class="docutils literal notranslate"><span class="pre">minMarkedElements</span></code> eligible elements. Marks are not carried over to later evaluations – they are
 a function of the current state only, which is what keeps a restarted run identical to an
 uninterrupted one. This trades refinement latency (a marked element may stay on the coarse mesh
-until enough elements qualify at once) for fewer, larger equation-system rebuilds.</p>
+until enough elements qualify at once) for fewer, larger discrete system rebuilds.</p>
 <div class="literal-block-wrapper docutils container" id="id4">
 <div class="code-block-caption"><span class="caption-text">Example (refinement deferred indefinitely because only one of the two elements ever
 crosses the marker threshold, so no evaluation reaches
@@ -981,7 +981,7 @@ all
 </section>
 <section id="predictor-after-a-refinement">
 <h2>Predictor after a refinement<a class="headerlink" href="#predictor-after-a-refinement" title="Link to this heading"></a></h2>
-<p>On the increment in which the mesh is mutated the solver already rebuilds the equation system and
+<p>On the increment in which the mesh is mutated the solver already rebuilds the discrete system and
 starts from a zero predictor. The <em>following</em> increment, however, extrapolates from that increment’s
 solution increment, which conflates the load advance with the one-off warm-start/remesh settling
 transient – a questionable predictor when refining into a softening zone. The <code class="docutils literal notranslate"><span class="pre">NISTSolver</span></code> option
@@ -1042,7 +1042,7 @@ does have one – but it also holds an acceleration, and an <em>interpolated</em
 equilibrium with the mass just reassembled on the refined mesh. So <code class="docutils literal notranslate"><span class="pre">NID</span></code> re-solves the
 acceleration from equilibrium on the increment after a topology change, with the same machinery a
 step start uses; <code class="docutils literal notranslate"><span class="pre">computeInitialAcceleration=False</span></code> keeps the interpolated one instead. A rebuild
-of the equation system that is <em>not</em> a topology change – a contact constraint re-reporting its
+of the discrete system that is <em>not</em> a topology change – a contact constraint re-reporting its
 connectivity – moves no node and does not trigger it.</p>
 <p><code class="docutils literal notranslate"><span class="pre">NID</span></code> ignores <code class="docutils literal notranslate"><span class="pre">equilibrateAfterModelChange</span></code>: that option’s re-equilibration increment is a
 zero-time one, and in zero time a dynamic model cannot move. Its dynamic counterpart is the
@@ -1055,7 +1055,7 @@ constraint works out of the box: the modifier keeps the relevant <code class="do
 with the refined child faces, and the constraint – a <code class="xref py py-class docutils literal notranslate">
 <span class="pre">MeshDependent</span></code> – regenerates its facets from it. <code class="xref py py-mod docutils literal notranslate">
 <span class="pre">nodetodeformablesurfacepenalty</span></code> notices via <a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.changesSince" title="edelweissfe.models.topologypipeline.TopologyPipeline.changesSince"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changesSince()</span></code></a>
-at its own next connectivity update (a pull, since that tick already runs before the equation
+at its own next connectivity update (a pull, since that tick already runs before the discrete
 system is rebuilt); a tie has no such early tick of its own (its only hook is called <em>from inside</em>
 that rebuild, too late to safely swap in new facet elements), so it reconciles via the model’s push
 notification instead. Either way, no separate wiring is needed. A model with both solid elements to

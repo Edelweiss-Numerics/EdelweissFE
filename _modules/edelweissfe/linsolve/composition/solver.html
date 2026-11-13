@@ -319,7 +319,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built</span>
 <span class="sd">        for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear</span>
-<span class="sd">        solver builds the new equation system before that."""</span>
+<span class="sd">        solver builds the new discrete system before that."""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coordinateCache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>

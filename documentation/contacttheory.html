@@ -953,7 +953,7 @@ the rotation to the slave nodes and to <span class="math notranslate nohighlight
 <span class="math notranslate nohighlight">\(\boldsymbol{\theta}\boldsymbol{\theta}\)</span> block is omitted, as for the node-based constraint;
 it plays no role for a fixed rigid body or in explicit runs.</p>
 <p><strong>Degrees of freedom.</strong> The constraint acts on all parent-face nodes of the slave surface and on the
-RP. This footprint does not depend on the search, so a search never changes the equation system –
+RP. This footprint does not depend on the search, so a search never changes the discrete system –
 which matters on the explicit path, where the search runs every <code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code>
 increments. The stiffness consists of one block per slave facet plus the RP block they all share
 (<code class="xref py py-mod docutils literal notranslate"><span class="pre">rigidbodycontactstiffness</span></code>). A fixed support is a rigid body
@@ -1020,7 +1020,7 @@ largest expected approach so that a point does not enter and leave the assigned 
 <h3>Solver integration<a class="headerlink" href="#solver-integration" title="Link to this heading"></a></h3>
 <p>The constraint participates in the implicit solution through three hooks:</p>
 <dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">updateConnectivity(model)</span></code> (once per increment in an implicit analysis, before the equation system is (re)built)</dt><dd><p>Re-assigns every slave to its closest facet from the last converged configuration (clamped
+<dt><code class="docutils literal notranslate"><span class="pre">updateConnectivity(model)</span></code> (once per increment in an implicit analysis, before the discrete system is (re)built)</dt><dd><p>Re-assigns every slave to its closest facet from the last converged configuration (clamped
 closest point for small sliding, centroid distance for finite sliding), refreshes the frozen
 projection data, rotates the frictional history into the new tangent plane, zeroes the
 history and multiplier of slaves that lost contact, and reports whether the constraint’s DOF
@@ -1076,7 +1076,7 @@ between two searches a slave node moves <span class="math notranslate nohighligh
 magnitude below a facet dimension. This is reported rather than assumed – on every search that
 changes the connectivity the solver prints the largest nodal motion accumulated since the previous
 one, so the configured frequency can be checked against a given model’s facet size instead of
-trusted. A connectivity change rebuilds the equation system, but reuses the critical time step:
+trusted. A connectivity change rebuilds the discrete system, but reuses the critical time step:
 the mesh is unchanged, so the stability limit is unchanged, and recomputing it would cost a full
 element pass.</p>
 <p>A candidate-facet pre-filter (a centroid k-d tree with a triangle-inequality radius bound) reduces

@@ -123,7 +123,7 @@
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">SystemMatrixContributorBase</span><span class="p">):</span>
     <span class="c1">#: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block</span>
-    <span class="c1">#: the constraint has in the equation system it is evaluated in; None until its first evaluation there (see</span>
+    <span class="c1">#: the constraint has in the discrete system it is evaluated in; None until its first evaluation there (see</span>
     <span class="c1">#: :meth:`prepareExplicitEvaluation`).</span>
     <span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -133,9 +133,9 @@
     <span class="n">checkpointedState</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="c1">#: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:</span>
-    <span class="c1">#: e.g. a contact constraint whose partner is far away is not, and takes no part in the equation system then (see</span>
+    <span class="c1">#: e.g. a contact constraint whose partner is far away is not, and takes no part in the discrete system then (see</span>
     <span class="c1">#: :attr:`active`). A constraint sets it there, and reports a change of :attr:`active` as a change of its</span>
-    <span class="c1">#: connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays within</span>
+    <span class="c1">#: connectivity, so that the solver rebuilds its discrete system. A constraint that does not check stays within</span>
     <span class="c1">#: reach.</span>
     <span class="n">withinReach</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 
@@ -161,9 +161,9 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Whether this constraint takes part in the equation system: while it is :attr:`switchedOn` and</span>
+<span class="w">        </span><span class="sd">"""Whether this constraint takes part in the discrete system, while it is :attr:`switchedOn` and</span>
 <span class="sd">        :attr:`withinReach`. A constraint that does not take part gets no degrees of freedom and adds nothing to the</span>
-<span class="sd">        residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the equation system with it, so</span>
+<span class="sd">        residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the discrete system with it, so</span>
 <span class="sd">        that they leave no empty rows behind.</span>
 
 <span class="sd">        Setting it switches the constraint on or off from outside, e.g. by a ``modelupdate`` step action at the start</span>
@@ -173,7 +173,7 @@
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        bool</span>
-<span class="sd">            Whether the constraint takes part in the equation system.</span>
+<span class="sd">            Whether the constraint takes part in the discrete system.</span>
 <span class="sd">        """</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_switchedOn</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">withinReach</span>
@@ -268,7 +268,7 @@
 <div class="viewcode-block" id="ConstraintBase.updateConnectivity">
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">updateConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Called once at the start of every increment, before the global equation system is</span>
+<span class="w">        </span><span class="sd">"""Called once at the start of every increment, before the global discrete system is</span>
 <span class="sd">        (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based</span>
 <span class="sd">        contact pairs) and declare whether its ``nodes``/``fieldsOnNodes``/``nDof`` footprint has</span>
 <span class="sd">        changed since the last call.</span>
@@ -286,7 +286,7 @@
 <span class="sd">        -------</span>
 <span class="sd">        bool</span>
 <span class="sd">            True if this constraint's contribution to the global system has changed and the</span>
-<span class="sd">            equation system must be rebuilt before the next Newton solve.</span>
+<span class="sd">            discrete system must be rebuilt before the next Newton solve.</span>
 <span class="sd">        """</span>
 
         <span class="k">return</span> <span class="kc">False</span></div>
@@ -369,14 +369,14 @@
 <div class="viewcode-block" id="ConstraintBase.prepareExplicitEvaluation">
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">prepareExplicitEvaluation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt</span>
+<span class="w">        </span><span class="sd">"""Called by an explicit solver whenever the constraint is located anew in its discrete system (a rebuilt</span>
 <span class="sd">        one, or one whose constraints are re-located), before it evaluates the constraint there with</span>
 <span class="sd">        :meth:`computeKernelsExplicit`.</span>
 
 <span class="sd">        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation</span>
 <span class="sd">        sizes it, once, for the block the constraint has now. The size is the number of entries of the block</span>
 <span class="sd">        (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists</span>
-<span class="sd">        its entries means building the list: once per equation system, not in every increment. A constraint that</span>
+<span class="sd">        its entries means building the list: once per discrete system, not in every increment. A constraint that</span>
 <span class="sd">        evaluates its forces without a tangent needs nothing here.</span>
 
 <span class="sd">        A solver that evaluates constraints itself, rather than through</span>
@@ -402,7 +402,7 @@
 <span class="sd">        The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear</span>
 <span class="sd">        system and so has no use for a tangent. This default calls :meth:`computeKernels` with a</span>
 <span class="sd">        scratch tangent that is thrown away, so that every constraint also works in an explicit</span>
-<span class="sd">        analysis; the scratch is sized once per equation system: a solver that evaluates constraints itself calls</span>
+<span class="sd">        analysis; the scratch is sized once per discrete system: a solver that evaluates constraints itself calls</span>
 <span class="sd">        :meth:`prepareExplicitEvaluation` whenever the constraint is located anew.</span>
 <span class="sd">        A constraint whose tangent is costly overrides it, e.g. through</span>
 <span class="sd">        :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.</span>
@@ -419,7 +419,7 @@
 <span class="sd">            The current time step.</span>
 <span class="sd">        """</span>
 
-        <span class="c1"># The discarded tangent buffer is sized once per equation system, and re-zeroed in every increment.</span>
+        <span class="c1"># The discarded tangent buffer is sized once per discrete system, and re-zeroed in every increment.</span>
         <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span>
         <span class="k">if</span> <span class="n">scratch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">countEntriesOfBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>

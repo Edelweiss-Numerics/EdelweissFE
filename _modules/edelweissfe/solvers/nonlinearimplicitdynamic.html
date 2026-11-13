@@ -175,7 +175,7 @@
 <span class="sd">:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addLumpedMatrix`): before the parent's</span>
 <span class="sd">multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act on the effective</span>
 <span class="sd">matrix without knowing it is one. Mass and damping are assembled in one loop over the elements (in chunks of elements</span>
-<span class="sd">on the assembly's worker threads, see :doc:`/documentation/parallelization`) when the equation system is (re)built --</span>
+<span class="sd">on the assembly's worker threads, see :doc:`/documentation/parallelization`) when the discrete system is (re)built --</span>
 <span class="sd">at a step's start and after a topology change -- not per Newton iteration. A rebuild caused only by a constraint</span>
 <span class="sd">changing its connectivity (a contact candidate list, which can change on every increment) leaves the numbering of the</span>
 <span class="sd">degrees of freedom and every element where they were: the mass is then copied onto the sparsity pattern of the new</span>
@@ -201,7 +201,7 @@
 <span class="sd">so is what the model receives for them at acceptance. A nonzero inertia an element reports there --</span>
 <span class="sd">a rotational inertia, or the micro-inertia of a gradient-enhanced element -- is discarded with a</span>
 <span class="sd">warning, once per field. A model with no such field is refused. Which degrees of freedom of these fields carry</span>
-<span class="sd">the mass of the nodes, the model says (:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`):</span>
+<span class="sd">the mass of the nodes, the model says (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia`):</span>
 <span class="sd">in a finite element model, all of them.</span>
 
 <span class="sd">**Entities that integrate their own inertia.** A finite element reports its mass, and this solver integrates its</span>
@@ -209,8 +209,8 @@
 <span class="sd">included, and that integrate the Newmark scheme at their own evaluation points, with the Newmark parameters the</span>
 <span class="sd">solver gives them at the start of every step</span>
 <span class="sd">(:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`). The nodes such an entity couples are</span>
-<span class="sd">then the coefficients of one increment, without an inertia of their own: the layout leaves them out of</span>
-<span class="sd">:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`. Where the inertia of these</span>
+<span class="sd">then the coefficients of one increment, without an inertia of their own: the discrete system leaves them out of</span>
+<span class="sd">:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia`. Where the inertia of these</span>
 <span class="sd">entities is integrated, the option ``inertia`` selects:</span>
 
 <span class="sd">* ``entities`` (default): each such entity integrates its inertia itself, with this solver's :math:`\\beta, \\gamma`</span>
@@ -224,9 +224,9 @@
 <span class="sd">  solver reports cover the nodes it integrates only.</span>
 <span class="sd">* ``nodes``: the entities are quasi-static (:math:`\\beta = \\gamma = 0`), and this solver integrates the nodes they</span>
 <span class="sd">  couple too, with their lumped mass</span>
-<span class="sd">  (:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia`).</span>
+<span class="sd">  (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`).</span>
 <span class="sd">  Such entities may move with every increment, so this mass is assembled anew for every increment, and the velocity</span>
-<span class="sd">  and acceleration of a node are carried by node in the model's ``V`` and ``A`` from one increment, and one equation</span>
+<span class="sd">  and acceleration of a node are carried by node in the model's ``V`` and ``A`` from one increment, and one discrete</span>
 <span class="sd">  system, to the next; a node that has just become active starts at rest, and a node without positive mass is</span>
 <span class="sd">  quasi-static. The acceleration from equilibrium covers these nodes, as every node. A model without such entities has</span>
 <span class="sd">  nothing for this choice to act on, and is refused.</span>
@@ -237,7 +237,7 @@
 <span class="sd">The two keep the motion of the entities in different places: ``entities`` in the entities' state, ``nodes`` in the</span>
 <span class="sd">entries ``V`` and ``A`` of the nodes they couple. Nothing transfers the motion from the one place to the other, so a</span>
 <span class="sd">step that would take the motion from where the model does not hold it refuses to start</span>
-<span class="sd">(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion`): a step in ``nodes`` after</span>
+<span class="sd">(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`): a step in ``nodes`` after</span>
 <span class="sd">a step in ``entities``, or after an initial velocity given to the entities; a step in ``entities`` after a step in</span>
 <span class="sd">``nodes``. Either continue in the place of the step before, or let a quasi-static step bring the model to rest in</span>
 <span class="sd">between. Material points that belong to no element are refused: they carry no inertia of their own, and there are no</span>
@@ -267,8 +267,8 @@
 <span class="sd">``computeInitialAcceleration=False`` to continue a step from whatever acceleration was carried over.</span>
 
 <span class="sd">**State and restart.** Velocity and acceleration are ordinary node-field entries, ``V`` and ``A``,</span>
-<span class="sd">read from the model whenever the equation system is (re)built and written at the acceptance of every</span>
-<span class="sd">increment alongside the parent's ``U``/``P``/``dU``, both through the model's layout of the equation</span>
+<span class="sd">read from the model whenever the discrete system is (re)built and written at the acceptance of every</span>
+<span class="sd">increment alongside the parent's ``U``/``P``/``dU``, both through the discrete</span>
 <span class="sd">system -- the same mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the</span>
 <span class="sd">``*output, type=restart`` manager writes and of every ``*fieldOutput`` (``result=V``,</span>
 <span class="sd">``result=A``), with no solver-specific restart code beyond the marker of whether the initial</span>
@@ -297,7 +297,7 @@
 <span class="sd">  switches this off). The displacement and the velocity are kept: they are the kinematic state, and</span>
 <span class="sd">  interpolation is the best statement of them the new mesh admits. Only a change that the topology</span>
 <span class="sd">  pipeline actually recorded re-arms it -- a mere change of a constraint's connectivity (a contact</span>
-<span class="sd">  candidate list) rebuilds the equation system without moving a node, and must not restart the</span>
+<span class="sd">  candidate list) rebuilds the discrete system without moving a node, and must not restart the</span>
 <span class="sd">  acceleration of every degree of freedom in the model.</span>
 
 <span class="sd">What is exactly conserved across a refinement, and what is not, is reported at every event and</span>
@@ -424,7 +424,7 @@
 
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">_NewmarkSystem</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Everything the Newmark increment reads that is sized by the current equation system.</span>
+<span class="w">    </span><span class="sd">"""Everything the Newmark increment reads that is sized by the current discrete system.</span>
 
 <span class="sd">    Bound to the :class:`~edelweissfe.numerics.dofmanager.DofManager` it was assembled for: the</span>
 <span class="sd">    moment the parent rebuilds that manager, every entry here is stale together, so the whole</span>
@@ -439,7 +439,7 @@
 <span class="sd">    dynamicFields</span>
 <span class="sd">        The names of those fields, in the model's field order.</span>
 <span class="sd">    M</span>
-<span class="sd">        The consistent mass, on the sparsity pattern of the stiffness of this equation system</span>
+<span class="sd">        The consistent mass, on the sparsity pattern of the stiffness of this discrete system</span>
 <span class="sd">        (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.copyOntoSparsityPattern`), the form</span>
 <span class="sd">        in which it is added to the tangent; it shares the pattern arrays of the stiffness, and keeps them alive. An</span>
 <span class="sd">        empty matrix if no degree of freedom is integrated in time (see</span>
@@ -458,7 +458,7 @@
 <span class="sd">        every increment.</span>
 <span class="sd">    V, A</span>
 <span class="sd">        The velocity and acceleration at the last converged increment: the solver's own vectors of the</span>
-<span class="sd">        current equation system, read from the model when it was built.</span>
+<span class="sd">        current discrete system, read from the model when it was built.</span>
 <span class="sd">    """</span>
 
     <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span>
@@ -494,7 +494,7 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    system</span>
+<span class="sd">    newmarkSystem</span>
 <span class="sd">        The Newmark system of the increment.</span>
 <span class="sd">    dT</span>
 <span class="sd">        The time increment.</span>
@@ -508,7 +508,7 @@
 <span class="sd">        The trial velocity and acceleration of the current iteration.</span>
 <span class="sd">    """</span>
 
-    <span class="n">system</span><span class="p">:</span> <span class="n">_NewmarkSystem</span>
+    <span class="n">newmarkSystem</span><span class="p">:</span> <span class="n">_NewmarkSystem</span>
     <span class="n">dT</span><span class="p">:</span> <span class="nb">float</span>
     <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span>
     <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span>
@@ -591,16 +591,16 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-        <span class="c1">#: The operators and kinematic state of the current equation system; None until the</span>
+        <span class="c1">#: The operators and kinematic state of the current discrete system; None until the</span>
         <span class="c1">#: first increment of a step has built it. See :class:`_NewmarkSystem`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_newmarkSystem</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: Whether the next increment has to compute the acceleration from equilibrium first.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_initialAccelerationPending</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="c1">#: Whether the first equation system of a step checks where the model holds the motion of its entities that</span>
+        <span class="c1">#: Whether the first discrete system of a step checks where the model holds the motion of its entities that</span>
         <span class="c1">#: integrate their own inertia (see :meth:`_refuseMotionItDoesNotTakeOver`); not on a resumed step, which</span>
         <span class="c1">#: continues from its own checkpoint.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_carriersOfTheMotionToBeChecked</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="c1">#: Length of ``model.topology.history`` when the current equation system was assembled; tells</span>
+        <span class="c1">#: Length of ``model.topology.history`` when the current discrete system was assembled; tells</span>
         <span class="c1">#: a mesh change from a constraint re-reporting its connectivity (see :meth:`_updateNewmarkSystem`).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_topologyRecordsAtLastBuild</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="c1">#: The per-topology-change mass check and the drift it accumulates over a step; see</span>
@@ -611,11 +611,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_currentIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The non-time-integrated fields a discarded inertia has already been warned about.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_fieldsWarnedAboutDiscardedInertia</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-        <span class="c1">#: The velocity and the acceleration of the current equation system, read from the model when it is</span>
+        <span class="c1">#: The velocity and the acceleration of the current discrete system, read from the model when it is</span>
         <span class="c1">#: (re)built (see :meth:`readStateFromModel`), and the state of the last converged increment from then on.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The names of the fields of the current equation system that carry a mass, whose velocity and acceleration</span>
+        <span class="c1">#: The names of the fields of the current discrete system that carry a mass, whose velocity and acceleration</span>
         <span class="c1">#: this solver reads from the model; it writes them to every field, zero where there is no mass.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -670,7 +670,7 @@
 <span class="w">        </span><span class="sd">"""Start a step; see the parent.</span>
 
 <span class="sd">        Arms the initial-acceleration computation and drops the operators of the previous step -- the</span>
-<span class="sd">        parent rebuilds its equation system at the start of every step, and the operators follow that</span>
+<span class="sd">        parent rebuilds its discrete system at the start of every step, and the operators follow that</span>
 <span class="sd">        system. A step that continues from a restart checkpoint takes over, with the checkpointed state</span>
 <span class="sd">        restored after this, whether the initial acceleration is still to be computed: the first real</span>
 <span class="sd">        increment of the step computes it, and a checkpoint written after the zero increment comes</span>
@@ -842,7 +842,7 @@
 <div class="viewcode-block" id="NonlinearImplicitDynamic.initializeIncrement">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.initializeIncrement">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">initializeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Bring the Newmark operators up to date with the equation system, form the two terms the</span>
+<span class="w">        </span><span class="sd">"""Bring the Newmark operators up to date with the discrete system, form the two terms the</span>
 <span class="sd">        dynamics add to the tangent, and -- at a cold step start or after a topology change --</span>
 <span class="sd">        compute the acceleration from equilibrium; see the parent's hook.</span>
 
@@ -862,13 +862,13 @@
 <span class="sd">            The time step.</span>
 <span class="sd">        """</span>
 
-        <span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_updateNewmarkSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">)</span>
+        <span class="n">newmarkSystem</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_updateNewmarkSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">)</span>
 
         <span class="n">beta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"newmarkBeta"</span><span class="p">]</span>
         <span class="n">gamma</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"newmarkGamma"</span><span class="p">]</span>
         <span class="n">dT</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_currentIncrement</span> <span class="o">=</span> <span class="n">_NewmarkIncrement</span><span class="p">(</span>
-            <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">,</span>
+            <span class="n">newmarkSystem</span><span class="o">=</span><span class="n">newmarkSystem</span><span class="p">,</span>
             <span class="n">dT</span><span class="o">=</span><span class="n">dT</span><span class="p">,</span>
             <span class="n">beta</span><span class="o">=</span><span class="n">beta</span><span class="p">,</span>
             <span class="n">gamma</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span>
@@ -882,8 +882,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_initialAccelerationPending</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="c1"># A model whose only inertia is that of entities which integrate it themselves (inertia=entities) has no</span>
             <span class="c1"># degree of freedom to compute an acceleration for: they start from the acceleration in their state.</span>
-            <span class="k">if</span> <span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_computeInitialAcceleration</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
+            <span class="k">if</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_computeInitialAcceleration</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NonlinearImplicitDynamic.assembleAdditionalTerms">
@@ -910,9 +910,9 @@
 <span class="sd">        """</span>
 
         <span class="n">increment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_currentIncrement</span>
-        <span class="n">system</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">system</span>
+        <span class="n">newmarkSystem</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">newmarkSystem</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
             <span class="c1"># No degree of freedom is integrated here: there is neither inertia nor damping to add, and the trial</span>
             <span class="c1"># velocity and acceleration of the increment stay zero (see _noMassAndDamping).</span>
             <span class="k">return</span>
@@ -920,20 +920,20 @@
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"newmark kinematics"</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_newmarkVelocityAndAcceleration</span><span class="p">(</span>
                 <span class="n">dU</span><span class="p">,</span>
-                <span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">,</span>
-                <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">,</span>
+                <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">V</span><span class="p">,</span>
+                <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">A</span><span class="p">,</span>
                 <span class="n">increment</span><span class="o">.</span><span class="n">dT</span><span class="p">,</span>
                 <span class="n">increment</span><span class="o">.</span><span class="n">beta</span><span class="p">,</span>
                 <span class="n">increment</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
-                <span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">,</span>
+                <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">,</span>
                 <span class="n">increment</span><span class="o">.</span><span class="n">V_np</span><span class="p">,</span>
                 <span class="n">increment</span><span class="o">.</span><span class="n">A_np</span><span class="p">,</span>
             <span class="p">)</span>
 
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"inertia and damping forces"</span><span class="p">):</span>
-            <span class="n">PInertia</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">A_np</span><span class="p">)</span>
+            <span class="n">PInertia</span> <span class="o">=</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">A_np</span><span class="p">)</span>
             <span class="c1"># The damping is lumped (diagonal), so C v is an entry-wise product.</span>
-            <span class="n">PDamping</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">V_np</span><span class="p">)</span>
+            <span class="n">PDamping</span> <span class="o">=</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">V_np</span><span class="p">)</span>
 
             <span class="n">R</span> <span class="o">-=</span> <span class="n">PInertia</span>
             <span class="n">R</span> <span class="o">-=</span> <span class="n">PDamping</span>
@@ -946,8 +946,8 @@
         <span class="c1"># The effective tangent K_eff = K + M / (beta dT^2) + gamma C / (beta dT), added while K is assembled, like</span>
         <span class="c1"># the block of an element: before the parent's CSR conversion, MPC condensation and Dirichlet row replacement.</span>
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"effective tangent"</span><span class="p">):</span>
-            <span class="n">K</span><span class="o">.</span><span class="n">addMatrix</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">M</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">massFactor</span><span class="p">)</span>
-            <span class="n">K</span><span class="o">.</span><span class="n">addLumpedMatrix</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">dampingFactor</span><span class="p">)</span></div>
+            <span class="n">K</span><span class="o">.</span><span class="n">addMatrix</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">M</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">massFactor</span><span class="p">)</span>
+            <span class="n">K</span><span class="o">.</span><span class="n">addLumpedMatrix</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">dampingFactor</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NonlinearImplicitDynamic.finalizeIncrement">
@@ -966,13 +966,13 @@
 <span class="sd">        """</span>
 
         <span class="n">increment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_currentIncrement</span>
-        <span class="n">system</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">system</span>
+        <span class="n">newmarkSystem</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">newmarkSystem</span>
 
-        <span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">V_np</span>
-        <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">A_np</span>
+        <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">V</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">V_np</span>
+        <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">A</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">A_np</span>
 
         <span class="c1"># What a topology change before the next increment is compared against.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_conservedAtLastAccept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conservedQuantities</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_conservedAtLastAccept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conservedQuantities</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"kinetic energy </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_conservedAtLastAccept</span><span class="o">.</span><span class="n">kineticEnergy</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">2</span>
         <span class="p">)</span></div>
@@ -1027,7 +1027,7 @@
 <div class="viewcode-block" id="NonlinearImplicitDynamic.readStateFromModel">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.readStateFromModel">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Read the state the next increment starts from out of the model, into the vectors of the equation system just</span>
+<span class="w">        </span><span class="sd">"""Read the state the next increment starts from out of the model, into the vectors of the discrete system just</span>
 <span class="sd">        (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,</span>
 <span class="sd">        where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a</span>
 <span class="sd">        refinement has meanwhile interpolated them onto the nodes it created. After a quasi-static step, they are zero:</span>
@@ -1037,13 +1037,13 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        U</span>
-<span class="sd">            The solution vector of the equation system, zero, overwritten.</span>
+<span class="sd">            The solution vector of the discrete system, zero, overwritten.</span>
 <span class="sd">        """</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fieldsCarryingMass</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carriersOfTheMotionToBeChecked</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_carriersOfTheMotionToBeChecked</span> <span class="o">=</span> <span class="kc">False</span>
@@ -1077,10 +1077,10 @@
         <span class="k">if</span> <span class="n">increment</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">internalInertialAndDampingForce</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">system</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">system</span>
+            <span class="n">newmarkSystem</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">newmarkSystem</span>
             <span class="n">internalInertialAndDampingForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
             <span class="n">internalInertialAndDampingForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">P</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">)</span>
+                <span class="n">P</span> <span class="o">+</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span> <span class="o">+</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">)</span>
             <span class="p">)</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">internalInertialAndDampingForce</span><span class="p">)</span></div>
@@ -1091,16 +1091,16 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Write the velocity and the acceleration of the converged increment to every field, as part of</span>
 <span class="sd">        :meth:`writeResultsToModel`, instead of the parent's state at rest: what field outputs read, what a checkpoint</span>
-<span class="sd">        stores, and what the next equation system reads back. The fields carrying a mass get the state of their</span>
+<span class="sd">        stores, and what the next discrete system reads back. The fields carrying a mass get the state of their</span>
 <span class="sd">        Newmark integration; every other field, which this solver treats quasi-statically, is at rest, and gets zero,</span>
 <span class="sd">        which is what the solver's vectors hold there.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_updateNewmarkSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_NewmarkSystem</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The Newmark operators and state for the parent's current equation system, assembled if</span>
+<span class="w">        </span><span class="sd">"""The Newmark operators and state for the parent's current discrete system, assembled if</span>
 <span class="sd">        that system is new and reused otherwise.</span>
 
 <span class="sd">        The parent rebuilds its :class:`~edelweissfe.numerics.dofmanager.DofManager` at the start</span>
@@ -1137,17 +1137,17 @@
 <span class="sd">            The system for the current DofManager.</span>
 <span class="sd">        """</span>
 
-        <span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_newmarkSystem</span>
-        <span class="n">dofManagerChanged</span> <span class="o">=</span> <span class="n">system</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">system</span><span class="o">.</span><span class="n">dofManager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span>
+        <span class="n">newmarkSystem</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_newmarkSystem</span>
+        <span class="n">dofManagerChanged</span> <span class="o">=</span> <span class="n">newmarkSystem</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dofManager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span>
 
         <span class="k">if</span> <span class="p">(</span>
             <span class="ow">not</span> <span class="n">dofManagerChanged</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"changematerialproperty"</span><span class="p">]</span>
-            <span class="ow">and</span> <span class="ow">not</span> <span class="n">system</span><span class="o">.</span><span class="n">includesLumpedMassOfEntities</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">includesLumpedMassOfEntities</span>
         <span class="p">):</span>
-            <span class="k">return</span> <span class="n">system</span>
+            <span class="k">return</span> <span class="n">newmarkSystem</span>
 
-        <span class="k">if</span> <span class="n">dofManagerChanged</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">materialPoints</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">dofManagerChanged</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">materialPoints</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="s2">"The model has material points that belong to no element. </span><span class="si">{:}</span><span class="s2"> integrates the inertia the elements "</span>
                 <span class="s2">"report and that of the entities that integrate their own; such material points carry none, so there "</span>
@@ -1164,9 +1164,7 @@
         <span class="n">lumpedMassOfEntities</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"inertia"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"nodes"</span><span class="p">:</span>
             <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"lumped mass of entities"</span><span class="p">):</span>
-                <span class="n">lumpedMassOfEntities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">assembleLumpedMassOfEntitiesWithOwnInertia</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span>
-                <span class="p">)</span>
+                <span class="n">lumpedMassOfEntities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">assembleLumpedMassOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">lumpedMassOfEntities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">"</span><span class="si">{:}</span><span class="s2"> with inertia=nodes integrates the inertia of the entities that integrate their own at the "</span>
@@ -1181,15 +1179,15 @@
         <span class="n">reusedMassAndDamping</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">dofManagerChanged</span>
-            <span class="ow">and</span> <span class="n">system</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span>
+            <span class="ow">and</span> <span class="n">newmarkSystem</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span>
             <span class="ow">and</span> <span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">topologyChanged</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"changematerialproperty"</span><span class="p">]</span>
             <span class="ow">and</span> <span class="n">lumpedMassOfEntities</span> <span class="ow">is</span> <span class="kc">None</span>
-            <span class="ow">and</span> <span class="ow">not</span> <span class="n">system</span><span class="o">.</span><span class="n">includesLumpedMassOfEntities</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">includesLumpedMassOfEntities</span>
         <span class="p">):</span>
-            <span class="n">reusedMassAndDamping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reuseMassAndDamping</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+            <span class="n">reusedMassAndDamping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reuseMassAndDamping</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
             <span class="n">M</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">massByField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noMassAndDamping</span><span class="p">()</span>
@@ -1253,7 +1251,7 @@
 <span class="sd">            If the model holds the motion of these entities only where this solver does not take it from.</span>
 <span class="sd">        """</span>
 
-        <span class="n">carriers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">carriersOfTheMotion</span><span class="p">()</span>
+        <span class="n">carriers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">carriersOfTheMotion</span><span class="p">()</span>
         <span class="n">inertia</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"inertia"</span><span class="p">]</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">carriers</span> <span class="ow">or</span> <span class="n">inertia</span> <span class="ow">in</span> <span class="n">carriers</span><span class="p">:</span>
             <span class="k">return</span>
@@ -1273,7 +1271,7 @@
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_noMassAndDamping</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""The mass and the damping of an equation system none of whose degrees of freedom is integrated in time here --</span>
+<span class="w">        </span><span class="sd">"""The mass and the damping of a discrete system none of whose degrees of freedom is integrated in time here --</span>
 <span class="sd">        a model whose only inertia is that of entities which integrate it themselves (``inertia=entities``). Nothing</span>
 <span class="sd">        is assembled: the mass is an empty matrix and the damping zero, so that the products with them cost nothing;</span>
 <span class="sd">        the Newmark terms add nothing to the residual and the tangent (see :meth:`assembleAdditionalTerms`).</span>
@@ -1288,8 +1286,8 @@
         <span class="k">return</span> <span class="n">csr_matrix</span><span class="p">((</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">),</span> <span class="p">{}</span>
 
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"reuse mass and damping"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_reuseMassAndDamping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The mass and the damping of ``system``, moved onto the equation system of the current</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reuseMassAndDamping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">newmarkSystem</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The mass and the damping of ``newmarkSystem``, moved onto the discrete system of the current</span>
 <span class="sd">        :class:`~edelweissfe.numerics.dofmanager.DofManager` without reassembling them -- or None if that manager</span>
 <span class="sd">        differs from the old one in anything they depend on.</span>
 
@@ -1310,7 +1308,7 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        system</span>
+<span class="sd">        newmarkSystem</span>
 <span class="sd">            The Newmark system of the previous manager.</span>
 
 <span class="sd">        Returns</span>
@@ -1320,7 +1318,7 @@
 <span class="sd">            (unchanged, as the numbering is) -- or None if they have to be reassembled.</span>
 <span class="sd">        """</span>
 
-        <span class="n">old</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">dofManager</span>
+        <span class="n">old</span> <span class="o">=</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dofManager</span>
         <span class="n">new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span>
 
         <span class="k">if</span> <span class="n">new</span><span class="o">.</span><span class="n">dofNumberingDigest</span> <span class="o">!=</span> <span class="n">old</span><span class="o">.</span><span class="n">dofNumberingDigest</span><span class="p">:</span>
@@ -1328,7 +1326,7 @@
         <span class="k">if</span> <span class="n">new</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">!=</span> <span class="n">old</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="k">return</span> <span class="kc">None</span>
 
-        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">copyOntoSparsityPattern</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">M</span><span class="p">)</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">copyOntoSparsityPattern</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">M</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"constraint connectivity changed only: mass and damping reused, not reassembled"</span><span class="p">,</span>
@@ -1336,9 +1334,9 @@
             <span class="mi">2</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">M</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">massByField</span>
+        <span class="k">return</span> <span class="n">M</span><span class="p">,</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">massByField</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_conservedQuantities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_ConservedQuantities</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_conservedQuantities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">newmarkSystem</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_ConservedQuantities</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Total mass, linear momentum and kinetic energy of one Newmark system.</span>
 
 <span class="sd">        Read off that system's own :class:`~edelweissfe.numerics.dofmanager.DofManager`, so the</span>
@@ -1352,7 +1350,7 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        system</span>
+<span class="sd">        newmarkSystem</span>
 <span class="sd">            The system to measure.</span>
 <span class="sd">        model</span>
 <span class="sd">            The model tree, for the fields' spatial dimension.</span>
@@ -1369,12 +1367,12 @@
 <span class="sd">            common components to add.</span>
 <span class="sd">        """</span>
 
-        <span class="n">V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
-        <span class="n">MV</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="n">V</span><span class="p">)</span>
+        <span class="n">V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
+        <span class="n">MV</span> <span class="o">=</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="n">V</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">_ConservedQuantities</span><span class="p">(</span>
-            <span class="n">massByField</span><span class="o">=</span><span class="n">system</span><span class="o">.</span><span class="n">massByField</span><span class="p">,</span>
-            <span class="n">momentum</span><span class="o">=</span><span class="n">linearMomentum</span><span class="p">(</span><span class="n">MV</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">dofManager</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">dynamicFields</span><span class="p">,</span> <span class="n">model</span><span class="p">),</span>
+            <span class="n">massByField</span><span class="o">=</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">massByField</span><span class="p">,</span>
+            <span class="n">momentum</span><span class="o">=</span><span class="n">linearMomentum</span><span class="p">(</span><span class="n">MV</span><span class="p">,</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dofManager</span><span class="p">,</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicFields</span><span class="p">,</span> <span class="n">model</span><span class="p">),</span>
             <span class="n">kineticEnergy</span><span class="o">=</span><span class="mf">0.5</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">V</span> <span class="o">@</span> <span class="n">MV</span><span class="p">),</span>
         <span class="p">)</span>
 
@@ -1490,7 +1488,7 @@
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_fieldsCarryingMass</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The fields of the equation system whose inertia is a mass, which this solver integrates in time.</span>
+<span class="w">        </span><span class="sd">"""The fields of the discrete system whose inertia is a mass, which this solver integrates in time.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1519,7 +1517,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_locateDynamicDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">lumpedMassOfEntities</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The degrees of freedom integrated in time: those of the fields carrying a mass whose inertia is that of the</span>
-<span class="sd">        nodes (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`) -- in a</span>
+<span class="sd">        nodes (see :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia`) -- in a</span>
 <span class="sd">        finite element model, all of them -- and, if the lumped mass of the entities that integrate their own inertia</span>
 <span class="sd">        is integrated at the nodes, those of the nodes that receive a positive mass from it. A node that receives no</span>
 <span class="sd">        positive mass carries no inertia and stays quasi-static.</span>
@@ -1538,7 +1536,7 @@
 <span class="sd">        """</span>
 
         <span class="n">isDynamic</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-        <span class="n">isDynamic</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">dofsWithNodalInertia</span><span class="p">(</span><span class="n">dynamicFields</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">isDynamic</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">dofsWithNodalInertia</span><span class="p">(</span><span class="n">dynamicFields</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="k">if</span> <span class="n">lumpedMassOfEntities</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">hasLumpedMass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedMassOfEntities</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
@@ -1746,7 +1744,7 @@
 
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"initial acceleration"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">_computeInitialAcceleration</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">,</span> <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">newmarkSystem</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">,</span> <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Compute the acceleration from equilibrium at the start of an increment, and commit it.</span>
 
@@ -1765,7 +1763,7 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        system</span>
+<span class="sd">        newmarkSystem</span>
 <span class="sd">            The current Newmark system; its acceleration is overwritten.</span>
 <span class="sd">        U_n</span>
 <span class="sd">            The displacement at the start of the increment.</span>
@@ -1801,20 +1799,20 @@
         <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleInternalForces</span><span class="p">(</span><span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">startTimeStep</span><span class="p">)</span>
         <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">loads</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">startTimeStep</span><span class="p">)</span>
         <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">startTimeStep</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">startTimeStep</span>
         <span class="p">)</span>
 
         <span class="c1"># f_ext - f_int is the negative of the summed residual contributions, as in solveIncrement</span>
         <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">P</span>
         <span class="n">R</span> <span class="o">-=</span> <span class="n">PLoadsAndConstraints</span>
-        <span class="n">R</span> <span class="o">-=</span> <span class="n">system</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
+        <span class="n">R</span> <span class="o">-=</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">lumpedDamping</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
 
         <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span>
         <span class="n">isStatic</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-        <span class="n">isStatic</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">isStatic</span><span class="p">[</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">R</span><span class="p">[</span><span class="n">isStatic</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="n">MEff</span> <span class="o">=</span> <span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">M</span> <span class="o">+</span> <span class="n">diags</span><span class="p">(</span><span class="n">isStatic</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">),</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"csr"</span><span class="p">))</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="n">MEff</span> <span class="o">=</span> <span class="p">(</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">M</span> <span class="o">+</span> <span class="n">diags</span><span class="p">(</span><span class="n">isStatic</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">),</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"csr"</span><span class="p">))</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformResidual</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">dU0</span><span class="p">)</span>
@@ -1829,17 +1827,17 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">A0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">recoverSlaveSolution</span><span class="p">(</span><span class="n">A0</span><span class="p">)</span>
 
-        <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="n">A0</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span>
+        <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">A</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="n">A0</span><span class="p">[</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span>
         <span class="c1"># It completes the state the increment starts from: a rebuild before the increment is accepted -- a retry</span>
         <span class="c1"># after a cutback whose contact search changes the connectivity -- reads it back from the model. Every field,</span>
         <span class="c1"># as at acceptance: a field without a mass is at rest.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">A</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"acceleration from equilibrium at t = </span><span class="si">{:g}</span><span class="s2">: ||a0||inf = </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                 <span class="n">startTimeStep</span><span class="o">.</span><span class="n">stepTime</span><span class="p">,</span>
-                <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">A0</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">])))</span> <span class="k">if</span> <span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">,</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">A0</span><span class="p">[</span><span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">])))</span> <span class="k">if</span> <span class="n">newmarkSystem</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">,</span>
             <span class="p">),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
             <span class="mi">2</span><span class="p">,</span>

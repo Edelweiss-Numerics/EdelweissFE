@@ -24,7 +24,7 @@ serial one.
 
 A loop over independent entities, such as the elements that assemble the mass and the damping of the implicit
 dynamic solvers, the entities whose degrees of freedom the :class:`~edelweissfe.numerics.dofmanager.DofManager`
-locates in the DOF vector, the entities that fill their parts of the VIJ pattern of the system matrix when the equation
+locates in the DOF vector, the entities that fill their parts of the VIJ pattern of the system matrix when the discrete
 system is rebuilt, or the elements whose result arrays a field output gathers, runs in chunks of consecutive entities,
 :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`: each call handles a whole chunk, several
 chunks per thread let the pool balance chunks of unequal cost, and the results come back in the order of the entities,

@@ -23,7 +23,7 @@ Level 1
     An increment: its header, the convergence verdict, cutbacks, monitors, model modifiers such as adaptive
     refinement, and restart checkpoints.
 Level 2
-    Inside an increment: equation-system rebuilds, the iteration table, linear solver output, contact status.
+    Inside an increment: discrete system rebuilds, the iteration table, linear solver output, contact status.
 
 A warning keeps the level of the place it is raised and is marked ``WARNING:`` or ``⚠`` instead of being
 moved out to level 0. The implicit solvers open each increment's block with a separator line before the topology

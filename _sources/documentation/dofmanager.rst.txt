@@ -1,7 +1,7 @@
 Degree of Freedom (DOF) Manager and Numerics
 ============================================
 
-The ``edelweissfe.numerics`` package provides core data structures and managers for global equation systems in EdelweissFE.
+The ``edelweissfe.numerics`` package provides core data structures and managers for global discrete systems in EdelweissFE.
 
 The DOF manager numbers the degrees of freedom: every node field, scalar variable and entity gets its indices in the
 global DOF vector. It knows nothing about the system matrix. How the blocks of the entities -- each given in the

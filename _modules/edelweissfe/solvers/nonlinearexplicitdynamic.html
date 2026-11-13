@@ -105,7 +105,7 @@
 <span class="c1">#  ---------------------------------------------------------------------</span>
 <span class="sd">"""The nonlinear explicit dynamic solver.</span>
 
-<span class="sd">An increment solves no equation system. Second-order fields are advanced by central differences</span>
+<span class="sd">An increment solves no linear system. Second-order fields are advanced by central differences</span>
 <span class="sd">(a leapfrog, with the velocity staggered half an increment behind the displacement), first-order</span>
 <span class="sd">fields -- a nonlocal damage field, for instance -- by forward Euler, and both divide by a **lumped**</span>
 <span class="sd">mass, so the cost of an increment is one element pass plus vector arithmetic. There is no linear</span>
@@ -232,7 +232,7 @@
 <span class="sd">:doc:`/documentation/nodefieldresults`).</span>
 
 <span class="sd">**The net force is solver state, and a step starts from the model's state.** The net force lives</span>
-<span class="sd">within one equation system, and is never read back from the model. A rebuild after a change of a</span>
+<span class="sd">within one discrete system, and is never read back from the model. A rebuild after a change of a</span>
 <span class="sd">constraint's connectivity carries it over by numbering, and a resumed step takes it from its</span>
 <span class="sd">checkpoint. After a mesh change it starts at zero: re-evaluating it would run the constitutive law</span>
 <span class="sd">off-cycle and write into the material state, and zero is an O(dT) error for one increment. At the</span>
@@ -399,7 +399,7 @@
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.ExplicitSystem">[docs]</a>
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">ExplicitSystem</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Everything an explicit increment operates on that is sized by the current equation system.</span>
+<span class="w">    </span><span class="sd">"""Everything an explicit increment operates on that is sized by the current discrete system.</span>
 
 <span class="sd">    None of these are independent state: each is indexed by the :class:`DofManager` in force when it</span>
 <span class="sd">    was created, so the moment that system changes -- an h-adaptivity event creating nodes and</span>
@@ -455,7 +455,7 @@
 <span class="sd">    A rebuild asked for by a constraint's connectivity re-assigns which nodes that constraint</span>
 <span class="sd">    couples, and touches nothing the lumped inertia, its inverse, the mass-proportional damping</span>
 <span class="sd">    rate or the multi-point-constraint transformation are a function of -- so those are exactly</span>
-<span class="sd">    what they were, and :meth:`NED.buildEquationSystem` keeps them here instead of assembling</span>
+<span class="sd">    what they were, and :meth:`NED.buildExplicitSystem` keeps them here instead of assembling</span>
 <span class="sd">    them again.</span>
 
 <span class="sd">    The recorded model description is what :meth:`NED._operatorsReusable` checks before it does,</span>
@@ -565,24 +565,25 @@
         <span class="c1">#: checkpointed one, since the checkpointed velocity already carries the half-step offset.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The net force of the last completed increment, which the next velocity update divides by; a</span>
-        <span class="c1">#: vector of the current equation system. None between steps, so that the first build of a step</span>
+        <span class="c1">#: vector of the current discrete system. None between steps, so that the first build of a step</span>
         <span class="c1">#: can tell a resumed step (whose checkpoint holds it) from a cold one, which forms it from the</span>
         <span class="c1">#: state of the model (see :meth:`formNetForceOfTheModelsState`).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The inertia and the damping of every degree of freedom of the current equation system, the</span>
-        <span class="c1">#: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see buildEquationSystem.</span>
+        <span class="c1">#: The inertia and the damping of every degree of freedom of the current discrete system, the</span>
+        <span class="c1">#: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see buildExplicitSystem.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The elements the increment loop evaluates (those with kernels, i.e. without contact</span>
-        <span class="c1">#: facets); filled by :meth:`buildEquationSystem`. None, not {}, so an unbuilt system fails.</span>
+        <span class="c1">#: facets); filled by :meth:`buildExplicitSystem`. None, not {}, so an unbuilt system fails.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: Lumped operators kept across a connectivity-only rebuild; see</span>
         <span class="c1">#: :class:`_ReusableExplicitOperators`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reusableOperators</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: What the model's current equation system is made of (see</span>
-        <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`): the numbering of its degrees of</span>
-        <span class="c1">#: freedom, and how the state and the results pass between the model and the vectors of the increments.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: What the model's current discrete system is made of (see</span>
+        <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`): the numbering of its degrees of</span>
+        <span class="c1">#: freedom, its constraints, and how the state and the results pass between the model and the vectors of the</span>
+        <span class="c1">#: increments.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="NED.beginStep">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.beginStep">[docs]</a>
@@ -594,7 +595,7 @@
         <span class="n">outputmanagers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OutputManagerBase</span><span class="p">],</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Start the step; see</span>
-<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. The equation</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. The discrete</span>
 <span class="sd">        system is built by the first :meth:`prepareIncrement`.</span>
 
 <span class="sd">        Parameters</span>
@@ -638,21 +639,21 @@
             <span class="k">if</span> <span class="n">modifier</span><span class="o">.</span><span class="n">initiatesTopologyChanges</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">modifier</span><span class="o">.</span><span class="n">actsOnlyAtSimulationStart</span>
         <span class="p">]</span>
 
-        <span class="c1"># Step actions before the equation system, matching NIST: nothing they do depends on it.</span>
+        <span class="c1"># Step actions before the discrete system, matching NIST: nothing they do depends on it.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtStepStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_system</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="NED.prepareIncrement">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">prepareIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">isRetry</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""The topology update, when due, and the equation system; see</span>
+<span class="w">        </span><span class="sd">"""The topology update, when due, and the discrete system; see</span>
 <span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement`.</span>
 
 <span class="sd">        The topology update is due at the start of the step, and after every</span>
 <span class="sd">        ``topology-check-frequency``-th increment. At the start of the step it runs before anything</span>
-<span class="sd">        sized by the equation system exists, so the mesh is final before the lumped mass, the</span>
+<span class="sd">        sized by the discrete system exists, so the mesh is final before the lumped mass, the</span>
 <span class="sd">        multi-point-constraint condensation and the critical time step are derived from it. It runs</span>
 <span class="sd">        here, before the next increment is proposed, because a refinement may lower the stable time</span>
 <span class="sd">        increment that increment has to use.</span>
@@ -672,14 +673,14 @@
             <span class="c1"># hAdaptivity's initialOnly markers) and the first contact search.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># The net force of the checkpoint on a resumed step, None on a cold one.</span>
             <span class="n">resumedNetForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildExplicitSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">))</span>
             <span class="k">if</span> <span class="n">resumedNetForce</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">resumedNetForce</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">):</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">"The checkpoint holds a net force of </span><span class="si">{:}</span><span class="s2"> entries, but the equation system rebuilt from "</span>
+                        <span class="s2">"The checkpoint holds a net force of </span><span class="si">{:}</span><span class="s2"> entries, but the discrete system rebuilt from "</span>
                         <span class="s2">"the resumed model has </span><span class="si">{:}</span><span class="s2">."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">resumedNetForce</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">))</span>
                     <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">resumedNetForce</span>
@@ -688,7 +689,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_energyAtStepStart</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energyOfTheModelsState</span><span class="p">()</span>
             <span class="c1"># The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.</span>
             <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforceTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_system</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">)</span>
+                <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforceTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">)</span>
 
         <span class="c1"># --- h-adaptivity, mid-run ----------------------------------------------------------------</span>
         <span class="c1"># After every topology-check-frequency-th increment, i.e. after its output: the marker reads the</span>
@@ -702,7 +703,7 @@
         <span class="p">):</span>
             <span class="k">return</span>
 
-        <span class="n">theSystem</span><span class="p">,</span> <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span>
+        <span class="n">theSystem</span><span class="p">,</span> <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span>
         <span class="n">lumpedTotalsBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_perFieldLumpedTotals</span><span class="p">()</span>
         <span class="n">momentumBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">secondOrderMomentum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
         <span class="n">kineticBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kineticEnergy</span><span class="p">(</span><span class="n">V</span><span class="p">)</span>
@@ -714,9 +715,9 @@
         <span class="k">if</span> <span class="n">meshChanged</span> <span class="ow">or</span> <span class="n">connectivityChanged</span><span class="p">:</span>
             <span class="c1"># A connectivity-only change carries solution, velocity and net force over to the new system; a</span>
             <span class="c1"># mesh change reads solution and velocity from the model, and starts the net force at zero (see</span>
-            <span class="c1"># buildEquationSystem).</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">meshChanged</span> <span class="k">else</span> <span class="n">theSystem</span><span class="p">))</span>
-            <span class="n">theSystem</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system</span>
+            <span class="c1"># buildExplicitSystem).</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildExplicitSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">meshChanged</span> <span class="k">else</span> <span class="n">theSystem</span><span class="p">))</span>
+            <span class="n">theSystem</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span>
 
         <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span>
 
@@ -735,15 +736,15 @@
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theSystem</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Adopt a (re)built equation system, and the vectors the increments work on.</span>
+<span class="w">        </span><span class="sd">"""Adopt a (re)built explicit system, and the vectors the increments work on.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        theSystem</span>
-<span class="sd">            The equation system.</span>
+<span class="sd">            The explicit system, see :meth:`buildExplicitSystem`.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_system</span> <span class="o">=</span> <span class="n">theSystem</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span> <span class="o">=</span> <span class="n">theSystem</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span> <span class="o">=</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">Minv</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">U</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">dU</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">A</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">netForce</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">internalForce</span>
@@ -790,7 +791,7 @@
 
         <span class="n">contactUpdateFrequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"contact-update-frequency"</span><span class="p">]</span>
         <span class="n">topologyCheckFrequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"topology-check-frequency"</span><span class="p">]</span>
-        <span class="n">theSystem</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span>
+        <span class="n">theSystem</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span>
         <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">netForce</span><span class="p">,</span> <span class="n">internalForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span>
 
         <span class="k">if</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"output-frequency"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
@@ -834,8 +835,8 @@
 
             <span class="k">if</span> <span class="n">connectivityChanged</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Constraint connectivity changed"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="n">theSystem</span><span class="p">))</span>
-                <span class="n">theSystem</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildExplicitSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="n">theSystem</span><span class="p">))</span>
+                <span class="n">theSystem</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span>
                 <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">netForce</span><span class="p">,</span> <span class="n">internalForce</span> <span class="o">=</span> <span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span>
@@ -955,7 +956,7 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        dirichlets</span>
-<span class="sd">            The Dirichlet boundary conditions of the step, located on the current equation system.</span>
+<span class="sd">            The Dirichlet boundary conditions of the step, located on the current discrete system.</span>
 <span class="sd">        timeIncrement</span>
 <span class="sd">            The time increment just completed.</span>
 
@@ -984,7 +985,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">formNetForceOfTheModelsState</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Form the net force a cold step starts from: that of the state the model holds,</span>
 <span class="sd">        :math:`\\boldsymbol{f}_\\mathrm{net} = \\boldsymbol{M} \\boldsymbol{a}_0 + \\boldsymbol{C} \\boldsymbol{v}_0`,</span>
-<span class="sd">        from its velocity and acceleration, read with the solution when the equation system was built, and the lumped</span>
+<span class="sd">        from its velocity and acceleration, read with the solution when the discrete system was built, and the lumped</span>
 <span class="sd">        operators; nothing is evaluated (see the module documentation, "The net force is solver state, and a step</span>
 <span class="sd">        starts from the model's state"). Zero on a degree of freedom with a prescribed motion, which has no equation of</span>
 <span class="sd">        motion, and on a multi-point-constraint slave, whose inertia and damping are folded onto its masters.</span>
@@ -1007,7 +1008,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">energyOfTheModelsState</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The energy the model holds at the start of a cold step, which its energy balance starts from (see the module</span>
 <span class="sd">        documentation, "Energy balance"): the kinetic energy of the model's velocity, read with the solution when the</span>
-<span class="sd">        equation system was built, and the internal (strain) energy the materials publish for the state the elements</span>
+<span class="sd">        discrete system was built, and the internal (strain) energy the materials publish for the state the elements</span>
 <span class="sd">        hold. Nothing is evaluated.</span>
 
 <span class="sd">        Returns</span>
@@ -1063,7 +1064,7 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        dirichlets</span>
-<span class="sd">            The Dirichlet boundary conditions of the step, located on the current equation system.</span>
+<span class="sd">            The Dirichlet boundary conditions of the step, located on the current discrete system.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1131,7 +1132,7 @@
 <span class="sd">                - the net force of this increment</span>
 <span class="sd">        """</span>
 
-        <span class="c1"># only the entities that have kernels to evaluate; see buildEquationSystem()</span>
+        <span class="c1"># only the entities that have kernels to evaluate; see buildExplicitSystem()</span>
         <span class="n">elements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span>
         <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
         <span class="n">loads</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">stepActions</span><span class="p">)</span>
@@ -1213,7 +1214,7 @@
         <span class="n">internalForce</span><span class="p">,</span> <span class="n">psi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">internalForce</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
         <span class="n">netForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">internalForce</span>
         <span class="n">netForce</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">loads</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">netForce</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-        <span class="n">netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraintForces</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">netForce</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="n">netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraintForces</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">netForce</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
         <span class="n">netForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">netForce</span><span class="p">[:]</span>
 
         <span class="c1"># Fold slave forces onto their masters here, so the next increment's Dirichlet handling sees</span>
@@ -1393,7 +1394,7 @@
 <span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`.</span>
 <span class="sd">        A constraint switched off from outside</span>
 <span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it takes no</span>
-<span class="sd">        part in the step, and its scalar variables leave the equation system with it. One that is switched on is</span>
+<span class="sd">        part in the step, and its scalar variables leave the discrete system with it. One that is switched on is</span>
 <span class="sd">        refused even while it is out of reach: it may come within reach during the step.</span>
 
 <span class="sd">        Parameters</span>
@@ -1477,13 +1478,13 @@
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.writeResultsToModel">[docs]</a>
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"write results to nodes"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Write the results of an increment to the model, through the model's layout of the equation system: the</span>
+<span class="w">        </span><span class="sd">"""Write the results of an increment to the model, through the discrete system: the</span>
 <span class="sd">        solution, its increment and the internal, inertial and damping force to the node fields, and the solution to the</span>
-<span class="sd">        scalar variables (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`),</span>
+<span class="sd">        scalar variables (see :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`),</span>
 <span class="sd">        then the velocity and the acceleration (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel`); the</span>
+<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel`); the</span>
 <span class="sd">        incremental degrees of freedom are set to zero first, from where the next increment starts them (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`).</span>
+<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients`).</span>
 
 <span class="sd">        Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity</span>
 <span class="sd">        event can fall on any increment and its interpolation reads these entries, and a restart</span>
@@ -1506,9 +1507,9 @@
 <span class="sd">            the model's as it is.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">zeroIncrementalCoefficients</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">zeroIncrementalCoefficients</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NED.updateConstraintConnectivity">
@@ -1535,7 +1536,7 @@
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        bool</span>
-<span class="sd">            Whether any constraint's DOF footprint changed, i.e. whether the equation system has to</span>
+<span class="sd">            Whether any constraint's DOF footprint changed, i.e. whether the discrete system has to</span>
 <span class="sd">            be rebuilt.</span>
 <span class="sd">        """</span>
 
@@ -1773,11 +1774,12 @@
 
         <span class="k">return</span> <span class="n">M</span><span class="p">,</span> <span class="n">Minv</span>
 
-<div class="viewcode-block" id="NED.buildEquationSystem">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.buildEquationSystem">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"build equation system"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">buildEquationSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="p">:</span> <span class="n">ExplicitSystem</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExplicitSystem</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Build the equation system and everything sized by it.</span>
+<div class="viewcode-block" id="NED.buildExplicitSystem">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.buildExplicitSystem">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"build discrete system"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">buildExplicitSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="p">:</span> <span class="n">ExplicitSystem</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExplicitSystem</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build the explicit system, the operators and vectors sized by the discrete system, and the discrete system</span>
+<span class="sd">        itself (:attr:`system`).</span>
 
 <span class="sd">        Called once before the increment loop, and again from inside it whenever a constraint reports</span>
 <span class="sd">        that its DOF footprint changed -- one method for both, so the path every model takes and the</span>
@@ -1803,7 +1805,7 @@
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        ExplicitSystem</span>
-<span class="sd">            The freshly built system.</span>
+<span class="sd">            The freshly built explicit system.</span>
 <span class="sd">        """</span>
 
         <span class="n">isRebuild</span> <span class="o">=</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -1822,13 +1824,13 @@
             <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">refreshConstraintIndices</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Creating monolithic equation system"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Creating monolithic discrete system"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">)</span>
             <span class="c1"># The numbering of the model's degrees of freedom, and how the state passes between the model and the</span>
             <span class="c1"># vectors; this solver evaluates the model's elements itself, and assembles no system matrix.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">dofManager</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildDiscreteSystem</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">dofManager</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-            <span class="s2">"total size of eq. system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
+            <span class="s2">"total size of discrete system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
             <span class="n">verbosity</span><span class="p">,</span>
         <span class="p">)</span>
@@ -1877,11 +1879,11 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">isRebuild</span><span class="p">:</span>
             <span class="c1"># After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new</span>
             <span class="c1"># nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">previous</span><span class="o">.</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">"The equation system was rebuilt with </span><span class="si">{:}</span><span class="s2"> degrees of freedom instead of </span><span class="si">{:}</span><span class="s2">. Only "</span>
+                    <span class="s2">"The discrete system was rebuilt with </span><span class="si">{:}</span><span class="s2"> degrees of freedom instead of </span><span class="si">{:}</span><span class="s2">. Only "</span>
                     <span class="s2">"a constraint's connectivity is expected to trigger a rebuild here, and that "</span>
                     <span class="s2">"cannot add or remove degrees of freedom -- so the solution and the velocity "</span>
                     <span class="s2">"cannot be carried across safely."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">previous</span><span class="o">.</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>

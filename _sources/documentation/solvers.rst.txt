@@ -9,7 +9,7 @@ Solvers
 The residual and the tangent
 ----------------------------
 
-Every entity that enters the equation system -- an element, a load, a constraint -- contributes two things: a
+Every entity that enters the discrete system -- an element, a load, a constraint -- contributes two things: a
 vector :math:`\boldsymbol{P}` to the residual, and its tangent
 :math:`\boldsymbol{K} = \partial \boldsymbol{P} / \partial \boldsymbol{U}`. The rule is the same for all of them:
 
@@ -28,8 +28,8 @@ vector :math:`\boldsymbol{P}` to the residual, and its tangent
 
 A solver sums the contributions in three loops of every iteration: ``computeElements`` over the elements,
 ``assembleLoads`` over the loads -- every load assembles its own contribution, wherever it acts (see
-:class:`~edelweissfe.stepactions.base.loadbase.LoadBase`) -- and ``assembleConstraints`` over the constraints that
-are active (see :doc:`constraints`). Summed over all entities,
+:class:`~edelweissfe.stepactions.base.loadbase.LoadBase`) -- and ``assembleConstraints`` over the constraints of
+the discrete system (see :doc:`constraints`). Summed over all entities,
 
 .. math::
 
@@ -71,70 +71,75 @@ result ``P`` of a field output, and the dynamic solvers add the inertial and dam
 (:doc:`nodefieldresults`): at a degree of freedom with a Dirichlet boundary condition and no load, it is the reaction
 force. ``NED``'s net force :math:`\boldsymbol{R}` is its own state, and is not reported.
 
-.. _model-equation-system:
+.. _model-discrete-system:
 
 What the solver asks the model
 ------------------------------
 
-A solver solves; what the equation system is made of, the model says. ``NIST``, ``NISTParallel`` and
+A solver solves; what the discrete system is made of, the model says. ``NIST``, ``NISTParallel`` and
 ``NISTPArcLength`` ask the model three questions, and know nothing of their own about what a model consists of:
 
 1. **Has the coupling of the degrees of freedom changed?** At the start of every increment, and of every retry after a
    cutback, the topology update calls :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`, before the
-   increment is proposed. If a coupling changed, the solver rebuilds its equation system before it solves the
+   increment is proposed. If a coupling changed, the solver rebuilds its discrete system before it solves the
    increment. A change of the coupling is not a change of the mesh: no node moves or appears, so the solver does not
    re-equilibrate after it (``equilibrateAfterModelChange``), and it keeps its prediction if the rebuilt system numbers
    the degrees of freedom as before (``extrapolateAcrossConnectivityChange``).
 
-2. **What is the equation system made of?** Whenever the solver (re)builds its equation system, it calls
-   :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`, which returns the layout of the system, an
-   :class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`. The solver keeps it as long as the numbering
+2. **What is the discrete system made of?** Whenever the solver (re)builds its discrete system, it calls
+   :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`, which returns the discrete system, a
+   :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. The solver keeps it as long as the numbering
    of the degrees of freedom it holds -- until the next rebuild -- and takes from it:
 
    * the numbering of the degrees of freedom (the :class:`~edelweissfe.numerics.dofmanager.DofManager`). It also
      locates the degrees of freedom of a field on a node set, those a Dirichlet boundary condition prescribes or a node
      force loads (:meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`);
    * the elements, a list of everything the solver computes like an element (``computeElements``);
+   * the constraints that take part in the discrete system, the active ones the DOF manager locates
+     (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`). The solver evaluates exactly these
+     (``assembleConstraints``), so that every constraint it evaluates has its rows in the system matrix, and every row
+     of a constraint is filled; a solver never asks a constraint whether it is active. The loops that only validate or
+     classify constraints, e.g. the check of what a solver supports, run over the constraints of the model;
    * the state the solution vector (and the velocity and acceleration of a dynamic solver) starts from after a
-     rebuild, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel`, and where the
+     rebuild, :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel`, and where the
      results of an accepted increment go,
-     :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`, with the velocity and
+     :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`, with the velocity and
      the acceleration of a dynamic solver,
-     :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel` (see
+     :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel` (see
      :doc:`nodefieldresults`);
    * the model the linear solver is set up for.
 
 3. **Is anything to be updated before the elements are computed?** In every evaluation of the model -- every Newton
    iteration, every trial state of a line search -- the solver assembles the internal forces
    (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`): it calls
-   :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`, right before it computes
+   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`, right before it computes
    the elements.
 
 The loops over the entities stay with the solver: ``NIST`` computes the elements one after the other,
 ``NISTParallel`` on all threads, each element into its own part of the residual and its own block of the system matrix
-(see :ref:`system-matrix-assembly`). A layout that updates material points loops over them through the solver's
+(see :ref:`system-matrix-assembly`). A discrete system that updates material points loops over them through the solver's
 :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`, so that they are evaluated on the same threads.
 
 The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive from ``NIST``, and build, fill and write
-back their equation systems through the layout; ``NEST`` builds its system once per step and has no topology update,
-and ``NID`` assembles its mass matrix from the model's finite elements, asks the layout which degrees of freedom
+back their discrete systems through it; ``NEST`` builds its discrete system once per step and has no topology update,
+and ``NID`` assembles its mass matrix from the model's finite elements, asks the discrete system which degrees of freedom
 carry the mass of the nodes
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`) and, if it integrates the
+(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia`) and, if it integrates the
 inertia of the entities that integrate their own at the nodes, for their lumped mass
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia`),
+(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`),
 and, at the start of a step, where the model holds the motion of these entities
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion`). At the start
+(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`). At the start
 of every step, the implicit solvers give the entities of the model that integrate their own inertia their Newmark
 parameters (:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`): ``NID`` its own, every
 quasi-static solver zero, so that a quasi-static solver is quasi-static by construction. ``NED`` takes the numbering of the
-degrees of freedom from the layout and passes the state and the results through it, keeps the net force that drives
+degrees of freedom from the discrete system and passes the state and the results through it, keeps the net force that drives
 its velocity update as its own state, and evaluates the model's finite elements in its own loop. A step of it starts
 from the velocity and the acceleration the model holds, and leaves the velocity at its end time
 (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`), so that the steps of a dynamic analysis follow each
 other whichever solver solves them.
 
 A finite element model answers as follows: its constraints update the nodes they couple (a contact constraint
-searches for the surface it touches); its equation system numbers all nodes and the active constraints with their
+searches for the surface it touches); its discrete system numbers all nodes and the active constraints with their
 scalar variables; its elements are the finite elements; every node carries its total solution from increment to
 increment; and nothing is to be updated before the elements, which evaluate the material at their quadrature points
 themselves.
@@ -144,14 +149,14 @@ A model of EdelweissMeshfree answers differently, with the same solvers:
 * Its material points move through a fixed background grid of cells, and its particles carry their kernel functions
   along. When asked for the coupling, it first assigns the material points to the cells they lie in and the particles
   to the kernel functions they reach, then lets its constraints follow.
-* Only the part of the grid that holds material points, and the nodes in reach of the particles, form the equation
-  system (the active domain). So a node set of the grid may reach beyond the equation system: a Dirichlet boundary
+* Only the part of the grid that holds material points, and the nodes in reach of the particles, form the discrete
+  system (the active domain). So a node set of the grid may reach beyond the discrete system: a Dirichlet boundary
   condition then prescribes, and a node force loads, the nodes of the set in the active domain.
 * Its elements are its finite elements, the active cells, and the particles.
 * Only finite element nodes carry a total solution from increment to increment. The material point method and RKPM
   are incremental on the current configuration -- the cells are reset and the kernel functions move with their
   particles, while the state lives in the material points and particles -- so the values at the nodes of the grid and
-  of the kernel functions are coefficients of one increment, and start every rebuilt equation system at zero.
+  of the kernel functions are coefficients of one increment, and start every rebuilt discrete system at zero.
 * Before the cells are computed, each cell interpolates the solution increment to its material points, and the
   material points evaluate their material; the cells then integrate the result.
 
@@ -337,7 +342,7 @@ system matrix either way (``systemMatrixAssembly=vij|direct``, see :ref:`system-
 assembled through the same assembly as the stiffness, kept on its sparsity pattern, and added to the effective tangent
 while it is assembled, together with the lumped damping. The
 mass and the damping are assembled at a step's start and after every topology change; when a
-contact constraint merely changes its connectivity, they are reused in the rebuilt equation
+contact constraint merely changes its connectivity, they are reused in the rebuilt discrete
 system instead (the mass copied onto the new sparsity pattern), which matters for contact problems whose candidate
 lists change on nearly every increment.
 
@@ -350,7 +355,7 @@ is assembled from it, and a time-integrated degree of freedom that receives none
 than integrated as though it had inertia.
 
 A model whose entities carry their state, and with it their inertia, in themselves is solved through the same
-layout: these entities integrate their own inertia with the solver's Newmark parameters (``inertia=entities``, the
+discrete system: these entities integrate their own inertia with the solver's Newmark parameters (``inertia=entities``, the
 default), or the solver integrates the nodes they couple with their lumped mass (``inertia=nodes``). The module
 documentation above states what each one does; material points that belong to no element are refused.
 
@@ -395,14 +400,14 @@ iteration of a predicted increment already checks convergence. Under arc length 
 parameter is predicted from the same accepted increments with the same weights, see :ref:`arc-length-control`.
 
 A prediction can lead Newton's method astray, e.g., when the path turns sharply. Two options decide what happens then
-and around rebuilds of the equation system, both off by default:
+and around rebuilds of the discrete system, both off by default:
 
 * ``retryWithoutExtrapolation``: if an extrapolated increment fails, it is attempted once more from a zero prediction
   before it is cut back. A failed increment then keeps the accepted history, and the smaller increment after the
   cutback is extrapolated from it as well. Without this option, a failed increment drops the prediction, and the
   increments up to the next accepted one start from zero.
 * ``extrapolateAcrossConnectivityChange``: a change of the connectivity, e.g., a contact search that couples other
-  nodes, rebuilds the equation system, and the increment starts from zero. With this option, it is extrapolated
+  nodes, rebuilds the discrete system, and the increment starts from zero. With this option, it is extrapolated
   nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the one the last increments
   were accepted in (compared by the digests of the two numberings,
   :attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): the last accepted increments are vectors of
@@ -413,7 +418,7 @@ Both act on a prediction: a declaration of options -- the ``*solver`` datalines,
 switches either on with ``extrapolation=off`` is refused.
 
 The last accepted increments are checkpointed with the digest of their numbering. A step that continues from a
-restart checkpoint, resumed or fallen back to (see :doc:`restart`), rebuilds its equation system at its first
+restart checkpoint, resumed or fallen back to (see :doc:`restart`), rebuilds its discrete system at its first
 increment, and extrapolates them only if the rebuilt system numbers the degrees of freedom alike: the numbering of a
 meshfree model, e.g., follows its active cells, which may have changed since the checkpoint was written.
 
@@ -532,7 +537,7 @@ Besides the element loop and the linear solve, the rows include the parts that c
 element is involved:
 
 * ``topology update``: the model modifiers (e.g. ``AMR``), then the ties and the contact catching up;
-* ``equation system rebuild``, after a change of the mesh or of a constraint's DOF footprint: ``dof manager``,
+* ``discrete system rebuild``, after a change of the mesh or of a constraint's DOF footprint: ``dof manager``,
   ``linear solver setup``, ``system matrix pattern``, ``mpc transformation build`` and ``mpc dirichlet conflict
   check``;
 * ``mpc transform system matrix``: condensing the slave DOFs of the multi-point constraints out of the system;
@@ -571,10 +576,10 @@ topology history prints that replay in a table of its own (top-level ``AMR`` row
 
 .. pprint:: solver:NED
 
-Rebuilding the equation system during a step
+Rebuilding the discrete system during a step
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-An explicit analysis with contact rebuilds its equation system while it runs: a contact search
+An explicit analysis with contact rebuilds its discrete system while it runs: a contact search
 re-assigns which nodes a constraint couples, which changes that constraint's degree-of-freedom
 footprint, and everything sized by the footprints has to follow.
 
@@ -599,7 +604,7 @@ Work per increment outside the elements
 
 An explicit increment is cheap, so the work around the element loop counts. Second-order degrees
 of freedom are updated by the central difference with mass-proportional damping, first-order ones
-by forward Euler. The damping rate and a second-order mask are formed once per equation system, so
+by forward Euler. The damping rate and a second-order mask are formed once per discrete system, so
 the update runs on whole vectors instead of indexed subsets, and gives the same result to the bit.
 
 ``NEDParallel`` - Nonlinear Explicit Dynamic (parallel)

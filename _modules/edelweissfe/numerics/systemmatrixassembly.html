@@ -328,7 +328,7 @@
 
 <span class="sd">    One assembly per Newton iteration: :meth:`beginAssembly`, then every entity writes its block (``K[entity]``, or</span>
 <span class="sd">    from a worker thread, ``K.blocksOfWorker(worker)[entity]``), then :meth:`assembledMatrix` returns the global</span>
-<span class="sd">    matrix. It is built per equation system, together with its CSR pattern, see</span>
+<span class="sd">    matrix. It is built per discrete system, together with its CSR pattern, see</span>
 <span class="sd">    :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly`.</span>
 
 <span class="sd">    ``K[entity]`` hands out the blocks of worker 0, for the entity loops in the calling thread.</span>
@@ -521,7 +521,7 @@
 <span class="w">        </span><span class="sd">"""A copy of ``matrix`` on the sparsity pattern of the system matrix, the form :meth:`addMatrix` takes: a value</span>
 <span class="sd">        array of its own, one value per entry of the pattern (zero where ``matrix`` has no entry), and the pattern</span>
 <span class="sd">        arrays of the system matrix, shared, not copied. E.g., the mass a dynamic solver assembled through this</span>
-<span class="sd">        assembly (:meth:`assembledMatrix`, whose values the next assembly overwrites), or the mass of the equation</span>
+<span class="sd">        assembly (:meth:`assembledMatrix`, whose values the next assembly overwrites), or the mass of the discrete</span>
 <span class="sd">        system before a rebuild, moved onto the pattern of the new one.</span>
 
 <span class="sd">        The copy refuses to be changed structurally (see :class:`~edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix`):</span>
@@ -675,7 +675,7 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    dofManager</span>
-<span class="sd">        The DOF manager of the equation system: the global DOF list of every entity.</span>
+<span class="sd">        The DOF manager of the discrete system: the global DOF list of every entity.</span>
 <span class="sd">    numberOfWorkers</span>
 <span class="sd">        How many threads may write blocks at the same time.</span>
 <span class="sd">    patternFillIn</span>
@@ -800,7 +800,7 @@
 <span class="sd">    every entity, added to the CSR values when the block is committed.</span>
 
 <span class="sd">    It holds what it needs of the assembly, not the assembly itself: a reference cycle would keep the whole assembly</span>
-<span class="sd">    alive until the cyclic garbage collector runs, also across a rebuild of the equation system.</span>
+<span class="sd">    alive until the cyclic garbage collector runs, also across a rebuild of the discrete system.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -850,7 +850,7 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    dofManager</span>
-<span class="sd">        The DOF manager of the equation system: the global DOF list of every entity.</span>
+<span class="sd">        The DOF manager of the discrete system: the global DOF list of every entity.</span>
 <span class="sd">    numberOfWorkers</span>
 <span class="sd">        How many threads may write blocks at the same time; one scratch array each.</span>
 <span class="sd">    patternFillIn</span>

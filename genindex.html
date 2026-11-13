@@ -325,7 +325,7 @@
         <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.assembleLoadsAtIncrementEnd">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
       </ul></li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia">assembleLumpedMassOfEntitiesWithOwnInertia() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia">assembleLumpedMassOfEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.assembler">assembler (edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly attribute)</a>
 </li>
@@ -449,12 +449,10 @@
         <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate.build">(edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate method)</a>
 </li>
       </ul></li>
-      <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.buildEquationSystem">buildEquationSystem() (edelweissfe.models.femodel.FEModel method)</a>
-
-      <ul>
-        <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.buildEquationSystem">(edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.buildDiscreteSystem">buildDiscreteSystem() (edelweissfe.models.femodel.FEModel method)</a>
 </li>
-      </ul></li>
+      <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.buildExplicitSystem">buildExplicitSystem() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
+</li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.buildFieldHierarchy">buildFieldHierarchy() (in module edelweissfe.linsolve.composition.amg)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.builtMatrices">builtMatrices() (edelweissfe.linsolve.composition.base.Preconditioner method)</a>
@@ -473,7 +471,7 @@
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.SolveRecord.capHit">capHit (edelweissfe.linsolve.composition.krylov.SolveRecord attribute)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion">carriersOfTheMotion() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion">carriersOfTheMotion() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="documentation/phenomena.html#edelweissfe.config.phenomena.carriesKineticEnergy">carriesKineticEnergy() (in module edelweissfe.config.phenomena)</a>
 </li>
@@ -799,8 +797,12 @@
 </li>
       <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">ConstraintBase (class in edelweissfe.constraints.base.constraintbase)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.constraints">constraints (edelweissfe.models.femodel.FEModel attribute)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.constraints">constraints (edelweissfe.models.discretesystem.DiscreteSystem property)</a>
+
+      <ul>
+        <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.constraints">(edelweissfe.models.femodel.FEModel attribute)</a>
 </li>
+      </ul></li>
       <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.constraintSets">constraintSets (edelweissfe.models.femodel.FEModel attribute)</a>
 </li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.constructDofVector">constructDofVector() (edelweissfe.numerics.dofmanager.DofManager method)</a>
@@ -1023,6 +1025,8 @@
 </li>
       <li><a href="documentation/rigidbodies.html#edelweissfe.utils.discretesurfacequery.DiscreteSurfaceQuery">DiscreteSurfaceQuery (class in edelweissfe.utils.discretesurfacequery)</a>
 </li>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem">DiscreteSystem (class in edelweissfe.models.discretesystem)</a>
+</li>
       <li><a href="documentation/elements.html#edelweissfe.elements.displacementelement.element.DisplacementElement">DisplacementElement (class in edelweissfe.elements.displacementelement.element)</a>
 </li>
       <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase">DisplacementElementBase (class in edelweissfe.elements.base.displacementelementbase)</a>
@@ -1047,7 +1051,7 @@
       </ul></li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager">DofManager (class in edelweissfe.numerics.dofmanager)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofManager">dofManager (edelweissfe.models.equationsystemlayout.EquationSystemLayout attribute)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.dofManager">dofManager (edelweissfe.models.discretesystem.DiscreteSystem attribute)</a>
 </li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest">dofNumberingDigest (edelweissfe.numerics.dofmanager.DofManager property)</a>
 </li>
@@ -1061,7 +1065,7 @@
       </ul></li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofStart">dofStart (edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities attribute)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia">dofsWithNodalInertia() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia">dofsWithNodalInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofvector.DofVector">DofVector (class in edelweissfe.numerics.dofvector)</a>
 </li>
@@ -1585,10 +1589,10 @@
 </li>
       </ul></li>
       <li>
-    edelweissfe.models.equationsystemlayout
+    edelweissfe.models.discretesystem
 
       <ul>
-        <li><a href="documentation/models.html#module-edelweissfe.models.equationsystemlayout">module</a>
+        <li><a href="documentation/models.html#module-edelweissfe.models.discretesystem">module</a>
 </li>
       </ul></li>
       <li>
@@ -1661,6 +1665,8 @@
         <li><a href="documentation/output.html#module-edelweissfe.outputmanagers.computetimemonitor">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     edelweissfe.outputmanagers.conditionalstop
 
@@ -1668,8 +1674,6 @@
         <li><a href="documentation/output.html#module-edelweissfe.outputmanagers.conditionalstop">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     edelweissfe.outputmanagers.ensight
 
@@ -2087,7 +2091,7 @@
 </li>
       <li><a href="documentation/utils.html#edelweissfe.utils.elementresultcollector.ElementResultCollector">ElementResultCollector (class in edelweissfe.utils.elementresultcollector)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements">elements (edelweissfe.models.equationsystemlayout.EquationSystemLayout attribute)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.elements">elements (edelweissfe.models.discretesystem.DiscreteSystem attribute)</a>
 
       <ul>
         <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.elements">(edelweissfe.models.femodel.FEModel attribute)</a>
@@ -2153,14 +2157,6 @@
 
       <ul>
         <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.entryStart">(edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly attribute)</a>
-</li>
-      </ul></li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout">EquationSystemLayout (class in edelweissfe.models.equationsystemlayout)</a>
-</li>
-      <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.equationSystemLayout">equationSystemLayout (edelweissfe.solvers.nonlinearexplicitdynamic.NED attribute)</a>
-
-      <ul>
-        <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.equationSystemLayout">(edelweissfe.solvers.nonlinearimplicitstatic.NIST attribute)</a>
 </li>
       </ul></li>
       <li><a href="documentation/journal.html#edelweissfe.journal.journal.Journal.errorMessage">errorMessage() (edelweissfe.journal.journal.Journal method)</a>
@@ -2343,7 +2339,7 @@
         <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.forget">(edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation method)</a>
 </li>
       </ul></li>
-      <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetEquationSystem">forgetEquationSystem() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
+      <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetDiscreteSystem">forgetDiscreteSystem() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetPredictionAfterFailure">forgetPredictionAfterFailure() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
@@ -2925,7 +2921,7 @@
 </li>
       <li><a href="documentation/rigidbodies.html#edelweissfe.utils.polyhedronmassproperties.PolyhedronMassProperties.mass">mass (edelweissfe.utils.polyhedronmassproperties.PolyhedronMassProperties attribute)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.materialPoints">materialPoints (edelweissfe.models.equationsystemlayout.EquationSystemLayout attribute)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.materialPoints">materialPoints (edelweissfe.models.discretesystem.DiscreteSystem attribute)</a>
 </li>
       <li><a href="documentation/materials.html#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.materialProperties">materialProperties (edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial property)</a>
 
@@ -2978,10 +2974,10 @@
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.model">model (edelweissfe.linsolve.composition.base.SetUpContext attribute)</a>
 
       <ul>
-        <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.model">(edelweissfe.models.equationsystemlayout.EquationSystemLayout attribute)</a>
+        <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.model">(edelweissfe.models.discretesystem.DiscreteSystem attribute)</a>
 </li>
       </ul></li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.modelForLinearSolver">modelForLinearSolver (edelweissfe.models.equationsystemlayout.EquationSystemLayout attribute)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.modelForLinearSolver">modelForLinearSolver (edelweissfe.models.discretesystem.DiscreteSystem attribute)</a>
 </li>
       <li><a href="documentation/modelmodifiers.html#edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase">ModelModifierBase (class in edelweissfe.modelmodifiers.base.modelmodifierbase)</a>
 </li>
@@ -3133,7 +3129,7 @@
 </li>
         <li><a href="documentation/modelmodifiers.html#module-edelweissfe.modelmodifiers.geometry.surfacesnap">edelweissfe.modelmodifiers.geometry.surfacesnap</a>
 </li>
-        <li><a href="documentation/models.html#module-edelweissfe.models.equationsystemlayout">edelweissfe.models.equationsystemlayout</a>
+        <li><a href="documentation/models.html#module-edelweissfe.models.discretesystem">edelweissfe.models.discretesystem</a>
 </li>
         <li><a href="documentation/models.html#module-edelweissfe.models.femodel">edelweissfe.models.femodel</a>
 </li>
@@ -3634,13 +3630,13 @@
 </li>
       <li><a href="documentation/exceptions.html#edelweissfe.utils.exceptions.ReachedMinIncrementSize">ReachedMinIncrementSize</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readEntryOfNodeField">readEntryOfNodeField() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.readEntryOfNodeField">readEntryOfNodeField() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.readRestart">readRestart() (edelweissfe.models.femodel.FEModel method)</a>
 </li>
       <li><a href="documentation/output.html#edelweissfe.utils.checkpoint.readRestartDataInto">readRestartDataInto() (in module edelweissfe.utils.checkpoint)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel">readStateFromModel() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel">readStateFromModel() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 
       <ul>
         <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.readStateFromModel">(edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic method)</a>
@@ -4152,6 +4148,12 @@
 </li>
       <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn">switchedOn (edelweissfe.constraints.base.constraintbase.ConstraintBase property)</a>
 </li>
+      <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.system">system (edelweissfe.solvers.nonlinearexplicitdynamic.NED attribute)</a>
+
+      <ul>
+        <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.system">(edelweissfe.solvers.nonlinearimplicitstatic.NIST attribute)</a>
+</li>
+      </ul></li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix">SystemMatrix (class in edelweissfe.linsolve.composition.systemmatrix)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.systemMatrixAssemblies">systemMatrixAssemblies (edelweissfe.solvers.nonlinearimplicitstatic.NIST attribute)</a>
@@ -4272,7 +4274,7 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints">updateMaterialPoints() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints">updateMaterialPoints() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty">updateMaterialProperty() (edelweissfe.elements.base.baseelement.BaseElement method)</a>
 
@@ -4372,7 +4374,7 @@
 </li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables">writeDofVectorToScalarVariables() (edelweissfe.numerics.dofmanager.DofManager method)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField">writeEntryOfNodeField() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeEntryOfNodeField">writeEntryOfNodeField() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.views.writeHtml">writeHtml() (in module edelweissfe.linsolve.composition.views)</a>
 </li>
@@ -4386,7 +4388,7 @@
 </li>
       <li><a href="documentation/output.html#edelweissfe.utils.checkpoint.writeRestartDataOf">writeRestartDataOf() (in module edelweissfe.utils.checkpoint)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel">writeResultsToModel() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel">writeResultsToModel() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 
       <ul>
         <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.writeResultsToModel">(edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
@@ -4398,7 +4400,7 @@
       </ul></li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector">writeScalarVariablesToDofVector() (edelweissfe.numerics.dofmanager.DofManager method)</a>
 </li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel">writeVelocityAndAccelerationToModel() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel">writeVelocityAndAccelerationToModel() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 
       <ul>
         <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeVelocityAndAccelerationToModel">(edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic method)</a>
@@ -4406,7 +4408,7 @@
         <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeVelocityAndAccelerationToModel">(edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
       </ul></li>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel">writeZeroVelocityAndAccelerationToModel() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel">writeZeroVelocityAndAccelerationToModel() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="documentation/exceptions.html#edelweissfe.utils.exceptions.WrongDomain">WrongDomain</a>
 </li>
@@ -4416,7 +4418,7 @@
 <h2 id="Z">Z</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients">zeroIncrementalCoefficients() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
+      <li><a href="documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients">zeroIncrementalCoefficients() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>

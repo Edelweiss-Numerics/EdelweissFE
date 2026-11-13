@@ -2751,7 +2751,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <section id="implementing-your-own-elements">
 <h2>Implementing your own elements<a class="headerlink" href="#implementing-your-own-elements" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.elements.base.baseelement</span></code></p>
-<p>An element follows the rule every entity of the equation system follows (see
+<p>An element follows the rule every entity of the discrete system follows (see
 <a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>): each method adds a residual contribution <code class="docutils literal notranslate"><span class="pre">P</span></code> and its tangent
 <code class="docutils literal notranslate"><span class="pre">K</span> <span class="pre">=</span> <span class="pre">dP/dU</span></code>. <code class="docutils literal notranslate"><span class="pre">computeKernels(K,</span> <span class="pre">P,</span> <span class="pre">U,</span> <span class="pre">dU,</span> <span class="pre">time,</span> <span class="pre">dT)</span></code> adds the internal forces and the stiffness matrix – the
 tangent comes first in its arguments; the load methods <code class="docutils literal notranslate"><span class="pre">computeDistributedLoad</span></code> and <code class="docutils literal notranslate"><span class="pre">computeBodyForce</span></code> add the

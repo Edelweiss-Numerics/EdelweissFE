@@ -924,7 +924,7 @@ with no logging needs simply never read the attribute.</p>
 <dt class="sig sig-object py" id="edelweissfe.linsolve.base.LinearSolver.setModel">
 <span class="sig-name descname"><span class="pre">setModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/linsolve/base.html#LinearSolver.setModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.linsolve.base.LinearSolver.setModel" title="Link to this definition"></a></dt>
 <dd><p>Receive the live model and DOF manager this solver is being asked to solve for.</p>
-<p>Called by the nonlinear solver whenever the equation system is (re)built – i.e. on the first
+<p>Called by the nonlinear solver whenever the discrete system is (re)built – i.e. on the first
 solve and again after any AMR/connectivity change. The default implementation derives and
 stores the per-field DOF-block structure (name, DOF range, nodal dimension) any field-split
 solver needs – equivalent to calling <a class="reference internal" href="#edelweissfe.linsolve.base.LinearSolver.setFieldStructure" title="edelweissfe.linsolve.base.LinearSolver.setFieldStructure"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setFieldStructure()</span></code></a> with those blocks – and keeps
@@ -938,7 +938,7 @@ get the field-structure bookkeeping for free, then do whatever else it needs.</p
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>model</strong> – The live <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">FEModel</span></code></a>.</p></li>
 <li><p><strong>dofManager</strong> – The live <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a> describing the current
-equation system’s layout.</p></li>
+discrete system’s numbering.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -5760,7 +5760,7 @@ does not know is an error (<code class="xref py py-class docutils literal notran
 <span class="sig-name descname"><span class="pre">setModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/linsolve/composition/solver.html#ComposedLinearSolver.setModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.linsolve.composition.solver.ComposedLinearSolver.setModel" title="Link to this definition"></a></dt>
 <dd><p>Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built
 for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear
-solver builds the new equation system before that.</p>
+solver builds the new discrete system before that.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>None</p>
