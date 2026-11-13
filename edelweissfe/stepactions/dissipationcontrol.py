@@ -375,6 +375,12 @@ class StepAction(ArcLengthControllerBase):
             The increment of the load parameter.
         """
 
+        # A zero increment (the equilibrium check at the start of a step, the re-equilibration after a model change)
+        # has no arc length to control: its targets are zero, so round-off alone would violate them. Iterate at a
+        # fixed load parameter.
+        if timeStep.stepProgressIncrement == 0.0:
+            return 0.0
+
         if self.displacement is None and not self.isDissipationControlled():
             return timeStep.stepProgressIncrement * self.loadParameter - self.dLambda
 
@@ -446,6 +452,10 @@ class StepAction(ArcLengthControllerBase):
             True if the increment ends at the first of the dissipation and displacement targets.
         """
 
+        # nothing is controlled in a zero increment, see computeDDLambda
+        if timeStep.stepProgressIncrement == 0.0:
+            return True
+
         if self.displacement is None and not self.isDissipationControlled():
             return True
 
@@ -504,6 +514,10 @@ class StepAction(ArcLengthControllerBase):
         dofManager
             The dof manager of the current equation system.
         """
+
+        # a zero increment would overwrite the record of the last increment (the predictor) with zeros
+        if timeStep.stepProgressIncrement == 0.0:
+            return
 
         D = self.computeDissipation()
         idcs = self._displacementIdcs(dofManager)
