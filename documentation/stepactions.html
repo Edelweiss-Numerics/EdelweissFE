@@ -61,7 +61,7 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -1227,7 +1227,7 @@ step starts (see <a class="reference internal" href="#edelweissfe.stepactions.ba
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code>(model)</p></td>
 <td><p>Is called when a step starts.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, locations)</p></td>
 <td><p>Add this load's residual contribution to <code class="docutils literal notranslate"><span class="pre">P</span></code>, and its tangent to <code class="docutils literal notranslate"><span class="pre">K</span></code>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code>(name, definition, ...)</p></td>
@@ -1296,21 +1296,21 @@ applies <span class="math notranslate nohighlight">\(f(0) + \lambda \, (f(1) - f
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/loadbase.html#LoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/loadbase.html#LoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="Link to this definition"></a></dt>
 <dd><p>Add this load’s residual contribution to <code class="docutils literal notranslate"><span class="pre">P</span></code>, and its tangent to <code class="docutils literal notranslate"><span class="pre">K</span></code>.</p>
 <p>Both are augmented, never overwritten.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
 <li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><em>SystemMatrixBlocks</em></a><em> | </em><em>None</em>) – The blocks of the global system matrix to augment: <code class="docutils literal notranslate"><span class="pre">K[entity]</span></code> hands out the block of an entity (an
 element, a cell, a particle) to add to, see
 <a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixBlocks</span></code></a>; the solver commits the last one.
 None for an explicit solver, which needs no tangent.</p></li>
-<li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
-<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment since the last converged state.</p></li>
+<li><p><strong>U_np</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment since the last converged state.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system, which locates the degrees of freedom the load acts on.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the entities in the discrete system, from which the load finds where it acts.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1357,7 +1357,7 @@ None for an explicit solver, which needs no tangent.</p></li>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code>(model)</p></td>
 <td><p>Is called when a step starts.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad" title="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad" title="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, locations)</p></td>
 <td><p>Subtract the current node loads from the residual contribution at the degrees of freedom of the field on the node set; a dead load, so without a tangent.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code>(name, definition, ...)</p></td>
@@ -1382,22 +1382,22 @@ None for an explicit solver, which needs no tangent.</p></li>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad">
-<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/nodalloadbase.html#NodalLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/nodalloadbase.html#NodalLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad" title="Link to this definition"></a></dt>
 <dd><p>Subtract the current node loads from the residual contribution at the degrees of freedom of the field
 on the node set; a dead load, so without a tangent. See
 <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p>
 <p>Only the nodes of the set that are part of the discrete system are loaded (see
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>): every node of the set in a finite
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet" title="edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>): every node of the set in a finite
 element model, those in the active domain in a meshfree one.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
 <li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><em>SystemMatrixBlocks</em></a><em> | </em><em>None</em>) – The global system matrix; untouched.</p></li>
-<li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
-<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
+<li><p><strong>U_np</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system, which locates the degrees of freedom of the node set.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the entities in the discrete system, from which the load finds where it acts.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1464,7 +1464,7 @@ loaded face, see <a class="reference internal" href="elements.html#edelweissfe.e
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code>(model)</p></td>
 <td><p>Is called when a step starts.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad" title="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad" title="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, locations)</p></td>
 <td><p>Let every element of the surface add the residual contribution of the load on its face, the negative of the external load, and its tangent; see <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code>(name, definition, ...)</p></td>
@@ -1489,18 +1489,18 @@ loaded face, see <a class="reference internal" href="elements.html#edelweissfe.e
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad">
-<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/distributedloadbase.html#DistributedLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/distributedloadbase.html#DistributedLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad" title="Link to this definition"></a></dt>
 <dd><p>Let every element of the surface add the residual contribution of the load on its face, the negative of
 the external load, and its tangent; see <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
 <li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><em>SystemMatrixBlocks</em></a><em> | </em><em>None</em>) – The global system matrix to augment; None for an explicit solver, which needs no tangent.</p></li>
-<li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
-<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
+<li><p><strong>U_np</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the entities in the discrete system, from which the load finds where it acts.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1593,7 +1593,7 @@ see <a class="reference internal" href="elements.html#edelweissfe.elements.base.
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code>(model)</p></td>
 <td><p>Is called when a step starts.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad" title="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad" title="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, locations)</p></td>
 <td><p>Let every element of the element set add the residual contribution of the body force, the negative of the external load, and its tangent; see <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code>(name, definition, ...)</p></td>
@@ -1618,18 +1618,18 @@ see <a class="reference internal" href="elements.html#edelweissfe.elements.base.
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad">
-<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/bodyloadbase.html#BodyLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/bodyloadbase.html#BodyLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad" title="Link to this definition"></a></dt>
 <dd><p>Let every element of the element set add the residual contribution of the body force, the negative of
 the external load, and its tangent; see <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
 <li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><em>SystemMatrixBlocks</em></a><em> | </em><em>None</em>) – The global system matrix to augment; None for an explicit solver, which needs no tangent.</p></li>
-<li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
-<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
+<li><p><strong>U_np</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the entities in the discrete system, from which the load finds where it acts.</p></li>
 </ul>
 </dd>
 </dl>

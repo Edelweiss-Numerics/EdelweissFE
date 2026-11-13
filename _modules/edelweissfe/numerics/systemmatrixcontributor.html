@@ -108,8 +108,8 @@
 
 <span class="sd">An entity knows its block only in its own numbering: row ``a`` and column ``b`` of the block are its ``a``-th and</span>
 <span class="sd">``b``-th degree of freedom. Where these lie in the global system (the global DOF list of the entity, see</span>
-<span class="sd">:class:`~edelweissfe.numerics.dofmanager.DofManager`), and how the blocks are stored and summed, is the business of the</span>
-<span class="sd">system matrix assembly (:mod:`edelweissfe.numerics.systemmatrixassembly`).</span>
+<span class="sd">:class:`~edelweissfe.numerics.doflocations.DofLocations`), and how the blocks are stored and summed, is the business</span>
+<span class="sd">of the system matrix assembly (:mod:`edelweissfe.numerics.systemmatrixassembly`).</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
@@ -118,7 +118,7 @@
 
 
 <div class="viewcode-block" id="denseBlockLocalEntries">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">denseBlockLocalEntries</span><span class="p">(</span><span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""The local row and column of every value of a dense ``nDof x nDof`` block, stored column-major.</span>
 
@@ -143,7 +143,7 @@
 
 
 <div class="viewcode-block" id="localEntriesOfSubBlocks">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.localEntriesOfSubBlocks">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.localEntriesOfSubBlocks">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">localEntriesOfSubBlocks</span><span class="p">(</span><span class="n">subBlocks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""The local row and column of every value of a block made of dense sub-blocks, each stored row by row, one</span>
 <span class="sd">    after the other: the layout of the constraints that couple only some of their degrees of freedom.</span>
@@ -169,7 +169,7 @@
 
 
 <div class="viewcode-block" id="countEntriesOfBlock">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">countEntriesOfBlock</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""The number of values of the block of ``entity``: ``nDof**2`` for a dense block, else the number of entries it</span>
 <span class="sd">    lists in its ``localEntriesOfBlock``. An assembly counts once per discrete system and stores where each block</span>
@@ -193,7 +193,7 @@
 
 
 <div class="viewcode-block" id="SystemMatrixContributorBase">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">SystemMatrixContributorBase</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Base class for the entities that contribute a block to the system matrix.</span>
 
@@ -258,7 +258,7 @@
         <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">localEntriesOfBlock</span> <span class="ow">is</span> <span class="n">SystemMatrixContributorBase</span><span class="o">.</span><span class="n">localEntriesOfBlock</span>
 
 <div class="viewcode-block" id="SystemMatrixContributorBase.localEntriesOfBlock">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">localEntriesOfBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""The local row and column of every value of the entity's block, in the order of the values.</span>
 
@@ -277,7 +277,7 @@
 
 
 <div class="viewcode-block" id="SystemMatrixContributorBase.shapeBlock">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">shapeBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The entity's view of the flat array of the values of its block, which it writes its tangent into.</span>
 
@@ -303,7 +303,7 @@
 
 
 <div class="viewcode-block" id="SystemMatrixEntities">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">SystemMatrixEntities</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""The entities of a discrete system as the direct CSR assembly reads them: flat arrays, the counterpart of the</span>
@@ -332,7 +332,7 @@
     <span class="n">localColumns</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
 
 <div class="viewcode-block" id="SystemMatrixEntities.ofEntities">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">ofEntities</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dofsOfEntity</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SystemMatrixEntities"</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The table of the entities, in the order of ``dofsOfEntity``.</span>

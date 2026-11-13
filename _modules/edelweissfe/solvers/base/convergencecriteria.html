@@ -208,7 +208,8 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.doflocations</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofLocations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 
 
 <div class="viewcode-block" id="FieldConvergence">
@@ -346,7 +347,7 @@
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.computeSpatialAveragedFluxes">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">theDofManager</span><span class="p">:</span> <span class="n">DofManager</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">locations</span><span class="p">:</span> <span class="n">DofLocations</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Compute the spatial average flux of every field.</span>
 
@@ -356,8 +357,9 @@
 <span class="sd">            The accumulated absolute element fluxes.</span>
 <span class="sd">        FConstraints</span>
 <span class="sd">            The accumulated absolute constraint fluxes.</span>
-<span class="sd">        theDofManager</span>
-<span class="sd">            The DofManager.</span>
+<span class="sd">        locations</span>
+<span class="sd">            The locations of the entities in the discrete system, which know the number of accumulated nodal fluxes of</span>
+<span class="sd">            every field, and whose numbering knows the indices of the fields.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -538,10 +540,10 @@
 
 <div class="viewcode-block" id="LegacyConvergenceCriterion.computeSpatialAveragedFluxes">
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.computeSpatialAveragedFluxes">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">theDofManager</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">locations</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">{</span>
-            <span class="n">field</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">F</span><span class="p">[</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">nDof</span>
-            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">nDof</span> <span class="ow">in</span> <span class="n">theDofManager</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="n">field</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">F</span><span class="p">[</span><span class="n">locations</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">nDof</span>
+            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">nDof</span> <span class="ow">in</span> <span class="n">locations</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">}</span></div>
 </div>
 
@@ -715,14 +717,14 @@
 
 <div class="viewcode-block" id="AbaqusConvergenceCriterion.computeSpatialAveragedFluxes">
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.computeSpatialAveragedFluxes">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">theDofManager</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">locations</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">{</span>
             <span class="n">field</span><span class="p">:</span> <span class="p">(</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">F</span><span class="p">[</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span>
-                <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">FConstraints</span><span class="p">[</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">F</span><span class="p">[</span><span class="n">locations</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">FConstraints</span><span class="p">[</span><span class="n">locations</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span>
             <span class="p">)</span>
             <span class="o">/</span> <span class="n">nDof</span>
-            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">nDof</span> <span class="ow">in</span> <span class="n">theDofManager</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">nDof</span> <span class="ow">in</span> <span class="n">locations</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">}</span></div>
 </div>
 

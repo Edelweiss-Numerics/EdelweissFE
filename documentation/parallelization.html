@@ -60,7 +60,7 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -136,14 +136,14 @@ However, it is RECOMMENDED to enforce a fixed number of threads by running</p>
 <h2>Array operations on the thread pool<a class="headerlink" href="#array-operations-on-the-thread-pool" title="Link to this heading"></a></h2>
 <p>The same thread pool also runs the simple array operations on arrays as long as the system matrix
 (zeroing it before the element loop, adding the scaled mass matrix to it), which numpy alone runs
-on a single thread. <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel" title="edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">forEachSliceInParallel()</span></code></a>
+on a single thread. <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel" title="edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">forEachSliceInParallel()</span></code></a>
 splits such an operation into slices of the arrays, one call per slice; the result is bitwise the
 serial one.</p>
 <p>A loop over independent entities, such as the elements that assemble the mass and the damping of the implicit
-dynamic solvers, the entities whose degrees of freedom the <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a>
-locates in the DOF vector, the entities that fill their parts of the VIJ pattern of the system matrix when the discrete
+dynamic solvers, the entities whose degrees of freedom the <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>
+locate in the DOF vector, the entities that fill their parts of the VIJ pattern of the system matrix when the discrete
 system is rebuilt, or the elements whose result arrays a field output gathers, runs in chunks of consecutive entities,
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.parallelizationutilities.mapChunksInParallel" title="edelweissfe.numerics.parallelizationutilities.mapChunksInParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">mapChunksInParallel()</span></code></a>: each call handles a whole chunk, several
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.parallelizationutilities.mapChunksInParallel" title="edelweissfe.numerics.parallelizationutilities.mapChunksInParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">mapChunksInParallel()</span></code></a>: each call handles a whole chunk, several
 chunks per thread let the pool balance chunks of unequal cost, and the results come back in the order of the entities,
 so what is assembled from them is what the serial loop assembles. The three passes over the entries of the mass
 (which of them couple only time-integrated dofs, the warning about the inertia that is discarded, zeroing it) are
@@ -171,7 +171,7 @@ which is why it can survive a long time unnoticed on a cluster, where such varia
 by a site module or a job template rather than by the user.</p>
 <p>The parallel solvers therefore compare the number of threads they are about to use against the
 number of CPUs the process is actually permitted to run on
-(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.parallelizationutilities.getNumberOfAvailableCpus" title="edelweissfe.numerics.parallelizationutilities.getNumberOfAvailableCpus"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumberOfAvailableCpus()</span></code></a>, which reads the
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.parallelizationutilities.getNumberOfAvailableCpus" title="edelweissfe.numerics.parallelizationutilities.getNumberOfAvailableCpus"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumberOfAvailableCpus()</span></code></a>, which reads the
 affinity mask and so also sees a batch scheduler’s cgroup or a <code class="docutils literal notranslate"><span class="pre">taskset</span></code>), and print a warning
 naming <code class="docutils literal notranslate"><span class="pre">OMP_PROC_BIND</span></code> when there are fewer CPUs than threads. If you see that warning, unset
 those variables for the run:</p>

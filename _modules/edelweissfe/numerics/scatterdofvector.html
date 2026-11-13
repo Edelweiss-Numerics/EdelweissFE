@@ -103,13 +103,18 @@
 <span class="c1">#  the top level directory of EdelweissFE.</span>
 <span class="c1">#  ---------------------------------------------------------------------</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span>
 
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.doflocations</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofLocations</span>
+
 
 <div class="viewcode-block" id="ScatterDofVectorTemplate">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ScatterDofVectorTemplate</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    The precomputed, immutable layout of a :class:`ScatterDofVector`:</span>
@@ -121,40 +126,39 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    entitiesInDofVector : dict</span>
-<span class="sd">        The dictionary mapping entities to their global index arrays in the `DofVector`.</span>
+<span class="sd">    locations : DofLocations</span>
+<span class="sd">        The locations of the entities, which map every entity to its global index array in the `DofVector`.</span>
 <span class="sd">    nDof : int</span>
 <span class="sd">        The total number of global degrees of freedom.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entitiesInDofVector</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-        <span class="n">sizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">values</span><span class="p">()],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locations</span><span class="p">:</span> <span class="s2">"DofLocations"</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="n">ofEntity</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">ofEntity</span>
+        <span class="n">sizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ofEntity</span><span class="o">.</span><span class="n">values</span><span class="p">()],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>
         <span class="n">total_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">sizes</span><span class="p">))</span>
 
-        <span class="n">offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">entitiesInDofVector</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ofEntity</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>
         <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">sizes</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">offsets</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
 
         <span class="c1"># map entity -&gt; (offset, size), such that a single lookup suffices for access</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">offsetMap</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="n">entity</span><span class="p">:</span> <span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span> <span class="k">for</span> <span class="n">entity</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">offsets</span><span class="p">,</span> <span class="n">sizes</span><span class="p">)</span>
-        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">offsetMap</span> <span class="o">=</span> <span class="p">{</span><span class="n">entity</span><span class="p">:</span> <span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">size</span><span class="p">)</span> <span class="k">for</span> <span class="n">entity</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ofEntity</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">offsets</span><span class="p">,</span> <span class="n">sizes</span><span class="p">)}</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">globalIndices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">total_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
 
         <span class="n">current_offset</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">for</span> <span class="n">entity</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">entity</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">ofEntity</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">globalIndices</span><span class="p">[</span><span class="n">current_offset</span> <span class="p">:</span> <span class="n">current_offset</span> <span class="o">+</span> <span class="n">n</span><span class="p">]</span> <span class="o">=</span> <span class="n">indices</span>
             <span class="n">current_offset</span> <span class="o">+=</span> <span class="n">n</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="o">=</span> <span class="n">entitiesInDofVector</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="n">locations</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span> <span class="o">=</span> <span class="n">nDof</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">totalSize</span> <span class="o">=</span> <span class="n">total_size</span></div>
 
 
 
 <div class="viewcode-block" id="ScatterDofVector">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ScatterDofVector</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    A Scatter Vector that stores data for entities contiguously.</span>
@@ -171,7 +175,7 @@
 
         <span class="n">obj</span><span class="o">.</span><span class="n">_offset_map</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">offsetMap</span>
         <span class="n">obj</span><span class="o">.</span><span class="n">_global_indices</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">globalIndices</span>
-        <span class="n">obj</span><span class="o">.</span><span class="n">_entitiesInDofVector</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">entitiesInDofVector</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">_locations</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">locations</span>
         <span class="n">obj</span><span class="o">.</span><span class="n">_nDof</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">nDof</span>
         <span class="c1">#: Plain-ndarray alias of the same buffer; see __getitem__.</span>
         <span class="n">obj</span><span class="o">.</span><span class="n">_plainView</span> <span class="o">=</span> <span class="kc">None</span>
@@ -182,7 +186,7 @@
         <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_offset_map</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"_offset_map"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_entitiesInDofVector</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"_entitiesInDofVector"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_locations</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"_locations"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"_nDof"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_global_indices</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"_global_indices"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_plainView</span> <span class="o">=</span> <span class="kc">None</span>
@@ -250,7 +254,7 @@
             <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
 
 <div class="viewcode-block" id="ScatterDofVector.copy">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.copy">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.copy">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"C"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"ScatterDofVector"</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Create a copy of this ScatterDofVector.</span>
@@ -268,8 +272,7 @@
         <span class="n">new_vec</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">ScatterDofVector</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offset_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">new_vec</span><span class="o">.</span><span class="n">_offset_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_offset_map</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entitiesInDofVector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">new_vec</span><span class="o">.</span><span class="n">_entitiesInDofVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entitiesInDofVector</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">new_vec</span><span class="o">.</span><span class="n">_locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locations</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_global_indices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">new_vec</span><span class="o">.</span><span class="n">_global_indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_global_indices</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="n">new_vec</span><span class="o">.</span><span class="n">_nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span>
@@ -277,7 +280,7 @@
 
 
 <div class="viewcode-block" id="ScatterDofVector.assembleInto">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.assembleInto">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.assembleInto">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">assembleInto</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">targetDofVector</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">absolute</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Scatter-add values into a global DOF vector.</span>
@@ -295,7 +298,7 @@
 
 
 <div class="viewcode-block" id="ScatterDofVector.toDofVector">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.toDofVector">[docs]</a>
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.toDofVector">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">toDofVector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">absolute</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"edelweissfe.numerics.dofvector.DofVector"</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Create a new global DofVector by scattering values from this scatter vector.</span>
@@ -310,7 +313,7 @@
 <span class="sd">        DofVector</span>
 <span class="sd">            A new `DofVector` containing the accumulated entries.</span>
 <span class="sd">        """</span>
-        <span class="n">new_dof_vector</span> <span class="o">=</span> <span class="n">edelweissfe</span><span class="o">.</span><span class="n">numerics</span><span class="o">.</span><span class="n">dofvector</span><span class="o">.</span><span class="n">DofVector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entitiesInDofVector</span><span class="p">)</span>
+        <span class="n">new_dof_vector</span> <span class="o">=</span> <span class="n">edelweissfe</span><span class="o">.</span><span class="n">numerics</span><span class="o">.</span><span class="n">dofvector</span><span class="o">.</span><span class="n">DofVector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locations</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">assembleInto</span><span class="p">(</span><span class="n">new_dof_vector</span><span class="p">,</span> <span class="n">absolute</span><span class="o">=</span><span class="n">absolute</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">new_dof_vector</span></div>
 </div>

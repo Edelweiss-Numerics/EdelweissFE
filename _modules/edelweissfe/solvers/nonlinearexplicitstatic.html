@@ -109,8 +109,9 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.timing</span><span class="w"> </span><span class="kn">import</span> <span class="n">createTimingDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.change</span><span class="w"> </span><span class="kn">import</span> <span class="n">Change</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
     <span class="n">VIJSystemMatrixAssembly</span><span class="p">,</span>
@@ -316,6 +317,23 @@
         <span class="c1">#: The linear solver, and the ``linsolver`` it was made for (see :meth:`selectLinearSolverForStep`).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">linSolverName</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The last accepted increment, which the parent extrapolates from; this solver does not extrapolate.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="NEST.systemMatrixAssemblyType">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.systemMatrixAssemblyType">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">systemMatrixAssemblyType</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The type of the assembly of the system matrix, see the parent: always the VIJ assembly, which this solver</span>
+<span class="sd">        has no option to choose from.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        type</span>
+<span class="sd">            :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">VIJSystemMatrixAssembly</span></div>
+
 
 <div class="viewcode-block" id="NEST.validateModelCapabilities">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.validateModelCapabilities">[docs]</a>
@@ -377,12 +395,23 @@
 
         <span class="n">model</span><span class="o">.</span><span class="n">setNewmarkParametersOfEntities</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">newmarkParametersOfEntities</span><span class="p">())</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span>
+        <span class="c1"># A step starts without a prediction; the discrete system of the step is built without one to keep.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited linearSolve()), so</span>
+        <span class="c1"># its linear solver needs the setModel the parent gives its own when the discrete system is built, see</span>
+        <span class="c1"># onNewNumbering(): a field-split solver such as blockamg raises without the field structure setModel</span>
+        <span class="c1"># supplies.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selectLinearSolverForStep</span><span class="p">()</span>
+
+        <span class="c1"># The discrete system is built once per step, and never changes: this solver has no topology update, and</span>
+        <span class="c1"># refuses what changes the connectivity.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Creating monolithic discrete system"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildDiscreteSystem</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">dofManager</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">updateDiscreteSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-            <span class="s2">"total size of discrete system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
+            <span class="s2">"total size of discrete system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
             <span class="mi">0</span><span class="p">,</span>
         <span class="p">)</span>
@@ -396,25 +425,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">rkStages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"runge-kutta-stages"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">tol</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"runge-kutta-error-tolerance"</span><span class="p">,</span> <span class="mf">1e-3</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">selectLinearSolverForStep</span><span class="p">()</span>
-        <span class="c1"># NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited</span>
-        <span class="c1"># linearSolve()), so its linear solver needs the setModel NIST gives its own: for solvers that</span>
-        <span class="c1"># derive anything beyond the plain (A, b) call -- a field-split solver such as blockamg raises</span>
-        <span class="c1"># without the field structure setModel supplies. NEST's discrete system is built once per step here</span>
-        <span class="c1"># rather than being rebuilt on connectivity changes, so one call per step is enough.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">modelForLinearSolver</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
-
-        <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createSystemMatrixAssembly</span><span class="p">(</span><span class="n">VIJSystemMatrixAssembly</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtStepStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span></div>
 
@@ -582,12 +592,12 @@
 
         <span class="n">constraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">constraints</span>
 
-        <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">PLoadsAndConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">U_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">dU_</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rkStages</span><span class="p">)]</span>
-        <span class="n">err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">PLoadsAndConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">U_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">dU_</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rkStages</span><span class="p">)]</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">err</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
         <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>

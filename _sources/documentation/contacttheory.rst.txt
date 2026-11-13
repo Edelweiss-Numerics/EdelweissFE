@@ -997,7 +997,7 @@ The constraint participates in the implicit solution through three hooks:
     changed. The model polls every constraint that is switched on -- the poll must not
     short-circuit, since every dynamic constraint relies on the call to refresh its state -- and
     classifies the outcome (:class:`~edelweissfe.models.change.Change`); the solver rebuilds the
-    ``DofManager``/sparsity pattern only when the model reports a change.
+    numbering and locations / sparsity pattern only when the model reports a change.
 
 ``computeKernels(U, dU, P, K, timeStep)`` (every Newton iteration)
     Assembles the residual contribution of the contact forces and its consistent tangent from the

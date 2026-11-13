@@ -22,7 +22,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Field outputs" href="fieldoutputmanager.html" />
-    <link rel="prev" title="Degree of Freedom (DOF) Manager and Numerics" href="dofmanager.html" /> 
+    <link rel="prev" title="Degrees of freedom: numbering and locations" href="dofnumbering.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -61,7 +61,7 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">System matrix assembly</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#the-block-of-an-entity">The block of an entity</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#the-two-paths">The two paths</a></li>
@@ -148,18 +148,19 @@ so this page describes what each costs as well as what each does.</p>
 <h2>The block of an entity<a class="headerlink" href="#the-block-of-an-entity" title="Link to this heading"></a></h2>
 <p>Every element, constraint or other entity that couples nodes contributes a block to the system matrix, and knows it
 only in its own numbering: row <code class="docutils literal notranslate"><span class="pre">a</span></code> and column <code class="docutils literal notranslate"><span class="pre">b</span></code> of the block are its <code class="docutils literal notranslate"><span class="pre">a</span></code>-th and <code class="docutils literal notranslate"><span class="pre">b</span></code>-th degree of freedom
-(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixContributorBase</span></code></a>). Where these lie in the global
-system is its global DOF list, which the <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a> numbers; the DOF manager
-knows nothing about the system matrix.</p>
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixContributorBase</span></code></a>). Where these lie in the global
+system is its location, its global DOF list, which <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a> holds for
+every entity (in the numbering of <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>); neither knows anything
+about the system matrix.</p>
 <ul class="simple">
 <li><p>By default an entity couples all its degrees of freedom: its block is the dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> matrix, stored
 column-major, as every element writes it.</p></li>
 <li><p>An entity that couples only some of its degrees of freedom (a contact constraint couples each slave node with the
 master side, but not the slave nodes with each other) lists the local row and column of every value of its block:
 it overrides
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>, and its block
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>, and its block
 is the list of the values of these entries
-(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a> is then
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a> is then
 <code class="docutils literal notranslate"><span class="pre">False</span></code>).</p></li>
 </ul>
 <p>The number of values of a block is <code class="docutils literal notranslate"><span class="pre">nDof**2</span></code> for a dense block, and the length of the list otherwise. It cannot tell
@@ -170,7 +171,7 @@ assembly never guesses it. It declares it once, by overriding the list or not: a
 and two declarations that disagree would assemble two different matrices. An extension type, which cannot inherit the
 base class (the Marmot elements, for one), declares a dense block itself, with the dense list.</p>
 <p>The entity writes its tangent into the view
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">shapeBlock()</span></code></a> makes of the values of
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">shapeBlock()</span></code></a> makes of the values of
 its block – a 2-D array for a dense block, a structured view for a list of its own.</p>
 </section>
 <section id="the-two-paths">
@@ -277,7 +278,7 @@ offsets (see <a class="reference internal" href="#two-independent-derivations-of
 (<a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker"><code class="xref py py-meth docutils literal notranslate"><span class="pre">blocksOfWorker()</span></code></a>), a scratch
 array, and adds every block to the one CSR matrix of the assembly with atomic additions, see
 <a class="reference internal" href="#one-csr-array-atomic-additions">One CSR array, atomic additions</a>. The loop deals the elements out to the workers in a fixed way
-(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers" title="edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers"><code class="xref py py-func docutils literal notranslate"><span class="pre">mapChunksOnWorkers()</span></code></a>), so that no two threads
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers" title="edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers"><code class="xref py py-func docutils literal notranslate"><span class="pre">mapChunksOnWorkers()</span></code></a>), so that no two threads
 use the same scratch array at the same time.</p></li>
 <li><p><strong>More than one matrix.</strong> The arc length method needs the tangents of its dead load and its reference
 load besides the tangent of the elements. It adds them to the tangent of the increment as blocks
@@ -397,7 +398,7 @@ CSR afterwards.</p>
 </dl>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixassembly.</span></span><span class="sig-name descname"><span class="pre">DirectCSRSystemMatrixAssembly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numberOfWorkers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patternFillIn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixassembly.html#DirectCSRSystemMatrixAssembly"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixassembly.</span></span><span class="sig-name descname"><span class="pre">DirectCSRSystemMatrixAssembly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">locations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numberOfWorkers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patternFillIn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixassembly.html#DirectCSRSystemMatrixAssembly"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly" title="Link to this definition"></a></dt>
 <dd><p>Scatter directly: every block is scattered into CSR as soon as it is committed, through a map that knows the
 CSR position of every value of every block (<a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler"><code class="xref py py-class docutils literal notranslate"><span class="pre">DirectCSRAssembler</span></code></a>).
 The CSR pattern is derived from the entities’ DOF lists; neither a value array nor index arrays of the VIJ layout
@@ -408,12 +409,12 @@ one worker the matrix agrees from run to run to round-off, not bit for bit.</p>
 <p>Every block is a zeroed scratch array: an entity that is handed its block more than once in an assembly (an
 element, then a body load on it) has each one scattered on its own. Entities that list the entries of their block
 themselves (constraints that couple only some of their degrees of freedom, see
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>) are
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>) are
 scattered entry by entry.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system: the global DOF list of every entity.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the entities in the discrete system: the global DOF list of every entity.</p></li>
 <li><p><strong>numberOfWorkers</strong> (<em>int</em>) – How many threads may write blocks at the same time; one scratch array each.</p></li>
 <li><p><strong>patternFillIn</strong> (<em>Callable</em><em> | </em><em>None</em>) – As for <a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly" title="edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly"><code class="xref py py-class docutils literal notranslate"><span class="pre">VIJSystemMatrixAssembly</span></code></a>.</p></li>
 </ul>
@@ -837,7 +838,7 @@ the next assembly overwrites, and whose pattern must not change.</p>
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixassembly.</span></span><span class="sig-name descname"><span class="pre">SystemMatrixBlocks</span></span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixassembly.html#SystemMatrixBlocks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="Link to this definition"></a></dt>
 <dd><p>Hands out the blocks of the system matrix: <code class="docutils literal notranslate"><span class="pre">K[entity]</span></code> returns the array an entity writes its block of the
 tangent into, shaped by the entity (see
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">shapeBlock()</span></code></a>). A block that is
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">shapeBlock()</span></code></a>). A block that is
 handed out must be committed to the matrix with <a class="reference internal" href="#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks.flush" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks.flush"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flush()</span></code></a>; handing out the next block commits the previous
 one, so whoever loops over entities flushes once after the loop.</p>
 <p>A block is either the entity’s own place in the matrix, which already holds what was assembled for the entity
@@ -861,11 +862,11 @@ never reads it.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixassembly.</span></span><span class="sig-name descname"><span class="pre">VIJSystemMatrixAssembly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numberOfWorkers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patternFillIn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixassembly.html#VIJSystemMatrixAssembly"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixassembly.</span></span><span class="sig-name descname"><span class="pre">VIJSystemMatrixAssembly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">locations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numberOfWorkers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patternFillIn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixassembly.html#VIJSystemMatrixAssembly"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly" title="Link to this definition"></a></dt>
 <dd><p>Stage, then gather: every block is the entity’s own slice of one value array in VIJ (COO) layout, which is
 gathered into CSR, summing the duplicates, once all blocks are written.</p>
 <p>The textbook way: every value <code class="docutils literal notranslate"><span class="pre">V[k]</span></code> of a block has its global row <code class="docutils literal notranslate"><span class="pre">I[k]</span></code> and column <code class="docutils literal notranslate"><span class="pre">J[k]</span></code>, the entity’s
-local row and column (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>)
+local row and column (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>)
 looked up in its global DOF list, and the CSR matrix is the sum of all <code class="docutils literal notranslate"><span class="pre">(I[k],</span> <span class="pre">J[k],</span> <span class="pre">V[k])</span></code>.</p>
 <p>The blocks of all workers are slices of the same array, and no two entities share a slice, so the workers need
 nothing of their own. An entity that is handed its block more than once in an assembly (an element, then a body
@@ -873,7 +874,7 @@ load on it) adds to what is there.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the discrete system: the global DOF list of every entity.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the entities in the discrete system: the global DOF list of every entity.</p></li>
 <li><p><strong>numberOfWorkers</strong> (<em>int</em>) – How many threads may write blocks at the same time.</p></li>
 <li><p><strong>patternFillIn</strong> (<em>Callable</em><em> | </em><em>None</em>) – Called with the CSR pattern (as a matrix of zeros) once it is derived; returns the entries no entity
 contributes that the pattern must have as well (e.g.
@@ -972,7 +973,7 @@ same entities; <a class="reference internal" href="#edelweissfe.numerics.systemm
 <dd class="field-odd"><p>The value array.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix">VIJSystemMatrix</a></p>
+<dd class="field-even"><p><a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix">VIJSystemMatrix</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -1064,7 +1065,7 @@ with a serial assembly to round-off, not bit for bit.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>entities</strong> – The <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixEntities</span></code></a> table; entity <code class="docutils literal notranslate"><span class="pre">e</span></code> is number
+<li><p><strong>entities</strong> – The <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixEntities</span></code></a> table; entity <code class="docutils literal notranslate"><span class="pre">e</span></code> is number
 <code class="docutils literal notranslate"><span class="pre">e</span></code> in <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.scatterBlock" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.scatterBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scatterBlock()</span></code></a>.</p></li>
 <li><p><strong>nDof</strong> – The number of rows and columns.</p></li>
 <li><p><strong>numThreads</strong> – Threads used for the pattern, the map and the zeroing, and how many may scatter at the same time
@@ -1155,7 +1156,7 @@ sort-and-sum, derived independently.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>entities</strong> – The <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixEntities</span></code></a> table.</p></li>
+<li><p><strong>entities</strong> – The <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixEntities</span></code></a> table.</p></li>
 <li><p><strong>nDof</strong> – The number of rows and columns.</p></li>
 <li><p><strong>numThreads</strong> – The number of threads; the pattern does not depend on it.</p></li>
 </ul>
@@ -1509,7 +1510,7 @@ around in the logical array but not within a flattened representation.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="dofmanager.html" class="btn btn-neutral float-left" title="Degree of Freedom (DOF) Manager and Numerics" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="dofnumbering.html" class="btn btn-neutral float-left" title="Degrees of freedom: numbering and locations" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="fieldoutputmanager.html" class="btn btn-neutral float-right" title="Field outputs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

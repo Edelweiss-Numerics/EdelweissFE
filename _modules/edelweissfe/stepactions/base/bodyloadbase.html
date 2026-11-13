@@ -107,7 +107,8 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.doflocations</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofLocations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemMatrixBlocks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.sets.elementset</span><span class="w"> </span><span class="kn">import</span> <span class="n">ElementSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.base.loadbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoadBase</span>
@@ -165,7 +166,7 @@
         <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-        <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">,</span>
+        <span class="n">locations</span><span class="p">:</span> <span class="n">DofLocations</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Let every element of the element set add the residual contribution of the body force, the negative of</span>
 <span class="sd">        the external load, and its tangent; see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.</span>
@@ -182,8 +183,8 @@
 <span class="sd">            The global solution increment.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The current time step.</span>
-<span class="sd">        dofManager</span>
-<span class="sd">            The DOF manager of the discrete system.</span>
+<span class="sd">        locations</span>
+<span class="sd">            The locations of the entities in the discrete system, from which the load finds where it acts.</span>
 <span class="sd">        """</span>
 
         <span class="n">time</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span>

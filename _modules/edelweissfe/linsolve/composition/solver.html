@@ -198,7 +198,8 @@
 <span class="sd">    Per call it finds what changed and hands it down the tree as a</span>
 <span class="sd">    :class:`~edelweissfe.linsolve.composition.base.MatrixChange`: ``"first"`` (nothing built yet), ``"model"``</span>
 <span class="sd">    (after :meth:`setModel`), ``"reload"`` (a new tree from a hot reload), ``"amr"`` (another field layout or size),</span>
-<span class="sd">    ``"pattern"`` (another number of stored entries, an O(1) proxy for the sparsity pattern), or only new values.</span>
+<span class="sd">    ``"pattern"`` (the nonlinear solver announced a new sparsity pattern, see :meth:`onNewMatrixPattern`), or only new</span>
+<span class="sd">    values.</span>
 <span class="sd">    Whether a right-hand side jumped by more than ``residualGrowthFactor`` (a new increment) is passed along too; the</span>
 <span class="sd">    Krylov solver decides what it means.</span>
 
@@ -275,8 +276,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_reloaded</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coordinateCache</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_midsideCornersCache</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="c1">#: The stored entries of the last matrix: a new count is a new sparsity pattern.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: Whether the sparsity pattern was announced to change since the last solve (:meth:`onNewMatrixPattern`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_patternChanged</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="c1">#: The right-hand side norm of the last solve, ``None`` before the first one and after a new model.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span> <span class="o">=</span> <span class="kc">None</span>
@@ -316,17 +317,27 @@
 
 <div class="viewcode-block" id="ComposedLinearSolver.setModel">
 <a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver.setModel">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">numbering</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built</span>
-<span class="sd">        for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear</span>
-<span class="sd">        solver builds the new discrete system before that."""</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span>
+<span class="sd">        for the previous model is forgotten right away (:meth:`onNewMatrixPattern`): the tree is built anew at the next</span>
+<span class="sd">        solve, and the nonlinear solver builds the new discrete system before that."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">onNewMatrixPattern</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">numbering</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coordinateCache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_midsideCornersCache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_modelChanged</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">numbering</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComposedLinearSolver.onNewMatrixPattern">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver.onNewMatrixPattern">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">onNewMatrixPattern</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Forget what the tree built for the old sparsity pattern (the hierarchies, the factorizations); the tree is</span>
+<span class="sd">        built anew at the next solve, for the reason ``"pattern"``. What is bound to the model -- the field layout, the</span>
+<span class="sd">        node coordinates -- stays."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_patternChanged</span> <span class="o">=</span> <span class="kc">True</span></div>
 
 
 <div class="viewcode-block" id="ComposedLinearSolver.coordinatesOf">
@@ -431,7 +442,7 @@
             <span class="n">reason</span> <span class="o">=</span> <span class="s2">"reload"</span>
         <span class="k">elif</span> <span class="n">fields</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span><span class="p">:</span>
             <span class="n">reason</span> <span class="o">=</span> <span class="s2">"amr"</span>
-        <span class="k">elif</span> <span class="n">A</span><span class="o">.</span><span class="n">nnz</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_patternChanged</span><span class="p">:</span>
             <span class="n">reason</span> <span class="o">=</span> <span class="s2">"pattern"</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">reason</span> <span class="o">=</span> <span class="kc">None</span>
@@ -487,11 +498,11 @@
         <span class="n">condensedDofs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">finishSolve</span><span class="p">()</span>
 
-        <span class="n">patternChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">A</span><span class="o">.</span><span class="n">nnz</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span>
+        <span class="n">patternChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_patternChanged</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_patternChanged</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span> <span class="o">=</span> <span class="n">fields</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_modelChanged</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reloaded</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">nnz</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span> <span class="o">=</span> <span class="n">residualNorm</span>
         <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_report</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">change</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>
@@ -649,7 +660,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_rootBeforeReload</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">tree</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dofManager</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbering</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reloaded</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="s2">"warning"</span><span class="p">,</span> <span class="s2">"</span><span class="si">{:}</span><span class="s2">: the tree is replaced; it is set up on this solve:</span><span class="se">\n</span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="p">))</span>
 

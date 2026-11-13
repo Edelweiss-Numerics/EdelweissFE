@@ -107,12 +107,15 @@
 <span class="sd">discrete system, see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem` and</span>
 <span class="sd">:ref:`model-discrete-system`."""</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.doflocations</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofLocations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofnumbering</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofNumbering</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
@@ -123,13 +126,15 @@
 <div class="viewcode-block" id="DiscreteSystem">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DiscreteSystem</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The discrete system of a model: which degrees of freedom it has, which elements and which constraints contribute</span>
-<span class="sd">    to it, and how the solution passes between the model and the vectors a solver iterates on.</span>
+<span class="w">    </span><span class="sd">"""The discrete system of a model: which degrees of freedom it has (its numbering), which elements and which</span>
+<span class="sd">    constraints contribute to it and where they are located in the numbering (its locations), and how the solution</span>
+<span class="sd">    passes between the model and the vectors a solver iterates on.</span>
 
 <span class="sd">    A solver asks the model for it whenever it (re)builds its discrete system</span>
 <span class="sd">    (:meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), and keeps it as long as the numbering of the</span>
-<span class="sd">    degrees of freedom it holds: until the next rebuild. The solver itself only solves; what the model is made of, the</span>
-<span class="sd">    discrete system says.</span>
+<span class="sd">    degrees of freedom it holds: until the next rebuild. A change of the connectivity that leaves the numbering as it is</span>
+<span class="sd">    only makes new locations, in a new discrete system (:meth:`withNewLocations`). A discrete system never changes. The</span>
+<span class="sd">    solver itself only solves; what the model is made of, the discrete system says.</span>
 
 <span class="sd">    This class is the discrete system of a finite element model. A model made of other entities -- EdelweissMeshfree's</span>
 <span class="sd">    material point and RKPM models, with their background cells and particles -- returns a discrete system derived from</span>
@@ -139,46 +144,111 @@
 <span class="sd">    ----------</span>
 <span class="sd">    model</span>
 <span class="sd">        The model.</span>
-<span class="sd">    dofManager</span>
-<span class="sd">        The numbering of the degrees of freedom, and the locations of the constraints that take part in the</span>
-<span class="sd">        discrete system.</span>
-<span class="sd">    elements</span>
-<span class="sd">        The elements, in the order in which the solver computes them.</span>
+<span class="sd">    locations</span>
+<span class="sd">        The locations of the elements and of the constraints that take part in the discrete system, in the numbering</span>
+<span class="sd">        of the degrees of freedom they are built on.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="s2">"FEModel"</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">elements</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="s2">"FEModel"</span><span class="p">,</span> <span class="n">locations</span><span class="p">:</span> <span class="n">DofLocations</span><span class="p">):</span>
         <span class="c1">#: The model this discrete system belongs to.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
-        <span class="c1">#: The numbering of the degrees of freedom of the discrete system; see</span>
-        <span class="c1">#: :class:`~edelweissfe.numerics.dofmanager.DofManager`.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span> <span class="o">=</span> <span class="n">dofManager</span>
-        <span class="c1">#: Everything the solver computes like an element in every evaluation of the model, see</span>
-        <span class="c1">#: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`: the finite elements of the model,</span>
-        <span class="c1">#: and in a meshfree model its cells and particles as well. A list, which a parallel solver hands out in slices</span>
-        <span class="c1">#: to its threads.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="o">=</span> <span class="n">elements</span>
+        <span class="c1">#: The locations of the elements and of the constraints in the numbering of the degrees of freedom; see</span>
+        <span class="c1">#: :class:`~edelweissfe.numerics.doflocations.DofLocations`. They are replaced by new ones, never changed</span>
+        <span class="c1">#: (see :meth:`withNewLocations`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="n">locations</span>
         <span class="c1">#: The model the linear solver is set up for (see :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`),</span>
-        <span class="c1">#: whose node fields are the ones the DOF manager numbers: here, the model itself.</span>
+        <span class="c1">#: whose node fields are the ones the numbering numbers: here, the model itself.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">modelForLinearSolver</span> <span class="o">=</span> <span class="n">model</span>
         <span class="c1">#: The material points that belong to no element, which :meth:`updateMaterialPoints` updates: none in a</span>
         <span class="c1">#: finite element model, whose elements evaluate the material at their own quadrature points.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">materialPoints</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The constraints that take part in the discrete system: the ones the DOF manager located, with their scalar</span>
-<span class="sd">        variables, when the discrete system was built or last located its constraints anew (see</span>
-<span class="sd">        :meth:`~edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices`). The solver evaluates exactly</span>
-<span class="sd">        these in every evaluation of the model, so that every constraint it evaluates has its rows in the system</span>
-<span class="sd">        matrix, and every row of a constraint is filled.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numbering</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofNumbering</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The numbering of the degrees of freedom of the discrete system, which says which node fields and scalar</span>
+<span class="sd">        variables have degrees of freedom, and the global index of each; see</span>
+<span class="sd">        :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofNumbering</span>
+<span class="sd">            The numbering the locations are built on.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">numbering</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">elements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Everything the solver computes like an element in every evaluation of the model, see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`: the finite elements of the model that</span>
+<span class="sd">        have a location, and in a meshfree model its cells and particles as well. The entities the locations hold: a</span>
+<span class="sd">        solver computes exactly what has rows in the system matrix. A list, which a parallel solver hands out in slices</span>
+<span class="sd">        to its threads.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        list</span>
-<span class="sd">            The constraints, in the order in which the DOF manager located them.</span>
+<span class="sd">            The elements, in the order in which the solver computes them.</span>
 <span class="sd">        """</span>
 
-        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfConstraintsInDofVector</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">elements</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The constraints that take part in the discrete system, i.e. the ones the locations hold, with their scalar</span>
+<span class="sd">        variables, when the discrete system was built or last got new locations (see :meth:`withNewLocations`). The</span>
+<span class="sd">        solver evaluates exactly these in every evaluation of the model, so that every constraint it evaluates has its</span>
+<span class="sd">        rows in the system matrix, and every row of a constraint is filled.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The constraints, in the order in which the locations hold them.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constraints</span>
+
+<div class="viewcode-block" id="DiscreteSystem.withNewLocations">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">withNewLocations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"DiscreteSystem"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The discrete system after a change of the connectivity that leaves the numbering as it is, e.g. the contact</span>
+<span class="sd">        search of a constraint: the same numbering, and the locations of the constraints that are active now (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.femodel.FEModel.activeConstraints`). The constraints must take part with the scalar</span>
+<span class="sd">        variables the numbering holds: a change of these needs a new numbering, built by</span>
+<span class="sd">        :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`.</span>
+
+<span class="sd">        This discrete system is not changed. The vectors of the solver refer to the locations they were wrapped with</span>
+<span class="sd">        (:meth:`~edelweissfe.numerics.doflocations.DofLocations.constructDofVector`), and the solver wraps them on the</span>
+<span class="sd">        locations of the returned discrete system, their values kept</span>
+<span class="sd">        (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`).</span>
+
+<span class="sd">        This is the one implementation. A discrete system that holds more than the numbering and the locations</span>
+<span class="sd">        extends :meth:`_newLocations`; whatever else it holds must not depend on the connectivity, or be read from</span>
+<span class="sd">        the locations, which the new discrete system holds.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DiscreteSystem</span>
+<span class="sd">            A discrete system of the same model, with the same numbering and new locations.</span>
+<span class="sd">        """</span>
+
+        <span class="n">relocated</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="n">relocated</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_newLocations</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">relocated</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_newLocations</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofLocations</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The new locations of :meth:`withNewLocations`: the current ones, with the constraints that are active now</span>
+<span class="sd">        located anew. A discrete system with entities of further kinds (e.g. particles) locates these anew too.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofLocations</span>
+<span class="sd">            The new locations.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">withNewLocationsOf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">())</span>
 
 <div class="viewcode-block" id="DiscreteSystem.readStateFromModel">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel">[docs]</a>
@@ -207,7 +277,7 @@
 
         <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">readEntryOfNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodeFieldsWithVelocity</span><span class="p">(</span><span class="n">dynamicFields</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">V</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -236,7 +306,7 @@
 <span class="sd">            The entry, one of :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">dofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">dofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DiscreteSystem.zeroIncrementalCoefficients">
@@ -287,7 +357,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">writeEntryOfNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">dU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">writeEntryOfNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DiscreteSystem.writeVelocityAndAccelerationToModel">
@@ -326,7 +396,7 @@
 <span class="sd">        the discrete system or not.</span>
 <span class="sd">        """</span>
 
-        <span class="n">zero</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">zero</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">zero</span><span class="p">,</span> <span class="n">zero</span><span class="p">)</span></div>
 
 
@@ -352,7 +422,7 @@
 <span class="sd">            The entry, one of :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_nodeFieldsWithVelocity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
@@ -396,9 +466,9 @@
 <span class="sd">            The indices of the degrees of freedom in the vectors of the discrete system, sorted.</span>
 <span class="sd">        """</span>
 
-        <span class="n">isWithNodalInertia</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">isWithNodalInertia</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="n">fieldNames</span><span class="p">:</span>
-            <span class="n">isWithNodalInertia</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">isWithNodalInertia</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">True</span>
 
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">isWithNodalInertia</span><span class="p">)</span></div>
 

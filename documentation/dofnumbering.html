@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Degree of Freedom (DOF) Manager and Numerics &mdash; EdelweissFE v22.07 documentation</title>
+  <title>Degrees of freedom: numbering and locations &mdash; EdelweissFE v22.07 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
@@ -60,9 +60,13 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Degree of Freedom (DOF) Manager and Numerics</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.numerics.dofmanager">DofManager</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager"><code class="docutils literal notranslate"><span class="pre">DofManager</span></code></a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Degrees of freedom: numbering and locations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.numerics.dofnumbering">DofNumbering</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering"><code class="docutils literal notranslate"><span class="pre">DofNumbering</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.numerics.doflocations">DofLocations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations"><code class="docutils literal notranslate"><span class="pre">DofLocations</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.numerics.dofvector">DofVector</a><ul>
@@ -146,9 +150,9 @@
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
-      <li class="breadcrumb-item active">Degree of Freedom (DOF) Manager and Numerics</li>
+      <li class="breadcrumb-item active">Degrees of freedom: numbering and locations</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/documentation/dofmanager.rst.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/documentation/dofnumbering.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -156,60 +160,119 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="degree-of-freedom-dof-manager-and-numerics">
-<h1>Degree of Freedom (DOF) Manager and Numerics<a class="headerlink" href="#degree-of-freedom-dof-manager-and-numerics" title="Link to this heading"></a></h1>
-<p>The <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics</span></code> package provides core data structures and managers for global discrete systems in EdelweissFE.</p>
-<p>The DOF manager numbers the degrees of freedom: every node field, scalar variable and entity gets its indices in the
-global DOF vector. It knows nothing about the system matrix. How the blocks of the entities – each given in the
-entity’s own numbering by <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixContributorBase</span></code></a> – become
-the global matrix is the business of the system matrix assembly, see <a class="reference internal" href="assembly.html#system-matrix-assembly"><span class="std std-ref">System matrix assembly</span></a>.</p>
-<section id="module-edelweissfe.numerics.dofmanager">
-<span id="dofmanager"></span><h2>DofManager<a class="headerlink" href="#module-edelweissfe.numerics.dofmanager" title="Link to this heading"></a></h2>
-<p>This module contains important classes for describing the global discrete system by means of a sparse system.</p>
+  <section id="degrees-of-freedom-numbering-and-locations">
+<h1>Degrees of freedom: numbering and locations<a class="headerlink" href="#degrees-of-freedom-numbering-and-locations" title="Link to this heading"></a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics</span></code> package provides core data structures for global discrete systems in EdelweissFE.</p>
+<p>A discrete system has two lifetimes, and each has its own immutable object. The words below are used in the code, the
+docstrings and these pages in exactly this meaning.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 52.0%" />
+<col style="width: 30.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Word</p></th>
+<th class="head"><p>Meaning</p></th>
+<th class="head"><p>Object</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>connectivity</p></td>
+<td><p>Which nodes an entity touches (for a contact: which it couples now). The <em>IEN</em> array of the textbooks.</p></td>
+<td><p>the entities of the model</p></td>
+</tr>
+<tr class="row-odd"><td><p>numbering</p></td>
+<td><p>The global index of every degree of freedom of a node field or a scalar variable. The <em>ID</em> array of Hughes –
+but every degree of freedom is numbered, a prescribed one included.</p></td>
+<td><p><a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a></p></td>
+</tr>
+<tr class="row-even"><td><p>location of an entity</p></td>
+<td><p>The global indices of the entity’s local degrees of freedom, <code class="docutils literal notranslate"><span class="pre">locations[entity]</span></code>: never a position in
+space. The <em>LM</em> array: the ID array applied to the IEN array.</p></td>
+<td><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>indices</p></td>
+<td><p>Any other set of global indices: a node set’s, the Dirichlet degrees of freedom, the slaves of a multi-point
+constraint.</p></td>
+<td><p>whoever uses them</p></td>
+</tr>
+</tbody>
+</table>
+<p>The numbering changes with the mesh, and when scalar variables (e.g. the Lagrange multipliers of constraints) enter or
+leave the discrete system. The locations change when the connectivity changes: a contact search couples other nodes,
+and the numbering stays. Neither object is ever changed: a change makes a new one. A new
+<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a> on the same
+<a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a> is what
+<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations" title="edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">withNewLocations()</span></code></a> gives; a change of the numbering needs a
+new discrete system, built by the model.</p>
+<p>Every entity of the discrete system is located. An entity that couples a field its node does not have, or a scalar
+variable the numbering does not number, is an error of the model: it is reported, naming the entity and what is
+missing, when the locations are made.</p>
+<p><code class="docutils literal notranslate"><span class="pre">locations[entity]</span></code> is the one way to read the location of a single entity, <code class="docutils literal notranslate"><span class="pre">entity</span> <span class="pre">in</span> <span class="pre">locations</span></code> tells whether it
+has one; the consumers that handle all entities at once (the system matrix assembly, the layout of the scatter
+vectors) read the mapping of all of them, <code class="xref py py-attr docutils literal notranslate"><span class="pre">ofEntity</span></code>. The number
+of accumulated fluxes per field, which the convergence criteria compare the residual with, is computed from the
+entities of the locations when it is first asked for, so that new locations always have correct counts and a solver
+without convergence criteria never pays. A vector (<a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofVector</span></code></a>) refers to the
+locations it was wrapped with; for new locations on the same numbering it is wrapped on them, its values kept
+(<a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector.onLocations" title="edelweissfe.numerics.dofvector.DofVector.onLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onLocations()</span></code></a>).</p>
+<p>The numbering knows nothing about the entities, and neither of the two knows anything about the system matrix. How
+the blocks of the entities – each given in the entity’s own numbering by
+<a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixContributorBase</span></code></a> – become the global matrix is the
+business of the system matrix assembly, which reads the locations, see <a class="reference internal" href="assembly.html#system-matrix-assembly"><span class="std std-ref">System matrix assembly</span></a>.</p>
+<section id="module-edelweissfe.numerics.dofnumbering">
+<span id="dofnumbering"></span><h2>DofNumbering<a class="headerlink" href="#module-edelweissfe.numerics.dofnumbering" title="Link to this heading"></a></h2>
+<p>The numbering of the degrees of freedom of a discrete system: which node fields and scalar variables have degrees of
+freedom, and which global index each of them gets. In the vocabulary of the textbooks, the ID array.</p>
 <dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofmanager.</span></span><span class="sig-name descname"><span class="pre">DofManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodeFields</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scalarVariables</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">constraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initializeAccumulatedNodalFluxesFieldwise</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofnumbering.</span></span><span class="sig-name descname"><span class="pre">DofNumbering</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodeFields</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scalarVariables</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>The DofManager coordinates the global discrete system structure.</p>
+<p>The numbering of the degrees of freedom of a discrete system: the global index of every degree of freedom of every
+node field and of every scalar variable, the <em>ID array</em> of the textbooks. Unlike the ID array of a textbook, every
+degree of freedom is numbered, a prescribed one included.</p>
 <dl class="simple">
-<dt>Specifically, <cite>DofManager</cite>:</dt><dd><ul class="simple">
-<li><p>Analyzes the simulation domain (nodes, scalar variables, elements, constraints, and node sets).</p></li>
-<li><p>Collects and assigns global Degree-of-Freedom (DOF) indices for node fields and scalar variables.</p></li>
-<li><p>Manages entity-to-index mappings for fast scatter/gather operations: the global DOF list of every element and
-constraint, from which a system matrix assembly derives where each block goes.</p></li>
-<li><p>Calculates accumulated elemental/constraint fluxes fieldwise for convergence tests.</p></li>
-<li><p>Constructs domain-aware <cite>DofVector</cite> and <cite>ScatterDofVector</cite> instances.</p></li>
+<dt>Specifically, <cite>DofNumbering</cite>:</dt><dd><ul class="simple">
+<li><p>Numbers the degrees of freedom of node fields, field after field and node after node, followed by those of the
+scalar variables.</p></li>
+<li><p>Locates the degrees of freedom of a field on the nodes of a node set, e.g. those a Dirichlet boundary condition
+prescribes.</p></li>
+<li><p>Passes the values between the node fields and the scalar variables, and a <code class="xref py py-class docutils literal notranslate"><span class="pre">DofVector</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
+<p>It knows nothing of the entities that couple the degrees of freedom: where an element or a constraint finds its
+degrees of freedom is the business of <a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>, which is built on a
+numbering.</p>
+<p>A numbering is immutable: it is determined by its parameters, and never changes. A model whose degrees of freedom
+change – a mesh refinement, a Lagrange multiplier entering the system – is numbered anew, by a new
+<cite>DofNumbering</cite>.</p>
 <dl class="field-list">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>nodeFields</strong> (<em>list</em><em> of </em><a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The list of NodeFields to be represented in the DofVector structure.</p></li>
 <li><p><strong>scalarVariables</strong> (<em>list</em><em> of </em><a class="reference internal" href="variables.html#edelweissfe.variables.scalarvariable.ScalarVariable" title="edelweissfe.variables.scalarvariable.ScalarVariable"><em>ScalarVariable</em></a><em>, </em><em>optional</em>) – The list of ScalarVariables to be represented in the DofVector structure.</p></li>
-<li><p><strong>elements</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Elements for which DOF index mappings will be created.</p></li>
-<li><p><strong>constraints</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Constraints for which DOF index mappings will be created.</p></li>
-<li><p><strong>nodeSets</strong> (<em>list</em><em> of </em><a class="reference internal" href="sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>NodeSet</em></a><em>, </em><em>optional</em>) – The list of NodeSets for which DOF index mappings will be created.</p></li>
-<li><p><strong>initializeAccumulatedNodalFluxesFieldwise</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to compute accumulated nodal fluxes fieldwise during construction. Default is True.</p></li>
+<li><p><strong>nodeSets</strong> (<em>list</em><em> of </em><a class="reference internal" href="sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>NodeSet</em></a><em>, </em><em>optional</em>) – The list of NodeSets for which the degrees of freedom are located up front, see <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet" title="edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl>
-<dt><strong>dofNumberingDigest</strong></dt><dd><p>A digest, a hexadecimal string, of what decides the index of every degree of freedom: for every field, its
-name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and
-the names of the scalar variables, which follow, in the order they are numbered. Two discrete systems with the
-same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other –
-e.g., before and after a rebuild caused by a contact search, which changes the coupling of the degrees of
-freedom but not their numbering. The scalar variables are named, not counted: they are those of the
-constraints switched on, which a constraint may change within a step (switched from outside, or by itself), so
-that two systems with as many scalar variables may number different ones.</p>
+<dt><strong>digest</strong></dt><dd><p>A digest of what decides the index of every degree of freedom, a hexadecimal string over, for every field,
+its name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered,
+and over the names of the scalar variables, which follow, in the order they are numbered. Two numberings with
+the same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other
+– e.g., the vectors of a restart checkpoint and the numbering of the resumed model, which is built anew. The
+scalar variables are named, not counted: they are those of the constraints that take part, which a constraint
+may change by itself, by coming within reach or leaving it, so that two numberings with as many scalar
+variables may number different ones.</p>
 <p>The digest names the nodes by their labels, so it is the same in every run of a model: a restart checkpoint
-holds it together with the vectors it numbers. Computed at the first request; the numbering of a DofManager
+holds it together with the vectors it numbers. Computed at the first request; a DofNumbering
 does not change.</p>
 </dd>
-<dt><strong>indexToHostObjectMapping</strong></dt><dd><p>The node of every index of a field variable in the DofVector, built on first use: only the report of the
-largest residual of an implicit solver reads it (through <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector()</span></code></a>), while building it
-costs a pass over every degree of freedom, which a DOF manager that is never asked – one of the many an explicit
+<dt><strong>indexToHostObjectMapping</strong></dt><dd><p>The node of every index of a field variable in the DofVector, built on first use. Only the report of the
+largest residual of an implicit solver reads it (through <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.getNodeForIndexInDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector()</span></code></a>), while building it
+costs a pass over every degree of freedom, which a numbering that is never asked – one of the many an explicit
 solver builds over a run, say – does not pay.</p>
 </dd>
 </dl>
@@ -218,50 +281,29 @@ solver builds over a run, say – does not pay.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.constructDofVector" title="edelweissfe.numerics.dofmanager.DofManager.constructDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constructDofVector</span></code></a>()</p></td>
-<td><p>Construct a vector with size=nDof and which has knowledge about the location of each entity.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector</span></code></a>(index)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.getNodeForIndexInDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector</span></code></a>(index)</p></td>
 <td><p>Find the node for a given index in the discrete system.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">locateFieldOnNodeSet</span></code></a>(field, nodeSet)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet" title="edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">locateFieldOnNodeSet</span></code></a>(field, nodeSet)</p></td>
 <td><p>Where the degrees of freedom of a field on the nodes of a node set lie in the DofVector, e.g. those a Dirichlet boundary condition prescribes, or those a node force acts on.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices" title="edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refreshConstraintIndices</span></code></a>(constraints)</p></td>
-<td><p>Re-locate the constraints' degrees of freedom after their connectivity changed.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToNodeField" title="edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToNodeField</span></code></a>(dofVector, ...[, ...])</p></td>
+<td><p>Write the values of a NodeField from the respective locations in a given DofVector; the counterpart of <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.writeNodeFieldToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector()</span></code></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField" title="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToNodeField</span></code></a>(dofVector, ...[, ...])</p></td>
-<td><p>Write the values of a NodeField from the respective locations in a given DofVector; the counterpart of <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector()</span></code></a>.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToScalarVariables" title="edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToScalarVariables"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToScalarVariables</span></code></a>(dofVector)</p></td>
+<td><p>Set the values of the scalar variables of this discrete system from their locations in a given DofVector; the counterpart of <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.writeScalarVariablesToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector()</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables" title="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToScalarVariables</span></code></a>(dofVector)</p></td>
-<td><p>Set the values of the scalar variables of this discrete system from their locations in a given DofVector; the counterpart of <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector()</span></code></a>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector</span></code></a>(dofVector, ...[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.writeNodeFieldToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector</span></code></a>(dofVector, ...[, ...])</p></td>
 <td><p>Write the current values of an entire NodeField to the respective locations in a given DofVector.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector</span></code></a>(dofVector)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.writeScalarVariablesToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector</span></code></a>(dofVector)</p></td>
 <td><p>Write the values of the scalar variables of this discrete system to their locations in a given DofVector.</p></td>
 </tr>
 </tbody>
 </table>
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.constructDofVector">
-<span class="sig-name descname"><span class="pre">constructDofVector</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.constructDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.constructDofVector" title="Link to this definition"></a></dt>
-<dd><p>Construct a vector with size=nDof and which has knowledge about
-the location of each entity.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A DofVector.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector">
-<span class="sig-name descname"><span class="pre">getNodeForIndexInDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.getNodeForIndexInDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.getNodeForIndexInDofVector">
+<span class="sig-name descname"><span class="pre">getNodeForIndexInDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering.getNodeForIndexInDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.getNodeForIndexInDofVector" title="Link to this definition"></a></dt>
 <dd><p>Find the node for a given index in the discrete system.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -277,8 +319,8 @@ the location of each entity.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet">
-<span class="sig-name descname"><span class="pre">locateFieldOnNodeSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSet</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.locateFieldOnNodeSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet">
+<span class="sig-name descname"><span class="pre">locateFieldOnNodeSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSet</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering.locateFieldOnNodeSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet" title="Link to this definition"></a></dt>
 <dd><p>Where the degrees of freedom of a field on the nodes of a node set lie in the DofVector, e.g. those a
 Dirichlet boundary condition prescribes, or those a node force acts on.</p>
 <p>Only the nodes whose field is part of this discrete system count. In a finite element model, these are all
@@ -310,46 +352,21 @@ node the components of the field.</p></li>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices">
-<span class="sig-name descname"><span class="pre">refreshConstraintIndices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraints</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.refreshConstraintIndices"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices" title="Link to this definition"></a></dt>
-<dd><p>Re-locate the constraints’ degrees of freedom after their connectivity changed.</p>
-<p>A contact search re-assigns which nodes a constraint couples. That changes the constraints’
-DOF footprints and nothing else: no node, field, scalar variable or element is touched, so
-the DOF numbering and every element’s indices stay valid, and only the constraint-derived
-bookkeeping has to be recomputed – by the same methods, in the same order, as the
-constructor computed it. That is a small fraction of what constructing a DofManager for the
-same model costs, and it is the whole reason this method exists rather than a second
-constructor call.</p>
-<p>This does NOT re-derive the degree-of-freedom layout itself: the node fields and the scalar
-variables keep the indices they were given. A change that moves those – a mesh refinement,
-a constraint gaining a scalar variable of its own – is not a connectivity change and needs
-a new DofManager.</p>
-<p>The merged entity mapping is rebuilt as a new dict object on purpose: consumers cache plans
-keyed on its identity (the scatter template, the element loop’s gather plan), and a mapping
-mutated in place would leave those plans silently stale.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>constraints</strong> (<em>list</em>) – The constraints, with their current connectivity.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField">
-<span class="sig-name descname"><span class="pre">writeDofVectorToNodeField</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeField</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resultName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSet</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.writeDofVectorToNodeField"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToNodeField">
+<span class="sig-name descname"><span class="pre">writeDofVectorToNodeField</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeField</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resultName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSet</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering.writeDofVectorToNodeField"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToNodeField" title="Link to this definition"></a></dt>
 <dd><p>Write the values of a NodeField from the respective locations in a given DofVector; the counterpart of
-<a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector()</span></code></a>.</p>
+<a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.writeNodeFieldToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dofVector</strong> (<a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The source DofVector.</p></li>
-<li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The NodeField to get the updated values. Written as a whole, it must be the one this DofManager numbers
-(see <code class="xref py py-attr docutils literal notranslate"><span class="pre">numberedNodeFields</span></code>); written on a node set, any node field of a field this DofManager numbers,
-since its rows are then found by node.</p></li>
+<li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The NodeField to get the updated values. Written as a whole, it must be the one this DofNumbering numbers
+(see <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.numberedNodeFields" title="edelweissfe.numerics.dofnumbering.DofNumbering.numberedNodeFields"><code class="xref py py-attr docutils literal notranslate"><span class="pre">numberedNodeFields</span></code></a>); written on a node set, any node field of a field this DofNumbering
+numbers, since its rows are then found by node.</p></li>
 <li><p><strong>resultName</strong> (<em>str</em>) – The entry of the NodeField to write, one of
 <a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">NodeField.ENTRIES</span></code></a>.</p></li>
 <li><p><strong>nodeSet</strong> (<a class="reference internal" href="sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>NodeSet</em></a>) – The NodeSet to write: its nodes whose field is part of this discrete system (see
-<a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>); the other rows of the NodeField keep their values. If None, all nodes of the
+<a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet" title="edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>); the other rows of the NodeField keep their values. If None, all nodes of the
 NodeField are written.</p></li>
 </ul>
 </dd>
@@ -362,7 +379,7 @@ NodeField are written.</p></li>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>KeyError</strong> – If the entry is not one a node field holds.</p></li>
-<li><p><strong>ValueError</strong> – If this DofManager does not number the field, or, written as a whole, numbers another NodeField of that
+<li><p><strong>ValueError</strong> – If this DofNumbering does not number the field, or, written as a whole, numbers another NodeField of that
 name.</p></li>
 </ul>
 </dd>
@@ -370,10 +387,10 @@ name.</p></li>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables">
-<span class="sig-name descname"><span class="pre">writeDofVectorToScalarVariables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.writeDofVectorToScalarVariables"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToScalarVariables">
+<span class="sig-name descname"><span class="pre">writeDofVectorToScalarVariables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering.writeDofVectorToScalarVariables"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToScalarVariables" title="Link to this definition"></a></dt>
 <dd><p>Set the values of the scalar variables of this discrete system from their locations in a given
-DofVector; the counterpart of <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector()</span></code></a>. A scalar variable this DofManager
+DofVector; the counterpart of <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.writeScalarVariablesToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector()</span></code></a>. A scalar variable this DofNumbering
 does not number keeps its value.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -383,20 +400,20 @@ does not number keeps its value.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector">
-<span class="sig-name descname"><span class="pre">writeNodeFieldToDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeField</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resultName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSet</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.writeNodeFieldToDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.writeNodeFieldToDofVector">
+<span class="sig-name descname"><span class="pre">writeNodeFieldToDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeField</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resultName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSet</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering.writeNodeFieldToDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeNodeFieldToDofVector" title="Link to this definition"></a></dt>
 <dd><p>Write the current values of an entire NodeField to the respective locations in a given DofVector.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dofVector</strong> (<a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The result DofVector.</p></li>
-<li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The NodeField holding the values. Read as a whole, it must be the one this DofManager numbers (see
-<code class="xref py py-attr docutils literal notranslate"><span class="pre">numberedNodeFields</span></code>); read on a node set, any node field of a field this DofManager numbers, since
+<li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The NodeField holding the values. Read as a whole, it must be the one this DofNumbering numbers (see
+<a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.numberedNodeFields" title="edelweissfe.numerics.dofnumbering.DofNumbering.numberedNodeFields"><code class="xref py py-attr docutils literal notranslate"><span class="pre">numberedNodeFields</span></code></a>); read on a node set, any node field of a field this DofNumbering numbers, since
 its rows are then found by node.</p></li>
 <li><p><strong>resultName</strong> (<em>str</em>) – The entry of the NodeField to read, one of
 <a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">NodeField.ENTRIES</span></code></a>.</p></li>
 <li><p><strong>NodeSet</strong> – The NodeSet to consider: its nodes whose field is part of this discrete system (see
-<a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>). If None, all nodes of the NodeField are considered.</p></li>
+<a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet" title="edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>). If None, all nodes of the NodeField are considered.</p></li>
 <li><p><strong>nodeSet</strong> (<a class="reference internal" href="sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>NodeSet</em></a>)</p></li>
 </ul>
 </dd>
@@ -409,17 +426,17 @@ its rows are then found by node.</p></li>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><strong>KeyError</strong> – If the entry is not one a node field holds.</p></li>
-<li><p><strong>ValueError</strong> – If this DofManager does not number the field, or, read as a whole, numbers another NodeField of that name.</p></li>
+<li><p><strong>ValueError</strong> – If this DofNumbering does not number the field, or, read as a whole, numbers another NodeField of that name.</p></li>
 </ul>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector">
-<span class="sig-name descname"><span class="pre">writeScalarVariablesToDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.writeScalarVariablesToDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.writeScalarVariablesToDofVector">
+<span class="sig-name descname"><span class="pre">writeScalarVariablesToDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofVector</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering.writeScalarVariablesToDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.writeScalarVariablesToDofVector" title="Link to this definition"></a></dt>
 <dd><p>Write the values of the scalar variables of this discrete system to their locations in a given
-DofVector. Only the scalar variables this DofManager numbers are written: those of a constraint that is
+DofVector. Only the scalar variables this DofNumbering numbers are written: those of a constraint that is
 switched off are not part of the discrete system.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -434,111 +451,198 @@ switched off are not part of the discrete system.</p>
 </dl>
 </dd></dl>
 
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.accumulatedConstraintNDof">
-<span class="sig-name descname"><span class="pre">accumulatedConstraintNDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.accumulatedConstraintNDof" title="Link to this definition"></a></dt>
-<dd><p>Accumulated number of constraint DOFs (= sum of constraint vector sizes)</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.accumulatedElementNDof">
-<span class="sig-name descname"><span class="pre">accumulatedElementNDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.accumulatedElementNDof" title="Link to this definition"></a></dt>
-<dd><p>Accumulated number of element DOFs (= sum of element vector sizes)</p>
-</dd></dl>
-
 <dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dofNumberingDigest</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.dofNumberingDigest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest" title="Link to this definition"></a></dt>
-<dd><p>for every field, its
-name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and
-the names of the scalar variables, which follow, in the order they are numbered. Two discrete systems with the
-same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other –
-e.g., before and after a rebuild caused by a contact search, which changes the coupling of the degrees of
-freedom but not their numbering. The scalar variables are named, not counted: they are those of the
-constraints switched on, which a constraint may change within a step (switched from outside, or by itself), so
-that two systems with as many scalar variables may number different ones.</p>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.digest">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">digest</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering.digest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.digest" title="Link to this definition"></a></dt>
+<dd><p>A digest of what decides the index of every degree of freedom, a hexadecimal string over, for every field,
+its name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered,
+and over the names of the scalar variables, which follow, in the order they are numbered. Two numberings with
+the same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other
+– e.g., the vectors of a restart checkpoint and the numbering of the resumed model, which is built anew. The
+scalar variables are named, not counted: they are those of the constraints that take part, which a constraint
+may change by itself, by coming within reach or leaving it, so that two numberings with as many scalar
+variables may number different ones.</p>
 <p>The digest names the nodes by their labels, so it is the same in every run of a model: a restart checkpoint
-holds it together with the vectors it numbers. Computed at the first request; the numbering of a DofManager
+holds it together with the vectors it numbers. Computed at the first request; a DofNumbering
 does not change.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A digest, a hexadecimal string, of what decides the index of every degree of freedom</p>
-</dd>
-</dl>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.fields">
-<span class="sig-name descname"><span class="pre">fields</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.fields" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.fields">
+<span class="sig-name descname"><span class="pre">fields</span></span><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.fields" title="Link to this definition"></a></dt>
 <dd><p>The list of field names in the DofVector</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfConstraintsInDofVector">
-<span class="sig-name descname"><span class="pre">idcsOfConstraintsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfConstraintsInDofVector" title="Link to this definition"></a></dt>
-<dd><p>Dictionary mapping a constraint to its indices in the DofVector</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfElementsInDofVector">
-<span class="sig-name descname"><span class="pre">idcsOfElementsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfElementsInDofVector" title="Link to this definition"></a></dt>
-<dd><p>Dictionary mapping an element to its indices in the DofVector</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldVariablesInDofVector">
-<span class="sig-name descname"><span class="pre">idcsOfFieldVariablesInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldVariablesInDofVector" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.idcsOfFieldVariablesInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfFieldVariablesInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.idcsOfFieldVariablesInDofVector" title="Link to this definition"></a></dt>
 <dd><p>Dictionary mapping nodal field variables to their indices in the DofVector</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldsInDofVector">
-<span class="sig-name descname"><span class="pre">idcsOfFieldsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfFieldsInDofVector" title="Link to this definition"></a></dt>
-<dd><p>Dictionary mapping field names to all indices in the DofVector</p>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.idcsOfFieldsInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfFieldsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.idcsOfFieldsInDofVector" title="Link to this definition"></a></dt>
+<dd><p>Dictionary mapping field names to all indices (a slice) in the DofVector</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfNodeFieldsInDofVector">
-<span class="sig-name descname"><span class="pre">idcsOfNodeFieldsInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfNodeFieldsInDofVector" title="Link to this definition"></a></dt>
-<dd><p>Dictionary mapping a complete NodeField to all its indices in the DofVector</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.idcsOfScalarVariablesInDofVector">
-<span class="sig-name descname"><span class="pre">idcsOfScalarVariablesInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.idcsOfScalarVariablesInDofVector" title="Link to this definition"></a></dt>
-<dd><p>Dictionary mapping scalar variables to all indices in the DofVector</p>
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.idcsOfScalarVariablesInDofVector">
+<span class="sig-name descname"><span class="pre">idcsOfScalarVariablesInDofVector</span></span><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.idcsOfScalarVariablesInDofVector" title="Link to this definition"></a></dt>
+<dd><p>Dictionary mapping scalar variables to their index in the DofVector</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">indexToHostObjectMapping</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="points.html#edelweissfe.points.node.Node" title="edelweissfe.points.node.Node"><span class="pre">Node</span></a><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.indexToHostObjectMapping"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping" title="Link to this definition"></a></dt>
-<dd><p>only the report of the
-largest residual of an implicit solver reads it (through <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector()</span></code></a>), while building it
-costs a pass over every degree of freedom, which a DOF manager that is never asked – one of the many an explicit
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.indexToHostObjectMapping">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">indexToHostObjectMapping</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="points.html#edelweissfe.points.node.Node" title="edelweissfe.points.node.Node"><span class="pre">Node</span></a><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofnumbering.html#DofNumbering.indexToHostObjectMapping"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.indexToHostObjectMapping" title="Link to this definition"></a></dt>
+<dd><p>The node of every index of a field variable in the DofVector, built on first use. Only the report of the
+largest residual of an implicit solver reads it (through <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofnumbering.DofNumbering.getNodeForIndexInDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector()</span></code></a>), while building it
+costs a pass over every degree of freedom, which a numbering that is never asked – one of the many an explicit
 solver builds over a run, say – does not pay.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.nDof">
+<span class="sig-name descname"><span class="pre">nDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.nDof" title="Link to this definition"></a></dt>
+<dd><p>The total number of degrees of freedom (and size of the DofVector)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofnumbering.DofNumbering.numberedNodeFields">
+<span class="sig-name descname"><span class="pre">numberedNodeFields</span></span><a class="headerlink" href="#edelweissfe.numerics.dofnumbering.DofNumbering.numberedNodeFields" title="Link to this definition"></a></dt>
+<dd><p>The NodeFields this DofNumbering numbers, by name. They are the only ones it reads from and writes to as a
+whole.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-edelweissfe.numerics.doflocations">
+<span id="doflocations"></span><h2>DofLocations<a class="headerlink" href="#module-edelweissfe.numerics.doflocations" title="Link to this heading"></a></h2>
+<p>The locations of the entities of a discrete system: for every element and every constraint, the global indices of its
+local degrees of freedom. In the vocabulary of the textbooks, the LM array: the ID array
+(<a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>) applied to the connectivity of the entities.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.numerics.doflocations.DofLocations">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.doflocations.</span></span><span class="sig-name descname"><span class="pre">DofLocations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">numbering</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">constraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">furtherEntities</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/doflocations.html#DofLocations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.doflocations.DofLocations" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>The locations of the entities of a discrete system: for every element and every constraint, the global indices of
+its local degrees of freedom, <code class="docutils literal notranslate"><span class="pre">locations[entity]</span></code>, the <em>LM array</em> of the textbooks.</p>
+<dl class="simple">
+<dt>Specifically, <cite>DofLocations</cite>:</dt><dd><ul class="simple">
+<li><p>Locates every entity in a <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>, from the nodes it couples
+(its connectivity) and the fields it couples on them: the indices from which a system matrix assembly derives
+where each block goes, and which scatter and gather operations use.</p></li>
+<li><p>Calculates accumulated elemental/constraint fluxes fieldwise for convergence tests.</p></li>
+<li><p>Constructs the entity-aware <code class="xref py py-class docutils literal notranslate"><span class="pre">DofVector</span></code> of its discrete system.</p></li>
+</ul>
+</dd>
+</dl>
+<p>The locations are immutable: they are determined by the numbering and the entities, and never change. A change of
+the connectivity that leaves the numbering as it is – a contact search that couples other nodes – makes new
+locations on the same numbering, see <a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf" title="edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf"><code class="xref py py-meth docutils literal notranslate"><span class="pre">withNewLocationsOf()</span></code></a>.</p>
+<p>Every entity is located, or the construction raises: an entity that couples a field its node does not have has no
+location, which is an error of the model, see <code class="xref py py-meth docutils literal notranslate"><span class="pre">_locateNodeCouplingEntities()</span></code>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The node of every index of a field variable in the DofVector, built on first use</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>numbering</strong> (<a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><em>DofNumbering</em></a>) – The numbering of the degrees of freedom the entities are located in.</p></li>
+<li><p><strong>elements</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Elements to locate.</p></li>
+<li><p><strong>constraints</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Constraints to locate. Their scalar variables must be numbered.</p></li>
+<li><p><strong>furtherEntities</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – Entities of other kinds, which a subclass knows the meaning of (e.g. the cells and particles of a meshfree
+model). They are located like elements, and computed like elements: they follow the elements in
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">elements</span></code>, and the constraints in the entities this class is a mapping of.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.nAccumulatedNodalFluxesFieldwise" title="edelweissfe.numerics.doflocations.DofLocations.nAccumulatedNodalFluxesFieldwise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nAccumulatedNodalFluxesFieldwise</span></code></a></dt><dd><p>For the Abaqus like convergence test, the number of degrees of freedom ‘entity-wise’ per field, that is Σ_(elements+constraints) Σ_nodes ( nDof (field) ).</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.constructDofVector" title="edelweissfe.numerics.doflocations.DofLocations.constructDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constructDofVector</span></code></a>()</p></td>
+<td><p>Construct a vector with size=nDof and which has knowledge about the location of each entity.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf" title="edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">withNewLocationsOf</span></code></a>(constraints[, movedEntities])</p></td>
+<td><p>The locations of the same entities in the same numbering, with the constraints, and the further entities that moved, located anew after their connectivity changed.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.doflocations.DofLocations.constructDofVector">
+<span class="sig-name descname"><span class="pre">constructDofVector</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/doflocations.html#DofLocations.constructDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.doflocations.DofLocations.constructDofVector" title="Link to this definition"></a></dt>
+<dd><p>Construct a vector with size=nDof and which has knowledge about
+the location of each entity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A DofVector.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf">
+<span class="sig-name descname"><span class="pre">withNewLocationsOf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraints</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">movedEntities</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/doflocations.html#DofLocations.withNewLocationsOf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf" title="Link to this definition"></a></dt>
+<dd><p>The locations of the same entities in the same numbering, with the constraints, and the further entities
+that moved, located anew after their connectivity changed.</p>
+<p>A contact search re-assigns which nodes a constraint couples. That changes the constraints’ locations and
+nothing else: no node, field, scalar variable or element is touched, so the numbering and the locations of
+every element stay valid, and only what is derived from the constraints is computed again – by the same
+methods, in the same order, as the constructor computed it. That is a small fraction of what making
+locations for the same model costs.</p>
+<p>A change that moves the numbering – a mesh refinement, a constraint gaining a scalar variable of its own – is
+not a change of the connectivity, and needs a new <a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>:
+this method refuses it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>constraints</strong> (<em>list</em>) – The constraints, with their current connectivity.</p></li>
+<li><p><strong>movedEntities</strong> (<em>list</em>) – The further entities whose connectivity changed (see the constructor); the others keep the locations they
+were given. Only meaningful where the numbering stands, as for the constraints.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The new locations; these locations are not changed.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations">DofLocations</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If the scalar variables of the constraints are not exactly those the numbering numbers, in this order, or
+a moved entity is not located in these locations.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.numerics.doflocations.DofLocations.nAccumulatedNodalFluxesFieldwise">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">nAccumulatedNodalFluxesFieldwise</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#edelweissfe.numerics.doflocations.DofLocations.nAccumulatedNodalFluxesFieldwise" title="Link to this definition"></a></dt>
+<dd><p>For the Abaqus like convergence test, the number of degrees of freedom ‘entity-wise’ per field, that is
+Σ_(elements+constraints) Σ_nodes ( nDof (field) ).
+Computed from the entities of these locations at the first request, and kept: only the convergence criteria
+ask, so a solver without them does not pay. The count of the elements, and of the further entities that did
+not move, is shared with the locations these were made from: only the constraints, and the entities that
+moved, are counted again.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The number of accumulated fluxes, for every field of the numbering.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.largestNumberOfConstraintNDof">
-<span class="sig-name descname"><span class="pre">largestNumberOfConstraintNDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.largestNumberOfConstraintNDof" title="Link to this definition"></a></dt>
-<dd><p>Size of the largest constraint DOF vector</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.largestNumberOfElNDof">
-<span class="sig-name descname"><span class="pre">largestNumberOfElNDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.largestNumberOfElNDof" title="Link to this definition"></a></dt>
-<dd><p>Size of the largest element DOF vector</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.nDof">
-<span class="sig-name descname"><span class="pre">nDof</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.nDof" title="Link to this definition"></a></dt>
-<dd><p>The total number of degrees of freedom (and size of the DofVector)</p>
+<dt class="sig sig-object py" id="edelweissfe.numerics.doflocations.DofLocations.numbering">
+<span class="sig-name descname"><span class="pre">numbering</span></span><a class="headerlink" href="#edelweissfe.numerics.doflocations.DofLocations.numbering" title="Link to this definition"></a></dt>
+<dd><p>The numbering of the degrees of freedom the entities are located in.</p>
 </dd></dl>
 
 </dd></dl>
@@ -548,18 +652,22 @@ solver builds over a run, say – does not pay.</p>
 <span id="dofvector"></span><h2>DofVector<a class="headerlink" href="#module-edelweissfe.numerics.dofvector" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.dofvector.DofVector">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofvector.</span></span><span class="sig-name descname"><span class="pre">DofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entitiesInDofVector</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofvector.html#DofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofvector.DofVector" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofvector.</span></span><span class="sig-name descname"><span class="pre">DofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofvector.html#DofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofvector.DofVector" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></p>
 <p>Represents a Degree-of-Freedom (DOF) vector with entity-aware indexing.</p>
-<p>A <cite>DofVector</cite> is a 1D NumPy array subclass augmented with metadata mapping simulation
-entities (such as elements, constraints, or node sets) to their respective DOF indices.
-This enables direct indexing and assignment using entity objects as keys.</p>
+<p>A <cite>DofVector</cite> is a 1D NumPy array subclass wrapped with the locations of the entities (elements, constraints, …)
+in the numbering of its discrete system
+(<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>). This enables direct indexing and assignment using
+entity objects as keys: <code class="docutils literal notranslate"><span class="pre">vector[entity]</span></code> are the values at the entity’s location.</p>
+<p>The vector refers to the locations it was wrapped with. When the locations change but the numbering does not – a
+contact search that couples other nodes – the values stay the values of the same degrees of freedom: the vector is
+wrapped on the new locations, see <a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector.onLocations" title="edelweissfe.numerics.dofvector.DofVector.onLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onLocations()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>nDof</strong> (<em>int</em>) – The total number of degrees of freedom (length of the vector).</p></li>
-<li><p><strong>entitiesInDofVector</strong> (<em>dict</em><em>, </em><em>optional</em>) – A dictionary mapping entities (or entity keys) to their index arrays or slices
-in the DofVector.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a><em>, </em><em>optional</em>) – The locations of the entities, which map every entity to its indices in the vector: a
+<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>, or any object with a mapping <code class="docutils literal notranslate"><span class="pre">ofEntity</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
@@ -649,7 +757,7 @@ in the DofVector.</p></li>
 <td><p>Create a copy of this DofVector.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector.createScatterVector" title="edelweissfe.numerics.dofvector.DofVector.createScatterVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createScatterVector</span></code></a>()</p></td>
-<td><p>Create a scatter vector for ALL entities registered in this DofVector.</p></td>
+<td><p>Create a scatter vector for ALL entities located in the locations of this DofVector.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">cumprod</span></code>([axis, dtype, out])</p></td>
 <td><p>Return the cumulative product of the elements along the given axis.</p></td>
@@ -693,79 +801,82 @@ in the DofVector.</p></li>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">nonzero</span></code>()</p></td>
 <td><p>Return the indices of the elements that are non-zero.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">partition</span></code>(kth[, axis, kind, order])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector.onLocations" title="edelweissfe.numerics.dofvector.DofVector.onLocations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">onLocations</span></code></a>(locations)</p></td>
+<td><p>The same values, wrapped with other locations: a view of this vector's buffer, not a copy.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">partition</span></code>(kth[, axis, kind, order])</p></td>
 <td><p>Partially sorts the elements in the array in such a way that the value of the element in k-th position is in the position it would be in a sorted array.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prod</span></code>([axis, dtype, out, keepdims, initial, ...])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prod</span></code>([axis, dtype, out, keepdims, initial, ...])</p></td>
 <td><p>Return the product of the array elements over the given axis</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">put</span></code>(indices, values[, mode])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">put</span></code>(indices, values[, mode])</p></td>
 <td><p>Set <code class="docutils literal notranslate"><span class="pre">a.flat[n]</span> <span class="pre">=</span> <span class="pre">values[n]</span></code> for all <code class="docutils literal notranslate"><span class="pre">n</span></code> in indices.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ravel</span></code>([order])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ravel</span></code>([order])</p></td>
 <td><p>Return a flattened array.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">repeat</span></code>(repeats[, axis])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">repeat</span></code>(repeats[, axis])</p></td>
 <td><p>Repeat elements of an array.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reshape</span></code>(a.reshape)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reshape</span></code>(a.reshape)</p></td>
 <td><p>Returns an array containing the same data with a new shape.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code>(a.resize)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code>(a.resize)</p></td>
 <td><p>Change shape and size of array in-place.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">round</span></code>([decimals, out])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">round</span></code>([decimals, out])</p></td>
 <td><p>Return <cite>a</cite> with each element rounded to the given number of decimals.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">searchsorted</span></code>(v[, side, sorter])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">searchsorted</span></code>(v[, side, sorter])</p></td>
 <td><p>Find indices where elements of <cite>v</cite> should be inserted in <cite>a</cite> to maintain order.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setfield</span></code>(val, dtype[, offset])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setfield</span></code>(val, dtype[, offset])</p></td>
 <td><p>Put a value into a specified place in a field defined by a data-type.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setflags</span></code>([write, align, uic])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setflags</span></code>([write, align, uic])</p></td>
 <td><p>Set array flags WRITEABLE, ALIGNED, WRITEBACKIFCOPY, respectively.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort</span></code>([axis, kind, order, stable, descending])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort</span></code>([axis, kind, order, stable, descending])</p></td>
 <td><p>Sort an array in-place.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">squeeze</span></code>([axis])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">squeeze</span></code>([axis])</p></td>
 <td><p>Remove axes of length one from <cite>a</cite>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">std</span></code>([axis, dtype, out, ddof, keepdims, ...])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">std</span></code>([axis, dtype, out, ddof, keepdims, ...])</p></td>
 <td><p>Returns the standard deviation of the array elements along given axis.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sum</span></code>([axis, dtype, out, keepdims, initial, where])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sum</span></code>([axis, dtype, out, keepdims, initial, where])</p></td>
 <td><p>Return the sum of the array elements over the given axis.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">swapaxes</span></code>(axis1, axis2, /)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">swapaxes</span></code>(axis1, axis2, /)</p></td>
 <td><p>Return a view of the array with <cite>axis1</cite> and <cite>axis2</cite> interchanged.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">take</span></code>(indices[, axis, out, mode])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">take</span></code>(indices[, axis, out, mode])</p></td>
 <td><p>Return an array formed from the elements of <cite>a</cite> at the given indices.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_device</span></code>(device, /, *[, stream])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_device</span></code>(device, /, *[, stream])</p></td>
 <td><p>For Array API compatibility.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tobytes</span></code>([order])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tobytes</span></code>([order])</p></td>
 <td><p>Construct Python bytes containing the raw data bytes in the array.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tofile</span></code>(fid, /[, sep, format])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tofile</span></code>(fid, /[, sep, format])</p></td>
 <td><p>Write array to a file as text or binary (default).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tolist</span></code>()</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tolist</span></code>()</p></td>
 <td><p>Return the array as an <code class="docutils literal notranslate"><span class="pre">a.ndim</span></code>-levels deep nested list of Python scalars.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">trace</span></code>([offset, axis1, axis2, dtype, out])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">trace</span></code>([offset, axis1, axis2, dtype, out])</p></td>
 <td><p>Return the sum along diagonals of the array.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">transpose</span></code>(*axes)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">transpose</span></code>(*axes)</p></td>
 <td><p>Returns a view of the array with axes transposed.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">var</span></code>([axis, dtype, out, ddof, keepdims, ...])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">var</span></code>([axis, dtype, out, ddof, keepdims, ...])</p></td>
 <td><p>Returns the variance of the array elements, along given axis.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">view</span></code>([dtype][, type])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">view</span></code>([dtype][, type])</p></td>
 <td><p>New view of array with the same data.</p></td>
 </tr>
 </tbody>
@@ -797,7 +908,7 @@ once outside the loop instead of calling <code class="docutils literal notransla
 <dd class="field-odd"><p><strong>order</strong> (<em>str</em><em>, </em><em>optional</em>) – The memory layout order (‘C’ for C-contiguous, ‘F’ for Fortran-contiguous). Default is ‘C’.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new <cite>DofVector</cite> instance with copied array data and an independent copy of <cite>entitiesInDofVector</cite>.</p>
+<dd class="field-even"><p>A new <cite>DofVector</cite> instance with copied array data, wrapped with the same locations.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a></p>
@@ -808,19 +919,37 @@ once outside the loop instead of calling <code class="docutils literal notransla
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.numerics.dofvector.DofVector.createScatterVector">
 <span class="sig-name descname"><span class="pre">createScatterVector</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofvector.html#DofVector.createScatterVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofvector.DofVector.createScatterVector" title="Link to this definition"></a></dt>
-<dd><p>Create a scatter vector for ALL entities registered in this DofVector.</p>
+<dd><p>Create a scatter vector for ALL entities located in the locations of this DofVector.</p>
 <p>The underlying layout (entity lookup map and scatter indices) is computed once
 and cached, so repeated calls (e.g. once per Newton iteration) only allocate
 the zero-initialized data buffer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A <cite>ScatterDofVector</cite> initialized with this vector’s entity mapping and total DOF count.</p>
+<dd class="field-odd"><p>A <cite>ScatterDofVector</cite> initialized with this vector’s locations and total DOF count.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVector" title="edelweissfe.numerics.scatterdofvector.ScatterDofVector">ScatterDofVector</a></p>
 </dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ValueError</strong> – If <cite>entitiesInDofVector</cite> is None or uninitialized.</p>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.dofvector.DofVector.onLocations">
+<span class="sig-name descname"><span class="pre">onLocations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">locations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofvector.html#DofVector.onLocations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofvector.DofVector.onLocations" title="Link to this definition"></a></dt>
+<dd><p>The same values, wrapped with other locations: a view of this vector’s buffer, not a copy. For a discrete
+system whose locations changed on the same numbering
+(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations" title="edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">withNewLocations()</span></code></a>): the degrees of freedom are the
+same, and so are their values, only where the entities find theirs has changed. Writes through either vector
+are writes to both.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>locations</strong> (<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The new locations, on the same numbering.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The vector wrapped with the new locations.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -1122,7 +1251,7 @@ one go – instead of taking a view per entity.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.scatterdofvector.</span></span><span class="sig-name descname"><span class="pre">ScatterDofVectorTemplate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entitiesInDofVector</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/scatterdofvector.html#ScatterDofVectorTemplate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.scatterdofvector.</span></span><span class="sig-name descname"><span class="pre">ScatterDofVectorTemplate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">locations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/scatterdofvector.html#ScatterDofVectorTemplate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>The precomputed, immutable layout of a <a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVector" title="edelweissfe.numerics.scatterdofvector.ScatterDofVector"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScatterDofVector</span></code></a>:
 the entity lookup map and the gather/scatter index array.</p>
@@ -1132,7 +1261,7 @@ system, e.g. across Newton iterations.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>entitiesInDofVector</strong> (<em>dict</em>) – The dictionary mapping entities to their global index arrays in the <cite>DofVector</cite>.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the entities, which map every entity to its global index array in the <cite>DofVector</cite>.</p></li>
 <li><p><strong>nDof</strong> (<em>int</em>) – The total number of global degrees of freedom.</p></li>
 </ul>
 </dd>
@@ -1393,8 +1522,8 @@ indices <cite>I</cite> and <cite>J</cite> of the values.</p>
 nodes – and the layout of that block.</p>
 <p>An entity knows its block only in its own numbering: row <code class="docutils literal notranslate"><span class="pre">a</span></code> and column <code class="docutils literal notranslate"><span class="pre">b</span></code> of the block are its <code class="docutils literal notranslate"><span class="pre">a</span></code>-th and
 <code class="docutils literal notranslate"><span class="pre">b</span></code>-th degree of freedom. Where these lie in the global system (the global DOF list of the entity, see
-<a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a>), and how the blocks are stored and summed, is the business of the
-system matrix assembly (<a class="reference internal" href="assembly.html#module-edelweissfe.numerics.systemmatrixassembly" title="edelweissfe.numerics.systemmatrixassembly"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.numerics.systemmatrixassembly</span></code></a>).</p>
+<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>), and how the blocks are stored and summed, is the business
+of the system matrix assembly (<a class="reference internal" href="assembly.html#module-edelweissfe.numerics.systemmatrixassembly" title="edelweissfe.numerics.systemmatrixassembly"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.numerics.systemmatrixassembly</span></code></a>).</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixcontributor.</span></span><span class="sig-name descname"><span class="pre">SystemMatrixContributorBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#SystemMatrixContributorBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="Link to this definition"></a></dt>

@@ -61,7 +61,7 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -147,7 +147,7 @@ elements, re-partitioning element/node sets and surfaces, and reallocating the s
 A modifier is declared with the <code class="docutils literal notranslate"><span class="pre">*modelModifier</span></code> keyword. At the start of every increment the
 solver runs <strong>all</strong> modifiers to a fixed point via
 <a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.update" title="edelweissfe.models.topologypipeline.TopologyPipeline.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>, then lets mesh-dependent consumers catch
-up, then solves; when the topology changed, the discrete system (DOF manager, sparsity pattern,
+up, then solves; when the topology changed, the discrete system (numbering, locations, sparsity pattern,
 solution vectors and any multi-point-constraint transformation) is rebuilt first. A modifier itself
 is written as two halves – <a class="reference internal" href="#edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan" title="edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.plan"><code class="xref py py-meth docutils literal notranslate"><span class="pre">plan()</span></code></a>,
 which decides and may read solution state, and
@@ -773,8 +773,8 @@ all
 </section>
 <section id="batching-refinement-across-increments">
 <h2>Batching refinement across increments<a class="headerlink" href="#batching-refinement-across-increments" title="Link to this heading"></a></h2>
-<p>Every refinement pass forces the solver to rebuild the discrete system (DOF manager, sparsity
-pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
+<p>Every refinement pass forces the solver to rebuild the discrete system (numbering, locations,
+sparsity pattern, solution vectors and any multi-point-constraint transformation), which is expensive on a
 large model. Left unchecked, a marker whose criterion is crossed by elements one at a time –
 rather than in a single burst – triggers that rebuild on every increment a lone element newly
 qualifies. <code class="docutils literal notranslate"><span class="pre">minMarkedElements</span></code> (default <code class="docutils literal notranslate"><span class="pre">1</span></code>: refine as soon as anything is marked) raises the

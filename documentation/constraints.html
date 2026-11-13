@@ -88,7 +88,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -2572,7 +2572,7 @@ defining
 <dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-obj docutils literal notranslate"><span class="pre">active</span></code></a></dt><dd><p>Whether this constraint takes part in the discrete system, while it is <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-attr docutils literal notranslate"><span class="pre">switchedOn</span></code></a> and <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach"><code class="xref py py-attr docutils literal notranslate"><span class="pre">withinReach</span></code></a>.</p>
 </dd>
 <dt><strong>checkpointedState</strong></dt><dd></dd>
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fieldsOnNodes</span></code></a></dt><dd><p>The fields on the nodes this constraint is acting on.</p>
 </dd>
@@ -2774,7 +2774,7 @@ one, or one whose constraints are re-located), before it evaluates the constrain
 <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>.</p>
 <p>This default forgets the tangent that <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a> throws away, so that the next evaluation
 sizes it, once, for the block the constraint has now. The size is the number of entries of the block
-(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock"><code class="xref py py-func docutils literal notranslate"><span class="pre">countEntriesOfBlock()</span></code></a>), which for a constraint that lists
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock"><code class="xref py py-func docutils literal notranslate"><span class="pre">countEntriesOfBlock()</span></code></a>), which for a constraint that lists
 its entries means building the list: once per discrete system, not in every increment. A constraint that
 evaluates its forces without a tangent needs nothing here.</p>
 <p>A solver that evaluates constraints itself, rather than through
@@ -2951,8 +2951,8 @@ condense via <code class="xref py py-class docutils literal notranslate"><span c
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.fromConstraintDefinition" title="edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.fromConstraintDefinition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromConstraintDefinition</span></code></a>(name, definition, model)</p></td>
 <td><p>Create this constraint from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> constraint definition.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.getMultiPointConstraints" title="edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.getMultiPointConstraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getMultiPointConstraints</span></code></a>(dofManager)</p></td>
-<td><p>Return the linear dependency records of this constraint in global degree-of-freedom indices of the given DofManager.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.getMultiPointConstraints" title="edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.getMultiPointConstraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getMultiPointConstraints</span></code></a>(numbering)</p></td>
+<td><p>Return the linear dependency records of this constraint in global degree-of-freedom indices of the given numbering.</p></td>
 </tr>
 </tbody>
 </table>
@@ -3009,12 +3009,12 @@ expected to carry the slave node as their first item.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.getMultiPointConstraints">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getMultiPointConstraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/multipointconstraintbase.html#MultiPointConstraintBase.getMultiPointConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.getMultiPointConstraints" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getMultiPointConstraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">numbering</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/multipointconstraintbase.html#MultiPointConstraintBase.getMultiPointConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.getMultiPointConstraints" title="Link to this definition"></a></dt>
 <dd><p>Return the linear dependency records of this constraint in global degree-of-freedom
-indices of the given DofManager.</p>
+indices of the given numbering.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dofManager</strong> – The current <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a>, used to resolve
+<dd class="field-odd"><p><strong>numbering</strong> – The current <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>, used to resolve
 (node, field, component) to global degree-of-freedom indices.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

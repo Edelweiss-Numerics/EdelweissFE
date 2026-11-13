@@ -131,7 +131,7 @@
 
 <span class="sd">    Multi-point constraints are defined via the ``*constraint`` keyword like ordinary constraints,</span>
 <span class="sd">    but live in :attr:`~edelweissfe.models.femodel.FEModel.multiPointConstraints` and stay outside</span>
-<span class="sd">    the DofManager and the constraint assembly loop entirely.</span>
+<span class="sd">    the numbering of the degrees of freedom and the constraint assembly loop entirely.</span>
 
 <span class="sd">    A degree of freedom may be claimed as slave by at most one multi-point constraint of a model --</span>
 <span class="sd">    the condensation operator rejects duplicate claims. Constraints that build their slave set</span>
@@ -193,14 +193,14 @@
 <div class="viewcode-block" id="MultiPointConstraintBase.getMultiPointConstraints">
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.getMultiPointConstraints">[docs]</a>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">getMultiPointConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getMultiPointConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">numbering</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]]:</span>
 <span class="w">        </span><span class="sd">"""Return the linear dependency records of this constraint in global degree-of-freedom</span>
-<span class="sd">        indices of the given DofManager.</span>
+<span class="sd">        indices of the given numbering.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        dofManager</span>
-<span class="sd">            The current :class:`~edelweissfe.numerics.dofmanager.DofManager`, used to resolve</span>
+<span class="sd">        numbering</span>
+<span class="sd">            The current :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, used to resolve</span>
 <span class="sd">            (node, field, component) to global degree-of-freedom indices.</span>
 
 <span class="sd">        Returns</span>

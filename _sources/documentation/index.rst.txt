@@ -15,7 +15,7 @@ Documentation
    constraints
    rigidbodies
    contacttheory
-   dofmanager
+   dofnumbering
    assembly
    fieldoutputmanager
    fields

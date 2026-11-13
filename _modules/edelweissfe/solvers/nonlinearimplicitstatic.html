@@ -118,7 +118,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.change</span><span class="w"> </span><span class="kn">import</span> <span class="n">Change</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DirectCSRSystemMatrixAssembly</span><span class="p">,</span>
     <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
@@ -499,10 +499,6 @@
         <span class="s2">"abaqusInitialTimeAveragedFlux"</span><span class="p">:</span> <span class="mf">1e-2</span><span class="p">,</span>
     <span class="p">}</span>
 
-    <span class="c1">#: What the model's current discrete system is made of (see</span>
-    <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), rebuilt with it; None until it is built.</span>
-    <span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
-
     <span class="c1">#: The predictor's state between increments: the last accepted increment and its dU, for a quadratic</span>
     <span class="c1">#: extrapolation the accepted increment before it and its dU, and the digest of the numbering of the degrees of</span>
     <span class="c1">#: freedom these dU are vectors of; and the state of the convergence criterion.</span>
@@ -546,15 +542,12 @@
         <span class="c1">#: The solution increment of :attr:`timeStepOfIncrementBeforeLast`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dUOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The digest of the numbering of the degrees of freedom of the discrete system the last increment was accepted</span>
-        <span class="c1">#: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dUOfLastIncrement` is a</span>
+        <span class="c1">#: in (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`): :attr:`dUOfLastIncrement` is a</span>
         <span class="c1">#: vector of it, and so is :attr:`dUOfIncrementBeforeLast`, which is kept only as long as the prediction</span>
-        <span class="c1">#: survives the rebuilds of the discrete system (see :meth:`predictionSurvivesRebuild`).</span>
+        <span class="c1">#: survives the change of the discrete system (see :meth:`predictionSurvives`).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The convergence criterion of the current step, created when the step begins (None before).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: What the topology update changed at the start of the increment, which the increment reacts on (see</span>
-        <span class="c1">#: :meth:`prepareIncrement`).</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_change</span> <span class="o">=</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span>
 
 <div class="viewcode-block" id="NIST.applyOptionsOverride">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyOptionsOverride">[docs]</a>
@@ -636,13 +629,101 @@
 <div class="viewcode-block" id="NIST.forgetDiscreteSystem">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetDiscreteSystem">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">forgetDiscreteSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Drop the discrete system of the last build -- with its DOF manager, the system matrix assembly and its CSR</span>
-<span class="sd">        pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the next one is</span>
-<span class="sd">        built, never both at once."""</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">        </span><span class="sd">"""Drop the discrete system of the last build -- with its numbering and locations, the system matrix assembly</span>
+<span class="sd">        and its CSR pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the</span>
+<span class="sd">        next one is built, never both at once."""</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="NIST.onNewNumbering">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.onNewNumbering">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">onNewNumbering</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Build what is sized by the numbering of the new discrete system: the linear solver's view of the degrees of</span>
+<span class="sd">        freedom, which it is re-pushed on every new numbering so that it tracks the mesh across refinement; the layout of</span>
+<span class="sd">        the convergence table; the solution, its increment and the force, the solution read from the model; and the</span>
+<span class="sd">        multi-point-constraint condensation, which is reconciled with the Dirichlet boundary conditions of the actions</span>
+<span class="sd">        of the step (``self._stepActions``, set when the step begins).</span>
+
+<span class="sd">        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering`.</span>
+<span class="sd">        """</span>
+
+        <span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span>
+        <span class="n">numbering</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"discrete system rebuilt: </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+
+        <span class="c1"># Fields are laid out in contiguous slices: report the block structure per field.</span>
+        <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">fieldIndices</span> <span class="ow">in</span> <span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                <span class="s2">"field '</span><span class="si">{:}</span><span class="s2">': </span><span class="si">{:}</span><span class="s2"> dof, [</span><span class="si">{:}</span><span class="s2">, </span><span class="si">{:}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">fieldName</span><span class="p">,</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">stop</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                <span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"linear solver setup"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">modelForLinearSolver</span><span class="p">,</span> <span class="n">numbering</span><span class="p">)</span>
+
+        <span class="n">presentVariableNames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+        <span class="k">if</span> <span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">:</span>
+            <span class="n">presentVariableNames</span> <span class="o">+=</span> <span class="p">[</span>
+                <span class="s2">"scalar variables"</span><span class="p">,</span>
+            <span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">convergenceTable</span> <span class="o">=</span> <span class="n">ConvergenceTable</span><span class="p">(</span><span class="n">presentVariableNames</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">reportsSolveSummary</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transformation build"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc dirichlet conflict check"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NIST.onNewLocations">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.onNewLocations">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">onNewLocations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Build what is derived from the locations of the new discrete system: the vectors are wrapped with them, the</span>
+<span class="sd">        values kept, the linear solver is told that the sparsity pattern changes</span>
+<span class="sd">        (:meth:`~edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern`), and the system matrix assembly is built</span>
+<span class="sd">        with the CSR pattern the locations determine, with room for the entries the multi-point-constraint condensation</span>
+<span class="sd">        adds, so that it can be done in place: the assembly writes the matrix of the pattern it is built on. The</span>
+<span class="sd">        assembly of the previous locations is gone before the next one is built, never both at once.</span>
+
+<span class="sd">        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations`.</span>
+<span class="sd">        """</span>
+
+        <span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"locations of </span><span class="si">{:}</span><span class="s2"> entities in the numbering of </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">locations</span><span class="o">.</span><span class="n">ofEntity</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+            <span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+
+        <span class="c1"># What the linear solver built for the old pattern is dropped before the new pattern is built, never both at</span>
+        <span class="c1"># once; what it holds of the model and the numbering stays.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">onNewMatrixPattern</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix pattern"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createSystemMatrixAssembly</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">condensedPatternFillIn</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NIST.beginStep">
@@ -669,6 +750,8 @@
 <span class="sd">            The output managers.</span>
 <span class="sd">        """</span>
 
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span>
+
         <span class="c1"># self.options already reflects every &gt;&gt;options block applied so far (see applyOptionsOverride).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">selectLinearSolverForStep</span><span class="p">()</span>
 
@@ -676,8 +759,8 @@
         <span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">startStep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="n">convergenceCriterion</span>
 
-        <span class="c1"># The discrete system (DofManager, VIJ pattern, CSR pattern, system matrix assembly) is (re)built lazily in the</span>
-        <span class="c1"># first increment, and whenever the topology update reports a change (see Change).</span>
+        <span class="c1"># The discrete system (numbering, locations, VIJ pattern, CSR pattern, system matrix assembly) is (re)built</span>
+        <span class="c1"># lazily in the first increment, and whenever the topology update reports a change (see Change).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">:</span>
@@ -814,69 +897,11 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
             <span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;=</span> <span class="n">Change</span><span class="o">.</span><span class="n">LOCATIONS</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"discrete system rebuild"</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
-                <span class="c1"># The model says what its discrete system is made of: the numbering of the degrees of freedom, the</span>
-                <span class="c1"># elements to compute, how the solution passes between the model and the vectors below.</span>
-                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"dof manager"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildDiscreteSystem</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">dofManager</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                    <span class="s2">"discrete system rebuilt: </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-                    <span class="mi">2</span><span class="p">,</span>
-                <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">updateDiscreteSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
 
-                <span class="c1"># Fields are laid out in contiguous slices: report the block structure per field.</span>
-                <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">fieldIndices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                        <span class="s2">"field '</span><span class="si">{:}</span><span class="s2">': </span><span class="si">{:}</span><span class="s2"> dof, [</span><span class="si">{:}</span><span class="s2">, </span><span class="si">{:}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                            <span class="n">fieldName</span><span class="p">,</span>
-                            <span class="n">fieldIndices</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
-                            <span class="n">fieldIndices</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
-                            <span class="n">fieldIndices</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span>
-                        <span class="p">),</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-                        <span class="mi">2</span><span class="p">,</span>
-                    <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictionSurvives</span><span class="p">(</span><span class="n">change</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
 
-                <span class="c1"># Re-pushed on every (re)build so the linear solver tracks the mesh across AMR.</span>
-                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"linear solver setup"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">modelForLinearSolver</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
-
-                <span class="n">presentVariableNames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
-
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">:</span>
-                    <span class="n">presentVariableNames</span> <span class="o">+=</span> <span class="p">[</span>
-                        <span class="s2">"scalar variables"</span><span class="p">,</span>
-                    <span class="p">]</span>
-
-                <span class="bp">self</span><span class="o">.</span><span class="n">convergenceTable</span> <span class="o">=</span> <span class="n">ConvergenceTable</span><span class="p">(</span><span class="n">presentVariableNames</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">reportsSolveSummary</span><span class="p">)</span>
-
-                <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-                <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-                <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-
-                <span class="bp">self</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
-
-                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transformation build"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
-                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc dirichlet conflict check"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
-                <span class="c1"># The CSR pattern with room for the entries the condensation adds, so that it can be done in place:</span>
-                <span class="c1"># the assembly writes the matrix of the pattern it is built on.</span>
-                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix pattern"</span><span class="p">):</span>
-                    <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createSystemMatrixAssembly</span><span class="p">(</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]],</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">condensedPatternFillIn</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-                    <span class="p">)</span>
-
-                <span class="c1"># The last accepted increments are vectors of the discrete system they were solved in: this increment</span>
-                <span class="c1"># extrapolates them only if the rebuilt system numbers the degrees of freedom alike.</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictionSurvivesRebuild</span><span class="p">(</span><span class="n">change</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span>
         <span class="c1"># the discrete system of this increment, just built or kept from the last one</span>
         <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span>
 
@@ -1040,18 +1065,29 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeZeroVelocityAndAccelerationToModel</span><span class="p">()</span></div>
 
 
+<div class="viewcode-block" id="NIST.systemMatrixAssemblyType">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.systemMatrixAssemblyType">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">systemMatrixAssemblyType</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The type of the assembly of the system matrix: the one named by the option ``systemMatrixAssembly``, one of</span>
+<span class="sd">        :attr:`systemMatrixAssemblies`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        type</span>
+<span class="sd">            The type of the assembly.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]]</span></div>
+
+
 <div class="viewcode-block" id="NIST.createSystemMatrixAssembly">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">createSystemMatrixAssembly</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">assemblyType</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span> <span class="n">patternFillIn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SystemMatrixAssembly</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The assembly of the system matrix of the discrete system just built (option ``systemMatrixAssembly``), with</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">createSystemMatrixAssembly</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">patternFillIn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SystemMatrixAssembly</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The assembly of the system matrix of the discrete system just built (:meth:`systemMatrixAssemblyType`), with</span>
 <span class="sd">        its CSR pattern and :meth:`numberOfAssemblyWorkers` workers.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        assemblyType</span>
-<span class="sd">            The type of the assembly, one of :attr:`systemMatrixAssemblies`.</span>
 <span class="sd">        patternFillIn</span>
 <span class="sd">            The entries the pattern must have although no entity contributes them, see</span>
 <span class="sd">            :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`.</span>
@@ -1062,7 +1098,7 @@
 <span class="sd">            The assembly.</span>
 <span class="sd">        """</span>
 
-        <span class="k">return</span> <span class="n">assemblyType</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberOfAssemblyWorkers</span><span class="p">(),</span> <span class="n">patternFillIn</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblyType</span><span class="p">()(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberOfAssemblyWorkers</span><span class="p">(),</span> <span class="n">patternFillIn</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NIST.forEachChunk">
@@ -1100,27 +1136,28 @@
         <span class="k">return</span> <span class="mi">1</span></div>
 
 
-<div class="viewcode-block" id="NIST.predictionSurvivesRebuild">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">predictionSurvivesRebuild</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">Change</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Whether this increment may extrapolate the last accepted increments after the discrete system was rebuilt.</span>
-<span class="sd">        They are vectors of the discrete system they were solved in, so they fit the rebuilt one only if it numbers the</span>
-<span class="sd">        degrees of freedom alike, which the digests of the two numberings tell</span>
-<span class="sd">        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`; the one of the last accepted</span>
-<span class="sd">        increments is :attr:`dofNumberingOfLastIncrement`):</span>
+<div class="viewcode-block" id="NIST.predictionSurvives">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvives">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predictionSurvives</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">Change</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether this increment may extrapolate the last accepted increments, after the discrete system followed</span>
+<span class="sd">        the change. Called once per increment, right after :meth:`updateDiscreteSystem`, with the change the increment</span>
+<span class="sd">        was given. The last accepted increments are vectors of the numbering they were solved in:</span>
 
-<span class="sd">        * after a change of the mesh (e.g., a mesh refinement), never;</span>
-<span class="sd">        * after a change of the connectivity alone (e.g., a contact search), only with</span>
-<span class="sd">          ``extrapolateAcrossConnectivityChange``, and only if the numbering is unchanged;</span>
-<span class="sd">        * at the first increment of a step that continues from a restart checkpoint -- resumed, or fallen back to --</span>
-<span class="sd">          only if the rebuilt system numbers the degrees of freedom as the checkpoint's last accepted increments are</span>
-<span class="sd">          numbered: e.g., the active cells of a material point model may have changed since. A prediction without the</span>
-<span class="sd">          digest of its numbering has nothing to be compared with, and is dropped.</span>
+<span class="sd">        * after a change of the mesh (e.g., a mesh refinement), they are never extrapolated;</span>
+<span class="sd">        * across any other change of the connectivity they are extrapolated only with the option</span>
+<span class="sd">          ``extrapolateAcrossConnectivityChange``;</span>
+<span class="sd">        * and only if the numbering of the discrete system numbers the degrees of freedom as the last accepted</span>
+<span class="sd">          increments are numbered, which the digests of the two numberings tell</span>
+<span class="sd">          (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`; the one of the last accepted increments is</span>
+<span class="sd">          :attr:`dofNumberingOfLastIncrement`): e.g., at the first increment of a step that continues from a restart</span>
+<span class="sd">          checkpoint -- resumed, or fallen back to -- the active cells of a material point model may have changed</span>
+<span class="sd">          since. A prediction without the digest of its numbering has nothing to be compared with, and is dropped.</span>
+<span class="sd">          New locations on the same numbering are the same numbering: the prediction survives them by construction.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        change</span>
-<span class="sd">            What the topology update changed (:class:`~edelweissfe.models.change.Change`).</span>
+<span class="sd">            The change the increment was given.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1128,12 +1165,11 @@
 <span class="sd">            True if the prediction may extrapolate the last accepted increments.</span>
 <span class="sd">        """</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
         <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;=</span> <span class="n">Change</span><span class="o">.</span><span class="n">LOCATIONS</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAcrossConnectivityChange"</span><span class="p">]:</span>
             <span class="k">return</span> <span class="kc">False</span>
-
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">dofNumberingDigest</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">digest</span></div>
 
 
 <div class="viewcode-block" id="NIST.acceptIncrement">
@@ -1168,7 +1204,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="n">timeStep</span>
         <span class="c1"># A copy: the next increment iterates on dU in place, and may fail.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dUOfLastIncrement</span> <span class="o">=</span> <span class="n">dU</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">dofNumberingDigest</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">digest</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">acceptIncrement</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&gt;=</span> <span class="n">step</span><span class="o">.</span><span class="n">criticalIter</span><span class="p">:</span>
@@ -1467,13 +1503,13 @@
 <span class="sd">        """</span>
 
         <span class="n">iterationCounter</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">incrementResidualHistory</span> <span class="o">=</span> <span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">}</span>
+        <span class="n">incrementResidualHistory</span> <span class="o">=</span> <span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">}</span>
 
-        <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">FConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">PLoadsAndConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">U_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">FConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">PLoadsAndConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">U_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">ddU</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
@@ -2337,6 +2373,8 @@
 <span class="sd">            - The modified system matrix.</span>
 <span class="sd">        """</span>
 
+        <span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span>
+
         <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="p">:</span>
             <span class="n">Kc</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
             <span class="n">Pc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
@@ -2344,9 +2382,9 @@
             <span class="n">constraint</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">,</span> <span class="n">Kc</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
             <span class="c1"># instead of P[constraint] += Pc, np.add.at allows for repeated indices</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">P</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">locations</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">FConstraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">FConstraints</span><span class="p">,</span> <span class="n">FConstraints</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">Pc</span><span class="p">))</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">FConstraints</span><span class="p">,</span> <span class="n">locations</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">Pc</span><span class="p">))</span>
 
         <span class="c1"># the block of the last constraint</span>
         <span class="n">K</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>

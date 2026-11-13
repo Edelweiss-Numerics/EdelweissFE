@@ -21,7 +21,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Degree of Freedom (DOF) Manager and Numerics" href="dofmanager.html" />
+    <link rel="next" title="Degrees of freedom: numbering and locations" href="dofnumbering.html" />
     <link rel="prev" title="Rigid bodies" href="rigidbodies.html" /> 
 </head>
 
@@ -86,7 +86,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -1027,7 +1027,7 @@ history and multiplier of slaves that lost contact, and reports whether the node
 changed. The model polls every constraint that is switched on – the poll must not
 short-circuit, since every dynamic constraint relies on the call to refresh its state – and
 classifies the outcome (<a class="reference internal" href="models.html#edelweissfe.models.change.Change" title="edelweissfe.models.change.Change"><code class="xref py py-class docutils literal notranslate"><span class="pre">Change</span></code></a>); the solver rebuilds the
-<code class="docutils literal notranslate"><span class="pre">DofManager</span></code>/sparsity pattern only when the model reports a change.</p>
+numbering and locations / sparsity pattern only when the model reports a change.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">computeKernels(U,</span> <span class="pre">dU,</span> <span class="pre">P,</span> <span class="pre">K,</span> <span class="pre">timeStep)</span></code> (every Newton iteration)</dt><dd><p>Assembles the residual contribution of the contact forces and its consistent tangent from the
 current iterate, as derived above. All quantities derive from (converged state,
@@ -1162,7 +1162,7 @@ and is effectively superseded by <code class="docutils literal notranslate"><spa
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="rigidbodies.html" class="btn btn-neutral float-left" title="Rigid bodies" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="dofmanager.html" class="btn btn-neutral float-right" title="Degree of Freedom (DOF) Manager and Numerics" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="dofnumbering.html" class="btn btn-neutral float-right" title="Degrees of freedom: numbering and locations" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

@@ -61,7 +61,7 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -154,8 +154,9 @@ as well;</p></li>
 <li><p>in <code class="docutils literal notranslate"><span class="pre">NID</span></code>, also an increment of negligible length: the round-off remainder the time stepper may leave at the end
 of a step (see <a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearimplicitdynamic" title="edelweissfe.solvers.nonlinearimplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearimplicitdynamic</span></code></a>).</p></li>
 </ul>
-<p>A rebuilt discrete system (a changed mesh, a changed active domain, a changed coupling) reads the state entries from
-the model. A refinement of the mesh interpolates the state entries onto the nodes it creates; the results there are
+<p>A discrete system with a new numbering (a changed mesh, a changed active domain, a changed set of scalar variables)
+reads the state entries from the model; new locations on the same numbering (a changed connectivity, e.g. a contact
+search) do not: the vectors of the solver keep their values, which are the state. A refinement of the mesh interpolates the state entries onto the nodes it creates; the results there are
 zero until the next accepted increment.</p>
 <p>Every solver passes these entries through the discrete system
 (<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem" title="edelweissfe.models.discretesystem.DiscreteSystem"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiscreteSystem</span></code></a>), and in no other way:
@@ -224,7 +225,7 @@ summed over the nodes of a support, it is the reaction force. Zero at a node wit
 </table>
 <p>The Lagrange multipliers of constraints are scalar variables, not node field entries
 (<a class="reference internal" href="variables.html#edelweissfe.variables.scalarvariable.ScalarVariable" title="edelweissfe.variables.scalarvariable.ScalarVariable"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScalarVariable</span></code></a>). They are state as well: each holds its total
-value, written at acceptance and read back at every rebuild. A constraint that is not active keeps the value it
+value, written at acceptance and read back whenever the discrete system gets a new numbering. A constraint that is not active keeps the value it
 had.</p>
 </section>
 <section id="what-each-solver-writes">
@@ -315,8 +316,8 @@ does not hold it refuses to start
 <h2>Using the entries in code<a class="headerlink" href="#using-the-entries-in-code" title="Link to this heading"></a></h2>
 <p>The entries exist from the construction of a node field on, also in a model built programmatically; a resize (for
 instance, by adaptive mesh refinement) keeps all of them. Reading or writing an entry through the
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a> refuses a name that is not one of the five, and a node field
-the DofManager does not number: a node field is read or written as a whole only by the DofManager that numbers it,
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a> refuses a name that is not one of the five, and a node field
+the DofNumbering does not number: a node field is read or written as a whole only by the DofNumbering that numbers it,
 since its rows are addressed by position; on a node set, its rows are found by node, so that any node field of a
 numbered field can be read or written there (e.g. the node field of the model, while the discrete system numbers
 that of an active domain). A restart checkpoint holds every entry of every node field, and a

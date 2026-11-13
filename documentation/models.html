@@ -79,7 +79,7 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -624,20 +624,22 @@ the state the solver carries, e.g. the solver re-equilibrates (<code class="docu
 <section id="discretesystem-what-the-discrete-system-of-a-model-is-made-of">
 <h2><code class="docutils literal notranslate"><span class="pre">DiscreteSystem</span></code> - What the discrete system of a model is made of<a class="headerlink" href="#discretesystem-what-the-discrete-system-of-a-model-is-made-of" title="Link to this heading"></a></h2>
 <p>What a model answers a solver that (re)builds its discrete system: the numbering of the degrees of freedom, the
-elements and constraints to compute, and how the solution passes between the model and the solver’s vectors. See
-<a class="reference internal" href="solvers.html#model-discrete-system"><span class="std std-ref">What the solver asks the model</span></a>.</p>
+locations of the elements and constraints in it, and how the solution passes between the model and the solver’s
+vectors. See <a class="reference internal" href="solvers.html#model-discrete-system"><span class="std std-ref">What the solver asks the model</span></a>.</p>
 <p id="module-edelweissfe.models.discretesystem">What the global discrete system of a model is made of: the answer a model gives a solver that (re)builds its
 discrete system, see <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.buildDiscreteSystem" title="edelweissfe.models.femodel.FEModel.buildDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildDiscreteSystem()</span></code></a> and
 <a class="reference internal" href="solvers.html#model-discrete-system"><span class="std std-ref">What the solver asks the model</span></a>.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.models.discretesystem.</span></span><span class="sig-name descname"><span class="pre">DiscreteSystem</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/discretesystem.html#DiscreteSystem"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem" title="Link to this definition"></a></dt>
-<dd><p>The discrete system of a model: which degrees of freedom it has, which elements and which constraints contribute
-to it, and how the solution passes between the model and the vectors a solver iterates on.</p>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.models.discretesystem.</span></span><span class="sig-name descname"><span class="pre">DiscreteSystem</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/discretesystem.html#DiscreteSystem"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem" title="Link to this definition"></a></dt>
+<dd><p>The discrete system of a model: which degrees of freedom it has (its numbering), which elements and which
+constraints contribute to it and where they are located in the numbering (its locations), and how the solution
+passes between the model and the vectors a solver iterates on.</p>
 <p>A solver asks the model for it whenever it (re)builds its discrete system
 (<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.buildDiscreteSystem" title="edelweissfe.models.femodel.FEModel.buildDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildDiscreteSystem()</span></code></a>), and keeps it as long as the numbering of the
-degrees of freedom it holds: until the next rebuild. The solver itself only solves; what the model is made of, the
-discrete system says.</p>
+degrees of freedom it holds: until the next rebuild. A change of the connectivity that leaves the numbering as it is
+only makes new locations, in a new discrete system (<a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations" title="edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">withNewLocations()</span></code></a>). A discrete system never changes. The
+solver itself only solves; what the model is made of, the discrete system says.</p>
 <p>This class is the discrete system of a finite element model. A model made of other entities – EdelweissMeshfree’s
 material point and RKPM models, with their background cells and particles – returns a discrete system derived from
 it, which changes what its methods do; the solver calls them the same way.</p>
@@ -645,14 +647,17 @@ it, which changes what its methods do; the solver calls them the same way.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>model</strong> (<a class="reference internal" href="#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model.</p></li>
-<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The numbering of the degrees of freedom, and the locations of the constraints that take part in the
-discrete system.</p></li>
-<li><p><strong>elements</strong> (<em>list</em>) – The elements, in the order in which the solver computes them.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the elements and of the constraints that take part in the discrete system, in the numbering
+of the degrees of freedom they are built on.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.constraints" title="edelweissfe.models.discretesystem.DiscreteSystem.constraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constraints</span></code></a></dt><dd><p>The constraints that take part in the discrete system: the ones the DOF manager located, with their scalar variables, when the discrete system was built or last located its constraints anew (see <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices" title="edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshConstraintIndices()</span></code></a>).</p>
+<dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.constraints" title="edelweissfe.models.discretesystem.DiscreteSystem.constraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constraints</span></code></a></dt><dd><p>The constraints that take part in the discrete system, i.e.</p>
+</dd>
+<dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.elements" title="edelweissfe.models.discretesystem.DiscreteSystem.elements"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elements</span></code></a></dt><dd><p>Everything the solver computes like an element in every evaluation of the model, see <a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>: the finite elements of the model that have a location, and in a meshfree model its cells and particles as well.</p>
+</dd>
+<dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.numbering" title="edelweissfe.models.discretesystem.DiscreteSystem.numbering"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numbering</span></code></a></dt><dd><p>The numbering of the degrees of freedom of the discrete system, which says which node fields and scalar variables have degrees of freedom, and the global index of each; see <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>.</p>
 </dd>
 </dl>
 </dd>
@@ -678,19 +683,22 @@ discrete system.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints" title="edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialPoints</span></code></a>(dU, timeStep, forEachChunk)</p></td>
 <td><p>Bring the material points that belong to no element up to date with the trial solution increment, right before the solver computes the elements.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeEntryOfNodeField" title="edelweissfe.models.discretesystem.DiscreteSystem.writeEntryOfNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeEntryOfNodeField</span></code></a>(dofVector, nodeField, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations" title="edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">withNewLocations</span></code></a>()</p></td>
+<td><p>The discrete system after a change of the connectivity that leaves the numbering as it is, e.g. the contact search of a constraint: the same numbering, and the locations of the constraints that are active now (see <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="edelweissfe.models.femodel.FEModel.activeConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">activeConstraints()</span></code></a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeEntryOfNodeField" title="edelweissfe.models.discretesystem.DiscreteSystem.writeEntryOfNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeEntryOfNodeField</span></code></a>(dofVector, nodeField, ...)</p></td>
 <td><p>Write a vector of the discrete system to one entry of one node field of the model; every write of <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>, <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a> and <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeZeroVelocityAndAccelerationToModel()</span></code></a> goes through here, as every read goes through <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.readEntryOfNodeField" title="edelweissfe.models.discretesystem.DiscreteSystem.readEntryOfNodeField"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readEntryOfNodeField()</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P)</p></td>
 <td><p>Write the results of an accepted increment to the model, once (see the documentation page <em>Node field results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the force <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same names of the node fields, and the solution to the scalar variables.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel</span></code></a>(V, A)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel</span></code></a>(V, A)</p></td>
 <td><p>Write the velocity and the acceleration to the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of every node field, the one way a solver that integrates in time passes them to the model: at acceptance, with <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>, and when it completes the state an increment starts from, e.g. the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeZeroVelocityAndAccelerationToModel</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeZeroVelocityAndAccelerationToModel</span></code></a>()</p></td>
 <td><p>Write zero to the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of every node field of the model, on every node: the state a quasi-static solver leaves at acceptance.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients" title="edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients</span></code></a>(U)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients" title="edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients</span></code></a>(U)</p></td>
 <td><p>Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a converged increment, before its results are written to the model: these <em>incremental</em> degrees of freedom are the coefficients of one increment, and every increment starts them at zero (see the documentation page <em>Node field results</em>).</p></td>
 </tr>
 </tbody>
@@ -712,7 +720,7 @@ configuration.</p>
 <dd class="field-even"><p>The lumped mass, one value per degree of freedom; None if the model has no such entity.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a> | None</p>
+<dd class="field-odd"><p><a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a> | None</p>
 </dd>
 </dl>
 </dd></dl>
@@ -769,7 +777,7 @@ nodes reads the entry on the nodes that carry it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dofVector</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The vector of the discrete system, overwritten on the degrees of freedom of the field.</p></li>
+<li><p><strong>dofVector</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The vector of the discrete system, overwritten on the degrees of freedom of the field.</p></li>
 <li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The node field of the model.</p></li>
 <li><p><strong>entry</strong> (<em>str</em>) – The entry, one of <a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">NodeField.ENTRIES</span></code></a>.</p></li>
 </ul>
@@ -790,9 +798,9 @@ carries its total solution and its velocity, so every entry is read on every nod
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the discrete system, zero, overwritten.</p></li>
-<li><p><strong>V</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The velocity vector of the discrete system, zero, overwritten; None if the solver has none.</p></li>
-<li><p><strong>A</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The acceleration vector of the discrete system, zero, overwritten; None if the solver has none.</p></li>
+<li><p><strong>U</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the discrete system, zero, overwritten.</p></li>
+<li><p><strong>V</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The velocity vector of the discrete system, zero, overwritten; None if the solver has none.</p></li>
+<li><p><strong>A</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The acceleration vector of the discrete system, zero, overwritten; None if the solver has none.</p></li>
 <li><p><strong>dynamicFields</strong> (<em>list</em>) – The names of the fields whose velocity and acceleration are read, e.g. those the solver integrates in time;
 None for every field.</p></li>
 </ul>
@@ -821,10 +829,35 @@ material points evaluate their material, before the solver computes the cells, w
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The trial solution increment.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The trial solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The time step.</p></li>
 <li><p><strong>forEachChunk</strong> (<em>Callable</em><em>[</em><em>[</em><em>list</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>None</em><em>]</em>) – The solver’s loop over chunks of independent entities.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations">
+<span class="sig-name descname"><span class="pre">withNewLocations</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/discretesystem.html#DiscreteSystem.withNewLocations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations" title="Link to this definition"></a></dt>
+<dd><p>The discrete system after a change of the connectivity that leaves the numbering as it is, e.g. the contact
+search of a constraint: the same numbering, and the locations of the constraints that are active now (see
+<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="edelweissfe.models.femodel.FEModel.activeConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">activeConstraints()</span></code></a>). The constraints must take part with the scalar
+variables the numbering holds: a change of these needs a new numbering, built by
+<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.buildDiscreteSystem" title="edelweissfe.models.femodel.FEModel.buildDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildDiscreteSystem()</span></code></a>.</p>
+<p>This discrete system is not changed. The vectors of the solver refer to the locations they were wrapped with
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations.constructDofVector" title="edelweissfe.numerics.doflocations.DofLocations.constructDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">constructDofVector()</span></code></a>), and the solver wraps them on the
+locations of the returned discrete system, their values kept
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector.onLocations" title="edelweissfe.numerics.dofvector.DofVector.onLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onLocations()</span></code></a>).</p>
+<p>This is the one implementation. A discrete system that holds more than the numbering and the locations
+extends <code class="xref py py-meth docutils literal notranslate"><span class="pre">_newLocations()</span></code>; whatever else it holds must not depend on the connectivity, or be read from
+the locations, which the new discrete system holds.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A discrete system of the same model, with the same numbering and new locations.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem" title="edelweissfe.models.discretesystem.DiscreteSystem">DiscreteSystem</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -842,7 +875,7 @@ on the others.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>dofVector</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The vector of the discrete system.</p></li>
+<li><p><strong>dofVector</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The vector of the discrete system.</p></li>
 <li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The node field of the model.</p></li>
 <li><p><strong>entry</strong> (<em>str</em>) – The entry, one of <a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">NodeField.ENTRIES</span></code></a>.</p></li>
 </ul>
@@ -864,9 +897,9 @@ It passes None for the entries the other part writes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution.</p></li>
-<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The increment of the solution; None to leave the entry <code class="docutils literal notranslate"><span class="pre">dU</span></code> of the node fields as it is.</p></li>
-<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The internal force, the sum of the elements’ residual contributions, with the inertial and damping forces
+<li><p><strong>U</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The increment of the solution; None to leave the entry <code class="docutils literal notranslate"><span class="pre">dU</span></code> of the node fields as it is.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The internal force, the sum of the elements’ residual contributions, with the inertial and damping forces
 of a solver that integrates in time; None to leave the entry <code class="docutils literal notranslate"><span class="pre">P</span></code> of the node fields as it is.</p></li>
 </ul>
 </dd>
@@ -883,8 +916,8 @@ computes from equilibrium at the start of a step.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>V</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The velocity; None to leave the entry <code class="docutils literal notranslate"><span class="pre">V</span></code> as it is.</p></li>
-<li><p><strong>A</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The acceleration; None to leave the entry <code class="docutils literal notranslate"><span class="pre">A</span></code> as it is.</p></li>
+<li><p><strong>V</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The velocity; None to leave the entry <code class="docutils literal notranslate"><span class="pre">V</span></code> as it is.</p></li>
+<li><p><strong>A</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The acceleration; None to leave the entry <code class="docutils literal notranslate"><span class="pre">A</span></code> as it is.</p></li>
 </ul>
 </dd>
 </dl>
@@ -913,7 +946,7 @@ the documentation page <em>Node field results</em>).</p>
 model, whose background grid and kernel functions are incremental, sets their degrees of freedom to zero.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the converged increment, modified in place.</p>
+<dd class="field-odd"><p><strong>U</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the converged increment, modified in place.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -921,38 +954,44 @@ model, whose background grid and kernel functions are incremental, sets their de
 <dl class="py property">
 <dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.constraints">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">constraints</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.constraints" title="Link to this definition"></a></dt>
-<dd><p>the ones the DOF manager located, with their scalar
-variables, when the discrete system was built or last located its constraints anew (see
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices" title="edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshConstraintIndices()</span></code></a>). The solver evaluates exactly
-these in every evaluation of the model, so that every constraint it evaluates has its rows in the system
-matrix, and every row of a constraint is filled.</p>
+<dd><p>The constraints that take part in the discrete system, i.e. the ones the locations hold, with their scalar
+variables, when the discrete system was built or last got new locations (see <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations" title="edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">withNewLocations()</span></code></a>). The
+solver evaluates exactly these in every evaluation of the model, so that every constraint it evaluates has its
+rows in the system matrix, and every row of a constraint is filled.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The constraints, in the order in which the DOF manager located them.</p>
+<dd class="field-odd"><p>The constraints, in the order in which the locations hold them.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>list</p>
 </dd>
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The constraints that take part in the discrete system</p>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.elements">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">elements</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.elements" title="Link to this definition"></a></dt>
+<dd><p>Everything the solver computes like an element in every evaluation of the model, see
+<a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>: the finite elements of the model that
+have a location, and in a meshfree model its cells and particles as well. The entities the locations hold: a
+solver computes exactly what has rows in the system matrix. A list, which a parallel solver hands out in slices
+to its threads.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The elements, in the order in which the solver computes them.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.dofManager">
-<span class="sig-name descname"><span class="pre">dofManager</span></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.dofManager" title="Link to this definition"></a></dt>
-<dd><p>The numbering of the degrees of freedom of the discrete system; see
-<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a>.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.elements">
-<span class="sig-name descname"><span class="pre">elements</span></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.elements" title="Link to this definition"></a></dt>
-<dd><p>Everything the solver computes like an element in every evaluation of the model, see
-<a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>: the finite elements of the model,
-and in a meshfree model its cells and particles as well. A list, which a parallel solver hands out in slices
-to its threads.</p>
+<dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.locations">
+<span class="sig-name descname"><span class="pre">locations</span></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.locations" title="Link to this definition"></a></dt>
+<dd><p>The locations of the elements and of the constraints in the numbering of the degrees of freedom; see
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>. They are replaced by new ones, never changed
+(see <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations" title="edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">withNewLocations()</span></code></a>).</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -977,7 +1016,23 @@ finite element model, whose elements evaluate the material at their own quadratu
 <dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.modelForLinearSolver">
 <span class="sig-name descname"><span class="pre">modelForLinearSolver</span></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.modelForLinearSolver" title="Link to this definition"></a></dt>
 <dd><p>The model the linear solver is set up for (see <a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.setModel" title="edelweissfe.linsolve.base.LinearSolver.setModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setModel()</span></code></a>),
-whose node fields are the ones the DOF manager numbers: here, the model itself.</p>
+whose node fields are the ones the numbering numbers: here, the model itself.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.numbering">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">numbering</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><span class="pre">DofNumbering</span></a></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.numbering" title="Link to this definition"></a></dt>
+<dd><p>The numbering of the degrees of freedom of the discrete system, which says which node fields and scalar
+variables have degrees of freedom, and the global index of each; see
+<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The numbering the locations are built on.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering">DofNumbering</a></p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>

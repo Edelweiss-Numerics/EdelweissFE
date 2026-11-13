@@ -628,11 +628,11 @@
 
 <div class="viewcode-block" id="Preconditioner.setModel">
 <a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.setModel">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">numbering</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Take a new model (the first, or one after a change of the mesh), and hand it to the children. A component</span>
 <span class="sd">        that derives something from the model (e.g. which dofs a marker selects) overrides this."""</span>
         <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
-            <span class="n">child</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span></div>
+            <span class="n">child</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">numbering</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Preconditioner.finishSolve">

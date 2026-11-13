@@ -60,7 +60,7 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -154,7 +154,7 @@ we store results in cumulative Fields, such as NodeField.</p>
 <dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – The name under which the model holds it (see <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.scalarVariables" title="edelweissfe.models.femodel.FEModel.scalarVariables"><code class="xref py py-attr docutils literal notranslate"><span class="pre">scalarVariables</span></code></a>),
 the same in every run of the model: a restart checkpoint stores its value under this name, and the numbering
 of the degrees of freedom names it so
-(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest" title="edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofNumberingDigest</span></code></a>).</p>
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.digest" title="edelweissfe.numerics.dofnumbering.DofNumbering.digest"><code class="xref py py-attr docutils literal notranslate"><span class="pre">digest</span></code></a>).</p>
 </dd>
 </dl>
 </dd></dl>

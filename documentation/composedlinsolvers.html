@@ -74,7 +74,7 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
 <li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
@@ -581,7 +581,7 @@ a combination then forms the residual of that field alone and calls <code class=
 <li><p><code class="docutils literal notranslate"><span class="pre">withRebuildReasons(change)</span></code>: a component that adds reasons for a rebuild of its own (a Krylov solver’s
 <code class="docutils literal notranslate"><span class="pre">RebuildPolicy</span></code>), or keeps something built for the matrix above such a child (the <span class="math notranslate nohighlight">\(D\)</span> of a
 <code class="docutils literal notranslate"><span class="pre">DiagonalScaling</span></code> around a Krylov solve), so that it rebuilds together with the child.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">setModel(model,</span> <span class="pre">dofManager)</span></code>: a component that derives something from the model, e.g. which dofs a marker
+<li><p><code class="docutils literal notranslate"><span class="pre">setModel(model,</span> <span class="pre">numbering)</span></code>: a component that derives something from the model, e.g. which dofs a marker
 selects.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">finishSolve()</span></code>: a component that holds something only one solve needs (e.g. the field blocks of its matrix)
 releases it here, so that no copy of the last matrix is kept while the nonlinear solver assembles the next one.</p></li>

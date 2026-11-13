@@ -265,7 +265,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">carriesKineticEnergy</span><span class="p">,</span> <span class="n">carriesLinearMomentum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.change</span><span class="w"> </span><span class="kn">import</span> <span class="n">Change</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.mpctransformation</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiPointConstraintTransformation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.base.outputmanagerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputManagerBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.conservationchecks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -401,7 +401,7 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">ExplicitSystem</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Everything an explicit increment operates on that is sized by the current discrete system.</span>
 
-<span class="sd">    None of these are independent state: each is indexed by the :class:`DofManager` in force when it</span>
+<span class="sd">    None of these are independent state: each is indexed by the numbering and the locations in force when it</span>
 <span class="sd">    was created, so the moment that system changes -- an h-adaptivity event creating nodes and</span>
 <span class="sd">    elements, a contact constraint re-assigning its slave nodes to different master facets -- every</span>
 <span class="sd">    one of them has to be rebuilt together, and any that is not becomes either a length mismatch or,</span>
@@ -1075,7 +1075,7 @@
 <span class="sd">        """</span>
 
         <span class="n">internalForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span>
-        <span class="n">force</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">force</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">internalForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">force</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>
             <span class="n">force</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="n">internalForce</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span>
@@ -1254,7 +1254,7 @@
             <span class="c1"># One row per non-mechanical second-order field, kept out of the total: for a hyperbolic</span>
             <span class="c1"># non-local field the inertia is a time squared, so 0.5 * m * rate**2 is a volume.</span>
             <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nonMechanicalSecondOrderFields</span><span class="p">:</span>
-                <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
+                <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
                 <span class="n">energyRows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                     <span class="p">[</span>
                         <span class="n">fieldName</span><span class="p">,</span>
@@ -1530,7 +1530,7 @@
 <span class="sd">        with no connectivity-update protocol at all -- ``updateConnectivity`` belongs to</span>
 <span class="sd">        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`, and only those</span>
 <span class="sd">        constraints can ask for this rebuild -- and the dependency records they produce are a function of the node DOF</span>
-<span class="sd">        indices, which a constraint refresh leaves untouched. Should a multi-point constraint ever gain a</span>
+<span class="sd">        indices, which a change of the connectivity leaves untouched. Should a multi-point constraint ever gain a</span>
 <span class="sd">        connectivity of its own, that argument fails and the transformation would have to be</span>
 <span class="sd">        rebuilt here rather than kept.</span>
 
@@ -1563,12 +1563,12 @@
         <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_restoreLumpedOperators</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Put the kept lumped operators back, into vectors carrying the refreshed entity mapping.</span>
+<span class="w">        </span><span class="sd">"""Put the kept lumped operators back, into vectors on the new locations.</span>
 
 <span class="sd">        The numbers are the ones :meth:`_assembleLumpedOperators` produced when it last ran. What</span>
 <span class="sd">        that method additionally left on the solver -- which fields are first and which second</span>
 <span class="sd">        order, and the DOF index sets of each -- is not restored because it was never invalidated:</span>
-<span class="sd">        a constraint refresh leaves the fields and their indices exactly as they were, so those</span>
+<span class="sd">        a change of the connectivity leaves the fields and their indices exactly as they were, so those</span>
 <span class="sd">        attributes still describe this system.</span>
 
 <span class="sd">        Returns</span>
@@ -1579,17 +1579,17 @@
 
         <span class="n">cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reusableOperators</span>
 
-        <span class="c1"># The transformation is indexed by the DOF layout, which the refresh did not move.</span>
-        <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">cache</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">nDof</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span>
+        <span class="c1"># The transformation is indexed by the numbering, which the change of the connectivity did not move.</span>
+        <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">cache</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">nDof</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">mpcTransformation</span>
 
-        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">M</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">lumpedMass</span>
-        <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">Minv</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">inverseLumpedMass</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">rawLumpedMass</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">dampingRate</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lumpedMass</span> <span class="o">=</span> <span class="n">M</span>
 
@@ -1628,8 +1628,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span> <span class="o">=</span> <span class="p">{</span><span class="n">number</span><span class="p">:</span> <span class="n">element</span> <span class="k">for</span> <span class="n">number</span><span class="p">,</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">element</span><span class="o">.</span><span class="n">hasKernels</span><span class="p">}</span>
 
         <span class="c1"># initialize mass and damping matrices</span>
-        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># initialize lumped mass matrix</span>
-        <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># initialize inverse lumped mass matrix</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># initialize lumped mass matrix</span>
+        <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># initialize inverse lumped mass matrix</span>
 
         <span class="n">M</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
@@ -1638,7 +1638,7 @@
             <span class="n">M</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Me</span>
 
         <span class="c1"># Each field's first-derivative coefficient: zero mechanically, the non-local viscosity always.</span>
-        <span class="n">damping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">damping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">damping</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="n">Ce</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
@@ -1727,7 +1727,7 @@
         <span class="n">Minv</span><span class="p">[</span><span class="n">M</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">M</span><span class="p">[</span><span class="n">M</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">]</span>
 
         <span class="c1"># Damping rate alpha = C / M at second-order DOFs with nonzero (folded) inertia; zero elsewhere.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="n">integrating</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span><span class="p">[</span><span class="n">M</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">[</span><span class="n">integrating</span><span class="p">]</span> <span class="o">=</span> <span class="n">damping</span><span class="p">[</span><span class="n">integrating</span><span class="p">]</span> <span class="o">/</span> <span class="n">M</span><span class="p">[</span><span class="n">integrating</span><span class="p">]</span>
@@ -1746,9 +1746,9 @@
 
 <span class="sd">        Called once before the increment loop, and again from inside it whenever a constraint reports</span>
 <span class="sd">        that its DOF footprint changed -- one method for both, so the path every model takes and the</span>
-<span class="sd">        path only a contact model takes cannot drift apart. On that second path the DofManager is</span>
-<span class="sd">        refreshed rather than rebuilt and the lumped operators are kept; see</span>
-<span class="sd">        :meth:`_operatorsReusable`.</span>
+<span class="sd">        path only a contact model takes cannot drift apart. On that second path the discrete system gets</span>
+<span class="sd">        new locations (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`) rather than being</span>
+<span class="sd">        rebuilt, and the lumped operators are kept; see :meth:`_operatorsReusable`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1774,7 +1774,7 @@
         <span class="n">isRebuild</span> <span class="o">=</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="n">verbosity</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">isRebuild</span> <span class="k">else</span> <span class="mi">0</span>
 
-        <span class="c1"># A connectivity-only rebuild refreshes the DofManager and keeps the lumped operators; see</span>
+        <span class="c1"># A connectivity-only rebuild makes new locations in the same numbering and keeps the lumped operators; see</span>
         <span class="c1"># _operatorsReusable(). Anything else builds from scratch.</span>
         <span class="n">reuseOperators</span> <span class="o">=</span> <span class="n">isRebuild</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_operatorsReusable</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
 
@@ -1785,15 +1785,14 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
                 <span class="n">verbosity</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">refreshConstraintIndices</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">withNewLocations</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Creating monolithic discrete system"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">)</span>
             <span class="c1"># The numbering of the model's degrees of freedom, and how the state passes between the model and the</span>
             <span class="c1"># vectors; this solver evaluates the model's elements itself, and assembles no system matrix.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildDiscreteSystem</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">dofManager</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-            <span class="s2">"total size of discrete system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
+            <span class="s2">"total size of discrete system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
             <span class="n">verbosity</span><span class="p">,</span>
         <span class="p">)</span>
@@ -1830,14 +1829,14 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="n">lumpedMass</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="n">lumpedMass</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span><span class="p">))</span>
 
-        <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="c1"># Zero unless carried over below or formed at the start of a step: see the module documentation, "The net force</span>
         <span class="c1"># is solver state, and a step starts from the model's state".</span>
-        <span class="n">netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">internalForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">internalForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">isRebuild</span><span class="p">:</span>
             <span class="c1"># After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new</span>
@@ -1904,7 +1903,7 @@
 <span class="sd">            The momentum, one entry per spatial component.</span>
 <span class="sd">        """</span>
 
-        <span class="k">return</span> <span class="n">linearMomentum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mass</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">V</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearMomentumFields</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">linearMomentum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mass</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">V</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearMomentumFields</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_perFieldLumpedTotals</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
@@ -1929,7 +1928,7 @@
 
         <span class="n">totals</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">firstOrderFields</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">secondOrderFields</span><span class="p">:</span>
-            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
             <span class="n">totals</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span><span class="p">[</span><span class="n">indices</span><span class="p">]))</span>
         <span class="k">return</span> <span class="n">totals</span>
 
@@ -1939,7 +1938,7 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        fieldNames</span>
-<span class="sd">            Names of fields present in the current DofManager.</span>
+<span class="sd">            Names of fields present in the current numbering.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1950,7 +1949,7 @@
 
         <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="n">fieldNames</span><span class="p">:</span>
-            <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]]</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[</span><span class="n">indices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]]</span>
         <span class="k">return</span> <span class="n">indices</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_checkDerivedSchemeAgainstTheDeck</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -2057,7 +2056,7 @@
         <span class="n">firstOrderFields</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">secondOrderFields</span> <span class="o">=</span> <span class="p">[]</span>
 
-        <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">carriesInertia</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">inertia</span><span class="p">[</span><span class="n">indices</span><span class="p">])</span> <span class="o">!=</span> <span class="mf">0.0</span>
             <span class="n">carriesDamping</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">damping</span><span class="p">[</span><span class="n">indices</span><span class="p">])</span> <span class="o">!=</span> <span class="mf">0.0</span>
 

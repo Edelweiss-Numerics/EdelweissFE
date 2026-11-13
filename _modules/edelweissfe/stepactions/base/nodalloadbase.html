@@ -107,7 +107,8 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.doflocations</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofLocations</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemMatrixBlocks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.sets.nodeset</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.base.loadbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoadBase</span>
@@ -151,14 +152,14 @@
         <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-        <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">,</span>
+        <span class="n">locations</span><span class="p">:</span> <span class="n">DofLocations</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Subtract the current node loads from the residual contribution at the degrees of freedom of the field</span>
 <span class="sd">        on the node set; a dead load, so without a tangent. See</span>
 <span class="sd">        :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.</span>
 
 <span class="sd">        Only the nodes of the set that are part of the discrete system are loaded (see</span>
-<span class="sd">        :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`): every node of the set in a finite</span>
+<span class="sd">        :meth:`~edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet`): every node of the set in a finite</span>
 <span class="sd">        element model, those in the active domain in a meshfree one.</span>
 
 <span class="sd">        Parameters</span>
@@ -173,11 +174,11 @@
 <span class="sd">            The global solution increment.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The current time step.</span>
-<span class="sd">        dofManager</span>
-<span class="sd">            The DOF manager of the discrete system, which locates the degrees of freedom of the node set.</span>
+<span class="sd">        locations</span>
+<span class="sd">            The locations of the entities in the discrete system, from which the load finds where it acts.</span>
 <span class="sd">        """</span>
 
-        <span class="n">dofIndices</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="n">dofManager</span><span class="o">.</span><span class="n">locateFieldOnNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodeSet</span><span class="p">)</span>
+        <span class="n">dofIndices</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">locateFieldOnNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">field</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodeSet</span><span class="p">)</span>
         <span class="c1"># one row of the load per node of the set: those of the nodes in the discrete system</span>
         <span class="n">P</span><span class="p">[</span><span class="n">dofIndices</span><span class="p">]</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">getCurrentLoad</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)[</span><span class="n">nodePositions</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span></div>
 </div>

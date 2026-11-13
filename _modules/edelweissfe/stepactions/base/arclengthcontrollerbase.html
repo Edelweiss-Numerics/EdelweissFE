@@ -107,7 +107,8 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">abstractmethod</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofnumbering</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofNumbering</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.base.stepactionbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">StepActionBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 
@@ -138,7 +139,7 @@
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.computeDDLambda">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeDDLambda</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_0</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_f</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_0</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_f</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">numbering</span><span class="p">:</span> <span class="n">DofNumbering</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Compute the correction of the load parameter in the current Newton iteration.</span>
 
@@ -154,8 +155,8 @@
 <span class="sd">        timeStep</span>
 <span class="sd">            The increment being solved: ``timeStep.stepProgress`` is the progress of the step at its end, and</span>
 <span class="sd">            ``timeStep.stepProgressIncrement`` its size, so it starts at their difference.</span>
-<span class="sd">        dofManager</span>
-<span class="sd">            The dof manager of the current discrete system.</span>
+<span class="sd">        numbering</span>
+<span class="sd">            The numbering of the degrees of freedom of the current discrete system.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -167,7 +168,7 @@
 <div class="viewcode-block" id="ArcLengthControllerBase.finishIncrement">
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.finishIncrement">[docs]</a>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">finishIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dLambda</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finishIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dLambda</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">numbering</span><span class="p">:</span> <span class="n">DofNumbering</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Called once an increment has converged, e.g. to report or to store the controlled quantity it reached.</span>
 
 <span class="sd">        Parameters</span>
@@ -180,8 +181,8 @@
 <span class="sd">            The converged increment of the load parameter.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The converged time step.</span>
-<span class="sd">        dofManager</span>
-<span class="sd">            The dof manager of the current discrete system.</span>
+<span class="sd">        numbering</span>
+<span class="sd">            The numbering of the degrees of freedom of the current discrete system.</span>
 <span class="sd">        """</span></div>
 </div>
 

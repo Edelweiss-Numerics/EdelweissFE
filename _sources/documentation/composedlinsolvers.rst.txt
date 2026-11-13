@@ -415,7 +415,7 @@ leaf; override a method only in the case named:
 * ``withRebuildReasons(change)``: a component that adds reasons for a rebuild of its own (a Krylov solver's
   ``RebuildPolicy``), or keeps something built for the matrix above such a child (the :math:`D` of a
   ``DiagonalScaling`` around a Krylov solve), so that it rebuilds together with the child.
-* ``setModel(model, dofManager)``: a component that derives something from the model, e.g. which dofs a marker
+* ``setModel(model, numbering)``: a component that derives something from the model, e.g. which dofs a marker
   selects.
 * ``finishSolve()``: a component that holds something only one solve needs (e.g. the field blocks of its matrix)
   releases it here, so that no copy of the last matrix is kept while the nonlinear solver assembles the next one.

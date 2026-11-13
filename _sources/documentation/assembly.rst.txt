@@ -16,8 +16,9 @@ The block of an entity
 Every element, constraint or other entity that couples nodes contributes a block to the system matrix, and knows it
 only in its own numbering: row ``a`` and column ``b`` of the block are its ``a``-th and ``b``-th degree of freedom
 (:class:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase`). Where these lie in the global
-system is its global DOF list, which the :class:`~edelweissfe.numerics.dofmanager.DofManager` numbers; the DOF manager
-knows nothing about the system matrix.
+system is its location, its global DOF list, which :class:`~edelweissfe.numerics.doflocations.DofLocations` holds for
+every entity (in the numbering of :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`); neither knows anything
+about the system matrix.
 
 - By default an entity couples all its degrees of freedom: its block is the dense ``nDof x nDof`` matrix, stored
   column-major, as every element writes it.
