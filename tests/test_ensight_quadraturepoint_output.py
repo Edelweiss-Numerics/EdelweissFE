@@ -27,8 +27,9 @@
 #  ---------------------------------------------------------------------
 """
 The Ensight export of quadrature point results (``>>perQuadraturePoint``), read back from the
-written files: each element is split into one linear sub-element per quadrature point, which
-carries the result of the quadrature point it contains.
+written files: each element is split into one linear sub-element per quadrature point of its
+Gauss rule, in proportion to the weights, which carries the result of the quadrature point it
+contains.
 
 The decks prescribe the displacement ``u_i = A_i x_i x_j`` (``j`` the next direction) at all nodes
 of a regular mesh, which bilinear and serendipity elements represent exactly. With a Poisson's
@@ -43,6 +44,11 @@ import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.elements._hexa3dnodeordering import hexa8DNdXi
+from edelweissfe.outputmanagers.ensight import (
+    createQuadraturePointPartFromElementSet,
+    createUnstructuredPartFromElementSet,
+)
+from edelweissfe.points.node import Node
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 E = 1000.0
@@ -86,11 +92,27 @@ MATERIALS = {
     "marmot": dict(material="LINEARELASTIC", materialProvider=""),
 }
 
-# (provider, element type, spatial dimensions): 2D quadrilaterals and 3D hexahedra, linear and quadratic
+# per number of Gauss points in a direction: the points, and the natural coordinates which split
+# the element in proportion to the weights
+GAUSS = {
+    2: ((-1 / np.sqrt(3), 1 / np.sqrt(3)), (-1.0, 0.0, 1.0)),
+    3: ((-np.sqrt(0.6), 0.0, np.sqrt(0.6)), (-1.0, -4 / 9, 4 / 9, 1.0)),
+}
+
+# (provider, element type, spatial dimensions, Gauss points per direction): 2D quadrilaterals and
+# 3D hexahedra, linear and quadratic, the latter with reduced and with full integration
 CASES = [
-    (provider, elType, dim)
+    (provider, elType, dim, n)
     for provider in ("edelweiss", "marmot")
-    for elType, dim in (("CPE4", 2), ("CPS4", 2), ("CPE8R", 2), ("C3D8", 3), ("C3D20R", 3))
+    for elType, dim, n in (
+        ("CPE4", 2, 2),
+        ("CPS4", 2, 2),
+        ("CPE8R", 2, 2),
+        ("CPE8", 2, 3),
+        ("C3D8", 3, 2),
+        ("C3D20R", 3, 2),
+        ("C3D20", 3, 3),
+    )
 ]
 
 
@@ -222,23 +244,31 @@ def _lastFile(pattern: str) -> str:
     return sorted(glob.glob(pattern))[-1]
 
 
-def _quadraturePointsOfSubElements(part: dict, subShape: str, dim: int) -> np.ndarray:
-    """The Gauss point each sub-element contains: at 1/sqrt(3) of the element's half length from the
-    element center, the centroid of the sub-element being at 1/2."""
+def _cellsOfSubElements(part: dict, subShape: str, dim: int, n: int) -> tuple[np.ndarray, np.ndarray]:
+    """For each sub-element of the regular mesh the Gauss point it contains and its extents, from
+    where its centroid lies in its element."""
 
     spacing = np.array(LENGTHS[:dim]) / np.array(DIVISIONS[:dim])
+    points, breakpoints = (np.array(values) for values in GAUSS[n])
+    cellCenters = (breakpoints[:-1] + breakpoints[1:]) / 2
+
     centroids = part["coordinates"][:, :dim][part["elements"][subShape]].mean(axis=1)
     elementCenters = (np.floor(centroids / spacing) + 0.5) * spacing
-    return elementCenters + (centroids - elementCenters) * 2 / np.sqrt(3)
+    natural = (centroids - elementCenters) / (spacing / 2)
+    cells = np.abs(natural[:, :, None] - cellCenters).argmin(axis=2)
+    assert np.allclose(natural, cellCenters[cells], atol=1e-6)
+
+    return elementCenters + points[cells] * spacing / 2, np.diff(breakpoints)[cells] * spacing / 2
 
 
-@pytest.mark.parametrize("provider, elType, dim", CASES, ids=lambda v: str(v))
-def test_quadrature_point_results_on_sub_elements(tmp_path, monkeypatch, provider, elType, dim):
-    model, _ = _run(tmp_path, monkeypatch, provider, elType, dim)
+@pytest.mark.parametrize("provider, elType, dim, n", CASES, ids=lambda v: str(v))
+def test_quadrature_point_results_on_sub_elements(tmp_path, monkeypatch, provider, elType, dim, n):
+    nQp = n**dim
+    model, _ = _run(tmp_path, monkeypatch, provider, elType, dim, "0:{:}".format(nQp))
 
-    nQp = 2**dim
     nElements = len(model.elementSets["all"])
-    spacing = np.array(LENGTHS[:dim]) / np.array(DIVISIONS[:dim])
+    divisions = np.array(DIVISIONS[:dim])
+    spacing = np.array(LENGTHS[:dim]) / divisions
     amplitudes = np.array(AMPLITUDES[:dim])
     following = [(i + 1) % dim for i in range(dim)]
 
@@ -246,35 +276,40 @@ def test_quadrature_point_results_on_sub_elements(tmp_path, monkeypatch, provide
     base, part = parts["all"], parts["all_QP"]
     subShape = "quad4" if dim == 2 else "hexa8"
 
-    # one linear sub-element per quadrature point, on the nodes of the element set and the added ones
+    # one linear sub-element per quadrature point
     assert list(part["elements"]) == [subShape]
     connectivity = part["elements"][subShape]
     assert len(connectivity) == nQp * nElements
     assert len(np.unique(part["labels"][subShape])) == nQp * nElements
 
+    # the nodes are those of the lattice of n cells per element and direction: nodes shared by neighboring
+    # elements are not duplicated, and nodes of the element set off that lattice are left out
     coordinates = part["coordinates"][:, :dim]
-    nBase = len(base["coordinates"])
-    assert np.array_equal(part["coordinates"][:nBase], base["coordinates"])
+    assert len(coordinates) == np.prod(n * divisions + 1)
+    assert len(np.unique(np.round(coordinates / spacing, 5), axis=0)) == len(coordinates)
 
-    # nodes shared by neighboring elements are not duplicated: the nodes are those of the lattice of half the spacing
-    assert len(coordinates) == np.prod(2 * np.array(DIVISIONS[:dim]) + 1)
-    assert len(np.unique(np.round(coordinates / (spacing / 2)), axis=0)) == len(coordinates)
+    # the nodes of the element set come first; all of them, unless edge midpoints are off the lattice
+    nBase = len(base["coordinates"])
+    allBaseNodesKept = n % 2 == 0 or nBase == np.prod(divisions + 1)
+    if allBaseNodesKept:
+        assert np.array_equal(part["coordinates"][:nBase], base["coordinates"])
+    else:
+        nCorners = np.prod(divisions + 1)
+        assert all((row == base["coordinates"]).all(axis=1).any() for row in part["coordinates"][:nCorners])
 
     # the sub-elements are the cells of that lattice, each one exactly once and none inverted
+    quadraturePoints, extents = _cellsOfSubElements(part, subShape, dim, n)
     X = coordinates[connectivity]
-    assert np.allclose(np.ptp(X, axis=1), spacing / 2)
-    centroids = X.mean(axis=1)
-    assert len(np.unique(np.round(centroids / (spacing / 4)), axis=0)) == nQp * nElements
+    assert np.allclose(np.ptp(X, axis=1), extents)
+    assert len(np.unique(np.round(X.mean(axis=1) / spacing, 5), axis=0)) == nQp * nElements
     if dim == 2:
         x, y = X[:, :, 0], X[:, :, 1]
         volumes = 0.5 * np.sum(x * np.roll(y, -1, axis=1) - np.roll(x, -1, axis=1) * y, axis=1)
     else:
         volumes = 8 * np.linalg.det(np.einsum("in,enj->eij", hexa8DNdXi(0.0, 0.0, 0.0), X))
-    assert np.allclose(volumes, np.prod(spacing / 2))
+    assert np.allclose(volumes, np.prod(extents, axis=1))
 
     # each sub-element carries the stress at the Gauss point it contains
-    quadraturePoints = _quadraturePointsOfSubElements(part, subShape, dim)
-
     stress = _readVariable(_lastFile("ensight/stress.var_*"), parts, 6)
     assert list(stress) == ["all_QP"]
     assert np.allclose(stress["all_QP"][subShape][:, :dim], E * amplitudes * quadraturePoints[:, following], rtol=1e-5)
@@ -282,19 +317,21 @@ def test_quadrature_point_results_on_sub_elements(tmp_path, monkeypatch, provide
     # node results are written on the sub-element part as well, interpolated to the added nodes
     displacement = _readVariable(_lastFile("ensight/displacement.var_*"), parts, 3)
     assert set(displacement) == {"all", "all_QP"}
-    assert np.array_equal(displacement["all"], displacement["all_QP"][:nBase])
+    if allBaseNodesKept:
+        assert np.array_equal(displacement["all"], displacement["all_QP"][:nBase])
     expected = amplitudes * coordinates * coordinates[:, following]
     assert np.allclose(displacement["all_QP"][:, :dim], expected, rtol=1e-5, atol=1e-9)
     assert not np.any(displacement["all_QP"][:, dim:])
 
 
-def test_sub_element_of_each_quadrature_point_of_the_element(tmp_path, monkeypatch):
+@pytest.mark.parametrize("elType, nQp", [("CPE8R", 4), ("CPE8", 9)])
+def test_sub_element_of_each_quadrature_point_of_the_element(tmp_path, monkeypatch, elType, nQp):
     """Sub-element g of an element contains the element's quadrature point g."""
 
-    model, _ = _run(tmp_path, monkeypatch, "edelweiss", "CPE8R", 2)
+    model, _ = _run(tmp_path, monkeypatch, "edelweiss", elType, 2, "0:{:}".format(nQp))
 
     part = _readGeometry("ensight/geometry.geo_0000")["all_QP"]
-    X = part["coordinates"][:, :2][part["elements"]["quad4"]].reshape(-1, 4, 4, 2)
+    X = part["coordinates"][:, :2][part["elements"]["quad4"]].reshape(-1, nQp, 4, 2)
     for element, subElements in zip(model.elementSets["all"], X):
         quadraturePoints = element.getCoordinatesAtQuadraturePoints()
         assert np.all(subElements.min(axis=1) < quadraturePoints)
@@ -304,15 +341,71 @@ def test_sub_element_of_each_quadrature_point_of_the_element(tmp_path, monkeypat
 @pytest.mark.parametrize(
     "elType, dim, quadraturePoints, message",
     [
-        ("CPE8", 2, "0:9", "2 quadrature points per direction"),
-        ("C3D20", 3, "0:27", "2 quadrature points per direction"),
         ("CPE4", 2, "0:2", "quadraturePoint=0:4"),
+        ("CPE8", 2, "0:4", "quadraturePoint=0:9"),
         ("C3D8", 3, "0", "quadraturePoint=0:8"),
+        ("C3D20", 3, "0:8", "quadraturePoint=0:27"),
     ],
 )
-def test_unsupported_quadrature_point_output_is_refused(tmp_path, monkeypatch, elType, dim, quadraturePoints, message):
+def test_incomplete_quadrature_point_range_is_refused(tmp_path, monkeypatch, elType, dim, quadraturePoints, message):
     with pytest.raises(Exception, match=message):
         _run(tmp_path, monkeypatch, "edelweiss", elType, dim, quadraturePoints)
+
+
+class _StubElement:
+    """Just what the sub-element part needs of an element: a unit square with given quadrature points."""
+
+    def __init__(self, elNumber: int, ensightType: str, quadraturePoints: list):
+        corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        self.elNumber = elNumber
+        self.ensightType = ensightType
+        self.visualizationNodes = [Node(4 * elNumber + i, np.array(x)) for i, x in enumerate(corners)]
+        self._quadraturePoints = np.array(quadraturePoints)
+
+    def getNumberOfQuadraturePoints(self) -> int:
+        return len(self._quadraturePoints)
+
+    def getCoordinatesAtQuadraturePoints(self) -> np.ndarray:
+        return self._quadraturePoints
+
+
+_GAUSS_2X2 = [(0.5 + 0.5 * a / np.sqrt(3), 0.5 + 0.5 * b / np.sqrt(3)) for a in (-1, 1) for b in (-1, 1)]
+
+
+@pytest.mark.parametrize(
+    "elements, message",
+    [
+        # not a quadrilateral or hexahedron
+        ([_StubElement(1, "tria3", _GAUSS_2X2)], "requires Quad4, Quad8, Hexa8 or Hexa20 elements"),
+        # not as many quadrature points as a rule with n points per direction has
+        ([_StubElement(1, "quad4", _GAUSS_2X2[:3])], "requires a Gauss rule"),
+        # as many, but elsewhere
+        ([_StubElement(1, "quad4", [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])], "requires a Gauss rule"),
+        # as many, but two of them at the same Gauss point
+        ([_StubElement(1, "quad4", _GAUSS_2X2[:3] + _GAUSS_2X2[:1])], "requires a Gauss rule"),
+        # two rules in one element set
+        (
+            [_StubElement(1, "quad4", _GAUSS_2X2), _StubElement(2, "quad4", [(0.5, 0.5)])],
+            "requires the same number of quadrature points in all elements",
+        ),
+    ],
+)
+def test_elements_without_a_sub_element_per_quadrature_point_are_refused(elements, message):
+    basePart = createUnstructuredPartFromElementSet("set", elements, 1)
+    with pytest.raises(Exception, match=message):
+        createQuadraturePointPartFromElementSet("set", elements, basePart, 2)
+
+
+def test_single_quadrature_point():
+    """An element with one quadrature point is its own sub-element."""
+
+    element = _StubElement(1, "quad4", [(0.5, 0.5)])
+    basePart = createUnstructuredPartFromElementSet("set", [element], 1)
+    part, mapping = createQuadraturePointPartFromElementSet("set", [element], basePart, 2)
+
+    assert part.nodes == element.visualizationNodes
+    assert [list(nodes) for nodes in part.elementTree["quad4"].values()] == [[0, 1, 2, 3]]
+    assert np.array_equal(mapping.toarray(), np.eye(4))
 
 
 def test_function_of_the_result_per_quadrature_point(tmp_path, monkeypatch):
@@ -321,7 +414,7 @@ def test_function_of_the_result_per_quadrature_point(tmp_path, monkeypatch):
     _run(tmp_path, monkeypatch, "edelweiss", "C3D8", 3, function="x[:, :, 1]")
 
     parts = _readGeometry("ensight/geometry.geo_0000")
-    quadraturePoints = _quadraturePointsOfSubElements(parts["all_QP"], "hexa8", 3)
+    quadraturePoints, _ = _cellsOfSubElements(parts["all_QP"], "hexa8", 3, 2)
 
     stress = _readVariable(_lastFile("ensight/stress.var_*"), parts, 1)["all_QP"]["hexa8"]
     assert np.allclose(stress[:, 0], E * AMPLITUDES[1] * quadraturePoints[:, 2], rtol=1e-5)
