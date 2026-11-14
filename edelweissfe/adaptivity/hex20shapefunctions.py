@@ -152,6 +152,12 @@ def _partition_local_coords():
 
 
 _CORNER_NODES, _MIDX_NODES, _MIDY_NODES, _MIDZ_NODES = _partition_local_coords()
+#: The same families as arrays, one per column of a node table (local index, then the node's reference
+#: coordinates): the operands of :func:`hex20_shape_grad`, which evaluates a family at once.
+_CORNERS, _MIDSIDES_X, _MIDSIDES_Y, _MIDSIDES_Z = (
+    tuple(np.array(column) for column in zip(*family))
+    for family in (_CORNER_NODES, _MIDX_NODES, _MIDY_NODES, _MIDZ_NODES)
+)
 
 
 def _hex20_shape(xi, eta, zeta, eighth, quarter) -> list:
@@ -184,52 +190,59 @@ def hex20_shape_exact(xi, eta, zeta) -> list:
 
 def hex20_shape_grad(xi, eta, zeta):
     """Evaluate the 20 serendipity shape functions together with their analytic gradient w.r.t.
-    (xi, eta, zeta) at that point. Used by the Newton-Raphson inverse map
-    (:meth:`~edelweissfe.adaptivity.hex20topology.Hex20Topology.inverse_map`) so each iteration needs
-    one evaluation instead of a value call plus a 3-point finite-difference Jacobian.
+    (xi, eta, zeta), at one point or at many at once (arrays of equal shape). Used by the
+    Newton-Raphson inverse map (:meth:`~edelweissfe.adaptivity.hex20topology.Hex20Topology.inverse_map`),
+    whose iterations need one evaluation each, for all the points they map.
 
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
-        ``(N, dN)`` with ``N`` of shape ``(20,)`` and ``dN`` of shape ``(20, 3)``, where
-        ``dN[a, k] = dN_a / d(xi, eta, zeta)[k]``.
+        ``(N, dN)`` with ``N`` of shape ``(..., 20)`` and ``dN`` of shape ``(..., 20, 3)``, where
+        ``dN[..., a, k] = dN_a / d(xi, eta, zeta)[k]`` and ``...`` is the shape of the coordinates
+        (empty for one point).
     """
-    N = [0.0] * N_NODES
-    dN = [[0.0, 0.0, 0.0] for _ in range(N_NODES)]
-    for i, xa, ya, za in _CORNER_NODES:
-        A = 1 + xi * xa
-        B = 1 + eta * ya
-        C = 1 + zeta * za
-        S = xi * xa + eta * ya + zeta * za - 2
-        N[i] = 0.125 * A * B * C * S
-        dN[i][0] = 0.125 * xa * B * C * (S + A)
-        dN[i][1] = 0.125 * ya * A * C * (S + B)
-        dN[i][2] = 0.125 * za * A * B * (S + C)
+    # one column per node of a family (corners, midside nodes on edges along x, y, z), one row per point
+    xi, eta, zeta = (c[..., None] for c in np.broadcast_arrays(*(np.asarray(c, dtype=float) for c in (xi, eta, zeta))))
+    N = np.empty(xi.shape[:-1] + (N_NODES,))
+    dN = np.empty(xi.shape[:-1] + (N_NODES, 3))
+
+    i, xa, ya, za = _CORNERS
+    A = 1 + xi * xa
+    B = 1 + eta * ya
+    C = 1 + zeta * za
+    S = xi * xa + eta * ya + zeta * za - 2
+    N[..., i] = 0.125 * A * B * C * S
+    dN[..., i, 0] = 0.125 * xa * B * C * (S + A)
+    dN[..., i, 1] = 0.125 * ya * A * C * (S + B)
+    dN[..., i, 2] = 0.125 * za * A * B * (S + C)
+
+    i, ya, za = _MIDSIDES_X
     xi2 = 1 - xi**2
-    for i, ya, za in _MIDX_NODES:
-        B = 1 + eta * ya
-        C = 1 + zeta * za
-        N[i] = 0.25 * xi2 * B * C
-        dN[i][0] = -0.5 * xi * B * C
-        dN[i][1] = 0.25 * xi2 * ya * C
-        dN[i][2] = 0.25 * xi2 * B * za
+    B = 1 + eta * ya
+    C = 1 + zeta * za
+    N[..., i] = 0.25 * xi2 * B * C
+    dN[..., i, 0] = -0.5 * xi * B * C
+    dN[..., i, 1] = 0.25 * xi2 * ya * C
+    dN[..., i, 2] = 0.25 * xi2 * B * za
+
+    i, xa, za = _MIDSIDES_Y
     eta2 = 1 - eta**2
-    for i, xa, za in _MIDY_NODES:
-        A = 1 + xi * xa
-        C = 1 + zeta * za
-        N[i] = 0.25 * eta2 * A * C
-        dN[i][0] = 0.25 * eta2 * xa * C
-        dN[i][1] = -0.5 * eta * A * C
-        dN[i][2] = 0.25 * eta2 * A * za
+    A = 1 + xi * xa
+    C = 1 + zeta * za
+    N[..., i] = 0.25 * eta2 * A * C
+    dN[..., i, 0] = 0.25 * eta2 * xa * C
+    dN[..., i, 1] = -0.5 * eta * A * C
+    dN[..., i, 2] = 0.25 * eta2 * A * za
+
+    i, xa, ya = _MIDSIDES_Z
     zeta2 = 1 - zeta**2
-    for i, xa, ya in _MIDZ_NODES:
-        A = 1 + xi * xa
-        B = 1 + eta * ya
-        N[i] = 0.25 * zeta2 * A * B
-        dN[i][0] = 0.25 * zeta2 * xa * B
-        dN[i][1] = 0.25 * zeta2 * A * ya
-        dN[i][2] = -0.5 * zeta * A * B
-    return np.array(N), np.array(dN)
+    A = 1 + xi * xa
+    B = 1 + eta * ya
+    N[..., i] = 0.25 * zeta2 * A * B
+    dN[..., i, 0] = 0.25 * zeta2 * xa * B
+    dN[..., i, 1] = 0.25 * zeta2 * A * ya
+    dN[..., i, 2] = -0.5 * zeta * A * B
+    return N, dN
 
 
 def _corner_indices():

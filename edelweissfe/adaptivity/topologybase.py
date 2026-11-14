@@ -161,8 +161,25 @@ class TopologyBase(ABC):
         """Evaluate shape functions and their analytic gradient w.r.t. parametric coordinates."""
 
     @abstractmethod
-    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
-        """Map a physical point into the reference domain."""
+    def inverse_map(self, points, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
+        """Map physical points into the reference domain of an element.
+
+        Parameters
+        ----------
+        points
+            ``(nPoints, dimension)`` physical coordinates.
+        elementNodeCoords
+            ``(nNodes, dimension)`` the element's node coordinates, in local node order.
+        tol
+            The residual (distance in physical space) at which a point counts as mapped.
+        itmax
+            The maximum number of Newton iterations.
+
+        Returns
+        -------
+        np.ndarray
+            ``(nPoints, dimension)`` the reference coordinates.
+        """
 
     @abstractmethod
     def subdivide(self, parent_coords: np.ndarray, n: int) -> list:

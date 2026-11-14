@@ -68,7 +68,20 @@ def quadraturePointReferenceCoordinates(element, referenceNodeCoords, topology) 
     children's quadrature points into the same (parent) reference frame, which is what makes
     nearest-point matching and projection distortion-independent and octant-correct."""
     phys = np.asarray(element.getCoordinatesAtQuadraturePoints()).reshape(element.getNumberOfQuadraturePoints(), -1)
-    return np.array([topology.inverse_map(p, referenceNodeCoords) for p in phys])
+    return topology.inverse_map(phys, referenceNodeCoords)
+
+
+def childrenQuadraturePointReferenceCoordinates(children, parentNodeCoords, topology) -> list:
+    """:func:`quadraturePointReferenceCoordinates` of each of ``children`` in the frame of their parent, mapped
+    together."""
+    nQuadraturePoints = [child.getNumberOfQuadraturePoints() for child in children]
+    phys = np.concatenate(
+        [
+            np.asarray(child.getCoordinatesAtQuadraturePoints()).reshape(n, -1)
+            for child, n in zip(children, nQuadraturePoints)
+        ]
+    )
+    return np.split(topology.inverse_map(phys, parentNodeCoords), np.cumsum(nQuadraturePoints)[:-1])
 
 
 class StateTransferStrategy(ABC):
@@ -99,12 +112,12 @@ class StateTransferStrategy(ABC):
         parentRefCoords = quadraturePointReferenceCoordinates(parent, parentNodeCoords, topology)
 
         allColumns = np.arange(parentBlock)
-        for child in children:
+        childrenRefCoords = childrenQuadraturePointReferenceCoordinates(children, parentNodeCoords, topology)
+        for child, childRefCoords in zip(children, childrenRefCoords):
             childBlock = perQuadraturePointBlockSize(child)
             if childBlock != parentBlock:
                 raise ValueError("state transfer: parent and child per-QP state sizes differ.")
             childInit = child.getStateVars().reshape(child.getNumberOfQuadraturePoints(), childBlock)
-            childRefCoords = quadraturePointReferenceCoordinates(child, parentNodeCoords, topology)
 
             result = childInit.copy()
             result[:, allColumns] = self._transferColumns(

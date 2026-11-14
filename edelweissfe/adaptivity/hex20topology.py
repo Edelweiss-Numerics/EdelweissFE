@@ -85,24 +85,34 @@ class Hex20Topology(TopologyBase):
     def shape_functions_and_grad(self, *params) -> tuple:
         return hex20_shape_grad(*params)
 
-    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
+    def inverse_map(self, points, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
+        """Newton-Raphson from the element center, for all points at once: each point iterates until its
+        residual or its step is small, independently of the others."""
         coords = np.asarray(elementNodeCoords, dtype=float)
-        xi = np.zeros(3)
+        points = np.asarray(points, dtype=float)
+        xi = np.zeros(points.shape)
+        #: Points still iterating; a point leaves when its residual is below ``tol`` (exactly mapped), or when
+        #: its step is small or its Jacobian singular (the best it gets: clipped to the reference cube's surroundings).
+        iterating = np.ones(len(points), dtype=bool)
+        mapped = np.zeros(len(points), dtype=bool)
         for _ in range(itmax):
-            N, dN = self.shape_functions_and_grad(*xi)
-            x = N @ coords
-            residual = x - point
-            if float(np.linalg.norm(residual)) < tol:
-                return xi
-            jac = coords.T @ dN  # jac[i, k] = dx_i / dxi_k
-            try:
-                dxi = np.linalg.solve(jac, residual)
-            except np.linalg.LinAlgError:
+            if not iterating.any():
                 break
-            xi -= dxi
-            if float(np.linalg.norm(dxi)) < 1e-10:
-                break
-        return np.clip(xi, -1.2, 1.2)
+            indices = np.flatnonzero(iterating)
+            N, dN_dxi = self.shape_functions_and_grad(*xi[indices].T)
+            residual = N @ coords - points[indices]
+            converged = np.linalg.norm(residual, axis=1) < tol
+            mapped[indices[converged]] = True
+            iterating[indices[converged]] = False
+            indices, residual, dN_dxi = indices[~converged], residual[~converged], dN_dxi[~converged]
+            dx_dxi = np.einsum("ai,pak->pik", coords, dN_dxi)
+            singular = np.linalg.det(dx_dxi) == 0.0
+            iterating[indices[singular]] = False
+            indices, residual, dx_dxi = indices[~singular], residual[~singular], dx_dxi[~singular]
+            dxi = np.linalg.solve(dx_dxi, residual[:, :, None])[:, :, 0]
+            xi[indices] -= dxi
+            iterating[indices[np.linalg.norm(dxi, axis=1) < 1e-10]] = False
+        return np.where(mapped[:, None], xi, np.clip(xi, -1.2, 1.2))
 
     def subdivide(self, parent_coords: np.ndarray, n: int) -> list:
         parent_coords = np.asarray(parent_coords, dtype=float)

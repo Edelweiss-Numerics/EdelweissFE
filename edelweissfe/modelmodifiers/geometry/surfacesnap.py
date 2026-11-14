@@ -64,6 +64,7 @@ anything, since either condition can resolve (a hanging slave stops being one on
 neighbour is itself refined; a quality veto can clear once local geometry changes).
 """
 
+import itertools
 from dataclasses import dataclass
 
 import numpy as np
@@ -251,13 +252,10 @@ class ModelModifier(ModelModifierBase):
         return labels
 
     def _minCornerJacobian(self, coords) -> float:
-        dets = []
-        for sx in (-1.0, 1.0):
-            for sy in (-1.0, 1.0):
-                for sz in (-1.0, 1.0):
-                    _, dN = self._topology.shape_functions_and_grad(sx, sy, sz)
-                    dets.append(np.linalg.det(np.asarray(coords).T @ dN))
-        return min(dets)
+        corners = np.array(list(itertools.product((-1.0, 1.0), repeat=3)))
+        _, dN_dxi = self._topology.shape_functions_and_grad(*corners.T)
+        dx_dxi = np.einsum("ai,pak->pik", np.asarray(coords, dtype=float), dN_dxi)
+        return float(np.linalg.det(dx_dxi).min())
 
     def _anyElementContaining(self, model: FEModel, label: int):
         """A HEX20 element currently containing node ``label`` as one of its own 20 nodes, or
