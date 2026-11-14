@@ -178,7 +178,12 @@ def finiteDifferenceTangent(constraint, U: np.ndarray, dU: np.ndarray, timeStep=
         The dense ``nDof x nDof`` matrix ``dP/dU``.
     """
 
+    # Only P is differentiated: the tangent the constraint computes along goes to a scratch block, which is not read.
+    discardedTangent = constraint.shapeBlock(np.zeros(len(constraint.localEntriesOfBlock()[0])))
+
     def residualContribution(perturbation):
-        return residualContributionAndTangent(constraint, U + perturbation, dU + perturbation, timeStep)[0]
+        P = np.zeros(constraint.nDof)
+        constraint.computeKernels(U + perturbation, dU + perturbation, P, discardedTangent, timeStep)
+        return P
 
     return centralDifferences(residualContribution, np.zeros(constraint.nDof), h)
