@@ -593,6 +593,9 @@ Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
     < perElement > Element-based Ensight export.
       required arguments
         [fieldOutput] Name of the result, defined on an elSet (also for perNode results!) (<class 'str'>)
+    < perQuadraturePoint > Quadrature point-based Ensight export on sub-elements.
+      required arguments
+        [fieldOutput] Name of an element result at all quadrature points of quadrilaterals or hexahedra, e.g. quadraturePoint=0:4 for CPE8R, 0:9 for CPE8, 0:8 for C3D20R, 0:27 for C3D20; written on a separate part, which splits each element into linear sub-elements, one per quadrature point (<class 'str'>)
     < configuration >
       optional arguments
         [overwrite] Overwrite results. (<class 'bool'>, default = False)

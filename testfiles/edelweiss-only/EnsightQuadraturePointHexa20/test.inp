@@ -1,0 +1,27 @@
+*material, name=linearelastic, id=mat, provider=edelweiss
+30000.0, 0.2
+
+*section, name=section1, material=mat, type=solid
+all
+
+*job, name=job, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=boxGen, name=gen
+x0=0, lX=40, y0=0, lY=10, z0=0, lZ=10, elType=C3D20R, elProvider=edelweiss, nX=4, nY=2, nZ=2
+
+*fieldOutput
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
+>>perElement, name=stress, elSet=all, result=stress, quadraturePoint=0:8
+>>perElement, name=strain, elSet=all, result=strain, quadraturePoint=0:8
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>perQuadraturePoint, fieldOutput=stress
+>>perQuadraturePoint, fieldOutput=strain
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=0.5, minInc=1e-5, maxNumInc=10, maxIter=25
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 2=-0.5
