@@ -51,7 +51,7 @@ from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
-from edelweissfe.utils.exceptions import DivergingSolution, TopologyError
+from edelweissfe.utils.exceptions import DivergingSolution, RestartError, TopologyError
 from edelweissfe.utils.schema import (
     OptionSchemaProvider,
     coerceValue,
@@ -282,6 +282,42 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             )
             self.onNewLocations()
 
+    def checkNumberingOfRestartedVectors(self, numberingOfCheckpoint: str | None):
+        """Refuse the vectors of a restart checkpoint if they belong to another numbering than the discrete system just
+        built from the resumed model: a vector is only a vector of the degrees of freedom it was written for, and one
+        of equal length numbers other nodes if the active nodes changed (e.g. a meshfree model that searches its
+        particles' kernel functions anew on resuming). The checkpoint holds the digest of the numbering
+        (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`) with the vectors it numbers. Call it with the
+        discrete system built, before the vectors are taken over.
+
+        Parameters
+        ----------
+        numberingOfCheckpoint
+            The digest the checkpoint holds with the vectors; None if it holds none.
+
+        Raises
+        ------
+        RestartError
+            If the checkpoint holds no digest, or the digest of another numbering than the current one.
+        """
+
+        if numberingOfCheckpoint is None:
+            raise RestartError(
+                "The checkpoint does not hold the numbering of the degrees of freedom its vectors belong to: they "
+                "cannot be taken over."
+            )
+
+        if numberingOfCheckpoint != self.system.numbering.digest:
+            raise RestartError(
+                "The vectors of the checkpoint (what the solver carries from increment to increment, e.g. the net "
+                "force of the last increment) belong to another numbering of the degrees of freedom than the one the "
+                "resumed model has (a different set of nodes, or other nodes in the same number): they cannot be "
+                "taken over. The connectivity of a model is not part of a checkpoint; the resumed run finds it by a "
+                "fresh search, which can give other nodes than the running search had, e.g. in a meshfree model with "
+                "unbonded kernel functions and a neighbour-list skin, which can admit other kernel functions on its "
+                "first search, and with them other active nodes. See the documentation page 'Restart'."
+            )
+
     def forgetDiscreteSystem(self) -> None:
         """Drop the discrete system, and everything that belongs to it, before the next one is built: the
         multi-point-constraint condensation as well, which is a function of the numbering. A solver that keeps more of
@@ -290,34 +326,22 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         self.system = None
         self.mpcTransformation = None
 
+    @abstractmethod
     def onNewNumbering(self):
         """Everything that is sized by the numbering of the new discrete system, :attr:`system`, is built here, e.g. the
         vectors, which the state is read into from the model, the linear solver's view of the degrees of freedom, the
         layout of the convergence table. Called by :meth:`updateDiscreteSystem` when the discrete system was built
         anew, before :meth:`onNewLocations`. Never called for new locations on the same numbering: what is built here
         stays as it is.
-
-        Raises
-        ------
-        NotImplementedError
-            A solver that builds through :meth:`updateDiscreteSystem` implements this.
         """
 
-        raise NotImplementedError("{:} implements onNewNumbering.".format(self.identification))
-
+    @abstractmethod
     def onNewLocations(self):
         """Everything that is derived from the locations of the new discrete system, :attr:`system`, is built here: the
         vectors are wrapped with them (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`, the values are
         kept), and the system matrix assembly, whose sparsity pattern the locations determine. Called by
         :meth:`updateDiscreteSystem` after every new discrete system, and after new locations on the same numbering.
-
-        Raises
-        ------
-        NotImplementedError
-            A solver that builds through :meth:`updateDiscreteSystem` implements this.
         """
-
-        raise NotImplementedError("{:} implements onNewLocations.".format(self.identification))
 
     @staticmethod
     def collectLoads(stepActions: dict) -> list[LoadBase]:

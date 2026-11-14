@@ -38,11 +38,14 @@ solver over real problems whose connectivity changes mid-run, and over a refinem
   of the increments keep their values and are wrapped with the locations of the discrete system,
 * that a tie and a contact together keep the fold through new locations, and the slaves follow their masters,
 * that a change of the mesh builds a new numbering whose net force starts at zero, and whose stable time increment is
-  that of the refined mesh.
+  that of the refined mesh,
+* that a resumed step takes the net force of its checkpoint over only if the checkpoint says it belongs to the
+  numbering of the discrete system built from the resumed model.
 
 Driven single-threaded where the hooks are recorded, to keep the order of the calls deterministic.
 """
 
+import h5py
 import numpy as np
 import pytest
 
@@ -52,6 +55,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.change import Change
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
+from edelweissfe.utils.exceptions import RestartError
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 #: Two blocks pressed into each other, with a penalty contact between them whose connectivity is
@@ -423,3 +427,52 @@ def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built()
         or solver.linearMomentumFields
         or solver.nonMechanicalSecondOrderFields
     )
+
+
+def _writeCheckpointAndResume(tmp_path, monkeypatch, tamper=None):
+    """Run a few increments of the contact deck writing a checkpoint, let ``tamper`` change the numbering the checkpoint
+    holds with its net force, and resume from it for a few more."""
+
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    base = tmp_path / "ckpt"
+    writer = "*output, type=restart, name=restart\nwriteInterval=1, baseName={:}, numberOfFilesToKeep=1\n".format(base)
+
+    def run(name, extra, maxNumInc):
+        deck = _DECK.replace("maxNumInc=400", "maxNumInc={:}".format(maxNumInc)).replace(
+            "*step, type=adaptiveForExplicitSimulations", extra + "*step, type=adaptiveForExplicitSimulations"
+        )
+        path = tmp_path / (name + ".inp")
+        path.write_text(deck)
+        finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
+
+    run("truncated", writer, 30)
+    (checkpoint,) = tmp_path.glob("ckpt_*.h5")
+    if tamper is not None:
+        with h5py.File(checkpoint, "r+") as f:
+            tamper(f["solver"])
+    run("resumed", "*restart, readFrom={:}\n".format(checkpoint), 60)
+
+    return checkpoint
+
+
+def test_a_checkpoint_holds_the_numbering_of_its_net_force_and_a_resume_on_it_goes_on(tmp_path, monkeypatch):
+    checkpoint = _writeCheckpointAndResume(tmp_path, monkeypatch)
+
+    with h5py.File(checkpoint, "r") as f:
+        assert len(f["solver/_numberingOfNetForce"][()]) > 0
+
+
+def test_a_resume_with_another_numbering_than_the_net_force_was_written_for_is_refused(tmp_path, monkeypatch):
+    def writtenForAnotherNumbering(solverGroup):
+        del solverGroup["_numberingOfNetForce"]
+        solverGroup.create_dataset("_numberingOfNetForce", data=np.array(b"0123456789abcdef"))
+
+    with pytest.raises(RestartError, match="another numbering"):
+        _writeCheckpointAndResume(tmp_path, monkeypatch, writtenForAnotherNumbering)
+
+
+def test_a_checkpoint_without_the_numbering_of_its_net_force_is_refused(tmp_path, monkeypatch):
+    with pytest.raises(RestartError, match="does not hold the numbering"):
+        _writeCheckpointAndResume(
+            tmp_path, monkeypatch, lambda solverGroup: solverGroup.__delitem__("_numberingOfNetForce")
+        )

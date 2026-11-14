@@ -156,8 +156,8 @@ accepted increment, which is their meaningful nodal value. Nodes outside the act
 zero in every entry.
 
 The explicit meshfree solver carries the velocity of the kernel functions in ``V``: it writes ``V`` by node at
-acceptance and reads it back by node whenever its discrete system is rebuilt, also at the start of a step, so that a
-node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
+acceptance and reads it back by node whenever its discrete system gets a new numbering, also at the start of a step,
+so that a node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
 increment ends on other kernel functions than it started on -- the particles move, and reach other nodes -- so it
 writes the results in two parts, each through the discrete system that holds them: ``dU`` on the nodes
 the increment was taken on, ``P``, ``V`` and ``A`` on the nodes of the configuration it ends in. A node that left the
