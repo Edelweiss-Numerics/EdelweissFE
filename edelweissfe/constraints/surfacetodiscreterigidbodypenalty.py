@@ -293,7 +293,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         # Degrees of freedom: all parent-face nodes of each slave facet, facet by facet, then the RP.
         nFacets = len(self.slave.facets)
         self._nodes = [node for nodes in self.slave.parentNodes for node in nodes] + [self.rpNode]
-        self._fieldsOnNodes = [["displacement"]] * (len(self._nodes) - 1) + [["displacement", "rotation"]]
+        self._fields = [["displacement"]] * (len(self._nodes) - 1) + [["displacement", "rotation"]]
         self.nSlaveDof = nFacets * self.nParentNodes * self.nDim
         self._nDof = self.nSlaveDof + self.rpDofCount
         self._slaveBlockSizes = [self.nParentNodes * self.nDim] * nFacets
@@ -321,8 +321,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:

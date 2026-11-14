@@ -52,7 +52,7 @@ class _UnitForceConstraint(ConstraintBase):
         return []
 
     @property
-    def fieldsOnNodes(self):
+    def fields(self):
         return []
 
     @property

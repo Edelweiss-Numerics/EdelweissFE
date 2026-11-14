@@ -121,7 +121,6 @@ class Constraint(ConstraintBase, MeshDependent):
         self._nodes = nSet
         self._lastSeenTopologyVersion = model.topology.version
         model.topology.registerMeshDependent(self)
-        self.nNodes = len(self._nodes)
         self.nMultipliers = len(self._nodes) - 1
 
         self._nDof = self.sizeField * self.nNodes + self.nMultipliers
@@ -134,7 +133,7 @@ class Constraint(ConstraintBase, MeshDependent):
         )
         self.indices_multipliers = slice(self.sizeField * self.nNodes, self._nDof)
 
-        self._fieldsOnNodes = [
+        self._fields = [
             [
                 theField,
             ]
@@ -155,8 +154,8 @@ class Constraint(ConstraintBase, MeshDependent):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:

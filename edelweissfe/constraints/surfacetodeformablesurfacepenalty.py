@@ -337,7 +337,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._gapCurrent = np.zeros(self.nPoints)
 
         self._nodes = []
-        self._fieldsOnNodes = []
+        self._fields = []
         self._nDof = 0
 
         # Batched active-point arrays, rebuilt by every connectivity update; None means the
@@ -367,8 +367,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
@@ -439,7 +439,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         # Only *assigned* points contribute DOFs; an assigned but open point keeps its (zero) block.
         newNodes = []
-        newFieldsOnNodes = []
+        newFields = []
         for p in range(self.nPoints):
             if newAssignment[p] is None:
                 continue
@@ -447,13 +447,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 self.slave.parentNodes[self.slave.pointFacet[p]] + self.facetElements[newAssignment[p]].parentFaceNodes
             )
             newNodes.extend(pointNodes)
-            newFieldsOnNodes.extend([["displacement"]] * len(pointNodes))
+            newFields.extend([["displacement"]] * len(pointNodes))
 
         if newNodes != self._nodes:
             hasChanged = True
 
         self._nodes = newNodes
-        self._fieldsOnNodes = newFieldsOnNodes
+        self._fields = newFields
         self._nDof = self.nDim * len(newNodes)
 
         self._prepareActiveArrays()

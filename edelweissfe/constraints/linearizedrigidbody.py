@@ -200,7 +200,7 @@ class Constraint(ConstraintBase):
 
         self.slaveNodesFields = [["displacement"]] * nSlaves
         self.referencePointFields = [["displacement", "rotation"]]
-        self._fieldsOnNodes = self.slaveNodesFields + self.referencePointFields
+        self._fields = self.slaveNodesFields + self.referencePointFields
 
         nDim = model.domainSize
 
@@ -260,8 +260,8 @@ class Constraint(ConstraintBase):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:

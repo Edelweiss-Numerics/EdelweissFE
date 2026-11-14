@@ -65,7 +65,9 @@ def test_the_vij_pattern_filled_on_the_thread_pool_is_the_serial_one_bitwise(mon
 
 class _StubEntity:
     """The face of an entity the locations locate: its nodes, the fields it couples on each of them, and the
-    permutation of its dofs."""
+    permutation of its dofs, and it owns no scalar variable."""
+
+    scalarVariables = []
 
     def __init__(self, nodes, fields, dofIndicesPermutation=None):
         self.nodes = nodes
@@ -96,11 +98,11 @@ def test_the_entities_located_on_the_thread_pool_are_the_serial_ones_in_order(mo
         entity.dofIndicesPermutation = permutations[i % len(permutations)]
 
     workerThreads(1)
-    serial = locations._locateNodeCouplingEntities(entities)
+    serial = locations._locate(entities)
 
     workerThreads(4)
     chunkCounts = _countChunks(monkeypatch)
-    pooled = locations._locateNodeCouplingEntities(entities)
+    pooled = locations._locate(entities)
 
     assert chunkCounts and max(chunkCounts) > 1, "the entities were not split into several chunks"
     assert list(serial) == entities and list(pooled) == entities, "not the entities, in the order they were given"
@@ -119,7 +121,7 @@ def test_an_entity_coupling_a_field_its_nodes_do_not_have_raises(numEntities, nu
 
     workerThreads(numThreads)
     with pytest.raises(ValueError, match="has no field 'noSuchField'"):
-        locations._locateNodeCouplingEntities(entities)
+        locations._locate(entities)
 
 
 @pytest.mark.parametrize("numEntities", [3, 600])
@@ -129,7 +131,7 @@ def test_an_entity_that_lists_no_fields_for_its_nodes_raises(numEntities, worker
 
     workerThreads(4)
     with pytest.raises(IndexError):
-        locations._locateNodeCouplingEntities(entities)
+        locations._locate(entities)
 
 
 class _ElementWithResults:

@@ -200,7 +200,7 @@ def _localIndices(constraint, isWanted) -> np.ndarray:
     """The local indices of the components of the (node, field) pairs for which ``isWanted(node, field)`` holds."""
 
     indices, offset = [], 0
-    for node, fields in zip(constraint.nodes, constraint.fieldsOnNodes):
+    for node, fields in zip(constraint.nodes, constraint.fields):
         for field in fields:
             size = getFieldSize(field, len(node.coordinates))
             if isWanted(node, field):

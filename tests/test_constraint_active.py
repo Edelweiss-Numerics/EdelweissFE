@@ -158,7 +158,7 @@ class _ConstraintWithAPartner(ConstraintBase):
         return []
 
     @property
-    def fieldsOnNodes(self):
+    def fields(self):
         return []
 
     @property
@@ -281,7 +281,7 @@ class _ReachProbe(ConstraintBase):
         return [self._node]
 
     @property
-    def fieldsOnNodes(self):
+    def fields(self):
         return [["displacement"]]
 
     @property

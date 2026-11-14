@@ -1846,7 +1846,8 @@ class NED(NonlinearSolverBase):
         )
 
     def getCriticalTimeStepForExplicitDynamics(self, U: DofVector) -> float:
-        """Compute the critical time step for explicit dynamics, over the finite elements of the discrete system.
+        """Compute the critical time step for explicit dynamics, over the entities the discrete system names for it
+        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).
 
         Parameters
         ----------

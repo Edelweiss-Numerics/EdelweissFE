@@ -253,8 +253,8 @@ class NEST(NIST):
     def validateModelCapabilities(self, model: FEModel):
         """Refuse, on top of the base checks, a constraint that is switched on and whose connectivity changes with the
         motion
-        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.connectivityChangesWithMotion`), e.g. a
-        contact, which searches for what it touches: this solver never updates the connectivity. A
+        (:attr:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion`),
+        e.g. a contact, which searches for what it touches: this solver never updates the connectivity. A
         constraint switched off from outside
         (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it rests,
         and takes no part in the step.

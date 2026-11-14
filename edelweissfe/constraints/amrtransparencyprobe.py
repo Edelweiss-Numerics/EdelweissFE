@@ -120,7 +120,7 @@ class Constraint(ConstraintBase):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
+    def fields(self) -> list:
         return [[] for _ in self._nodes]
 
     @property

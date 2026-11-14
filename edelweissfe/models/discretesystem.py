@@ -105,7 +105,8 @@ class DiscreteSystem:
         carry kernels (:attr:`~edelweissfe.elements.base.baseelement.BaseElement.hasKernels`), and in a meshfree model
         its cells and particles as well. The entities the locations hold: a solver computes exactly what has rows in
         the system matrix, for every solver, the explicit ones included. A list, which a parallel solver hands out in
-        slices to its threads.
+        slices to its threads. What a solver assembles element by element at the nodes, its inertia and damping, is in
+        :attr:`elementsWithNodalInertia`.
 
         Returns
         -------
