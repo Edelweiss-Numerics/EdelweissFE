@@ -93,6 +93,25 @@ Relevant module ``edelweissfe.generators.cylindergenerator``
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/CylinderGen/test.inp``
 
+``embeddedbond`` - Bond-slip of embedded reinforcement bars
+-----------------------------------------------------------
+
+Relevant module ``edelweissfe.generators.embeddedbond``
+
+.. automodule:: edelweissfe.generators.embeddedbond
+   :members: __doc__
+
+.. pprint:: generator:embeddedbond
+   :caption: Options:
+
+.. literalinclude:: ../../../testfiles/marmot/EmbeddedBondPullOut2D/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/EmbeddedBondPullOut2D/test.inp``
+
+.. literalinclude:: ../../../testfiles/marmot/EmbeddedBeamPile2D/test.inp
+    :language: edelweiss
+    :caption: Example (embedded beam): ``testfiles/marmot/EmbeddedBeamPile2D/test.inp``
+
 ``cuboidlatticegenerator`` - A cuboid lattice mesh generator
 ------------------------------------------------------------
 
