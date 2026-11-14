@@ -174,7 +174,7 @@ _addBuiltins(
 _addBuiltins(
     "section",
     "Section",
-    ["plane", "planerandomthickness", "solid"],
+    ["beam", "plane", "planerandomthickness", "solid", "truss"],
     "edelweissfe.sections",
 )
 
@@ -184,6 +184,7 @@ _addBuiltins(
     [
         "amrtransparencyprobe",
         "directionalspringpenalty",
+        "embeddedregion",
         "equalvaluelagrangian",
         "equalvaluepenalty",
         "hangingnode",
@@ -231,6 +232,7 @@ _addBuiltins(
         "cuboidlatticegenerator",
         "cylindergenerator",
         "discreterigidbodygenerator",
+        "embeddedbond",
         "executepythoncode",
         "findclosestnode",
         "microstructuregenerator",
