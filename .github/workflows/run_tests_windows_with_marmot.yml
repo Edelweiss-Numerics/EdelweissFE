@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Installs exactly what conda-lock.yml pins for win-64.
       - uses: ./.github/actions/setup-locked-env

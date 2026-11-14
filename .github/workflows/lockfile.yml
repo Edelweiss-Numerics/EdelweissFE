@@ -24,7 +24,7 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -66,7 +66,7 @@ jobs:
           fi
 
       # Expensive (a real solve), only if the environment definition changed.
-      - uses: mamba-org/setup-micromamba@v2
+      - uses: mamba-org/setup-micromamba@v3
         if: steps.changes.outputs.env == 'true'
         with:
           environment-name: conda-lock
@@ -91,11 +91,11 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: master
 
-      - uses: mamba-org/setup-micromamba@v2
+      - uses: mamba-org/setup-micromamba@v3
         with:
           # micromamba 2.9.0 mis-solves conda-lock's virtual-package channel for osx-64 (a spurious
           # __osx conflict locally, a segfault on the runner); 2.8.1 locks all four platforms.
@@ -133,7 +133,7 @@ jobs:
             sed -i "s/edelweissfe-dev=$old/edelweissfe-dev=$new/g" README.md
           fi
 
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         with:
           # Pull requests opened with the default GITHUB_TOKEN do not trigger other workflows, so
           # their CI would never run. LOCKFILE_UPDATE_TOKEN (a fine-grained token with contents and
