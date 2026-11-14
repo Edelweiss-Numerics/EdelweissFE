@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 600" width="980" height="600" role="img" aria-label="One increment. First the topology update gives a Change and the solver updates its discrete system. Both lanes then compute the same entities of the discrete system, its located in the numbering; the loads of the step add to the blocks of the entities they act on. Implicit lane: the blocks K[e] go into the SystemMatrixAssembly, which yields the CSR matrix K; the multi-point constraints condense K and the residual R, the Dirichlet boundary conditions replace their rows; the linear solver solves K ddU = R; the Newton update recovers the slaves, adds ddU to dU and checks convergence, then the next Newton iteration computes the entities again. Explicit lane: the residuals P only form the net force; the multi-point constraints fold the slave forces into the masters; the acceleration is the net force minus damping divided by the lumped mass and damping, per degree of freedom; the central difference updates velocity and solution, and the next increment begins. Both write the accepted increment to the node fields through the discrete system.">
+<title>One increment. First the topology update gives a Change and the solver updates its discrete system. Both lanes then compute the same entities of the discrete system, its located in the numbering; the loads of the step add to the blocks of the entities they act on. Implicit lane: the blocks K[e] go into the SystemMatrixAssembly, which yields the CSR matrix K; the multi-point constraints condense K and the residual R, the Dirichlet boundary conditions replace their rows; the linear solver solves K ddU = R; the Newton update recovers the slaves, adds ddU to dU and checks convergence, then the next Newton iteration computes the entities again. Explicit lane: the residuals P only form the net force; the multi-point constraints fold the slave forces into the masters; the acceleration is the net force minus damping divided by the lumped mass and damping, per degree of freedom; the central difference updates velocity and solution, and the next increment begins. Both write the accepted increment to the node fields through the discrete system.</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6e7781"/></marker><marker id="arrowStart" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#6e7781"/></marker></defs>
+<rect x="0" y="0" width="980" height="600" fill="#ffffff"/>
+<rect x="10" y="10" width="960" height="56" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="24" y="32" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">1. Update: updateTopologyAndConnectivity() gives a Change; updateDiscreteSystem(change) follows</text>
+<text x="24" y="52" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">new numbering and locations, new locations only, or nothing (previous figure); NED asks only when due</text>
+<path d="M115,66 V84" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="123" y="79" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">system</text>
+<rect x="10" y="84" width="210" height="432" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2"/>
+<text x="24" y="108" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">the discrete system</text>
+<text x="24" y="125" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">located in the numbering</text>
+<rect x="24" y="146" width="182" height="56" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="34" y="165" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">system.elements</text>
+<text x="34" y="182" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">internal force, stiffness</text>
+<rect x="24" y="214" width="182" height="56" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="34" y="233" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">system.constraints</text>
+<text x="34" y="250" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">− force, tangent</text>
+<text x="24" y="296" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">each adds to the residual P</text>
+<text x="24" y="311" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">and writes its block K[e],</text>
+<text x="24" y="326" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">numbered as the entity&#x27;s own</text>
+<text x="24" y="341" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">DOFs; locations[e] places it</text>
+<text x="24" y="356" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">in the global system</text>
+<rect x="236" y="84" width="734" height="196" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="250" y="106" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">2. Implicit: NIST, NISTParallel, NISTPArcLength, NID, NIDParallel — a linear solve per Newton iteration</text>
+<rect x="250" y="152" width="158" height="88" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="260" y="171" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="bold" fill="#1f2328" text-anchor="start">SystemMatrixAssembly</text>
+<text x="260" y="188" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">blocks → CSR K</text>
+<text x="260" y="203" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">vij or direct</text>
+<text x="260" y="218" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">NID: + mass, damping</text>
+<rect x="430" y="152" width="158" height="88" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="440" y="171" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="bold" fill="#1f2328" text-anchor="start">condense, constrain</text>
+<text x="440" y="188" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">MPC: TᵀKT, TᵀR</text>
+<text x="440" y="203" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">Dirichlet: identity</text>
+<text x="440" y="218" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">rows, columns into R</text>
+<rect x="610" y="152" width="158" height="88" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.8"/>
+<text x="620" y="171" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">linSolver(K, R)</text>
+<text x="620" y="188" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">K ΔΔU = R</text>
+<text x="620" y="203" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">direct, or composed</text>
+<text x="620" y="218" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">(blockamg, custom)</text>
+<rect x="790" y="152" width="158" height="88" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="800" y="171" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="bold" fill="#1f2328" text-anchor="start">Newton update</text>
+<text x="800" y="188" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">slaves from masters</text>
+<text x="800" y="203" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">dU += ΔΔU</text>
+<text x="800" y="218" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">converged? accept</text>
+<path d="M408,196 H428" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<path d="M588,196 H608" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<path d="M768,196 H788" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<path d="M220,182 H248" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="235" y="174" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">K[e]</text>
+<path d="M220,260 H509 V242" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="340" y="255" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">R = −ΣP</text>
+<path d="M869,152 V138 H222" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="540" y="133" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle" font-style="italic">next Newton iteration</text>
+<rect x="250" y="286" width="420" height="24" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="260" y="302" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">loads (step actions) add − load, + tangent, to the entity they act on</text>
+<rect x="236" y="320" width="734" height="196" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="250" y="342" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">2. Explicit: NED — no system matrix, no linear solver: a division per increment</text>
+<rect x="250" y="388" width="158" height="88" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="260" y="407" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">net force</text>
+<text x="260" y="424" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">f_net = f_ext − f_int</text>
+<text x="260" y="439" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">elements, loads,</text>
+<text x="260" y="454" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">constraints: P only</text>
+<rect x="430" y="388" width="158" height="88" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="440" y="407" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="bold" fill="#1f2328" text-anchor="start">condense, constrain</text>
+<text x="440" y="424" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">MPC: slave forces</text>
+<text x="440" y="439" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">folded to masters</text>
+<text x="440" y="454" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">Dirichlet: prescribed v</text>
+<rect x="610" y="388" width="158" height="88" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.8"/>
+<text x="620" y="407" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">lumped M, C</text>
+<text x="620" y="424" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">a = (f_net − C v)</text>
+<text x="620" y="439" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">  ÷ (M + ½Δt C)</text>
+<text x="620" y="454" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">per DOF, no matrix</text>
+<rect x="790" y="388" width="158" height="88" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="800" y="407" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">central difference</text>
+<text x="800" y="424" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">v += Δt a, u += Δt v</text>
+<text x="800" y="439" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">slaves follow masters</text>
+<text x="800" y="454" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">stable Δt: Courant</text>
+<path d="M408,432 H428" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<path d="M588,432 H608" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<path d="M768,432 H788" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<path d="M220,432 H248" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="235" y="424" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">P</text>
+<path d="M869,476 V492 H222" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="540" y="506" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle" font-style="italic">next increment</text>
+<text x="860" y="314" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#0969da" text-anchor="middle" font-style="italic">the difference: a solve vs. a division</text>
+<rect x="10" y="530" width="960" height="56" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2"/>
+<text x="24" y="552" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">3. Accepted increment: system.writeResultsToModel(), writeVelocityAndAccelerationToModel()</text>
+<text x="24" y="572" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">U, dU, P and, for a dynamic solver, V and A go to the node fields; the next step starts from them, whichever solver solves it</text>
+</svg>

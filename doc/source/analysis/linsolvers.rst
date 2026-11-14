@@ -61,7 +61,7 @@ A type name in ``linsolver=`` means that type with its defaults, so a block must
         (or two-level cycle) per field
     * - ``custom``
       - —
-      - a composed solver defined by you, in a Python script (see :doc:`composedlinsolvers`)
+      - a composed solver defined by you, in a Python script (see :doc:`/analysis/composedlinsolvers`)
 
 Direct or iterative
 -------------------
@@ -91,13 +91,13 @@ model. It requires the optional ``amgcl`` extension.
 
 A ``custom`` solver script composes any other tree: a Schur complement that condenses the dofs on which AMG alone
 stalls (bars tied to their host elements by bond springs, a softening zone), other smoothers, other coarse spaces.
-How to write one, and the tree of ``blockamg``, are on :doc:`composedlinsolvers`; why the field-split method works,
-and each of its steps, on :doc:`blockamgtheory`.
+How to write one, and the tree of ``blockamg``, are on :doc:`/analysis/composedlinsolvers`; why the field-split method works,
+and each of its steps, on :doc:`/theory/blockamg`.
 
 One adapter for every type
 --------------------------
 
-Every type is a composed solver (:doc:`composedlinsolvers`) behind one adapter,
+Every type is a composed solver (:doc:`/analysis/composedlinsolvers`) behind one adapter,
 :class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`: ``blockamg`` is the tree of the ``blockAMG()``
 preset, and a direct solver is a tree of one leaf, ``type=pardiso`` being ``DirectSolver("pardiso")``. What the adapter
 does therefore works the same for every type, with the same data lines
@@ -147,6 +147,6 @@ The pages on linear solvers
 
    composedlinsolvers
    composedlinsolversreference
-   blockamgtheory
-   fieldsplitmeasurements
-   linsolveapi
+
+The method of the field-split preconditioner is on :doc:`/theory/blockamg`, the measurements behind its defaults on
+:doc:`/theory/fieldsplitmeasurements`, and the classes and functions on :doc:`/developer/linsolveapi`.

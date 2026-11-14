@@ -98,7 +98,7 @@ while the tangent is assembled, both terms entering like the block of an element
 :meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.addLumpedMatrix`): before the parent's
 multi-point-constraint condensation and its Dirichlet row replacement, all of which therefore act on the effective
 matrix without knowing it is one. Mass and damping are assembled in one loop over the elements (in chunks of elements
-on the assembly's worker threads, see :doc:`/documentation/parallelization`) when the discrete system gets a new
+on the assembly's worker threads, see :doc:`/analysis/parallelization`) when the discrete system gets a new
 numbering -- at a step's start and after a topology change -- not per Newton iteration. A constraint changing its
 connectivity (a contact candidate list, which can change on every increment) makes new locations on the same numbering
 and moves no node and touches no element: the mass is then copied onto the sparsity pattern of the new system and the
@@ -198,7 +198,7 @@ system -- the same mechanism the explicit solver uses for its velocity. That mak
 acceleration is still to be computed. The force written as ``P`` is the internal force with the
 inertial and damping forces of the converged state, :math:`\\boldsymbol{f}_\\mathrm{int} +
 \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C} \\dot{\\boldsymbol{u}}_{n+1}`, as the
-documentation page :doc:`/documentation/nodefieldresults` defines it: at a support without load, the
+documentation page :doc:`/output/nodefieldresults` defines it: at a support without load, the
 reaction.
 
 **Live h-adaptivity.** A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is

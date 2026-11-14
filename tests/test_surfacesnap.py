@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """End-to-end test of the surfaceSnap model modifier (see the ``surfaceSnap`` section of
-doc/source/documentation/modelmodifiers.rst) against a real (small) FEModel, driven through the
+doc/source/analysis/modelmodifiers.rst) against a real (small) FEModel, driven through the
 actual ``*modelModifier`` .inp pipeline together with hAdaptivity -- not just the geometry math in
 isolation.
 

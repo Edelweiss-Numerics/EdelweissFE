@@ -67,5 +67,5 @@ elif strCaseCmp(materialName, "myMaterial"):
 ## 4. Input Syntax, Tests & Documentation
 - **Input deck**: `*material, name=myMat, id=myMaterial, provider=edelweiss` followed by datalines.
 - **Tests**: Follow [`ew-create-regression-test`](../ew-create-regression-test/SKILL.md) (`*modelGenerator, generator=boxGen` or `planeRectQuad`).
-- **Docs**: Follow [`ew-documentation`](../ew-documentation/SKILL.md) (update `doc/source/documentation/materials.rst`).
+- **Docs**: Follow [`ew-documentation`](../ew-documentation/SKILL.md) (update `doc/source/model/materials.rst`).
 - **Review**: Follow [`ew-code-review`](../ew-code-review/SKILL.md).

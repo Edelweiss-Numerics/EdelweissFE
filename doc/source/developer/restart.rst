@@ -1,8 +1,8 @@
 Restart
 =======
 
-An analysis writes restart checkpoints with ``*output, type=restart`` (see :doc:`output`) and resumes
-from one with ``*restart, readFrom=<checkpoint>`` (see :doc:`keywords`). This page describes the one
+An analysis writes restart checkpoints with ``*output, type=restart`` (see :doc:`/output/outputmanagers`) and resumes
+from one with ``*restart, readFrom=<checkpoint>`` (see :doc:`/keywords`). This page describes the one
 rule restart follows, and how each part of the code keeps it.
 
 The rule
@@ -88,7 +88,7 @@ The model is first rebuilt from the same input file, then restored in this order
      - catch up with the replayed mesh, as they had in the uninterrupted run
    * - node fields, scalar variables, element state, additional parameters (e.g. the load parameter the arc length
        method publishes)
-     - read; a node field with all its entries (see :doc:`nodefieldresults`), a checkpoint lacking one is refused
+     - read; a node field with all its entries (see :doc:`/output/nodefieldresults`), a checkpoint lacking one is refused
    * - rigid bodies
      - their surface nodes are moved to the restored configuration
    * - constraint state (e.g. a frozen contact search)
@@ -110,7 +110,7 @@ The model is first rebuilt from the same input file, then restored in this order
        real increment computes it), the explicit solver's last increment, net force with the digest of the numbering it is a
        vector of, accumulated external work and the energy at the start of its step. The resumed step
        extrapolates the last accepted increments only if its first discrete system numbers the degrees
-       of freedom as they are numbered (see :doc:`solvers`); the explicit solver takes the net force
+       of freedom as they are numbered (see :doc:`/analysis/solvers`); the explicit solver takes the net force
        over only then, and refuses to resume otherwise, also from a checkpoint that holds no digest. The
        connectivity is not part of a checkpoint: it is found anew by the first search of the resumed run, which
        can give another numbering than the checkpointed one, e.g. in a meshfree model with unbonded kernel functions
@@ -119,7 +119,7 @@ The model is first rebuilt from the same input file, then restored in this order
 Going back to a checkpoint within a run
 ---------------------------------------
 
-A step that may fall back to a checkpoint (``maxCheckpointFallbacks``, see :doc:`steps`) restores one
+A step that may fall back to a checkpoint (``maxCheckpointFallbacks``, see :doc:`/analysis/steps`) restores one
 within the running job, by the same pieces and in the same order as a resumed run: the model, the time
 stepper, then the solver begins the step anew -- a restored time stepper is not at the step start, so
 nothing of the step start is repeated -- and takes over the checkpointed state together with the step

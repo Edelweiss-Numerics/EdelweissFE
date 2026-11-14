@@ -33,7 +33,7 @@ vectors. See :ref:`model-discrete-system`.
 Held by every model as ``model.topology``. The model is the mesh and its data; the pipeline owns the
 topology window, the number allocators, the fixed-point rounds of the model modifiers, the change log
 and mesh-dependent consumers, and the recorded history that a restart replays. See
-:doc:`topologypipeline` for the design.
+:doc:`/developer/topologypipeline` for the design.
 
 .. automodule:: edelweissfe.models.topologypipeline
    :members:

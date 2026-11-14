@@ -153,10 +153,10 @@ Module ``edelweissfe.constraints.nodetodiscreterigidbodypenalty``
 
 This is a frictionless, penalty-based, unilateral (contact-only) constraint that prevents the nodes
 of a slave node set from penetrating the moving surface of a
-:doc:`discrete rigid body <rigidbodies>`. It is the discrete-mesh counterpart of
+:doc:`discrete rigid body </model/rigidbodies>`. It is the discrete-mesh counterpart of
 ``nodetorigidsurfacepenalty`` (which uses an analytical boundary) and reuses the rigid body's
 own closest-point surface query for the geometry evaluation. Currently 3D only, and implicit /
-explicit-static only (see :doc:`solvers`).
+explicit-static only (see :doc:`/analysis/solvers`).
 
 **Theory**
 
@@ -166,7 +166,7 @@ The rigid body carries a reference point (RP) with displacement DOF :math:`\math
 rotation pseudo-vector DOF :math:`\boldsymbol{\theta}_{RP}`; its current position is
 :math:`\mathbf{x}_{RP} = \mathbf{X}_{RP} + \mathbf{u}_{RP}` and its orientation is
 :math:`\mathbf{R} = \exp(\mathrm{skew}(\boldsymbol{\theta}_{RP}))` (see
-:doc:`rigidbodies` for the rigid-body kinematics).
+:doc:`/model/rigidbodies` for the rigid-body kinematics).
 
 For each slave node the rigid body's surface query returns the signed distance :math:`d_s`
 (negative when the node is *inside* the body) and the outward unit normal :math:`\mathbf{n}_s` of
@@ -255,7 +255,7 @@ comments of the ``computeKernels`` method in the module source.
 The complete theory of this constraint -- surface discretization and triangulation, tributary
 areas, finite- and small-sliding gap kinematics, penalty and augmented-Lagrange normal laws,
 Coulomb friction with consistent tangents, solver integration, and the verification methodology
--- is documented in :doc:`contacttheory`.
+-- is documented in :doc:`/theory/contact`.
 
 Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
 
@@ -320,7 +320,7 @@ Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
 The integrated counterpart of ``nodetodiscreterigidbodypenalty``, and the rigid-body counterpart
 of ``surfacetodeformablesurfacepenalty``: contact is evaluated at quadrature points over a slave
 facet surface and distributed with the slave parent-face shape functions, against the triangulated,
-closed surface of a :doc:`discrete rigid body <rigidbodies>`. The theory is documented in
+closed surface of a :doc:`discrete rigid body </model/rigidbodies>`. The theory is documented in
 :ref:`integrated-contact-rigid-body`. Use it for any contact against rigid supports or indenters,
 in particular with quadratic slave faces.
 
@@ -363,7 +363,7 @@ its own, so it equilibrates cleanly also for a consistent mass matrix; see
 dynamics (mass-conserving row-sum folding of slave masses and forces onto the masters, direct
 kinematic slaving -- the critical time step is untouched).
 
-The implicit solver's ``useThreadedMPCCondensation`` option (:doc:`solvers`, ``NIST``) computes
+The implicit solver's ``useThreadedMPCCondensation`` option (:doc:`/analysis/solvers`, ``NIST``) computes
 :math:`T^T K T + I_s` in place, with an OpenMP-threaded kernel
 (:class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`), instead of with SciPy's
 single-threaded CSR routines, which build a second matrix: the system matrix is held once, not twice.
@@ -487,7 +487,7 @@ clamped closest-point projections routinely leave weights at round-off magnitude
 --------------------------------------------------------------------
 
 The kinematic multi-point constraint that couples a non-conforming 2:1 refined interface produced
-by hanging-node :math:`h`-adaptivity (see :doc:`modelmodifiers`). Each hanging (slave) node is
+by hanging-node :math:`h`-adaptivity (see :doc:`/analysis/modelmodifiers`). Each hanging (slave) node is
 tied to the coarse serendipity trace it lies on -- an 8-node QUAD8 face or a 3-node quadratic edge
 -- by :math:`u_s = \sum_a N_a(\xi_s)\, u_{m_a}`, enforced by master-slave DOF elimination (no
 Lagrange multipliers, no extra DOFs, no saddle point). Because the QUAD8 face-trace and quadratic
@@ -498,7 +498,7 @@ transformation.
 
 The records (masters + weights per slave) are either loaded from a file (``recordsFile``, one line
 per slave ``<slaveLabel> <masterLabel> <weight> ...``) for a statically pre-refined mesh, or set in
-memory by the :doc:`hAdaptivity model modifier <modelmodifiers>` after each dynamic refinement.
+memory by the :doc:`hAdaptivity model modifier </analysis/modelmodifiers>` after each dynamic refinement.
 
 Module ``edelweissfe.constraints.hangingnode``
 

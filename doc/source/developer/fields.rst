@@ -5,7 +5,7 @@ Fields
 -----------------------------------------
 
 The entries ``U``, ``dU``, ``P``, ``V`` and ``A`` every node field holds, and their meaning, are defined in
-:doc:`nodefieldresults`.
+:doc:`/output/nodefieldresults`.
 
 .. automodule:: edelweissfe.fields.nodefield
    :members:

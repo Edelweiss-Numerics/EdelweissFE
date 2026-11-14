@@ -878,7 +878,7 @@ Integrated contact against a discrete rigid body
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty` applies the same integrated
-formulation when the master side is a :doc:`discrete rigid body <rigidbodies>` instead of a
+formulation when the master side is a :doc:`discrete rigid body </model/rigidbodies>` instead of a
 deformable surface. The slave side is identical and shared: the contact points, their weights and
 the distribution with the parent-face shape functions :math:`N^s` all come from
 :class:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface`, and
@@ -913,7 +913,7 @@ defined; both are checked when the constraint is created.
     \frac{\partial g_q}{\partial \boldsymbol{\theta}} = -\boldsymbol{S}^T(\boldsymbol{r}_q \times \boldsymbol{n}_q) ,
 
 with :math:`\boldsymbol{S} = \boldsymbol{R}\,\boldsymbol{J}_r(\boldsymbol{\theta})` (see
-:doc:`rigidbodies`). Unlike the deformable case, the gap is not linear in the degrees of freedom: the
+:doc:`/model/rigidbodies`). Unlike the deformable case, the gap is not linear in the degrees of freedom: the
 normal rotates with the body, :math:`\partial\boldsymbol{n}_q/\partial\boldsymbol{\theta} =
 -\mathrm{skew}(\boldsymbol{n}_q)\boldsymbol{S}`, which gives the geometric tangent terms coupling
 the rotation to the slave nodes and to :math:`\boldsymbol{u}_{RP}`. The
@@ -1030,7 +1030,7 @@ which is node-ordered like the accessors above.
 Explicit dynamics
 ^^^^^^^^^^^^^^^^^
 
-Under ``NED`` (:doc:`solvers`) the same formulation is used, with two differences that follow from
+Under ``NED`` (:doc:`/analysis/solvers`) the same formulation is used, with two differences that follow from
 what an explicit increment is.
 
 **No tangent is assembled.** An explicit increment solves no linear system, so a constraint
@@ -1049,7 +1049,7 @@ increment of an implicit analysis -- where it is amortised over a Newton loop an
 solve -- and not affordable at every one of millions of explicit increments. It therefore runs
 every ``contact-update-frequency`` increments, and is skipped entirely on an increment where a
 mid-run topology check is due, because that check re-searches every constraint anyway *after* a
-possible refinement (:doc:`adaptivitytheory`).
+possible refinement (:doc:`/theory/adaptivity`).
 
 What makes throttling defensible rather than merely cheap is that an explicit time step is tiny:
 between two searches a slave node moves :math:`\|\boldsymbol{v}\| \, \Delta t \, f`, orders of

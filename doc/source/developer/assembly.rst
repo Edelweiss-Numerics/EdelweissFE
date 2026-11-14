@@ -252,7 +252,7 @@ Reference
    :members:
 
 :class:`~edelweissfe.numerics.csrgeneratorv2.CSRGenerator` and the C++ engine behind it are described
-under :doc:`utils`; only the direct-scatter side is documented here.
+under :doc:`/developer/utils`; only the direct-scatter side is documented here.
 
 .. autoclass:: edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler
    :members:
@@ -260,4 +260,9 @@ under :doc:`utils`; only the direct-scatter side is documented here.
 .. autofunction:: edelweissfe.numerics.csrgeneratorv2.csrPatternOfEntities
 
 .. autoclass:: edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix
+   :members:
+
+The condensation of the multi-point constraints, whose pattern fill-in enters the pattern of the assembly:
+
+.. autoclass:: edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation
    :members:

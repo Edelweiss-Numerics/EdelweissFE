@@ -1,7 +1,7 @@
 Composing a linear solver
 =========================
 
-Every linear solver of EdelweissFE is a composed solver behind one adapter (:doc:`linsolvers`): ``type=blockamg`` is
+Every linear solver of EdelweissFE is a composed solver behind one adapter (:doc:`/analysis/linsolvers`): ``type=blockamg`` is
 the ``blockAMG()`` preset below, ``type=pardiso`` the one leaf ``DirectSolver("pardiso")``, and ``type=custom`` the
 tree of a solver script of your own.
 
@@ -12,8 +12,8 @@ of the textbook. There is one way to build each method, and it is the fast one -
 two-level cycle (see :ref:`composed-two-level-two-ways`).
 
 This page teaches how to build a tree. The arguments and data lines of every component and of the adapter are on
-:doc:`composedlinsolversreference`, the method of the field-split preconditioner on :doc:`blockamgtheory`, and the
-Python API on :doc:`linsolveapi`.
+:doc:`/analysis/composedlinsolversreference`, the method of the field-split preconditioner on :doc:`/theory/blockamg`, and the
+Python API on :doc:`/developer/linsolveapi`.
 
 A solver script
 ---------------

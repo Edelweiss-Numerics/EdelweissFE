@@ -535,7 +535,7 @@ exact for straight-edged meshes) or triangulated including their midside nodes
 face-consistent per-node tributary area shares for the pressure-weighted contact formulation;
 ``nodalWeights`` selects between the facet tiling's own consistent shares and the non-negative
 weighting that best approximates a *serendipity* face's consistent nodal loads. See the
-:doc:`contact theory documentation </documentation/contacttheory>` for the full background.
+:doc:`contact theory documentation </theory/contact>` for the full background.
 
 The underlying :func:`buildContactFacets` is idempotent and re-runnable, so a
 :class:`~edelweissfe.models.meshdependent.MeshDependent` consumer of these facets (e.g.

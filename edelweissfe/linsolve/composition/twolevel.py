@@ -64,7 +64,7 @@ The cycle runs in C++ (:mod:`~edelweissfe.linsolve.composition.rigidbodymodestwo
 ``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])``
 (:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is faster per
 application, the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
-end the exception: the "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``.
+end the exception: the "two-level cycle: two ways" section of ``doc/source/analysis/composedlinsolvers.rst``.
 """
 
 import edelweissfe.utils.performancetiming as performancetiming

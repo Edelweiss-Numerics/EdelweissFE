@@ -326,8 +326,8 @@ This is why a field meant to be reachable only this way is marked
 Documentation and the grammar surface come from the same schema
 -------------------------------------------------------------------
 
-Because a schema is the single source of truth, the reference documentation on the other pages
-under :doc:`index` is not hand-written prose about options -- it is rendered directly from the same
+Because a schema is the single source of truth, the option tables on the pages of the model, the analysis
+and the output (e.g., :doc:`/output/outputmanagers`) are not hand-written prose -- they are rendered directly from the same
 schema classes described above, via the ``.. pprint::`` Sphinx directive:
 
 .. code-block:: rst
@@ -379,7 +379,7 @@ Putting the pieces together, adding a new pluggable module -- say an output mana
    generic L4 adapter in ``helpers/inputfilehelpers.py`` already knows how to drive any
    ``outputmanager``-category class through ``buildSchemaFromOptions``.
 
-4. **Document it** by adding a short section to ``doc/source/documentation/output.rst``, following
+4. **Document it** by adding a short section to ``doc/source/output/outputmanagers.rst``, following
    the same pattern every other entry on that page uses: an ``automodule`` directive targeting
    ``edelweissfe.outputmanagers.myoutput`` with ``:members: __doc__`` (to render the module's own
    docstring), followed by a ``pprint`` directive targeting ``outputmanager:myoutput`` (to render

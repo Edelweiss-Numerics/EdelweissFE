@@ -4,226 +4,11 @@ Solvers
 .. automodule:: edelweissfe.config.solvers
    :members:
 
-.. _residual-and-tangent-convention:
-
-The residual and the tangent
-----------------------------
-
-Every entity that enters the discrete system -- an element, a load, a constraint -- contributes two things: a
-vector :math:`\boldsymbol{P}` to the residual, and its tangent
-:math:`\boldsymbol{K} = \partial \boldsymbol{P} / \partial \boldsymbol{U}`. The rule is the same for all of them:
-
-* An **element** adds its internal forces,
-  :math:`\boldsymbol{P} = \boldsymbol{f}_\mathrm{int} = \int_\Omega \boldsymbol{B}^T \boldsymbol{\sigma} \, \mathrm{d}V`,
-  and its stiffness matrix.
-* A **load** adds the *negative* of the external load it applies: a node force :math:`\boldsymbol{F}` adds
-  :math:`-\boldsymbol{F}`, a body force :math:`-\int_\Omega \boldsymbol{N}^T \boldsymbol{b} \, \mathrm{d}V`. A dead
-  load has no tangent; a load that follows the deformation, such as a pressure on the current surface, has one.
-* A **constraint** adds the negative of the force it exerts on its nodes -- just what an element of the same
-  mechanics would add as its internal force. A penalty spring of stiffness :math:`k` that pulls a degree of freedom
-  :math:`u` towards :math:`\bar{u}` adds :math:`P = k\,(u - \bar{u})` and :math:`K = k`; a Lagrange multiplier
-  :math:`\boldsymbol{\lambda}` enforcing :math:`\boldsymbol{g}(\boldsymbol{u}) = \boldsymbol{0}` adds
-  :math:`\boldsymbol{\lambda}^T \partial \boldsymbol{g} / \partial \boldsymbol{u}` to the rows of the nodes and
-  :math:`\boldsymbol{g}` to the rows of the multipliers. See :doc:`constraints` for writing one.
-
-A solver sums the contributions in three loops of every iteration: ``computeElements`` over the elements,
-``assembleLoads`` over the loads -- every load assembles its own contribution, wherever it acts (see
-:class:`~edelweissfe.stepactions.base.loadbase.LoadBase`) -- and ``assembleConstraints`` over the constraints of
-the discrete system (see :doc:`constraints`). Summed over all entities,
-
-.. math::
-
-    \boldsymbol{G}(\boldsymbol{U}) = \sum \boldsymbol{P} = \boldsymbol{f}_\mathrm{int} - \boldsymbol{f}_\mathrm{ext}
-
-is the out-of-balance force, which equilibrium makes zero, and the summed :math:`\boldsymbol{K}` is its derivative.
-Newton's method replaces :math:`\boldsymbol{G}(\boldsymbol{U} + \Delta \boldsymbol{U}) = \boldsymbol{0}` by its
-linearization :math:`\boldsymbol{G} + \boldsymbol{K}\, \Delta \boldsymbol{U} = \boldsymbol{0}`, so the implicit
-solvers solve
-
-.. math::
-
-    \boldsymbol{K}\, \Delta \boldsymbol{U} = \boldsymbol{R}, \qquad
-    \boldsymbol{R} = -\boldsymbol{G} = \boldsymbol{f}_\mathrm{ext} - \boldsymbol{f}_\mathrm{int}
-
-in every iteration. The right-hand side :math:`\boldsymbol{R}` is what the convergence criteria check, and what the
-multi-point-constraint condensation and the Dirichlet boundary conditions act on. The other solvers use the same
-sums:
-
-* ``NID`` subtracts the inertia and damping forces from :math:`\boldsymbol{R}`, and adds their tangents to
-  :math:`\boldsymbol{K}`.
-* ``NED`` accelerates the nodes with the net force :math:`\boldsymbol{R}`, and needs no tangent.
-* ``NISTPArcLength`` sums the loads twice, at the start of the step (the dead load, :math:`\boldsymbol{P}_0`) and
-  at its end; their difference is the reference load, :math:`\boldsymbol{P}_\mathrm{ref}`. Scaled by the load
-  parameter :math:`\lambda`, it enters
-  :math:`\boldsymbol{R} = -(\boldsymbol{P}_0 + \lambda \boldsymbol{P}_\mathrm{ref} + \boldsymbol{P}_\mathrm{elements}
-  + \boldsymbol{P}_\mathrm{constraints})`.
-
-Why one rule? Because then :math:`\boldsymbol{K}` is always the derivative of exactly what was added to
-:math:`\boldsymbol{P}`, for every entity alike. That can be checked by finite differences, entity by entity, and the
-same check catches a contribution whose sign alone is wrong: :math:`\boldsymbol{K}` then comes out as
-:math:`-\partial \boldsymbol{P} / \partial \boldsymbol{U}`. A contribution negated together with its tangent passes it,
-so ``tests/test_residual_tangent_convention.py`` checks every constraint this way and also checks the direction of the
-forces it exerts (see :doc:`constraints`); a dead load has no tangent, so there the sign of each element load is
-checked against the load integrated independently.
-
-The elements' sum alone, :math:`\boldsymbol{f}_\mathrm{int}`, is what the quasi-static solvers report as the nodal
-result ``P`` of a field output, and the dynamic solvers add the inertial and damping forces to it
-(:doc:`nodefieldresults`): at a degree of freedom with a Dirichlet boundary condition and no load, it is the reaction
-force. ``NED``'s net force :math:`\boldsymbol{R}` is its own state, and is not reported.
-
-.. _model-discrete-system:
-
-What the solver asks the model
-------------------------------
-
-A solver solves; what the discrete system is made of, the model says. ``NIST``, ``NISTParallel`` and
-``NISTPArcLength`` ask the model three questions, and know nothing of their own about what a model consists of. ``NED``
-and EdelweissMeshfree's ``MeshfreeExplicitDynamic`` ask the first two, and evaluate what the discrete system holds in
-their own loops:
-
-1. **What has changed?** At the start of every increment, and of every retry after a cutback, the topology update
-   (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`) runs the
-   model modifiers, lets the mesh-dependent consumers catch up, and calls
-   :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`, before the increment is proposed. The answer is one
-   :class:`~edelweissfe.models.change.Change`, the same for every solver. The model classifies what its entities report
-   (``NONE``, ``LOCATIONS``, ``NUMBERING``), and the topology update adds ``MESH``:
-
-   * ``NONE``: the discrete system stands.
-   * ``LOCATIONS``: an entity couples other nodes, or takes part or not (a contact constraint paired anew, or leaving
-     reach), but the numbering of the degrees of freedom stands.
-   * ``NUMBERING``: the scalar variables of the active constraints changed, e.g. a constraint with Lagrange multipliers
-     left reach; in a meshfree model, also the nodes of the active domain.
-   * ``MESH``: a model modifier changed the mesh (e.g. h-adaptivity), or a mesh-dependent consumer (a tie or contact
-     surface) caught up on a changed mesh: it refreshes only when nodes or elements did change.
-
-   Every solver updates its discrete system before it solves the increment, by one path
-   (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem`), which only the
-   ``Change`` decides (``MeshfreeExplicitDynamic`` updates it after the particles advanced, on the kernel functions they
-   reach then):
-
-   .. code-block:: python
-
-      if self.system is None or change >= Change.NUMBERING:
-          self.system = model.buildDiscreteSystem()
-          self.onNewNumbering()
-          self.onNewLocations()
-      elif change == Change.LOCATIONS:
-          self.system = self.system.withNewLocations()
-          self.onNewLocations()
-
-   Everything that is sized by the numbering is built in ``onNewNumbering`` (the vectors, which the state is read into
-   from the model, the linear solver's view of the degrees of freedom, the layout of the convergence table, the
-   multi-point-constraint condensation, and, in ``NED``, the lumped mass and damping, the classification of the fields
-   by time derivative and the stable time increment); everything that is derived from the locations is built in
-   ``onNewLocations`` (the vectors are wrapped with the new locations, their values kept; the linear solver is told that
-   the sparsity pattern changes (:meth:`~edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern`), and drops what it
-   built for the old one, a hierarchy or a factorization, before the new pattern is built; the system matrix assembly
-   and its sparsity pattern, and, in ``NID``, the mass copied onto it; in ``NED``, which has no system matrix, only the
-   vectors are wrapped). ``NID``'s mass and damping are dropped with the discrete system they were assembled for and
-   assembled by the first increment on the next one. Nothing sized by the numbering is touched by new locations: the
-   lumped mass of ``NED`` is a function of the elements and of the numbering, and a contact search does not reassemble
-   it. Only a change of the mesh makes the solvers re-equilibrate (``equilibrateAfterModelChange``): a change of the
-   locations or of the numbering moves no node and creates none. The prediction is judged once per increment, right
-   after the update (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvives`): it survives new
-   locations on the same numbering by construction, but is extrapolated across a change of the connectivity only with
-   ``extrapolateAcrossConnectivityChange``; it survives a new numbering only if the new one numbers the degrees of
-   freedom as before, and a change of the mesh never. The explicit solver ``NED`` asks the same question at the start
-   of its step and after the topology checks, and, every ``contact-update-frequency`` increments, of
-   :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity` alone; it can only be answered with new locations, as
-   it refuses constraints with scalar variables. It asks it only if a
-   constraint of the model searches as the bodies move
-   (:attr:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion`, e.g. a contact);
-   the same attribute is what makes ``NEST``, which never updates the connectivity, refuse such a constraint.
-
-2. **What is the discrete system made of?** Whenever the solver (re)builds its discrete system, it calls
-   :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`, which returns the discrete system, a
-   :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. The solver keeps it as long as the numbering
-   of the degrees of freedom it holds -- until the next rebuild, or until new locations on the same numbering replace
-   it -- and takes from it:
-
-   * the numbering of the degrees of freedom (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.numbering`, a
-     :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, the *ID* array). It also locates the degrees of freedom
-     of a field on a node set, those a Dirichlet boundary condition prescribes or a node force loads
-     (:meth:`~edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet`);
-   * the locations of the entities in that numbering
-     (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.locations`, a
-     :class:`~edelweissfe.numerics.doflocations.DofLocations`, the *LM* array): the global indices of the local
-     degrees of freedom of every element and constraint, ``locations[entity]``. Numbering and locations are immutable:
-     a contact search leaves the numbering as it is, and gives a new discrete system with new locations on the same
-     numbering (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`), which refuses a change of
-     the scalar variables, as that is a change of the numbering. The vectors of the solver
-     (:class:`~edelweissfe.numerics.dofvector.DofVector`) refer to the locations they were wrapped with, and are
-     wrapped on the new ones (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`) without a copy;
-   * the elements, a list of everything the solver computes like an element (``computeElements``), the ones the
-     locations hold: the finite elements that carry kernels (an entity that carries geometry only, such as a contact
-     facet, takes no part), for every solver, ``NED`` included;
-   * the constraints that take part in the discrete system, the active ones the locations hold
-     (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`). The solver evaluates exactly these
-     (``assembleConstraints``), so that every constraint it evaluates has its rows in the system matrix, and every row
-     of a constraint is filled; a solver never asks a constraint whether it is active. The loops that only validate or
-     classify constraints, e.g. the check of what a solver supports, run over the constraints of the model;
-   * the state the solution vector (and the velocity and acceleration of a dynamic solver) starts from after a
-     rebuild, :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel`, and where the
-     results of an accepted increment go,
-     :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`, with the velocity and
-     the acceleration of a dynamic solver,
-     :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel` (see
-     :doc:`nodefieldresults`);
-   * the model the linear solver is set up for.
-
-3. **Is anything to be updated before the elements are computed?** In every evaluation of the model -- every Newton
-   iteration, every trial state of a line search -- the solver assembles the internal forces
-   (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`): it calls
-   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`, right before it computes
-   the elements.
-
-The loops over the entities stay with the solver: ``NIST`` computes the elements one after the other,
-``NISTParallel`` on all threads, each element into its own part of the residual and its own block of the system matrix
-(see :ref:`system-matrix-assembly`). A discrete system that updates material points loops over them through the solver's
-:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`, so that they are evaluated on the same threads.
-
-The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive from ``NIST``, and build, fill and write
-back their discrete systems through it; ``NEST`` builds its discrete system once per step, in its first ``onNewNumbering``
-and ``onNewLocations``, and has no topology update,
-and ``NID`` assembles its mass matrix from the entities the discrete system names for it
-(:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`), asks the discrete system which
-degrees of freedom carry the mass of the nodes
-(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia`) and, if it integrates the
-inertia of the entities that integrate their own at the nodes, for their lumped mass
-(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`),
-and, at the start of a step, where the model holds the motion of these entities
-(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`). At the start
-of every step, the implicit solvers give the entities of the model that integrate their own inertia their Newmark
-parameters (:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`): ``NID`` its own, every
-quasi-static solver zero, so that a quasi-static solver is quasi-static by construction. ``NED`` takes the numbering of the
-degrees of freedom from the discrete system and passes the state and the results through it, keeps the net force that drives
-its velocity update as its own state, and evaluates the elements of the discrete system in its own loop. A step of it starts
-from the velocity and the acceleration the model holds, and leaves the velocity at its end time
-(:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`), so that the steps of a dynamic analysis follow each
-other whichever solver solves them.
-
-A finite element model answers as follows: its constraints update the nodes they couple (a contact constraint
-searches for the surface it touches); its discrete system numbers all nodes and the active constraints with their
-scalar variables; its elements are the finite elements; every node carries its total solution from increment to
-increment; and nothing is to be updated before the elements, which evaluate the material at their quadrature points
-themselves.
-
-A model of EdelweissMeshfree answers differently, with the same solvers:
-
-* Its material points move through a fixed background grid of cells, and its particles carry their kernel functions
-  along. When asked what has changed, it first assigns the material points to the cells they lie in and the particles
-  to the kernel functions they reach, then lets its constraints follow.
-* Only the part of the grid that holds material points, and the nodes in reach of the particles, form the discrete
-  system (the active domain). So a node set of the grid may reach beyond the discrete system: a Dirichlet boundary
-  condition then prescribes, and a node force loads, the nodes of the set in the active domain.
-* Its elements are its finite elements, the active cells, and the particles.
-* Only finite element nodes carry a total solution from increment to increment. The material point method and RKPM
-  are incremental on the current configuration -- the cells are reset and the kernel functions move with their
-  particles, while the state lives in the material points and particles -- so the values at the nodes of the grid and
-  of the kernel functions are coefficients of one increment, and start every new discrete system at zero.
-* Before the cells are computed, each cell interpolates the solution increment to its material points, and the
-  material points evaluate their material; the cells then integrate the result.
-
+Every solver builds its discrete system from the model, and renews it when the model reports a change, e.g. after a
+contact search or an h-adaptive refinement; what is renewed depends only on the kind of change. How this works, which
+solver asks when, and what it asks of the model, is told once, for developers, in :doc:`/developer/architecture`; the
+rule every contribution to the residual and the tangent follows is in :doc:`/developer/residualandtangent`. Below is
+what the user needs per solver.
 
 ``NIST`` - Nonlinear Implicit Static
 ------------------------------------
@@ -360,7 +145,7 @@ step, and the controller the change of its controlled quantity over the step, so
 exactly where it stopped. The load parameter advances only when an increment has converged, with its solution, so a
 cut back increment starts again from the load parameter of the last accepted one.
 
-The re-equilibration after a model change (``equilibrateAfterModelChange``, see :doc:`modelmodifiers`) is, under arc
+The re-equilibration after a model change (``equilibrateAfterModelChange``, see :doc:`/analysis/modelmodifiers`) is, under arc
 length control, an arc length increment of size zero: the controller asks for a change of zero, so the controlled
 quantity stays where the last accepted increment left it, and the load parameter is solved for, and with it the loads
 and the prescribed displacements it scales -- the counterpart of a zero-time increment under displacement control,
@@ -425,7 +210,7 @@ documentation above states what each one does; material points that belong to no
 A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is supported: ``V`` and ``A`` are
 carried onto new nodes by the node-field warm start, the mass and damping are reassembled on the
 refined mesh, and the acceleration is re-solved from equilibrium on the increment that follows --
-see :doc:`modelmodifiers`, "Refinement under a dynamic solver", for what is conserved exactly across
+see :doc:`/analysis/modelmodifiers`, "Refinement under a dynamic solver", for what is conserved exactly across
 such an event and what is not.
 
 Verified in ``tests/test_nid_newmark.py``, ``tests/test_nid_restart.py`` and
@@ -481,7 +266,7 @@ Both act on a prediction: a declaration of options -- the ``*solver`` datalines,
 switches either on with ``extrapolation=off`` is refused.
 
 The last accepted increments are checkpointed with the digest of their numbering. A step that continues from a
-restart checkpoint, resumed or fallen back to (see :doc:`restart`), builds its discrete system at its first
+restart checkpoint, resumed or fallen back to (see :doc:`/developer/restart`), builds its discrete system at its first
 increment, and extrapolates them only if the new numbering numbers the degrees of freedom alike: the numbering of a
 meshfree model, e.g., follows its active cells, which may have changed since the checkpoint was written.
 
@@ -639,31 +424,19 @@ topology history prints that replay in a table of its own (top-level ``AMR`` row
 
 .. pprint:: solver:NED
 
-Updating the discrete system during a step
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Contact searches during a step
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-An explicit analysis with contact updates its discrete system while it runs: a contact search
-re-assigns which nodes a constraint couples, which changes that constraint's locations, and
-everything derived from the locations has to follow. ``NED`` goes through the same path as every solver
-(:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem`), and the model's
-:class:`~edelweissfe.models.change.Change` decides how much of it is renewed.
+An explicit analysis with contact searches while it runs, every ``contact-update-frequency`` increments. A search
+re-assigns which nodes a contact constraint couples, and touches no node, no field, no scalar variable and no element:
+the change is ``LOCATIONS``, ``NED`` only wraps its vectors with the new locations, and the lumped inertia, the
+mass-proportional damping rate, the multi-point-constraint condensation and the stable time increment are kept
+(:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations`, and :ref:`how-a-change-selects-the-path`).
 
-A contact search is much narrower than it looks. It touches no node, no field, no scalar variable and
-no element, so the numbering and every element's location stay exactly as they were -- and with them the
-lumped inertia, its inverse, the mass-proportional damping rate and the multi-point-constraint transformation, none of
-which is a function of the constraints' locations. The change is ``LOCATIONS``: the discrete system gets new locations
-on the same numbering
-(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`), and ``NED`` only wraps its vectors
-with them, their values kept (:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations`). Everything sized
-by the numbering -- the lumped operators, the classification of the fields by time derivative, the condensation of the
-multi-point constraints, the vectors, the stable time increment -- is built once for the numbering, in
-:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering`, and kept for as long as the numbering stands.
-There is no test of whether the operators may be kept: that new locations cannot change them is what the type of
-change says.
-
-A change of the mesh -- a refinement -- gives a new numbering: the operators are assembled anew over the elements of
-the new discrete system, the solution, the velocity and the acceleration are read from the model, which interpolated
-them onto the new nodes, and the stable time increment is computed again.
+A change of the mesh -- a refinement -- gives a new numbering
+(:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering`): the operators are assembled anew over the
+elements of the new discrete system, the solution, the velocity and the acceleration are read from the model, which
+interpolated them onto the new nodes, and the stable time increment is computed again.
 
 Work per increment outside the elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

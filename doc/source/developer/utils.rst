@@ -13,7 +13,7 @@ Matrix assembly is a critical performance bottleneck in Finite Element simulatio
 The CSR generator (``csrgeneratorv2``) converts COO (Coordinate) format sparse matrices to CSR (Compressed Sparse Row) format efficiently without re-analysing the sparsity pattern: a parallelized C++ engine with OpenMP support, thread-safe memory layouts, cache friendliness, and vectorized operations.
 
 .. seealso::
-   :doc:`assembly` compares this stage-then-gather route against direct scatter-to-CSR assembly, which
+   :doc:`/developer/assembly` compares this stage-then-gather route against direct scatter-to-CSR assembly, which
    avoids the staging array entirely -- relevant whenever the number of stored contributions greatly
    exceeds the number of matrix entries, as it does for meshfree discretisations.
 

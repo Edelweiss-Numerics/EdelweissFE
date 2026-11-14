@@ -47,7 +47,7 @@ step instead goes back to its latest restart checkpoint and continues from there
     maxInc=1e-2, minInc=1e-6, maxCheckpointFallbacks=3
 
 The increments accepted after the checkpoint are discarded, and the step continues exactly as a run resumed from that
-checkpoint would (see :doc:`restart`), with the one difference that its next increment is smaller. Their output is
+checkpoint would (see :doc:`/developer/restart`), with the one difference that its next increment is smaller. Their output is
 replaced: field output exports are cut back to the checkpoint, and the Ensight sequence continues from it. Path
 dependent materials (plasticity, damage) then follow a different, finer path through the same load history, which may
 pass where the coarser one got stuck. If the increment the checkpoint holds cannot be cut back either, the step goes
