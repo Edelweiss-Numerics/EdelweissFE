@@ -1,0 +1,1524 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.solvers.base.nonlinearsolverbase &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.solvers.base.nonlinearsolverbase</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.solvers.base.nonlinearsolverbase</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="kn">import</span> <span class="n">ndarray</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csr_matrix</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.change</span><span class="w"> </span><span class="kn">import</span> <span class="n">Change</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.discretesystem</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteSystem</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.mpctransformation</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MultiPointConstraintTransformation</span><span class="p">,</span>
+    <span class="n">_flattenChainedRecords</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
+    <span class="n">SystemMatrixBlocks</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.convergencetable</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceTable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.base.loadbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoadBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.base.stepactionbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">StepActionBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.checkpointedstate</span><span class="w"> </span><span class="kn">import</span> <span class="n">packState</span><span class="p">,</span> <span class="n">unpackState</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DivergingSolution</span><span class="p">,</span> <span class="n">RestartError</span><span class="p">,</span> <span class="n">TopologyError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">OptionSchemaProvider</span><span class="p">,</span>
+    <span class="n">coerceValue</span><span class="p">,</span>
+    <span class="n">fieldSchemaMeta</span><span class="p">,</span>
+    <span class="n">optionNames</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NonlinearSolverBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""This is the base class for all nonlinear solvers.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    jobInfo</span>
+<span class="sd">        A dictionary containing the job information.</span>
+<span class="sd">    journal</span>
+<span class="sd">        The journal instance for logging.</span>
+<span class="sd">    """</span>
+
+    <span class="n">identification</span> <span class="o">=</span> <span class="s2">"NonlinearSolverBase"</span>
+
+    <span class="n">SolverSpecificOptions</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1">#: Whether this solver supports master-slave condensation / multi-point constraints</span>
+    <span class="c1">#: (e.g. surface ties). Subclasses supporting MPCs must set this to True.</span>
+    <span class="n">supportsMPC</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1">#: Whether this solver runs the topology update (e.g. h-adaptivity) at all; without it a modifier never runs.</span>
+    <span class="c1">#: A solver that runs it only before its increment loop sets this too, and refuses the modifiers that would</span>
+    <span class="c1">#: need it later (see ModelModifierBase.actsOnlyAtSimulationStart and NED.validateModelCapabilities).</span>
+    <span class="n">supportsModelModifiers</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1">#: The current discrete system of the model (see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`),</span>
+    <span class="c1">#: with its numbering, its locations, and how the solution passes between the model and the vectors of the solver.</span>
+    <span class="c1">#: Replaced by a new one, never changed (see :meth:`updateDiscreteSystem`); None until the first one is built.</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">DiscreteSystem</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1">#: What the topology update changed at the start of the increment, which the increment reacts on (see</span>
+    <span class="c1">#: :meth:`updateTopologyAndConnectivity`).</span>
+    <span class="n">_change</span><span class="p">:</span> <span class="n">Change</span> <span class="o">=</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span>
+
+    <span class="c1">#: The actions of the step being solved, set when it begins. The multi-point constraints are reconciled with its</span>
+    <span class="c1">#: Dirichlet boundary conditions whenever the discrete system gets a new numbering.</span>
+    <span class="n">_stepActions</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1">#: The active multi-point-constraint (hanging node / tie) condensation, or None without MPCs. Lets</span>
+    <span class="c1">#: applyDirichletToStiffness tell an MPC-transformed (disposable) system matrix apart from the</span>
+    <span class="c1">#: assembler's persistent, in-place-updated one.</span>
+    <span class="n">mpcTransformation</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1">#: The layout of the iteration table that :meth:`checkConvergence` writes, one column per field; set up</span>
+    <span class="c1">#: by the solver whenever it (re)builds its discrete system.</span>
+    <span class="n">convergenceTable</span><span class="p">:</span> <span class="n">ConvergenceTable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1">#: Whether the header of the iteration table is written in this attempt of the increment. It comes with the</span>
+    <span class="c1">#: first row, so that what the linear solver reports while it solves for the first time (e.g. its set-up) stands</span>
+    <span class="c1">#: above the table, not inside it.</span>
+    <span class="n">tableHeaderWritten</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1">#: The force buffer of each constraint, by constraint, with the DOF indices it was made for, which</span>
+    <span class="c1">#: :meth:`assembleConstraintForces` reuses from increment to increment as long as the constraint has these indices.</span>
+    <span class="n">_constraintForcePlans</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+<div class="viewcode-block" id="NonlinearSolverBase.validateModelCapabilities">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.validateModelCapabilities">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validateModelCapabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Validate whether the solver supports the active features/constraints of the model.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">multiPointConstraints</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">supportsMPC</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Multi-point constraints (e.g. surface ties) are not supported by the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="si">}</span><span class="s2"> solver."</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Only self-starting modifiers matter: a purely reactive one (e.g. the surface-facet retiling) never acts</span>
+        <span class="c1"># unless another modifier changed the mesh first.</span>
+        <span class="n">selfStarting</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">modelModifiers</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">initiatesTopologyChanges</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">selfStarting</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">supportsModelModifiers</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">"The </span><span class="si">{:}</span><span class="s2"> solver does not run the topology update, so the model modifier(s) </span><span class="si">{:}</span><span class="s2"> "</span>
+                <span class="s2">"would never modify the model."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">selfStarting</span><span class="p">))</span>
+            <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_updateOptions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">updatedOptions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Update options of the solver using a string dict</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        updatedOptions</span>
+<span class="sd">            The options dictionary.</span>
+<span class="sd">        journal</span>
+<span class="sd">            The journal module.</span>
+<span class="sd">        strict</span>
+<span class="sd">            If True, an unrecognised option raises an AttributeError instead of being ignored. Use it</span>
+<span class="sd">            for option sources which are exclusively owned by this solver (i.e. the datalines of the</span>
+<span class="sd">            *solver keyword), such that typos are not silently swallowed.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set[str]</span>
+<span class="sd">            The names of the options updated.</span>
+<span class="sd">        """</span>
+
+        <span class="c1"># Option keys arrive lowercased: match them case-insensitively against the camelCase names. A &gt;&gt;options</span>
+        <span class="c1"># block carries every solver's options plus meta keys, so keys of other solvers are skipped.</span>
+        <span class="n">canonicalByLower</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">SolverSpecificOptions</span><span class="p">}</span>
+        <span class="n">updatedNames</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">updatedOptions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">canonicalKey</span> <span class="o">=</span> <span class="n">canonicalByLower</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">canonicalKey</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s2">"Invalid option </span><span class="si">{:}</span><span class="s2"> for </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">))</span>
+                <span class="k">continue</span>
+            <span class="n">updatedNames</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">canonicalKey</span><span class="p">)</span>
+            <span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Updating option </span><span class="si">{:}</span><span class="s2">=</span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">canonicalKey</span><span class="p">,</span> <span class="n">v</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
+            <span class="n">defaultValue</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">SolverSpecificOptions</span><span class="p">[</span><span class="n">canonicalKey</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">defaultValue</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+                <span class="c1"># bool("False") is truthy, so parse the string explicitly rather than via bool(...)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="n">canonicalKey</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"true"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">,</span> <span class="s2">"yes"</span><span class="p">,</span> <span class="s2">"on"</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">defaultValue</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="n">canonicalKey</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="n">canonicalKey</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="n">item</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">","</span><span class="p">)]</span>
+            <span class="k">elif</span> <span class="n">defaultValue</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># an option that decides for itself while unset (``bool | None``): no default to take its type from,</span>
+                <span class="c1"># so the schema says it</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">optionNames</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schema</span><span class="p">)[</span><span class="n">canonicalKey</span><span class="p">])</span><span class="o">.</span><span class="n">dtype</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="n">canonicalKey</span><span class="p">]</span> <span class="o">=</span> <span class="n">coerceValue</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="n">canonicalKey</span><span class="p">]</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">defaultValue</span><span class="p">)(</span><span class="n">v</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">updatedNames</span>
+
+<div class="viewcode-block" id="NonlinearSolverBase.updateTopologyAndConnectivity">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"topology update"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateTopologyAndConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">offerModelModifiers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Change</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run the topology update, then let every mesh-dependent consumer catch up on it, and say what changed.</span>
+
+<span class="sd">        Two phases. First, the model modifiers plan and apply to a fixed point inside one topology</span>
+<span class="sd">        window (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`). Second, the pure</span>
+<span class="sd">        readers of the settled model catch up, once, on the net change: the tie and contact surfaces,</span>
+<span class="sd">        then the connectivity, which the model brings up to date itself</span>
+<span class="sd">        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`; the constraints of a finite</span>
+<span class="sd">        element model, e.g. a contact search). They may not create or delete elements: the topology</span>
+<span class="sd">        window is closed by then, so an attempt raises.</span>
+
+<span class="sd">        One :class:`~edelweissfe.models.change.Change` comes out of it, the same for every solver:</span>
+
+<span class="sd">        * :attr:`~edelweissfe.models.change.Change.MESH` if the model modifiers changed the mesh, or if a</span>
+<span class="sd">          mesh-dependent consumer caught up (e.g. a tie or contact surface rebuilt on a mesh that changed in a way that</span>
+<span class="sd">          concerns it). A consumer refreshes only when the topology version advanced, i.e. when nodes or elements did</span>
+<span class="sd">          change, so its catching up is a change of the mesh whoever made it, and its changed records (e.g. the</span>
+<span class="sd">          multi-point constraints of a tie) are sized by that mesh.</span>
+<span class="sd">        * Otherwise the model's answer.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being solved.</span>
+<span class="sd">        offerModelModifiers</span>
+<span class="sd">            False when an increment is retried after a cutback. The model modifiers decide once per</span>
+<span class="sd">            converged state: the retry starts from the state they already decided on.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Change</span>
+<span class="sd">            What changed; the solver decides from it how much of its discrete system to renew.</span>
+<span class="sd">        """</span>
+
+        <span class="n">meshChanged</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="k">if</span> <span class="n">offerModelModifiers</span> <span class="k">else</span> <span class="kc">False</span>
+        <span class="n">meshDependentsRefreshed</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">refreshMeshDependents</span><span class="p">()</span>
+        <span class="n">change</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">meshChanged</span> <span class="ow">or</span> <span class="n">meshDependentsRefreshed</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span>
+        <span class="k">return</span> <span class="n">change</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.updateDiscreteSystem">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateDiscreteSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">Change</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Bring the discrete system up to date with what changed: the one way a solver builds its discrete system, from</span>
+<span class="sd">        the first to the last increment.</span>
+
+<span class="sd">        * No discrete system yet, or a change of the numbering or of the mesh</span>
+<span class="sd">          (:attr:`~edelweissfe.models.change.Change.NUMBERING`, :attr:`~edelweissfe.models.change.Change.MESH`): the</span>
+<span class="sd">          model builds a new one (:meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), then</span>
+<span class="sd">          :meth:`onNewNumbering` and :meth:`onNewLocations` follow. The old one is dropped before</span>
+<span class="sd">          (:meth:`forgetDiscreteSystem`): never both at once.</span>
+<span class="sd">        * A change of the locations (:attr:`~edelweissfe.models.change.Change.LOCATIONS`): the same numbering, new</span>
+<span class="sd">          locations (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`); only</span>
+<span class="sd">          :meth:`onNewLocations` follows, so that nothing sized by the numbering is touched.</span>
+<span class="sd">        * Else nothing.</span>
+
+<span class="sd">        The change is the one :meth:`updateTopologyAndConnectivity` reports: the model classifies what its entities</span>
+<span class="sd">        report, and the topology update adds a change of the mesh. The solver never tests whether an entity changed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        change</span>
+<span class="sd">            What changed since the discrete system was built.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"discrete system rebuild"</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">change</span> <span class="o">&gt;=</span> <span class="n">Change</span><span class="o">.</span><span class="n">NUMBERING</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"numbering and locations"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildDiscreteSystem</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                    <span class="s2">"discrete system built: </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">2</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">onNewNumbering</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"numbering and locations"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">withNewLocations</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                <span class="s2">"locations of </span><span class="si">{:}</span><span class="s2"> entities in the numbering of </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">ofEntity</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                <span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">onNewLocations</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.checkNumberingOfRestartedVectors">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkNumberingOfRestartedVectors">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkNumberingOfRestartedVectors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">numberingOfCheckpoint</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Refuse the vectors of a restart checkpoint if they belong to another numbering than the discrete system just</span>
+<span class="sd">        built from the resumed model: a vector is only a vector of the degrees of freedom it was written for, and one</span>
+<span class="sd">        of equal length numbers other nodes if the active nodes changed (e.g. a meshfree model that searches its</span>
+<span class="sd">        particles' kernel functions anew on resuming). The checkpoint holds the digest of the numbering</span>
+<span class="sd">        (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`) with the vectors it numbers. Call it with the</span>
+<span class="sd">        discrete system built, before the vectors are taken over.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        numberingOfCheckpoint</span>
+<span class="sd">            The digest the checkpoint holds with the vectors; None if it holds none.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RestartError</span>
+<span class="sd">            If the checkpoint holds no digest, or the digest of another numbering than the current one.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">numberingOfCheckpoint</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span>
+                <span class="s2">"The checkpoint does not hold the numbering of the degrees of freedom its vectors belong to: they "</span>
+                <span class="s2">"cannot be taken over."</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">numberingOfCheckpoint</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">digest</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span>
+                <span class="s2">"The vectors of the checkpoint (what the solver carries from increment to increment, e.g. the net "</span>
+                <span class="s2">"force of the last increment) belong to another numbering of the degrees of freedom than the one the "</span>
+                <span class="s2">"resumed model has (a different set of nodes, or other nodes in the same number): they cannot be "</span>
+                <span class="s2">"taken over. The connectivity of a model is not part of a checkpoint; the resumed run finds it by a "</span>
+                <span class="s2">"fresh search, which can give other nodes than the running search had, e.g. in a meshfree model with "</span>
+                <span class="s2">"unbonded kernel functions and a neighbour-list skin, which can admit other kernel functions on its "</span>
+                <span class="s2">"first search, and with them other active nodes. See the documentation page 'Restart'."</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.forgetDiscreteSystem">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forgetDiscreteSystem">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forgetDiscreteSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop the discrete system, and everything that belongs to it, before the next one is built: the</span>
+<span class="sd">        multi-point-constraint condensation as well, which is a function of the numbering. A solver that keeps more of</span>
+<span class="sd">        it extends this."""</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.onNewNumbering">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">onNewNumbering</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Everything that is sized by the numbering of the new discrete system, :attr:`system`, is built here, e.g. the</span>
+<span class="sd">        vectors, which the state is read into from the model, the linear solver's view of the degrees of freedom, the</span>
+<span class="sd">        layout of the convergence table. Called by :meth:`updateDiscreteSystem` when the discrete system was built</span>
+<span class="sd">        anew, before :meth:`onNewLocations`. Never called for new locations on the same numbering: what is built here</span>
+<span class="sd">        stays as it is.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.onNewLocations">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">onNewLocations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Everything that is derived from the locations of the new discrete system, :attr:`system`, is built here: the</span>
+<span class="sd">        vectors are wrapped with them (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`, the values are</span>
+<span class="sd">        kept), and the system matrix assembly, whose sparsity pattern the locations determine. Called by</span>
+<span class="sd">        :meth:`updateDiscreteSystem` after every new discrete system, and after new locations on the same numbering.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.collectLoads">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.collectLoads">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">collectLoads</span><span class="p">(</span><span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">LoadBase</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The loads among a step's actions: every action that is a</span>
+<span class="sd">        :class:`~edelweissfe.stepactions.base.loadbase.LoadBase`, whatever step action module it is defined in, so</span>
+<span class="sd">        that a new kind of load needs no change to any solver.</span>
+
+<span class="sd">        They come in the order in which their contributions are summed, module by module: the node forces, the</span>
+<span class="sd">        distributed loads and the body forces first, then the loads of any other module, by the name of the module;</span>
+<span class="sd">        within a module, in the order of their definition. A fixed order makes the residual the same sum in every run.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        stepActions</span>
+<span class="sd">            The step actions, by module.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[LoadBase]</span>
+<span class="sd">            The loads.</span>
+<span class="sd">        """</span>
+
+        <span class="n">modulesSummedFirst</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"nodeforces"</span><span class="p">,</span> <span class="s2">"distributedload"</span><span class="p">,</span> <span class="s2">"bodyforce"</span><span class="p">)</span>
+        <span class="n">modules</span> <span class="o">=</span> <span class="p">[</span><span class="n">module</span> <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">modulesSummedFirst</span> <span class="k">if</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">]</span>
+        <span class="n">modules</span> <span class="o">+=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">module</span> <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">stepActions</span> <span class="k">if</span> <span class="n">module</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">modulesSummedFirst</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">action</span> <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">modules</span> <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="n">module</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">LoadBase</span><span class="p">)]</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.assembleLoads">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleLoads">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"assemble loads"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleLoads</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">loads</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">LoadBase</span><span class="p">],</span>
+        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixBlocks</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixBlocks</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Assemble the residual contributions of all loads: each adds the negative of the external load it</span>
+<span class="sd">        applies, and the tangent of that contribution, which is nonzero only for a load that follows the</span>
+<span class="sd">        deformation; see :ref:`residual-and-tangent-convention`. Every load knows where it acts, see</span>
+<span class="sd">        :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`, so this only loops over them.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        loads</span>
+<span class="sd">            The loads, see :meth:`collectLoads`.</span>
+<span class="sd">        U_np</span>
+<span class="sd">            The current solution vector.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current solution increment.</span>
+<span class="sd">        P</span>
+<span class="sd">            The residual contribution vector to assemble into.</span>
+<span class="sd">        K</span>
+<span class="sd">            The system matrix to assemble into; None for an explicit solver, which needs no tangent.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The current time step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[DofVector,SystemMatrixBlocks]</span>
+<span class="sd">            - The updated residual contribution vector.</span>
+<span class="sd">            - The updated system matrix.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">load</span> <span class="ow">in</span> <span class="n">loads</span><span class="p">:</span>
+            <span class="n">load</span><span class="o">.</span><span class="n">assembleLoad</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">K</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># the block of the last load</span>
+            <span class="n">K</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.assembleConstraintForces">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"assemble constraints"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleConstraintForces</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">constraints</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Evaluate the constraints of the discrete system and add their residual contributions to the given vector.</span>
+
+<span class="sd">        The explicit counterpart of</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same</span>
+<span class="sd">        sign: a constraint adds the negative of the force it exerts on the nodes, like an element its</span>
+<span class="sd">        internal force, see :ref:`residual-and-tangent-convention`.</span>
+
+<span class="sd">        No tangent is requested. An explicit increment solves no linear system, so a constraint's</span>
+<span class="sd">        stiffness enters nothing, and</span>
+<span class="sd">        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`</span>
+<span class="sd">        is the entry point that evaluates the constraint forces directly without assembling a tangent.</span>
+<span class="sd">        A constraint that could act *only* through its tangent would contribute nothing here; an explicit solver</span>
+<span class="sd">        refuses it in its ``validateModelCapabilities``.</span>
+
+<span class="sd">        The force buffer and the DOF indices of each constraint are kept in :attr:`_constraintForcePlans` (by</span>
+<span class="sd">        constraint) and reused in every increment. They hold for the indices of the constraint they were made</span>
+<span class="sd">        for: whenever the locations locate the constraint anew -- a rebuilt discrete system, or one with new</span>
+<span class="sd">        locations --, the constraint has indices of its own, its plan is made anew, and the</span>
+<span class="sd">        constraint is told so</span>
+<span class="sd">        (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        constraints</span>
+<span class="sd">            The constraints of the discrete system</span>
+<span class="sd">            (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`).</span>
+<span class="sd">        U_np</span>
+<span class="sd">            The current solution vector.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current solution increment.</span>
+<span class="sd">        P</span>
+<span class="sd">            The residual contribution vector to be augmented.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The current time step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector</span>
+<span class="sd">            The augmented residual contribution vector.</span>
+<span class="sd">        """</span>
+
+        <span class="c1"># Per-constraint buffers and index plans, made once per discrete system.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">PPlain</span> <span class="o">=</span> <span class="n">P</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="p">:</span>
+            <span class="c1"># A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
+            <span class="n">plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">plan</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">indices</span><span class="p">:</span>
+                <span class="c1"># np.add.at only if a DOF appears more than once (e.g. a slave node in its own master</span>
+                <span class="c1"># facet), since fancy-indexed += would drop repeated contributions.</span>
+                <span class="n">plan</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="n">indices</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span> <span class="o">=</span> <span class="n">plan</span>
+                <span class="n">constraint</span><span class="o">.</span><span class="n">prepareExplicitEvaluation</span><span class="p">()</span>
+
+            <span class="n">Pc</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">namesDofMoreThanOnce</span> <span class="o">=</span> <span class="n">plan</span>
+
+            <span class="c1"># Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.</span>
+            <span class="n">Pc</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+            <span class="n">constraint</span><span class="o">.</span><span class="n">computeKernelsExplicit</span><span class="p">(</span><span class="n">U_np</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">namesDofMoreThanOnce</span><span class="p">:</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">PPlain</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">Pc</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">PPlain</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Pc</span>
+
+        <span class="k">return</span> <span class="n">P</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.getRestartData">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.getRestartData">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getRestartData</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The state this solver carries from one increment to the next, as it is; see</span>
+<span class="sd">        :attr:`checkpointedState`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, numpy.ndarray]</span>
+<span class="sd">            The state; see :func:`~edelweissfe.utils.checkpointedstate.packState`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RestartError</span>
+<span class="sd">            If this solver does not declare its state, i.e. does not support restart.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">packState</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.setRestartData">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.setRestartData">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setRestartData</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Restore the state :meth:`getRestartData` returned, so that the resumed step continues</span>
+<span class="sd">        exactly where the uninterrupted run would have.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data</span>
+<span class="sd">            The state.</span>
+<span class="sd">        """</span>
+
+        <span class="n">unpackState</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.applyOptionsOverride">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyOptionsOverride">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyOptionsOverride</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldValues</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply a partial override of this solver's own ``schema`` fields onto ``self.options``.</span>
+
+<span class="sd">        The counterpart, on the solver side, of the name-based ``&gt;&gt;options`` override mechanism</span>
+<span class="sd">        (``stepactions/options.py``): once that mechanism has resolved an ``&gt;&gt;options, name=X, ...``</span>
+<span class="sd">        block to this solver instance and validated the present keys against ``type(self).schema``</span>
+<span class="sd">        via :func:`~edelweissfe.utils.schema.coercePresentOptions`, it calls this method with the</span>
+<span class="sd">        result to actually apply them.</span>
+
+<span class="sd">        ``fieldValues`` is keyed by *schema field name* (e.g. ``rungeKuttaStages``), while</span>
+<span class="sd">        ``self.options`` -- read throughout a step -- is keyed by the</span>
+<span class="sd">        option's ``.inp``-facing spelling (e.g. ``"runge-kutta-stages"``), which are not always the</span>
+<span class="sd">        same (a hyphenated name cannot be a Python identifier). The schema's ``optionName`` metadata</span>
+<span class="sd">        is the one place that mapping is recorded, so it is consulted here rather than duplicated.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fieldValues</span>
+<span class="sd">            Maps schema field name to its new, already-coerced value.</span>
+<span class="sd">        """</span>
+
+        <span class="n">fieldsByName</span> <span class="o">=</span> <span class="p">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">field</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schema</span><span class="p">)}</span>
+        <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">fieldValues</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">optionName</span> <span class="o">=</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">fieldsByName</span><span class="p">[</span><span class="n">fieldName</span><span class="p">])</span><span class="o">.</span><span class="n">optionName</span> <span class="ow">or</span> <span class="n">fieldName</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Updating option </span><span class="si">{:}</span><span class="s2">=</span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">optionName</span><span class="p">,</span> <span class="n">value</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="n">optionName</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span></div>
+
+
+    <span class="c1">#: The status of the current increment, handed to the output managers (iterations, notes, ...),</span>
+    <span class="c1">#: or None.</span>
+    <span class="n">incrementStatus</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1">#: The state this solver carries from one increment to the next, by attribute name and type; see</span>
+    <span class="c1">#: :mod:`~edelweissfe.utils.checkpointedstate`. None for a solver that does not support restart:</span>
+    <span class="c1">#: writing a checkpoint then refuses.</span>
+    <span class="n">checkpointedState</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="NonlinearSolverBase.beginStep">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">beginStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">outputmanagers</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Start a step: set up what the step needs, and -- on a cold start only, see</span>
+<span class="sd">        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart` -- apply</span>
+<span class="sd">        the step actions' step-start parts and reset the state carried between increments. A resumed</span>
+<span class="sd">        step continues from the state the checkpoint restored.</span>
+
+<span class="sd">        The step's increment loop (:meth:`~edelweissfe.steps.base.stepbase.StepBase.solve`) then</span>
+<span class="sd">        calls, per increment, :meth:`prepareIncrement`, :meth:`attemptIncrement` and</span>
+<span class="sd">        :meth:`acceptIncrement`, and finally :meth:`endStep`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step to be solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        fieldOutputController</span>
+<span class="sd">            The field output controller.</span>
+<span class="sd">        outputmanagers</span>
+<span class="sd">            The output managers.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.prepareIncrement">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prepareIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">isRetry</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Bring the model up to date before an increment is proposed: the topology update, when due,</span>
+<span class="sd">        and whatever the solver derives from the mesh. Runs before the time stepper proposes the</span>
+<span class="sd">        increment, because it may change what is proposed (an explicit solver lowers its stable time</span>
+<span class="sd">        increment after a refinement).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        isRetry</span>
+<span class="sd">            True if the increment is retried after a cutback. The model modifiers decide once per</span>
+<span class="sd">            accepted state: the retry starts from the state they already decided on.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.attemptIncrement">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">attemptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Solve the increment, without committing anything to the model.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The increment proposed by the time stepper.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        IncrementFailed</span>
+<span class="sd">            If the increment cannot be solved; it is retried smaller.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.acceptIncrement">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Commit the solved increment to the model, and keep the state the solver carries to the next</span>
+<span class="sd">        increment. Called before the time stepper accepts it, so that the solver may still keep the</span>
+<span class="sd">        next increment from growing.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The solved increment.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.isOutputIncrement">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.isOutputIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isOutputIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether field outputs, output managers and restart checkpoints are written after this</span>
+<span class="sd">        increment. By default, after every increment.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The accepted increment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True to write output.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.endStep">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.endStep">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">endStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Finish a step, however it ended.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step that was solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        """</span></div>
+
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solveIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+<div class="viewcode-block" id="NonlinearSolverBase.applyDirichletToResidual">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyDirichletToResidual">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"dirichlet R"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyDirichletToResidual</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Impose the Dirichlet BCs on the residual.</span>
+
+<span class="sd">        For every constrained DOF we *overwrite* its residual entry with the</span>
+<span class="sd">        value we want the linear solve to return for that DOF's increment.</span>
+<span class="sd">        Together with :meth:`applyDirichletToStiffness` (which replaces the DOF's</span>
+<span class="sd">        row of K by the identity and eliminates its column into R), the</span>
+<span class="sd">        linearized system ``K ddU = R`` then reproduces exactly that increment for the DOF.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The current time step.</span>
+<span class="sd">        R</span>
+<span class="sd">            The residual vector of the global discrete system to be modified.</span>
+<span class="sd">        dirichlets</span>
+<span class="sd">            The list of dirichlet boundary conditions.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector</span>
+<span class="sd">            The modified residual vector.</span>
+<span class="sd">        """</span>
+        <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>
+            <span class="n">R</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">getPrescribedIncrementOfConstrainedDofs</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">R</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.checkConvergence">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"convergence check"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkConvergence</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">ddU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">iterationCounter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">residualHistory</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Check the convergence, individually for each field and for the scalar variables, based on the current flux</span>
+<span class="sd">        residual and the correction, using the convergence criterion of the solver (see</span>
+<span class="sd">        :mod:`edelweissfe.solvers.base.convergencecriteria`). Is called by solveIncrement() to decide whether to</span>
+<span class="sd">        continue iterating or stop.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        R</span>
+<span class="sd">            The current residual.</span>
+<span class="sd">        ddU</span>
+<span class="sd">            The current correction increment.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current solution increment.</span>
+<span class="sd">        F</span>
+<span class="sd">            The accumulated absolute element fluxes.</span>
+<span class="sd">        FConstraints</span>
+<span class="sd">            The accumulated absolute constraint fluxes.</span>
+<span class="sd">        iterationCounter</span>
+<span class="sd">            The current iteration number.</span>
+<span class="sd">        residualHistory</span>
+<span class="sd">            The convergence state of every field in each iteration checked so far in this increment; the state of</span>
+<span class="sd">            this iteration is appended, for</span>
+<span class="sd">            :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkDivergingSolution`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[bool,dict]</span>
+<span class="sd">            - True if converged.</span>
+<span class="sd">            - The nodes with the largest residual, per field.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        DivergingSolution</span>
+<span class="sd">            If the residual contains a NaN: no further iteration can recover from it.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">R</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="n">DivergingSolution</span><span class="p">(</span><span class="s2">"Obtained NaN in the residual"</span><span class="p">)</span>
+
+        <span class="n">tableColumns</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">convergedAtAll</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">nodesWithLargestResidual</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="n">spatialAveragedFluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">computeSpatialAveragedFluxes</span><span class="p">(</span>
+            <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span>
+        <span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">fieldIndices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">fieldConvergence</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">checkField</span><span class="p">(</span>
+                <span class="n">field</span><span class="p">,</span>
+                <span class="n">R</span><span class="p">[</span><span class="n">fieldIndices</span><span class="p">],</span>
+                <span class="n">ddU</span><span class="p">[</span><span class="n">fieldIndices</span><span class="p">]</span> <span class="k">if</span> <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="n">dU</span><span class="p">[</span><span class="n">fieldIndices</span><span class="p">],</span>
+                <span class="n">spatialAveragedFluxes</span><span class="p">[</span><span class="n">field</span><span class="p">],</span>
+                <span class="n">iterationCounter</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">nodesWithLargestResidual</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">getNodeForIndexInDofVector</span><span class="p">(</span>
+                <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">R</span><span class="p">))[</span><span class="n">fieldIndices</span><span class="p">][</span><span class="n">fieldConvergence</span><span class="o">.</span><span class="n">indexOfLargestResidual</span><span class="p">]</span>
+            <span class="p">)</span>
+
+            <span class="n">residualHistory</span><span class="p">[</span><span class="n">field</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fieldConvergence</span><span class="p">)</span>
+
+            <span class="n">tableColumns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fieldConvergence</span><span class="p">)</span>
+            <span class="n">convergedAtAll</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">convergedAtAll</span> <span class="ow">and</span> <span class="n">fieldConvergence</span><span class="o">.</span><span class="n">correctionConverged</span> <span class="ow">and</span> <span class="n">fieldConvergence</span><span class="o">.</span><span class="n">fluxResidualConverged</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">:</span>
+            <span class="n">scalarVariableIndices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+            <span class="n">scalarVariablesConvergence</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">checkScalarVariables</span><span class="p">(</span>
+                <span class="n">R</span><span class="p">[</span><span class="n">scalarVariableIndices</span><span class="p">],</span>
+                <span class="n">ddU</span><span class="p">[</span><span class="n">scalarVariableIndices</span><span class="p">]</span> <span class="k">if</span> <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="n">dU</span><span class="p">[</span><span class="n">scalarVariableIndices</span><span class="p">],</span>
+                <span class="n">iterationCounter</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="n">tableColumns</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">scalarVariablesConvergence</span><span class="p">)</span>
+            <span class="n">convergedAtAll</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">convergedAtAll</span>
+                <span class="ow">and</span> <span class="n">scalarVariablesConvergence</span><span class="o">.</span><span class="n">correctionConverged</span>
+                <span class="ow">and</span> <span class="n">scalarVariablesConvergence</span><span class="o">.</span><span class="n">fluxResidualConverged</span>
+            <span class="p">)</span>
+
+        <span class="n">summary</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">lastSolveSummary</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">reportsSolveSummary</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="c1"># ddU is None on the first iteration of an increment: no solve yet, so the column stays blank.</span>
+        <span class="n">thisIterationsSolve</span> <span class="o">=</span> <span class="n">summary</span> <span class="k">if</span> <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">tableHeaderWritten</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">preformatted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">convergenceTable</span><span class="o">.</span><span class="n">headerLines</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tableHeaderWritten</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">preformatted</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">convergenceTable</span><span class="o">.</span><span class="n">row</span><span class="p">(</span><span class="n">tableColumns</span><span class="p">,</span> <span class="n">thisIterationsSolve</span><span class="p">)],</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">2</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">thisIterationsSolve</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">preformatted</span><span class="p">(</span>
+                <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">convergenceTable</span><span class="o">.</span><span class="n">linearSolveDetailLine</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">thisIterationsSolve</span><span class="o">.</span><span class="n">detailLines</span><span class="p">],</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                <span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">convergedAtAll</span><span class="p">,</span> <span class="n">nodesWithLargestResidual</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.linearSolve">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.linearSolve">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"linear solve"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">linearSolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Solve the linear system of equations.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        A</span>
+<span class="sd">            The system matrix in compressed spare row format.</span>
+<span class="sd">        b</span>
+<span class="sd">            The right hand side.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ndarray</span>
+<span class="sd">            The solution 'x'.</span>
+<span class="sd">        """</span>
+
+        <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">ddU</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="n">DivergingSolution</span><span class="p">(</span><span class="s2">"Obtained NaN in linear solve"</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ddU</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.assembleStiffnessCSR">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleStiffnessCSR">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"assemble stiffness CSR"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleStiffnessCSR</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The assembled system matrix in CSR format, see</span>
+<span class="sd">        :meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        K</span>
+<span class="sd">            The system matrix being assembled.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        csr_matrix</span>
+<span class="sd">            The system matrix in compressed sparse row format; the assembly's own, which the next assembly</span>
+<span class="sd">            overwrites. Safe, since no solver keeps it across iterations, and the Dirichlet boundary conditions only</span>
+<span class="sd">            overwrite values.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">K</span><span class="o">.</span><span class="n">assembledMatrix</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.printResidualOutlierNodes">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.printResidualOutlierNodes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">printResidualOutlierNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">residualOutliers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Print which nodes have the largest residuals.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        residualOutliers</span>
+<span class="sd">            The dictionary containing the outlier nodes for every field.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"Residual outliers:"</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+            <span class="n">level</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">residualOutliers</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                <span class="s2">"|</span><span class="si">{:20}</span><span class="s2">|node </span><span class="si">{:10}</span><span class="s2">|"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">label</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                <span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.applyStepActionsAtStepStart">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtStepStart">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyStepActionsAtStepStart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">step</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Apply every step action's step-start part (initial conditions, material initialization,</span>
+<span class="sd">        prescribed fields, ...).</span>
+
+<span class="sd">        Only at the start of a step: a resumed step was checkpointed after the step's real start,</span>
+<span class="sd">        and the state these set has evolved since -- applying them again would overwrite it.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being started.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">isAtStepStart</span><span class="p">():</span>
+            <span class="k">return</span>
+        <span class="k">for</span> <span class="n">stepActionType</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">stepActionType</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">action</span><span class="o">.</span><span class="n">applyAtStepStart</span><span class="p">(</span><span class="n">model</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.updateRigidBodies">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateRigidBodies">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateRigidBodies</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Refresh the kinematics of all rigid bodies in the model after a converged increment.</span>
+
+<span class="sd">        A rigid body's surface (visualization) nodes are not degrees of freedom of their own; they</span>
+<span class="sd">        are fully determined by the rigid body's reference point. This propagates the just-converged</span>
+<span class="sd">        reference-point pose onto those surface nodes so that output managers write the transient</span>
+<span class="sd">        geometry of the moving body and any consumer relying on the surface nodes' ``coordinates``</span>
+<span class="sd">        (e.g. the fast-path AABB of :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB`)</span>
+<span class="sd">        sees the current configuration.</span>
+
+<span class="sd">        Every nonlinear solver must call this once per converged increment, in :meth:`acceptIncrement`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The converged time step.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">rigidBody</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">rigidBodies</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">rigidBody</span><span class="o">.</span><span class="n">updateKinematics</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.applyStepActionsAtStepEnd">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtStepEnd">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyStepActionsAtStepEnd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StepActionBase</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Called when all step actions should finish a step.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        stepActions</span>
+<span class="sd">            The dictionary of active step actions.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">stepActionType</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">stepActionType</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">action</span><span class="o">.</span><span class="n">applyAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.applyStepActionsAtIncrementStart">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtIncrementStart">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyStepActionsAtIncrementStart</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">StepActionBase</span><span class="p">]</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Called when all step actions should be applied at the start of a step.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        increment</span>
+<span class="sd">            The time increment.</span>
+<span class="sd">        stepActions</span>
+<span class="sd">            The dictionary of active step actions.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">stepActionType</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">stepActionType</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">action</span><span class="o">.</span><span class="n">applyAtIncrementStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.locateConstrainedDofs">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.locateConstrainedDofs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">locateConstrainedDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Determine, up front, which global DOFs each Dirichlet BC constrains.</span>
+
+<span class="sd">        Called at the start of every increment, before its iterations: the numbering of the degrees of freedom may</span>
+<span class="sd">        have changed since the last increment -- a rebuild of the discrete system after a change of the mesh or of the</span>
+<span class="sd">        coupling, or a new active domain of a meshfree model, which locates a node set anew. The result</span>
+<span class="sd">        is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, together with the</span>
+<span class="sd">        positions of their nodes in the BC's node set (:attr:`~DirichletBase.constrainedNodePositions`),</span>
+<span class="sd">        so that the Newton loop can address the constrained DOFs directly, instead</span>
+<span class="sd">        of recomputing the mapping on every residual update and every stiffness</span>
+<span class="sd">        modification.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dirichlets</span>
+<span class="sd">            The list of dirichlet boundary conditions active in this step.</span>
+<span class="sd">        """</span>
+        <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>
+            <span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">,</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedNodePositions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constrainedDofsOf</span><span class="p">(</span><span class="n">dirichlet</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_constrainedDofsOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dirichlet</span><span class="p">:</span> <span class="n">StepActionBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the global DOF indices prescribed by a single Dirichlet BC, and the positions of their nodes in its</span>
+<span class="sd">        node set.</span>
+
+<span class="sd">        The numbering knows every DOF of ``field`` on ``nSet``, laid out node</span>
+<span class="sd">        by node in a single flat array::</span>
+
+<span class="sd">            [ node0: (u_x u_y u_z),  node1: (u_x u_y u_z),  ... ]</span>
+
+<span class="sd">        A BC usually prescribes only some of the per-node components (given by</span>
+<span class="sd">        ``dirichlet.components``, e.g. just u_x and u_z). So we view the flat</span>
+<span class="sd">        array as one row per node, keep only the prescribed component columns,</span>
+<span class="sd">        and flatten it back into a plain list of global DOF indices. The order</span>
+<span class="sd">        stays node-major, matching the prescribed values of these nodes</span>
+<span class="sd">        (:meth:`~DirichletBase.getPrescribedIncrementOfConstrainedDofs`).</span>
+
+<span class="sd">        Only the nodes of the set that are part of the discrete system count, see</span>
+<span class="sd">        :meth:`~edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet`: all nodes of the set in a</span>
+<span class="sd">        finite element model, those in the active domain in a meshfree one.</span>
+<span class="sd">        """</span>
+        <span class="n">dofsOfFieldOnNodeSet</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">locateFieldOnNodeSet</span><span class="p">(</span>
+            <span class="n">dirichlet</span><span class="o">.</span><span class="n">field</span><span class="p">,</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">nSet</span>
+        <span class="p">)</span>
+        <span class="n">perNodeDofs</span> <span class="o">=</span> <span class="n">dofsOfFieldOnNodeSet</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">fieldSize</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">perNodeDofs</span><span class="p">[:,</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">components</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">(),</span> <span class="n">nodePositions</span>
+
+<div class="viewcode-block" id="NonlinearSolverBase.buildMPCTransformation">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.buildMPCTransformation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">buildMPCTransformation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Collect the linear dependency records from all multi-point constraints of the model</span>
+<span class="sd">        and assemble the master-slave condensation operator for the current discrete system.</span>
+<span class="sd">        Must be called whenever the discrete system is (re)built.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        stepActions</span>
+<span class="sd">            The step's actions, against which conflicting records are reconciled (see</span>
+<span class="sd">            :meth:`_reconcileMPCDirichletConflicts`). Without them the records are used exactly as</span>
+<span class="sd">            collected -- there is nothing to reconcile against.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        MultiPointConstraintTransformation | None</span>
+<span class="sd">            The assembled transformation, or None if the model has no multi-point constraints or</span>
+<span class="sd">            none of them currently constrains a DOF.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">model</span><span class="o">.</span><span class="n">multiPointConstraints</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">supportsMPC</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Multi-point constraints (e.g. surface ties) are not supported by the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="si">}</span><span class="s2"> solver."</span>
+            <span class="p">)</span>
+
+        <span class="n">records</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collectMultiPointConstraintRecords</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">stepActions</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">records</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reconcileMPCDirichletConflicts</span><span class="p">(</span><span class="n">records</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">)</span>
+
+        <span class="c1"># Without a record T is the identity: skip the T^T K T + C product and the pattern-changing zero pruning.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">records</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">transformation</span> <span class="o">=</span> <span class="n">MultiPointConstraintTransformation</span><span class="p">(</span>
+            <span class="n">records</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span>
+            <span class="n">useThreadedCondensation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"useThreadedMPCCondensation"</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"eliminating </span><span class="si">{:}</span><span class="s2"> slave DOF(s) via multi-point constraints"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">transformation</span><span class="o">.</span><span class="n">nEliminatedDof</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+            <span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">transformation</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_prescribedDofValues</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``{globalDofIndex: prescribed increment}`` over **all** Dirichlet BCs of the step.</span>
+
+<span class="sd">        The union matters: a tie slave's masters routinely take the relevant component from a</span>
+<span class="sd">        different boundary condition than the slave does (a node can sit in both a symmetry set,</span>
+<span class="sd">        which prescribes one component, and an encastre set, which prescribes three). Evaluated</span>
+<span class="sd">        per-DOF rather than per-node for the same reason -- a BC need not prescribe every component.</span>
+<span class="sd">        """</span>
+
+        <span class="n">prescribed</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">active</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="c1"># the node set may have grown in place (adaptive refinement): let the BC catch up first</span>
+            <span class="n">dirichlet</span><span class="o">.</span><span class="n">reconcileIfSetChanged</span><span class="p">()</span>
+            <span class="n">indices</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constrainedDofsOf</span><span class="p">(</span><span class="n">dirichlet</span><span class="p">)</span>
+            <span class="c1"># the prescribed values of the nodes that are part of the discrete system, one row per node of the set</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">delta</span><span class="p">)[</span><span class="n">nodePositions</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">"Dirichlet '</span><span class="si">{:}</span><span class="s2">': </span><span class="si">{:}</span><span class="s2"> constrained DOF(s) but </span><span class="si">{:}</span><span class="s2"> prescribed value(s) -- the DOF "</span>
+                    <span class="s2">"index layout and the delta layout must agree node-by-node."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">dirichlet</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">indices</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
+                <span class="n">prescribed</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">index</span><span class="p">)]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">prescribed</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_collectMultiPointConstraintRecords</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Collect every multi-point constraint's records, keeping one claim per slave DOF.</span>
+
+<span class="sd">        A DOF may be condensed out only once, so when several constraints ask for the same one, the</span>
+<span class="sd">        first in model order keeps it. That is an invariant of the condensation operator, not of any</span>
+<span class="sd">        constraint type -- resolving it here, where all records are in one place and every</span>
+<span class="sd">        constraint has finished refreshing, is what makes the outcome independent of the order in</span>
+<span class="sd">        which constraints happened to be *refreshed*.</span>
+
+<span class="sd">        **Model order therefore carries meaning**, and one case depends on it: a hanging node lying</span>
+<span class="sd">        on a tie's slave surface is claimed by both. The hanging-node constraint must win -- it has</span>
+<span class="sd">        no stand-in, whereas the tie's equation for that node is still delivered by the node's coarse</span>
+<span class="sd">        parents, which are themselves tie slaves. ``hAdaptivity`` registers its hanging-node</span>
+<span class="sd">        constraint at the FRONT of ``model.multiPointConstraints`` for exactly this reason, and</span>
+<span class="sd">        ``tests/test_mpc_slave_claim_arbitration.py`` pins it.</span>
+<span class="sd">        """</span>
+
+        <span class="n">records</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">claimed</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">dropped</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">mpc</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">multiPointConstraints</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">mpc</span><span class="o">.</span><span class="n">getMultiPointConstraints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="n">claimed</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">mpc</span><span class="o">.</span><span class="n">mayYieldSlaveToEarlierClaim</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="n">TopologyError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">"multi-point constraint '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">' must keep every slave it declares, but DOF "</span>
+                            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">record</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> is already claimed by a constraint earlier in model order; such a "</span>
+                            <span class="s2">"constraint has to be registered before any constraint that may claim its slaves"</span>
+                        <span class="p">)</span>
+                    <span class="n">dropped</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">dropped</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+                    <span class="k">continue</span>
+                <span class="n">claimed</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">records</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">dropped</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> slave DOF(s) of '</span><span class="si">{:}</span><span class="s2">' are already claimed by an earlier multi-point constraint "</span>
+                <span class="s2">"(e.g. hanging nodes); their redundant records were dropped"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">name</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                <span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">records</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_reconcileMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">records</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop the multi-point-constraint records whose slave DOF is also Dirichlet-prescribed, so</span>
+<span class="sd">        the boundary condition takes precedence -- and report what was dropped.</span>
+
+<span class="sd">        A DOF cannot be both eliminated by a constraint and prescribed. The alternative -- rejecting</span>
+<span class="sd">        the model -- forces the user to subtract the constraint's slave nodes from the boundary</span>
+<span class="sd">        condition's node set by hand, offline: a snapshot that goes stale the moment the mesh, the</span>
+<span class="sd">        constraint tolerance or an adaptive refinement changes, and which additionally blocks the</span>
+<span class="sd">        propagation of that boundary condition to nodes created later, since refinement extends a</span>
+<span class="sd">        node set only where the whole parent face already lies within it. Resolving in favour of the</span>
+<span class="sd">        boundary condition is what Abaqus does with the same conflict.</span>
+
+<span class="sd">        Records are classified, not silently dropped:</span>
+
+<span class="sd">        * **redundant** -- the constraint equation already delivers the prescribed value (every</span>
+<span class="sd">          master with a non-negligible weight is itself prescribed, and the weighted sum matches).</span>
+<span class="sd">          Dropping it changes nothing; reported quietly.</span>
+<span class="sd">        * **overridden** -- it does not. Dropping it *does* change the model, so this is reported</span>
+<span class="sd">          loudly with the worst offender: it usually means the boundary condition's node set is</span>
+<span class="sd">          incomplete, or the constraint is not the one the user thought it was.</span>
+
+<span class="sd">        Masters are resolved transitively first (a master may itself be a slave), exactly as the</span>
+<span class="sd">        transformation does before it enforces anything.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">          The records to keep.</span>
+<span class="sd">        """</span>
+
+        <span class="n">prescribed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prescribedDofValues</span><span class="p">(</span><span class="n">stepActions</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">prescribed</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">records</span>
+
+        <span class="n">flattened</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">_flattenChainedRecords</span><span class="p">(</span><span class="n">records</span><span class="p">))</span>
+
+        <span class="n">dropped</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">nRedundant</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">overridden</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">slaveDof</span><span class="p">,</span> <span class="n">masters</span> <span class="ow">in</span> <span class="n">flattened</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">slaveDof</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">prescribed</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">target</span> <span class="o">=</span> <span class="n">prescribed</span><span class="p">[</span><span class="n">slaveDof</span><span class="p">]</span>
+            <span class="c1"># a scaled tolerance, never an exact comparison: clamped closest-point projections</span>
+            <span class="c1"># routinely leave round-off-scale weights that are not exactly 0.0</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="nb">max</span><span class="p">((</span><span class="nb">abs</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">masters</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+            <span class="n">totalWeight</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="n">delivered</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="n">unresolvedWeight</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">for</span> <span class="n">masterDof</span><span class="p">,</span> <span class="n">coefficient</span> <span class="ow">in</span> <span class="n">masters</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">coefficient</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1e-12</span> <span class="o">*</span> <span class="n">scale</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">totalWeight</span> <span class="o">+=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">coefficient</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">masterDof</span> <span class="ow">in</span> <span class="n">prescribed</span><span class="p">:</span>
+                    <span class="n">delivered</span> <span class="o">+=</span> <span class="n">coefficient</span> <span class="o">*</span> <span class="n">prescribed</span><span class="p">[</span><span class="n">masterDof</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">unresolvedWeight</span> <span class="o">+=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">coefficient</span><span class="p">)</span>
+
+            <span class="n">dropped</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">slaveDof</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">unresolvedWeight</span> <span class="o">&lt;=</span> <span class="mf">1e-12</span> <span class="o">*</span> <span class="n">scale</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">delivered</span> <span class="o">-</span> <span class="n">target</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1e-12</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="nb">abs</span><span class="p">(</span><span class="n">target</span><span class="p">)):</span>
+                <span class="n">nRedundant</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">weightFraction</span> <span class="o">=</span> <span class="n">unresolvedWeight</span> <span class="o">/</span> <span class="n">totalWeight</span> <span class="k">if</span> <span class="n">totalWeight</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="k">else</span> <span class="mf">1.0</span>
+                <span class="n">overridden</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">slaveDof</span><span class="p">,</span> <span class="n">weightFraction</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dropped</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">records</span>
+
+        <span class="k">if</span> <span class="n">nRedundant</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                <span class="s2">"reconciled </span><span class="si">{:}</span><span class="s2"> Dirichlet/constraint conflict(s) that were exactly redundant "</span>
+                <span class="s2">"(the constraint already delivered the prescribed value)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nRedundant</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                <span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">overridden</span><span class="p">:</span>
+            <span class="n">worstDof</span><span class="p">,</span> <span class="n">worstWeight</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">overridden</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">entry</span><span class="p">:</span> <span class="n">entry</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                <span class="s2">"WARNING: </span><span class="si">{:}</span><span class="s2"> multi-point-constraint equation(s) conflicted with a Dirichlet boundary "</span>
+                <span class="s2">"condition and were dropped -- a DOF cannot be both eliminated by a constraint and "</span>
+                <span class="s2">"directly prescribed, so the boundary condition wins. This changes the model: those "</span>
+                <span class="s2">"DOFs now get exactly their prescribed value instead of whatever the constraint (e.g. "</span>
+                <span class="s2">"a tie or hanging-node link) would have computed for them. Worst case: DOF </span><span class="si">{:}</span><span class="s2">, where "</span>
+                <span class="s2">"</span><span class="si">{:.3e}</span><span class="s2"> of its constraint weight depends on masters that are themselves NOT prescribed "</span>
+                <span class="s2">"-- meaning the constraint's own value would likely have differed. This usually means "</span>
+                <span class="s2">"the boundary condition's node set was built independently of the mesh's tie/hanging-"</span>
+                <span class="s2">"node topology and is missing some nodes -- check whether it should be extended, or "</span>
+                <span class="s2">"whether these DOFs should be excluded from the constraint."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="nb">len</span><span class="p">(</span><span class="n">overridden</span><span class="p">),</span> <span class="n">worstDof</span><span class="p">,</span> <span class="n">worstWeight</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                <span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">record</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span> <span class="k">if</span> <span class="n">record</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">dropped</span><span class="p">]</span>
+
+<div class="viewcode-block" id="NonlinearSolverBase.buildAndCheckMPCTransformation">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.buildAndCheckMPCTransformation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">buildAndCheckMPCTransformation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Build the multi-point-constraint condensation of the new discrete system, :attr:`system`, as</span>
+<span class="sd">        :attr:`mpcTransformation`, and refuse a Dirichlet boundary condition of the step that prescribes a slave</span>
+<span class="sd">        degree of freedom. Called by the solvers that condense in :meth:`onNewNumbering`, with the actions of the step</span>
+<span class="sd">        (:attr:`_stepActions`) the condensation is reconciled with."""</span>
+
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transformation build"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc dirichlet conflict check"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearSolverBase.checkMPCDirichletConflicts">
+<a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkMPCDirichletConflicts">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">transformation</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave</span>
+<span class="sd">        DOF of a multi-point constraint.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        transformation</span>
+<span class="sd">            The assembled MultiPointConstraintTransformation (may be None).</span>
+<span class="sd">        stepActions</span>
+<span class="sd">            The step's actions dictionary.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">transformation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="c1"># A post-condition: _reconcileMPCDirichletConflicts has already removed every conflicting record.</span>
+        <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">constrainedDofIndices</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constrainedDofsOf</span><span class="p">(</span><span class="n">dirichlet</span><span class="p">)</span>
+            <span class="n">transformation</span><span class="o">.</span><span class="n">checkDirichletConflicts</span><span class="p">(</span><span class="n">constrainedDofIndices</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,200 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Points &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Physical phenomena" href="phenomena.html" />
+    <link rel="prev" title="Variables" href="variables.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="variables.html">Variables</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Points</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#edelweissfe.points.node.Node"><code class="docutils literal notranslate"><span class="pre">Node</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Points</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/developer/points.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="points">
+<h1>Points<a class="headerlink" href="#points" title="Link to this heading"></a></h1>
+<p>Points represent entities with a spatial position and a unique identity,</p>
+<p>Relevant modules:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">edelweissfe.points.node</span></code></p></li>
+</ul>
+</div></blockquote>
+<span class="target" id="module-edelweissfe.points.node"></span><dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.points.node.Node">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.points.node.</span></span><span class="sig-name descname"><span class="pre">Node</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/points/node.html#Node"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.points.node.Node" title="Link to this definition"></a></dt>
+<dd><p>A basic node.
+It has a label, a spatial position, and may be associated with an arbitrary number of fields.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>label</strong> (<em>int</em>) – The unique label for this node.</p></li>
+<li><p><strong>coordinates</strong> (<em>ndarray</em>) – The coordinates of this node.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="variables.html" class="btn btn-neutral float-left" title="Variables" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="phenomena.html" class="btn btn-neutral float-right" title="Physical phenomena" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

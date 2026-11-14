@@ -1,0 +1,668 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.numerics.mpctransformation &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.numerics.mpctransformation</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.numerics.mpctransformation</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">coo_matrix</span><span class="p">,</span> <span class="n">csr_matrix</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">performancetiming</span>
+
+<span class="c1">#: Set to cross-check the threaded condensation against the plain SciPy ``T^T @ K @ T + C`` on every call.</span>
+<span class="c1">#: Expensive; development/CI use only.</span>
+<span class="n">_ASSERT_EXACT_ENV_VAR</span> <span class="o">=</span> <span class="s2">"EDELWEISS_MPC_ASSERT_EXACT"</span>
+
+<span class="c1">#: Set to a directory to dump the raw (pre-condensation) K and T/C for the first</span>
+<span class="c1">#: ``_DUMP_MPC_MAX_CALLS`` calls of :meth:`MultiPointConstraintTransformation.transformSystemMatrix` (diagnostics).</span>
+<span class="n">_DUMP_MPC_ENV_VAR</span> <span class="o">=</span> <span class="s2">"EDELWEISS_DUMP_MPC"</span>
+<span class="n">_DUMP_MPC_MAX_CALLS</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">_dumpMpcCallsWritten</span> <span class="o">=</span> <span class="mi">0</span>
+
+<span class="sd">"""</span>
+<span class="sd">Master-slave condensation (Abaqus-style DOF elimination) of linear multi-point constraints</span>
+
+<span class="sd">.. math::</span>
+<span class="sd">    u_s = \\sum_a N_a \\, u_{m_a}</span>
+
+<span class="sd">expressed as a full-size square transformation, so the discrete system keeps its size ``nDof`` and</span>
+<span class="sd">every consumer of the DOF vector layout (Dirichlet indices, convergence checks, node-field</span>
+<span class="sd">write-back, field outputs) remains untouched.</span>
+
+<span class="sd">With the transformation matrix :math:`T` (identity on independent DOFs, row :math:`s` carrying the</span>
+<span class="sd">weights :math:`N_a` in the master columns, slave columns entirely zero), both the slave rows and the</span>
+<span class="sd">slave columns of :math:`T^T K T` are structurally zero. They are filled with the identity</span>
+<span class="sd">:math:`I_s` (ones on the slave diagonal, nothing else), so the condensed implicit system reads</span>
+
+<span class="sd">.. math::</span>
+<span class="sd">    (T^T K \\, T + I_s) \\; \\delta U = \\tilde{R},</span>
+<span class="sd">    \\qquad \\tilde{R}_m = (T^T R)_m, \\qquad</span>
+<span class="sd">    \\tilde{R}_s = -\\Big(dU_s - \\sum_a N_a \\, dU_{m_a}\\Big),</span>
+
+<span class="sd">and the slave DOFs are recovered from the masters after the linear solve</span>
+<span class="sd">(:meth:`MultiPointConstraintTransformation.recoverSlaveSolution`):</span>
+
+<span class="sd">.. math::</span>
+<span class="sd">    \\delta U_s \\leftarrow \\tilde{R}_s + \\sum_a N_a \\, \\delta U_{m_a},</span>
+
+<span class="sd">which satisfies the constraint :math:`dU_s + \\delta U_s = \\sum_a N_a (dU_{m_a} + \\delta U_{m_a})`</span>
+<span class="sd">exactly. The masters decouple from the slaves completely, so the condensed operator is symmetric</span>
+<span class="sd">whenever :math:`K` is, and its slave rows carry no scale of their own -- in particular no master</span>
+<span class="sd">coupling that a symmetric diagonal equilibration :math:`D = \\mathrm{diag}(|A_{ii}|^{-1/2})` would</span>
+<span class="sd">blow up to :math:`N_a / \\sqrt{K_{mm}}` for a small-valued operator such as a consistent mass matrix.</span>
+
+<span class="sd">The Dirichlet elimination of a prescribed master's column moves nothing into a slave row (the slave</span>
+<span class="sd">rows hold no master columns), and the linear solve returns the prescribed increment at that master,</span>
+<span class="sd">so the recovery :math:`\\delta U_s \\mathrel{+}= \\sum_a N_a \\, \\delta U_{m_a}` with the full weights</span>
+<span class="sd">is exact for prescribed and free masters alike. (Writing the raw constraint equation into the slave</span>
+<span class="sd">rows instead, :math:`C_{ss} = 1, C_{s m_a} = -N_a`, would yield the same solution, but a</span>
+<span class="sd">block-triangular, non-symmetric operator.)</span>
+
+<span class="sd">For explicit dynamics with a lumped (diagonal) mass vector, the consistent row-sum lumping of</span>
+<span class="sd">:math:`T^T M T` stays diagonal: each master receives its own mass plus the :math:`N_a`-weighted</span>
+<span class="sd">mass of the slaves glued to it (total mass is conserved when :math:`\\sum_a N_a = 1`, which holds</span>
+<span class="sd">for interpolation-type constraints). Forces are folded as :math:`\\tilde{P} = T^T P`, and the slave</span>
+<span class="sd">kinematics are assigned directly from the masters, adding zero stiffness and hence leaving the</span>
+<span class="sd">critical time step untouched.</span>
+<span class="sd">"""</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_flattenChainedRecords</span><span class="p">(</span>
+    <span class="n">records</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]]:</span>
+<span class="w">    </span><span class="sd">"""Resolve a slave DOF's masters that are themselves slave DOFs of another (or the same) record,</span>
+<span class="sd">    substituting them recursively until every master is an independent DOF.</span>
+
+<span class="sd">    Distinct MPC instances are free to compose this way -- e.g. a tie constraint's projected facet</span>
+<span class="sd">    can legitimately reference a hanging-node MPC's slave node as one of its own interpolation</span>
+<span class="sd">    nodes. The substitution works across all of a model's multi-point constraints, in whatever order</span>
+<span class="sd">    they were collected; :meth:`~edelweissfe.adaptivity.refinement.AdaptiveMesh.hanging_mpc_records`</span>
+<span class="sd">    uses it for the chains within the hanging-node constraint's own records.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    records</span>
+<span class="sd">        The raw per-constraint records, one per slave DOF.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of (int, list of (int, float))</span>
+<span class="sd">        The same slave DOFs, with every master substituted down to independent DOFs and duplicate</span>
+<span class="sd">        ultimate masters (reached via more than one path) coalesced by summing their coefficients.</span>
+<span class="sd">    """</span>
+    <span class="n">recordOf</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">records</span><span class="p">)</span>
+    <span class="n">resolved</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">resolve</span><span class="p">(</span><span class="n">slaveDof</span><span class="p">,</span> <span class="n">visiting</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">slaveDof</span> <span class="ow">in</span> <span class="n">resolved</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">resolved</span><span class="p">[</span><span class="n">slaveDof</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">slaveDof</span> <span class="ow">in</span> <span class="n">visiting</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"Multi-point constraints: circular master/slave dependency detected at DOF </span><span class="si">{:}</span><span class="s2">."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">slaveDof</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">visiting</span> <span class="o">=</span> <span class="n">visiting</span> <span class="o">|</span> <span class="p">{</span><span class="n">slaveDof</span><span class="p">}</span>
+        <span class="n">flat</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">masterDof</span><span class="p">,</span> <span class="n">coefficient</span> <span class="ow">in</span> <span class="n">recordOf</span><span class="p">[</span><span class="n">slaveDof</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">masterDof</span> <span class="ow">in</span> <span class="n">recordOf</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">mm</span><span class="p">,</span> <span class="n">cc</span> <span class="ow">in</span> <span class="n">resolve</span><span class="p">(</span><span class="n">masterDof</span><span class="p">,</span> <span class="n">visiting</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">flat</span><span class="p">[</span><span class="n">mm</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">mm</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">+</span> <span class="n">coefficient</span> <span class="o">*</span> <span class="n">cc</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">flat</span><span class="p">[</span><span class="n">masterDof</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">masterDof</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">+</span> <span class="n">coefficient</span>
+        <span class="n">resolved</span><span class="p">[</span><span class="n">slaveDof</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat</span>
+        <span class="k">return</span> <span class="n">flat</span>
+
+    <span class="k">return</span> <span class="p">[(</span><span class="n">slaveDof</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">resolve</span><span class="p">(</span><span class="n">slaveDof</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">())</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span> <span class="k">for</span> <span class="n">slaveDof</span> <span class="ow">in</span> <span class="n">recordOf</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MultiPointConstraintTransformation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The assembled master-slave condensation operator for all linear multi-point constraints of</span>
+<span class="sd">    a discrete system.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    records</span>
+<span class="sd">        The linear dependency records, one per slave DOF:</span>
+<span class="sd">        ``(slaveDofIndex, [(masterDofIndex, coefficient), ...])``, as collected from all</span>
+<span class="sd">        :class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`</span>
+<span class="sd">        instances of a model.</span>
+<span class="sd">    nDof</span>
+<span class="sd">        The total size of the discrete system.</span>
+<span class="sd">    useThreadedCondensation</span>
+<span class="sd">        Condense the system matrix in place, with the OpenMP-threaded kernel of</span>
+<span class="sd">        :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`, instead of with SciPy's</span>
+<span class="sd">        single-threaded CSR routines, which build a second matrix. The values of ``Tᵀ K T + C``</span>
+<span class="sd">        overwrite those of ``K``, in ``K``'s own pattern, which must hold the condensed one (see</span>
+<span class="sd">        :meth:`condensedPatternFillIn`). Only the rows a constraint touches are computed; the result</span>
+<span class="sd">        does not depend on the number of threads. Entries of ``K`` outside the condensed pattern (the</span>
+<span class="sd">        slave columns, the slave rows apart from their diagonal) become stored zeros, which</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness` prunes</span>
+<span class="sd">        from a copy if ``pruneCondensedMatrixZeros`` says so.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">records</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]],</span>
+        <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">useThreadedCondensation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">slaveDofs</span> <span class="o">=</span> <span class="p">[</span><span class="n">slaveDof</span> <span class="k">for</span> <span class="n">slaveDof</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">records</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">slaveDofs</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">slaveDofs</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Multi-point constraints: a DOF is claimed as slave by more than one constraint record."</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">slaveDof</span><span class="p">,</span> <span class="n">masters</span> <span class="ow">in</span> <span class="n">records</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">masters</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Multi-point constraints: slave DOF </span><span class="si">{:}</span><span class="s2"> has no master DOFs."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">slaveDof</span><span class="p">))</span>
+
+        <span class="c1"># A master may itself be a slave DOF of another constraint; substitute down to independent DOFs.</span>
+        <span class="n">records</span> <span class="o">=</span> <span class="n">_flattenChainedRecords</span><span class="p">(</span><span class="n">records</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span> <span class="o">=</span> <span class="n">nDof</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">slaveDofs</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+
+        <span class="n">recordOfSlaveDof</span> <span class="o">=</span> <span class="p">{</span><span class="n">slaveDof</span><span class="p">:</span> <span class="n">masters</span> <span class="k">for</span> <span class="n">slaveDof</span><span class="p">,</span> <span class="n">masters</span> <span class="ow">in</span> <span class="n">records</span><span class="p">}</span>
+
+        <span class="c1"># W: (nSlaves x nDof) weight matrix, row k carrying the master weights of the k-th (sorted) slave DOF.</span>
+        <span class="n">wRows</span><span class="p">,</span> <span class="n">wCols</span><span class="p">,</span> <span class="n">wVals</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">slaveDof</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">masterDof</span><span class="p">,</span> <span class="n">coefficient</span> <span class="ow">in</span> <span class="n">recordOfSlaveDof</span><span class="p">[</span><span class="n">slaveDof</span><span class="p">]:</span>
+                <span class="n">wRows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+                <span class="n">wCols</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">masterDof</span><span class="p">)</span>
+                <span class="n">wVals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">coefficient</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_W</span> <span class="o">=</span> <span class="n">csr_matrix</span><span class="p">((</span><span class="n">wVals</span><span class="p">,</span> <span class="p">(</span><span class="n">wRows</span><span class="p">,</span> <span class="n">wCols</span><span class="p">)),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">),</span> <span class="n">nDof</span><span class="p">))</span>
+
+        <span class="c1"># T: identity on independent DOFs, slave rows carrying the master weights, slave columns zero.</span>
+        <span class="n">independentDofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">setdiff1d</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">,</span> <span class="n">assume_unique</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">tRows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">independentDofs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">,</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">recordOfSlaveDof</span><span class="p">[</span><span class="n">s</span><span class="p">])</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">])]</span>
+        <span class="p">)</span>
+        <span class="n">tCols</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">independentDofs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">wCols</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)])</span>
+        <span class="n">tVals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">independentDofs</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">wVals</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_T</span> <span class="o">=</span> <span class="n">csr_matrix</span><span class="p">((</span><span class="n">tVals</span><span class="p">,</span> <span class="p">(</span><span class="n">tRows</span><span class="p">,</span> <span class="n">tCols</span><span class="p">)),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">))</span>
+
+        <span class="c1"># C: the identity on the slave DOFs, filling the (structurally zero) slave rows and columns of T^T K T.</span>
+        <span class="c1"># Not the raw constraint equation (C_sm = -N_a), which would be non-symmetric (see module docstring);</span>
+        <span class="c1"># the slaves are recovered after the solve instead, see recoverSlaveSolution.</span>
+        <span class="n">nSlaves</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_C</span> <span class="o">=</span> <span class="n">csr_matrix</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">nSlaves</span><span class="p">),</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">)),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_useThreadedCondensation</span> <span class="o">=</span> <span class="n">useThreadedCondensation</span>
+        <span class="c1"># Built by _condensation() on first use, from T, T^T and C, which are fixed for the lifetime of this</span>
+        <span class="c1"># object.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_threadedCondensation</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nEliminatedDof</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of slave DOFs eliminated from the system of equations."""</span>
+
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.checkDirichletConflicts">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.checkDirichletConflicts">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dirichletDofIndices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Raise if any Dirichlet-constrained DOF is a slave DOF of a multi-point constraint --</span>
+<span class="sd">        a slave DOF's motion is fully determined by its masters and cannot be prescribed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dirichletDofIndices</span>
+<span class="sd">            The global DOF indices constrained by Dirichlet boundary conditions.</span>
+<span class="sd">        """</span>
+
+        <span class="n">conflicts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">intersect1d</span><span class="p">(</span><span class="n">dirichletDofIndices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">conflicts</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> Dirichlet-constrained DOF(s) are slave DOFs of a multi-point constraint. "</span>
+                <span class="s2">"Prescribe the masters instead."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">conflicts</span><span class="p">))</span>
+            <span class="p">)</span></div>
+
+
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transform system matrix"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_transformSystemMatrixLegacy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The plain ``T^T @ K @ T + C`` expression via SciPy's own (single-threaded) sparse</span>
+<span class="sd">        routines -- the default condensation strategy."""</span>
+        <span class="n">KT</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_T</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">K</span>
+        <span class="n">Kt</span> <span class="o">=</span> <span class="n">KT</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_T</span>
+        <span class="n">Kt</span> <span class="o">=</span> <span class="p">(</span><span class="n">Kt</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_C</span><span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="n">Kt</span><span class="o">.</span><span class="n">setdiag</span><span class="p">(</span><span class="n">Kt</span><span class="o">.</span><span class="n">diagonal</span><span class="p">())</span>
+        <span class="n">Kt</span><span class="o">.</span><span class="n">sort_indices</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">Kt</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assertExact</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">legacy</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":envvar:`EDELWEISS_MPC_ASSERT_EXACT` cross-check: the threaded result must match</span>
+<span class="sd">        the plain ``T^T K T + C`` expression, ``legacy``, to within a matrix-norm-relative tolerance</span>
+<span class="sd">        (entry-relative fails on cancellation-tiny entries)."""</span>
+        <span class="n">diff</span> <span class="o">=</span> <span class="p">(</span><span class="n">result</span> <span class="o">-</span> <span class="n">legacy</span><span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="n">maxDiff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">diff</span><span class="o">.</span><span class="n">data</span><span class="p">))</span> <span class="k">if</span> <span class="n">diff</span><span class="o">.</span><span class="n">nnz</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">data</span><span class="p">))</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">nnz</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">legacy</span><span class="o">.</span><span class="n">data</span><span class="p">))</span> <span class="k">if</span> <span class="n">legacy</span><span class="o">.</span><span class="n">nnz</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">,</span>
+            <span class="mf">1e-300</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">maxDiff</span> <span class="o">&gt;</span> <span class="mf">1e-9</span> <span class="o">*</span> <span class="n">scale</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span>
+                <span class="s2">"mpctransformation: EDELWEISS_MPC_ASSERT_EXACT caught a real mismatch between the "</span>
+                <span class="s2">"threaded result and the plain T^T K T + C expression: max|delta|=</span><span class="si">{:.3e}</span><span class="s2">, "</span>
+                <span class="s2">"tolerance=</span><span class="si">{:.3e}</span><span class="s2"> (1e-9 x max|data|=</span><span class="si">{:.3e}</span><span class="s2">)."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">maxDiff</span><span class="p">,</span> <span class="mf">1e-9</span> <span class="o">*</span> <span class="n">scale</span><span class="p">,</span> <span class="n">scale</span><span class="p">)</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_dumpForOfflineProbe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Write this call's raw `K` plus `T`/`C` to :envvar:`EDELWEISS_DUMP_MPC`'s directory,</span>
+<span class="sd">        capped at `_DUMP_MPC_MAX_CALLS` process-wide -- see that env var's own comment.</span>
+<span class="sd">        """</span>
+        <span class="k">global</span> <span class="n">_dumpMpcCallsWritten</span>
+        <span class="n">directory</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_DUMP_MPC_ENV_VAR</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span> <span class="ow">or</span> <span class="n">_dumpMpcCallsWritten</span> <span class="o">&gt;=</span> <span class="n">_DUMP_MPC_MAX_CALLS</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">save_npz</span>
+
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">stem</span> <span class="o">=</span> <span class="s2">"</span><span class="si">{:03d}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">_dumpMpcCallsWritten</span><span class="p">)</span>
+        <span class="n">save_npz</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="s2">"K_</span><span class="si">{:}</span><span class="s2">.npz"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stem</span><span class="p">)),</span> <span class="n">K</span><span class="o">.</span><span class="n">tocsr</span><span class="p">(),</span> <span class="n">compressed</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">save_npz</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="s2">"T_</span><span class="si">{:}</span><span class="s2">.npz"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stem</span><span class="p">)),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_T</span><span class="p">,</span> <span class="n">compressed</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">save_npz</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="s2">"C_</span><span class="si">{:}</span><span class="s2">.npz"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stem</span><span class="p">)),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_C</span><span class="p">,</span> <span class="n">compressed</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">_dumpMpcCallsWritten</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="nb">print</span><span class="p">(</span>
+            <span class="s2">"mpctransformation: dumped call </span><span class="si">{:}</span><span class="s2"> (</span><span class="si">{:}</span><span class="s2"> rows, </span><span class="si">{:}</span><span class="s2"> nnz K) to </span><span class="si">{:}</span><span class="s2"> (</span><span class="si">{:}</span><span class="s2">/</span><span class="si">{:}</span><span class="s2"> used)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">stem</span><span class="p">,</span> <span class="n">K</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">K</span><span class="o">.</span><span class="n">nnz</span><span class="p">,</span> <span class="n">directory</span><span class="p">,</span> <span class="n">_dumpMpcCallsWritten</span><span class="p">,</span> <span class="n">_DUMP_MPC_MAX_CALLS</span>
+            <span class="p">),</span>
+            <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.transformSystemMatrix">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformSystemMatrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">transformSystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Condense the system matrix: :math:`\\tilde{K} = T^T K \\, T + C`, with :math:`C` the identity on</span>
+<span class="sd">        the slave DOFs. The slave DOFs of the solution must be completed with</span>
+<span class="sd">        :meth:`recoverSlaveSolution` after the linear solve.</span>
+
+<span class="sd">        With ``useThreadedCondensation``, ``K`` is condensed in place and returned; its pattern must</span>
+<span class="sd">        hold the condensed one (see :meth:`condensedPatternFillIn`). Otherwise (the default), the</span>
+<span class="sd">        plain SciPy expression builds a new matrix -- see the constructor's</span>
+<span class="sd">        ``useThreadedCondensation`` docstring.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dumpForOfflineProbe</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_useThreadedCondensation</span><span class="p">:</span>
+            <span class="n">reference</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transformSystemMatrixLegacy</span><span class="p">(</span><span class="n">K</span><span class="p">)</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_ASSERT_EXACT_ENV_VAR</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_condenseInPlace</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">reference</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_assertExact</span><span class="p">(</span><span class="n">K</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">K</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transformSystemMatrixLegacy</span><span class="p">(</span><span class="n">K</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.condensedPatternFillIn">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">condensedPatternFillIn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The entries that ``K``'s pattern must gain to hold the condensed matrix: with</span>
+<span class="sd">        ``useThreadedCondensation``, the entries of the structural pattern of :math:`T^T K T + C`</span>
+<span class="sd">        that ``K`` lacks (where a master collects the couplings of its slaves); none for the plain</span>
+<span class="sd">        SciPy expression, which builds a matrix of its own.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        K</span>
+<span class="sd">            The system matrix (CSR); only its pattern is read.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        csr_matrix</span>
+<span class="sd">            The missing entries, as stored zeros, with sorted column indices.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_useThreadedCondensation</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_condensation</span><span class="p">()</span><span class="o">.</span><span class="n">condensedPatternFillIn</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">csr_matrix</span><span class="p">(</span><span class="n">K</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.withCondensedPattern">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.withCondensedPattern">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">withCondensedPattern</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``K`` with the entries of :meth:`condensedPatternFillIn` added as stored zeros, for a</span>
+<span class="sd">        matrix that does not come from a CSR generator that holds them already.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        K</span>
+<span class="sd">            The system matrix (CSR, sorted rows).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        csr_matrix</span>
+<span class="sd">            ``K`` itself if nothing is missing, otherwise a new matrix.</span>
+<span class="sd">        """</span>
+        <span class="n">fillIn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensedPatternFillIn</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">fillIn</span><span class="o">.</span><span class="n">nnz</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">K</span>
+        <span class="c1"># SciPy's sum would drop the stored zeros; the COO conversion keeps them, and sorts the rows</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">K</span><span class="o">.</span><span class="n">indptr</span><span class="p">)),</span> <span class="n">fillIn</span><span class="o">.</span><span class="n">tocoo</span><span class="p">()</span><span class="o">.</span><span class="n">row</span><span class="p">])</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">K</span><span class="o">.</span><span class="n">indices</span><span class="p">,</span> <span class="n">fillIn</span><span class="o">.</span><span class="n">indices</span><span class="p">])</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">K</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">fillIn</span><span class="o">.</span><span class="n">data</span><span class="p">])</span>
+        <span class="n">withFillIn</span> <span class="o">=</span> <span class="n">coo_matrix</span><span class="p">((</span><span class="n">values</span><span class="p">,</span> <span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">columns</span><span class="p">)),</span> <span class="n">shape</span><span class="o">=</span><span class="n">K</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="n">withFillIn</span><span class="o">.</span><span class="n">sort_indices</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">withFillIn</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_condensation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The threaded kernel, built on first use."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_threadedCondensation</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.mpccondensation</span><span class="w"> </span><span class="kn">import</span> <span class="n">MPCCondensation</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_threadedCondensation</span> <span class="o">=</span> <span class="n">MPCCondensation</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_T</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_T</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">tocsr</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_C</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_threadedCondensation</span>
+
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transform system matrix"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_condenseInPlace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Condense the system matrix in place, :math:`K \\leftarrow T^T K \\, T + C`, with the</span>
+<span class="sd">        OpenMP-threaded kernel of :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation` --</span>
+<span class="sd">        see the constructor's ``useThreadedCondensation`` docstring. Explicit zeros are kept;</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness` prunes a copy</span>
+<span class="sd">        if ``pruneCondensedMatrixZeros`` says so.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_condensation</span><span class="p">()</span><span class="o">.</span><span class="n">condenseInPlace</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.transformResidual">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformResidual">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transform residual"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">transformResidual</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Condense the residual: :math:`\\tilde{R} = T^T R`, with the slave rows replaced by the</span>
+<span class="sd">        current constraint violation :math:`-(dU_s - \\sum_a N_a \\, dU_{m_a})` (exactly zero for</span>
+<span class="sd">        any consistently accumulated increment; written explicitly as a drift correction).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        R</span>
+<span class="sd">            The assembled residual.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current displacement increment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The condensed residual.</span>
+<span class="sd">        """</span>
+
+        <span class="n">Rt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_T</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">R</span>
+        <span class="n">Rt</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">dU</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_W</span> <span class="o">@</span> <span class="n">dU</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">Rt</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.recoverSlaveSolution">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.recoverSlaveSolution">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc recover slave solution"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">recoverSlaveSolution</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Complete the solution of the condensed system (in place): add the master-interpolated</span>
+<span class="sd">        part to the slave DOFs, :math:`x_s \\mathrel{+}= \\sum_a N_a \\, x_{m_a}`.</span>
+
+<span class="sd">        Must be called right after every linear solve of a system condensed with</span>
+<span class="sd">        :meth:`transformSystemMatrix` and :meth:`transformResidual`, before the solution is used: the</span>
+<span class="sd">        solve itself only returns the drift correction (the condensed residual's slave rows) at the</span>
+<span class="sd">        slave DOFs. The weights read master entries only (masters are independent DOFs), so the</span>
+<span class="sd">        order of the update does not matter. Prescribed (Dirichlet) masters are included: the solve</span>
+<span class="sd">        returns their prescribed increment, and the Dirichlet column elimination has moved nothing</span>
+<span class="sd">        into the slave rows.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        x</span>
+<span class="sd">            The solution of the condensed system, of shape ``(nDof,)`` or ``(nDof, nRhs)``; modified</span>
+<span class="sd">            in place.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The completed solution (the same object as ``x``).</span>
+<span class="sd">        """</span>
+
+        <span class="n">x</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">]</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_W</span> <span class="o">@</span> <span class="n">x</span>
+        <span class="k">return</span> <span class="n">x</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.foldLumpedMass">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">foldLumpedMass</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">M</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Fold the slave masses onto their masters (in place): :math:`M_{m_a} \\mathrel{+}= N_a</span>
+<span class="sd">        M_s`, then :math:`M_s = 0` -- the row-sum lumping of :math:`T^T M T`, which keeps the mass</span>
+<span class="sd">        vector diagonal and conserves total mass for interpolation-type constraints</span>
+<span class="sd">        (:math:`\\sum_a N_a = 1`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        M</span>
+<span class="sd">            The lumped (diagonal) mass vector, modified in place.</span>
+<span class="sd">        """</span>
+
+        <span class="n">foldedSlaveMasses</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_W</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">M</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">]</span>
+        <span class="n">M</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">M</span> <span class="o">+=</span> <span class="n">foldedSlaveMasses</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.foldExplicitForce">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldExplicitForce">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">foldExplicitForce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Fold the nodal forces acting on slave DOFs onto their masters:</span>
+<span class="sd">        :math:`\\tilde{P} = T^T P` (slave rows zero) -- the action-reaction transfer through the</span>
+<span class="sd">        rigid interpolation link.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        P</span>
+<span class="sd">            The assembled force vector.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The folded force vector.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_T</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">P</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.applySlaveKinematics">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.applySlaveKinematics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applySlaveKinematics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Assign the slave DOFs their master-interpolated values (in place):</span>
+<span class="sd">        :math:`V_s = \\sum_a N_a \\, V_{m_a}`. Used on the velocity vector in explicit dynamics;</span>
+<span class="sd">        displacements then follow automatically from the time integration.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        V</span>
+<span class="sd">            The vector to slave, modified in place.</span>
+<span class="sd">        """</span>
+
+        <span class="n">V</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_W</span> <span class="o">@</span> <span class="n">V</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

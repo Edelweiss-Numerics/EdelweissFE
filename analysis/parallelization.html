@@ -1,0 +1,269 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parallelization &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Outputmanagers" href="../output/outputmanagers.html" />
+    <link rel="prev" title="Model modifiers" href="modelmodifiers.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Parallelization</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#array-operations-on-the-thread-pool">Array operations on the thread pool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#do-not-set-omp-proc-bind-or-omp-places">Do not set <code class="docutils literal notranslate"><span class="pre">OMP_PROC_BIND</span></code> or <code class="docutils literal notranslate"><span class="pre">OMP_PLACES</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#thread-local-buffers-in-the-element-loop">Thread-local buffers in the element loop</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#load-balancing-of-the-element-loop">Load balancing of the element loop</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Parallelization</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/analysis/parallelization.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="parallelization">
+<h1>Parallelization<a class="headerlink" href="#parallelization" title="Link to this heading"></a></h1>
+<p>EdelweissFE makes use of OpenMP to parallelize the computation of finite elements and for certain solvers, such as SuperLU, UMFPACK, or PARDISO.</p>
+<p>If a parallel solver (e.g, NISTParallel, NISTPArcLength) is selected in the .inp file, EdelweissFE  automatically determines the maximum number of threads,
+depending on the host architecture.
+However, it is RECOMMENDED to enforce a fixed number of threads by running</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">OMP_NUM_THREADS=XX python edelweiss.py INPUT.inp</span>
+</pre></div>
+</div>
+<p>This ensures that the same number of threads <code class="docutils literal notranslate"><span class="pre">XX</span></code> is employed both in EdelweissFE as well as in the underlying Intel MKL (e.g., if the PARDISO linear solver is used).</p>
+<section id="array-operations-on-the-thread-pool">
+<h2>Array operations on the thread pool<a class="headerlink" href="#array-operations-on-the-thread-pool" title="Link to this heading"></a></h2>
+<p>The same thread pool also runs the simple array operations on arrays as long as the system matrix
+(zeroing it before the element loop, adding the scaled mass matrix to it), which numpy alone runs
+on a single thread. <a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel" title="edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">forEachSliceInParallel()</span></code></a>
+splits such an operation into slices of the arrays, one call per slice; the result is bitwise the
+serial one.</p>
+<p>A loop over independent entities, such as the elements that assemble the mass and the damping of the implicit
+dynamic solvers, the entities whose degrees of freedom the <a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>
+locate in the DOF vector, the entities that fill their parts of the VIJ pattern of the system matrix when the discrete
+system is rebuilt, or the elements whose result arrays a field output gathers, runs in chunks of consecutive entities,
+<a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.numerics.parallelizationutilities.mapChunksInParallel" title="edelweissfe.numerics.parallelizationutilities.mapChunksInParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">mapChunksInParallel()</span></code></a>: each call handles a whole chunk, several
+chunks per thread let the pool balance chunks of unequal cost, and the results come back in the order of the entities,
+so what is assembled from them is what the serial loop assembles. The three passes over the entries of the mass
+(which of them couple only time-integrated dofs, the warning about the inertia that is discarded, zeroing it) are
+array operations in slices, as above.
+Both helpers return, or raise, only when no call is running anymore: if a call raises, the calls that have not started
+are not made, the running ones are waited for, and what is raised is the exception of the first failing call in order,
+the one a serial loop meets first, so that a caller that retries – the solver repeats an increment with a smaller time
+step when an element asks for it – never has workers of the failed attempt still computing the elements it is about to
+compute again.</p>
+<p>SciPy’s sparse matrix-vector product is single-threaded as well, so the implicit dynamic solvers
+multiply by the mass matrix (the inertia forces, the momentum and the kinetic energy) the same way:
+one call per block of consecutive rows of the mass matrix, each block a CSR matrix sharing the mass
+matrix’ arrays, and each row summed exactly as in the product with the whole matrix.</p>
+</section>
+<section id="do-not-set-omp-proc-bind-or-omp-places">
+<span id="parallelization-thread-pinning"></span><h2>Do not set <code class="docutils literal notranslate"><span class="pre">OMP_PROC_BIND</span></code> or <code class="docutils literal notranslate"><span class="pre">OMP_PLACES</span></code><a class="headerlink" href="#do-not-set-omp-proc-bind-or-omp-places" title="Link to this heading"></a></h2>
+<p>EdelweissFE’s element loop is a Python thread pool, not an OpenMP team, and the two do not mix
+well. When <code class="docutils literal notranslate"><span class="pre">OMP_PROC_BIND</span></code> (or <code class="docutils literal notranslate"><span class="pre">OMP_PLACES</span></code>) is set, the OpenMP runtime pins the thread that
+loads it to a single place – and it is loaded as soon as the first compiled extension that links
+it is imported, which happens long before any solver starts. Every thread created after that
+inherits the one-core mask, so the whole element loop ends up sharing a single core.</p>
+<p>Nothing fails when this happens. The pool is created with the requested number of workers, the
+results are correct, and the run is simply several times slower than it believes itself to be –
+which is why it can survive a long time unnoticed on a cluster, where such variables are often set
+by a site module or a job template rather than by the user.</p>
+<p>The parallel solvers therefore compare the number of threads they are about to use against the
+number of CPUs the process is actually permitted to run on
+(<a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.numerics.parallelizationutilities.getNumberOfAvailableCpus" title="edelweissfe.numerics.parallelizationutilities.getNumberOfAvailableCpus"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumberOfAvailableCpus()</span></code></a>, which reads the
+affinity mask and so also sees a batch scheduler’s cgroup or a <code class="docutils literal notranslate"><span class="pre">taskset</span></code>), and print a warning
+naming <code class="docutils literal notranslate"><span class="pre">OMP_PROC_BIND</span></code> when there are fewer CPUs than threads. If you see that warning, unset
+those variables for the run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">unset OMP_PROC_BIND OMP_PLACES</span>
+<span class="go">OMP_NUM_THREADS=XX python edelweiss.py INPUT.inp</span>
+</pre></div>
+</div>
+</section>
+<section id="thread-local-buffers-in-the-element-loop">
+<h2>Thread-local buffers in the element loop<a class="headerlink" href="#thread-local-buffers-in-the-element-loop" title="Link to this heading"></a></h2>
+<p>On a free-threaded interpreter the element loop runs Python code on every core at once, and there
+the cost of <em>sharing</em> an object becomes visible: a numpy view keeps a reference to the buffer it
+looks into, so taking one view per element into a single buffer shared by all threads makes every
+core update the same reference count, and they end up passing that one cache line back and forth
+instead of computing. The loop looks parallel and does not scale.</p>
+<p>The explicit element loop therefore gives each chunk of elements buffers of its own – the gathered
+solution and increment, and a force buffer the elements write into – and places the finished chunk
+into the shared scatter buffer in a single indexed assignment. Per element, nothing shared is
+touched. The positions each chunk writes to are precomputed once, in
+<code class="xref py py-func docutils literal notranslate"><span class="pre">_chunkedGatherPlan()</span></code>, and reused for as
+long as the mesh and the degree-of-freedom layout stay the same.</p>
+<p>This is worth keeping in mind when adding a parallel loop of your own: prefer giving each task its
+own buffer and merging once, over having every task write into one shared object as it goes.</p>
+</section>
+<section id="load-balancing-of-the-element-loop">
+<h2>Load balancing of the element loop<a class="headerlink" href="#load-balancing-of-the-element-loop" title="Link to this heading"></a></h2>
+<p>The elements are handed to the threads in chunks. It is tempting to cut exactly one chunk per
+thread, which minimises the bookkeeping, but that is only right when every element costs the same
+– and in a nonlinear analysis it does not. A quadrature point that is yielding or damaging pays
+for a return mapping that an elastic one does not, so the elements along a propagating front are
+several times more expensive than the bulk. Those elements are neighbours in the mesh and therefore
+neighbours in element order, so chunks cut from that order are systematically unequal, and a
+one-chunk-per-thread split makes the whole loop wait for whichever thread happened to draw the
+front.</p>
+<p>The element loop therefore cuts substantially more chunks than there are threads
+(<code class="xref py py-data docutils literal notranslate"><span class="pre">_chunksPerThread</span></code>) and lets the thread
+pool hand them out on demand: a thread that drew cheap elements comes back for more work rather
+than idling while a neighbour finishes. This costs one plan entry per chunk and nothing per
+element.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="modelmodifiers.html" class="btn btn-neutral float-left" title="Model modifiers" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../output/outputmanagers.html" class="btn btn-neutral float-right" title="Outputmanagers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

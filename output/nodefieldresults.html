@@ -1,0 +1,380 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Node field results &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Plotting" href="plotter.html" />
+    <link rel="prev" title="Field outputs" href="fieldoutput.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Node field results</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#who-owns-what">Who owns what</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-entries">The entries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-each-solver-writes">What each solver writes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#models-whose-discrete-system-covers-a-part-of-their-nodes">Models whose discrete system covers a part of their nodes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-the-entries-in-code">Using the entries in code</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Node field results</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/output/nodefieldresults.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="node-field-results">
+<h1>Node field results<a class="headerlink" href="#node-field-results" title="Link to this heading"></a></h1>
+<p>Every node field (<a class="reference internal" href="../developer/fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><code class="xref py py-class docutils literal notranslate"><span class="pre">NodeField</span></code></a>) holds the same five entries, from its
+construction on: <code class="docutils literal notranslate"><span class="pre">U</span></code>, <code class="docutils literal notranslate"><span class="pre">dU</span></code>, <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>
+(<a class="reference internal" href="../developer/fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ENTRIES</span></code></a>). There are no others, and no code creates one. These are
+the names a field output asks for with <code class="docutils literal notranslate"><span class="pre">result=</span></code>:</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*fieldOutput</span>
+&gt;&gt;perNode,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF</span>
+</pre></div>
+</div>
+<p>Each entry has one meaning, the same in every solver. This page defines it.</p>
+<section id="who-owns-what">
+<h2>Who owns what<a class="headerlink" href="#who-owns-what" title="Link to this heading"></a></h2>
+<p>One rule decides where a value lives: <em>the model owns the state the next attempt starts from; a solver owns only
+what lives within one discrete system.</em> An entry is therefore of one of two kinds:</p>
+<ul class="simple">
+<li><p><strong>state</strong> – what a solver reads back from the model whenever it (re)builds its discrete system, and what a
+restart checkpoint must carry for the run to continue;</p></li>
+<li><p><strong>result</strong> – what a solver writes for output and for the user; no solver reads it back.</p></li>
+</ul>
+<p>Iterations work on the solver’s vectors only. A cut back increment writes nothing. An accepted increment writes
+every entry, once (the explicit meshfree solver in two parts, see below). The exceptions are the increments of the
+dynamic solvers <code class="docutils literal notranslate"><span class="pre">NED</span></code> and <code class="docutils literal notranslate"><span class="pre">NID</span></code> that integrate nothing: they evaluate no force, so they leave <code class="docutils literal notranslate"><span class="pre">P</span></code> as the last
+accepted increment wrote it, of this step or of the step before. These are</p>
+<ul class="simple">
+<li><p>the zero-length increment before the first increment of a step, in both; <code class="docutils literal notranslate"><span class="pre">NED</span></code>’s leaves the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code>
+as well;</p></li>
+<li><p>in <code class="docutils literal notranslate"><span class="pre">NID</span></code>, also an increment of negligible length: the round-off remainder the time stepper may leave at the end
+of a step (see <a class="reference internal" href="../analysis/solvers.html#module-edelweissfe.solvers.nonlinearimplicitdynamic" title="edelweissfe.solvers.nonlinearimplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearimplicitdynamic</span></code></a>).</p></li>
+</ul>
+<p>A discrete system with a new numbering (a changed mesh, a changed active domain, a changed set of scalar variables)
+reads the state entries from the model; new locations on the same numbering (a changed connectivity, e.g. a contact
+search) do not: the vectors of the solver keep their values, which are the state. A refinement of the mesh interpolates the state entries onto the nodes it creates; the results there are
+zero until the next accepted increment.</p>
+<p>Every solver passes these entries through the discrete system
+(<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem" title="edelweissfe.models.discretesystem.DiscreteSystem"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiscreteSystem</span></code></a>), and in no other way:
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel" title="edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a> when it (re)builds the
+system, <a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a> when it accepts
+an increment, and, if it integrates in time,
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a> for the
+velocity and the acceleration. A quasi-static solver does not integrate in time: the state it accepts is at rest, and it writes zero to
+<code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of every node field
+(<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeZeroVelocityAndAccelerationToModel()</span></code></a>), so
+that a dynamic step after it starts from rest.</p>
+<p>A step hands the next one the model’s state at its end time: the solution, and the velocity and the acceleration at
+that time. The explicit solvers integrate the velocity staggered half an increment behind the solution, and so write
+that staggered velocity at every accepted increment; at the end of their step, the model advances it by the half
+increment it lags behind, with the acceleration (<a class="reference internal" href="../developer/models.html#edelweissfe.models.femodel.FEModel.advanceVelocity" title="edelweissfe.models.femodel.FEModel.advanceVelocity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">advanceVelocity()</span></code></a>, the one
+change of these entries that needs no discrete system). A dynamic step starts from this state: the implicit dynamic
+solver from the velocity, completing the acceleration from equilibrium; the explicit solver <code class="docutils literal notranslate"><span class="pre">NED</span></code> from both, without
+evaluating anything (see <a class="reference internal" href="../analysis/solvers.html#module-edelweissfe.solvers.nonlinearexplicitdynamic" title="edelweissfe.solvers.nonlinearexplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearexplicitdynamic</span></code></a>).</p>
+</section>
+<section id="the-entries">
+<h2>The entries<a class="headerlink" href="#the-entries" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 8.0%" />
+<col style="width: 8.0%" />
+<col style="width: 54.0%" />
+<col style="width: 30.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Entry</p></th>
+<th class="head"><p>Kind</p></th>
+<th class="head"><p>Meaning</p></th>
+<th class="head"><p>Written</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">U</span></code></p></td>
+<td><p>state</p></td>
+<td><p>The total solution: the displacement, the rotation, the nonlocal damage, … of the field.</p></td>
+<td><p>at acceptance</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">V</span></code>, <code class="docutils literal notranslate"><span class="pre">A</span></code></p></td>
+<td><p>state</p></td>
+<td><p>The rate and the second rate of the solution at the accepted time: velocity and acceleration of a field with
+inertia. Zero after a quasi-static step, which leaves the model at rest, and on a field the implicit dynamic
+solver treats quasi-statically, one without a mass. A field without inertia that the explicit solver integrates
+by forward Euler, through its damping, has a rate as well: its <code class="docutils literal notranslate"><span class="pre">V</span></code> is the rate of the increment just taken.
+The explicit solver integrates the velocity staggered by half an increment: within its step, its <code class="docutils literal notranslate"><span class="pre">V</span></code> is
+<span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1/2}\)</span>, and the end of the step advances it to the end time (see above).</p></td>
+<td><p>at acceptance; the implicit dynamic solver completes <code class="docutils literal notranslate"><span class="pre">A</span></code> at the start of an increment</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dU</span></code></p></td>
+<td><p>result</p></td>
+<td><p>The increment of the solution in the last accepted increment.</p></td>
+<td><p>at acceptance</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">P</span></code></p></td>
+<td><p>result</p></td>
+<td><p>The internal force, with the inertial and damping forces of a dynamic analysis: the residual contributions of
+the elements (and the other computed entities) and of the time integration, <em>without</em> loads and constraints
+(see <a class="reference internal" href="../developer/residualandtangent.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>). At a support that no load acts on, it is the support reaction;
+summed over the nodes of a support, it is the reaction force. Zero at a node without element.</p></td>
+<td><p>at acceptance</p></td>
+</tr>
+</tbody>
+</table>
+<p>The Lagrange multipliers of constraints are scalar variables, not node field entries
+(<a class="reference internal" href="../developer/variables.html#edelweissfe.variables.scalarvariable.ScalarVariable" title="edelweissfe.variables.scalarvariable.ScalarVariable"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScalarVariable</span></code></a>). They are state as well: each holds its total
+value, written at acceptance and read back whenever the discrete system gets a new numbering. A constraint that is not active keeps the value it
+had.</p>
+</section>
+<section id="what-each-solver-writes">
+<h2>What each solver writes<a class="headerlink" href="#what-each-solver-writes" title="Link to this heading"></a></h2>
+<p>Every solver writes <code class="docutils literal notranslate"><span class="pre">U</span></code> and <code class="docutils literal notranslate"><span class="pre">dU</span></code> of every node field at acceptance, and these:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 28.0%" />
+<col style="width: 28.0%" />
+<col style="width: 26.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Solver</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">P</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">V</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">A</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NIST</span></code>, <code class="docutils literal notranslate"><span class="pre">NISTParallel</span></code>, <code class="docutils literal notranslate"><span class="pre">NISTPArcLength</span></code>, <code class="docutils literal notranslate"><span class="pre">NEST</span></code></p></td>
+<td><p>the internal force</p></td>
+<td><p>zero</p></td>
+<td><p>zero</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NID</span></code>, <code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code></p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a} + \boldsymbol{C} \boldsymbol{v}\)</span> of the
+converged state</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1}\)</span> on the fields with a mass; zero on the others, which it treats quasi-statically</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{a}_{n+1}\)</span>, likewise; at the start of a step and after a refinement, the acceleration from
+equilibrium, written at the start of the increment</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NED</span></code>, <code class="docutils literal notranslate"><span class="pre">NEDParallel</span></code></p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int} + \boldsymbol{f}_\mathrm{net}\)</span>; <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int}\)</span> at a
+prescribed motion and on a multi-point-constraint slave</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1/2}\)</span> (on a field integrated by forward Euler, the rate of the increment just taken);
+at the end of the step, the velocity at its end time</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{a}_{n+1}\)</span> (on a field integrated by forward Euler, the one with which
+<span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1/2} + \tfrac{1}{2} \Delta t \, \boldsymbol{a}_{n+1}\)</span> is the rate at the end of the
+increment); zero at a prescribed motion; on a multi-point-constraint slave, from its masters</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">MeshfreeExplicitDynamic</span></code> (EdelweissMeshfree)</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a}\)</span></p></td>
+<td><p>as <code class="docutils literal notranslate"><span class="pre">NED</span></code>, on the nodes of the kernel functions</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{a} = \boldsymbol{M}^{-1} \boldsymbol{f}_\mathrm{net}\)</span>; zero on a node without mass</p></td>
+</tr>
+</tbody>
+</table>
+<p>In the explicit solver (<code class="docutils literal notranslate"><span class="pre">NED</span></code>), the inertial and damping forces of a node with an equation of motion are the
+net force the next velocity update divides by, so its <code class="docutils literal notranslate"><span class="pre">P</span></code> is the internal force plus that net force: the force of
+the loads and the constraints acting there. At a node with a prescribed motion, the acceleration at the end of an
+increment is set by the prescribed velocity of the next one, which is not known when the increment is accepted, so
+its <code class="docutils literal notranslate"><span class="pre">P</span></code> is the internal force alone: the support reaction, without the inertia of the support node’s own lumped
+mass, and its <code class="docutils literal notranslate"><span class="pre">A</span></code> is zero. A multi-point-constraint slave integrates no equation of motion of its own: its inertia
+and its force are folded onto its masters, so its <code class="docutils literal notranslate"><span class="pre">P</span></code> is its internal force, and it takes its <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> from
+its masters. Elsewhere, its <code class="docutils literal notranslate"><span class="pre">A</span></code> is the acceleration with which the velocity at the end of the increment, half an
+increment after its <code class="docutils literal notranslate"><span class="pre">V</span></code>, satisfies the equation of motion. The net force itself is the solver’s state, not an entry
+(see <a class="reference internal" href="../analysis/solvers.html#module-edelweissfe.solvers.nonlinearexplicitdynamic" title="edelweissfe.solvers.nonlinearexplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearexplicitdynamic</span></code></a>).</p>
+</section>
+<section id="models-whose-discrete-system-covers-a-part-of-their-nodes">
+<h2>Models whose discrete system covers a part of their nodes<a class="headerlink" href="#models-whose-discrete-system-covers-a-part-of-their-nodes" title="Link to this heading"></a></h2>
+<p>A meshfree model (EdelweissMeshfree) has nodes that carry no total solution: the nodes of the background grid of
+the material point method and the nodes of the kernel functions of RKPM are <em>incremental</em> – their degrees of
+freedom are the coefficients of the increment, starting at zero in every increment, while the particles and
+material points carry the state. On these nodes, <code class="docutils literal notranslate"><span class="pre">U</span></code> is zero and <code class="docutils literal notranslate"><span class="pre">dU</span></code> holds the coefficients of the last
+accepted increment, which is their meaningful nodal value. Nodes outside the active domain of an increment hold
+zero in every entry.</p>
+<p>The explicit meshfree solver carries the velocity of the kernel functions in <code class="docutils literal notranslate"><span class="pre">V</span></code>: it writes <code class="docutils literal notranslate"><span class="pre">V</span></code> by node at
+acceptance and reads it back by node whenever its discrete system gets a new numbering, also at the start of a step,
+so that a node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
+increment ends on other kernel functions than it started on – the particles move, and reach other nodes – so it
+writes the results in two parts, each through the discrete system that holds them: <code class="docutils literal notranslate"><span class="pre">dU</span></code> on the nodes
+the increment was taken on, <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> on the nodes of the configuration it ends in. A node that left the
+active domain in that increment therefore keeps its <code class="docutils literal notranslate"><span class="pre">dU</span></code>, and holds zero in <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>. Its zero-length
+increment evaluates the forces of the configuration the step starts from, and writes them, when the model’s nodes
+are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves <code class="docutils literal notranslate"><span class="pre">P</span></code>
+as it is.</p>
+<p>The implicit dynamic solver (<code class="docutils literal notranslate"><span class="pre">NID</span></code>) integrates the inertia of the entities that integrate their own either in the
+entities or at the nodes they couple (option <code class="docutils literal notranslate"><span class="pre">inertia</span></code>, see <a class="reference internal" href="../analysis/solvers.html#module-edelweissfe.solvers.nonlinearimplicitdynamic" title="edelweissfe.solvers.nonlinearimplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearimplicitdynamic</span></code></a>).
+In the entities, they carry their velocity and acceleration in their state, and <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the nodes they
+couple are zero; at the nodes, <code class="docutils literal notranslate"><span class="pre">NID</span></code> carries them in <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> by node. Either way, <code class="docutils literal notranslate"><span class="pre">P</span></code> holds the inertial
+force: in the entities’ residual contributions, or added at the nodes. The two keep the motion of the entities in
+different places, and nothing transfers it between them: a step whose <code class="docutils literal notranslate"><span class="pre">inertia</span></code> would take it from where the model
+does not hold it refuses to start
+(<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion" title="edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion"><code class="xref py py-meth docutils literal notranslate"><span class="pre">carriersOfTheMotion()</span></code></a>).</p>
+</section>
+<section id="using-the-entries-in-code">
+<h2>Using the entries in code<a class="headerlink" href="#using-the-entries-in-code" title="Link to this heading"></a></h2>
+<p>The entries exist from the construction of a node field on, also in a model built programmatically; a resize (for
+instance, by adaptive mesh refinement) keeps all of them. Reading or writing an entry through the
+<a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a> refuses a name that is not one of the five, and a node field
+the DofNumbering does not number: a node field is read or written as a whole only by the DofNumbering that numbers it,
+since its rows are addressed by position; on a node set, its rows are found by node, so that any node field of a
+numbered field can be read or written there (e.g. the node field of the model, while the discrete system numbers
+that of an active domain). A restart checkpoint holds every entry of every node field, and a
+checkpoint lacking one is refused (see <a class="reference internal" href="../developer/restart.html"><span class="doc">Restart</span></a>).</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fieldoutput.html" class="btn btn-neutral float-left" title="Field outputs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="plotter.html" class="btn btn-neutral float-right" title="Plotting" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
