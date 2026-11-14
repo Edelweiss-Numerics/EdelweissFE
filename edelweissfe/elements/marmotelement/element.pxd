@@ -172,9 +172,21 @@ cdef extern from "Marmot/MarmotElement.h":
 
         int getNumberOfQuadraturePoints()
 
+# Optional capability of a Marmot element: the gradients of its elastic energy and dissipation, written in every
+# computeKernels call to the assigned arrays.
+cdef extern from "Marmot/MarmotEnergyGradientProvider.h":
+    cdef cppclass MarmotEnergyGradientProvider "Marmot::Discretizations::Elements::EnergyGradientProvider" nogil:
+        # invalid_argument if the section or the material cannot provide them -> ValueError
+        void assignEnergyGradientOutput(double* dElasticEnergy_dQ, double* dDissipation_dQ) except +ValueError
+
+ctypedef MarmotEnergyGradientProvider* MarmotEnergyGradientProviderPtr
+
 cdef class MarmotElementWrapper:
 
     cdef MarmotElement* marmotElement
+    # the element's energy gradient capability (NULL if it has none), and the arrays it writes to
+    cdef MarmotEnergyGradientProvider* energyGradientProvider
+    cdef object _energyGradientOutput
     cdef list _nodes,
     cdef int _elNumber,
     cdef str _elType,

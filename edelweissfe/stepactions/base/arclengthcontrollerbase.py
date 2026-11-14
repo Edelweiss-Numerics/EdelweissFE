@@ -51,10 +51,19 @@ class ArcLengthControllerBase(StepActionBase):
     equation. A line search asks it the same for every trial state, with :math:`\\Delta\\Delta U_0` scaled by the trial
     step length, so that no trial state leaves the equation unsatisfied; the controller is asked several times per
     iteration, and the answers must not change it.
+
+    A controller whose equation is nonlinear in the solution, e.g. one that controls the dissipated energy, may
+    override the optional hooks: :meth:`setSystemState` (the state of the iterate), :meth:`isConstraintSatisfied` (its
+    equation in the convergence check, as it is only linearized in :meth:`computeDDLambda`) and
+    :meth:`getExtrapolationFactor` (the predictor), with :attr:`extrapolatesAfterCutback`.
     """
 
     #: The name of this step action, by which the solver option ``arcLengthController`` selects it.
     name: str
+
+    #: Whether the increment that follows a cutback is predicted from the last accepted increment as well, for a
+    #: controller whose equation needs the direction of the path (a zero prediction may follow an unloading branch).
+    extrapolatesAfterCutback = False
 
     @abstractmethod
     def computeDDLambda(
@@ -100,3 +109,63 @@ class ArcLengthControllerBase(StepActionBase):
         numbering
             The numbering of the degrees of freedom of the current discrete system.
         """
+
+    def setSystemState(
+        self, reaction: DofVector, referenceIncrement: DofVector, loadParameter: float, loadParameterIncrement: float
+    ):
+        """Receive the state of the iterate: called in every Newton iteration before :meth:`computeDDLambda`, and once
+        an increment has converged, before :meth:`finishIncrement`. By default, nothing is kept.
+
+        Parameters
+        ----------
+        reaction
+            The internal forces of the elements and the constraints, i.e. the reactions at the prescribed degrees of
+            freedom.
+        referenceIncrement
+            The change of the prescribed degrees of freedom over the step (zero elsewhere), conjugate to their
+            reactions.
+        loadParameter
+            The load parameter at the start of the increment.
+        loadParameterIncrement
+            The increment of the load parameter of the iterate.
+        """
+
+    def isConstraintSatisfied(self, timeStep: TimeStep, dU: DofVector, dofManager: DofManager) -> bool:
+        """Whether the iterate satisfies the controller's equation: checked once the residual has converged. A linear
+        equation holds after every correction, which is the default.
+
+        Parameters
+        ----------
+        timeStep
+            The increment being solved.
+        dU
+            The current increment of the solution.
+        dofManager
+            The dof manager of the current equation system.
+
+        Returns
+        -------
+        bool
+            True if the equation is satisfied.
+        """
+
+        return True
+
+    def getExtrapolationFactor(self, timeStep: TimeStep, prevTimeStep: TimeStep) -> float:
+        """The factor by which the last accepted increment, of the solution and of the load parameter, is scaled for
+        the linear prediction of a new increment. By default the ratio of their sizes, as without arc length control.
+
+        Parameters
+        ----------
+        timeStep
+            The new increment.
+        prevTimeStep
+            The last accepted increment.
+
+        Returns
+        -------
+        float
+            The scale factor.
+        """
+
+        return timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement

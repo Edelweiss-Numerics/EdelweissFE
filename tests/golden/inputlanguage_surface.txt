@@ -800,6 +800,26 @@ kept, apart from the changed one.
     [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
     [analyticalField] Scales the defined boundary condition (<class 'str'>, default = None)
     [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+===== module documentation: edelweissfe.stepactions.dissipationcontrol =====
+Dissipation controller for the NISTPArcLength solver (Gutiérrez 2004; Verhoosel, Remmers, Gutiérrez 2009).
+< dissipationcontrol > Dissipation controller for the NISTPArcLength solver.
+  required arguments
+    [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
+    [dissipation] Energy to be dissipated over the step. (<class 'float'>)
+  optional arguments
+    [elSet] Element set whose quadrature point result 'dissipation' is summed. (<class 'str'>, default = all)
+    [displacement] Maximum nodal displacement increment over the step; enables the combined constraint. (<class 'float'>, default = None)
+    [loadParameter] Load parameter increment over the step before dissipating (without displacement). (<class 'float'>, default = None)
+    [threshold] Dissipated energy beyond which the dissipation controlled phase starts (without displacement). (<class 'float'>, default = 0.0)
+< dissipationcontrol > Dissipation controller for the NISTPArcLength solver.
+  required arguments
+    [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
+    [dissipation] Energy to be dissipated over the step. (<class 'float'>)
+  optional arguments
+    [elSet] Element set whose quadrature point result 'dissipation' is summed. (<class 'str'>, default = all)
+    [displacement] Maximum nodal displacement increment over the step; enables the combined constraint. (<class 'float'>, default = None)
+    [loadParameter] Load parameter increment over the step before dissipating (without displacement). (<class 'float'>, default = None)
+    [threshold] Dissipated energy beyond which the dissipation controlled phase starts (without displacement). (<class 'float'>, default = 0.0)
 ===== module documentation: edelweissfe.stepactions.distributedload =====
 < distributedload > Standard distributed load, applied on a surface set.
   required arguments

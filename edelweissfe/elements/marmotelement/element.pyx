@@ -108,6 +108,9 @@ cdef class MarmotElementWrapper:
         except ValueError:
             raise NotImplementedError("Marmot element {:} not found in library.".format(elementType))
 
+        # a real dynamic_cast: the capability is a further base class, at another address than the Element
+        self.energyGradientProvider = libcpp.cast.dynamic_cast[MarmotEnergyGradientProviderPtr](self.marmotElement)
+
     @property
     def elNumber(self):
         return self._elNumber
@@ -422,6 +425,47 @@ cdef class MarmotElementWrapper:
         cdef double internalEnergy = 0.0
         self.marmotElement.computeInternalEnergy(internalEnergy)
         return internalEnergy
+
+    @property
+    def providesEnergyGradients(self):
+        """True if the underlying MarmotElement can write the gradients of its elastic energy and dissipation, see
+        :meth:`assignEnergyGradientOutput`."""
+
+        return self.energyGradientProvider != NULL
+
+    def assignEnergyGradientOutput(self, double[::1] dElasticEnergy_dQ, double[::1] dDissipation_dQ):
+        """Assign the arrays to which every computeKernels call writes the gradients of the element's elastic energy
+        and dissipation wrt its dofs (in the element's dof order), for the state of that call.
+
+        Parameters
+        ----------
+        dElasticEnergy_dQ
+            The gradient of the elastic energy, of size nDof; None, together with dDissipation_dQ, stops the output.
+        dDissipation_dQ
+            The gradient of the dissipation, of size nDof.
+
+        Raises
+        ------
+        ValueError
+            If the element, its section or its material cannot provide the gradients.
+        """
+
+        if self.energyGradientProvider == NULL:
+            raise ValueError(f"Marmot element {self._elType} ({self._elNumber}) provides no energy gradients")
+
+        if dElasticEnergy_dQ is None and dDissipation_dQ is None:
+            self.energyGradientProvider.assignEnergyGradientOutput(NULL, NULL)
+            self._energyGradientOutput = None
+            return
+
+        if dElasticEnergy_dQ is None or dDissipation_dQ is None:
+            raise ValueError("assign both energy gradient outputs, or none")
+        if dElasticEnergy_dQ.shape[0] != self._nDof or dDissipation_dQ.shape[0] != self._nDof:
+            raise ValueError(f"energy gradient outputs need {self._nDof} entries")
+
+        self.energyGradientProvider.assignEnergyGradientOutput(&dElasticEnergy_dQ[0], &dDissipation_dQ[0])
+        # the element writes to the arrays: keep them alive
+        self._energyGradientOutput = (dElasticEnergy_dQ, dDissipation_dQ)
 
     def acceptLastState(self, ):
         """Accept the computed state (in nonlinear iteration schemes)."""
