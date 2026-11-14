@@ -294,8 +294,8 @@ material points carry the state. On these nodes, <code class="docutils literal n
 accepted increment, which is their meaningful nodal value. Nodes outside the active domain of an increment hold
 zero in every entry.</p>
 <p>The explicit meshfree solver carries the velocity of the kernel functions in <code class="docutils literal notranslate"><span class="pre">V</span></code>: it writes <code class="docutils literal notranslate"><span class="pre">V</span></code> by node at
-acceptance and reads it back by node whenever its discrete system is rebuilt, also at the start of a step, so that a
-node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
+acceptance and reads it back by node whenever its discrete system gets a new numbering, also at the start of a step,
+so that a node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
 increment ends on other kernel functions than it started on – the particles move, and reach other nodes – so it
 writes the results in two parts, each through the discrete system that holds them: <code class="docutils literal notranslate"><span class="pre">dU</span></code> on the nodes
 the increment was taken on, <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> on the nodes of the configuration it ends in. A node that left the

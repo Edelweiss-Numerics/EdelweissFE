@@ -76,8 +76,10 @@ force. ``NED``'s net force :math:`\boldsymbol{R}` is its own state, and is not r
 What the solver asks the model
 ------------------------------
 
-A solver solves; what the discrete system is made of, the model says. ``NIST``, ``NISTParallel``,
-``NISTPArcLength`` and ``NED`` ask the model three questions, and know nothing of their own about what a model consists of:
+A solver solves; what the discrete system is made of, the model says. ``NIST``, ``NISTParallel`` and
+``NISTPArcLength`` ask the model three questions, and know nothing of their own about what a model consists of. ``NED``
+and EdelweissMeshfree's ``MeshfreeExplicitDynamic`` ask the first two, and evaluate what the discrete system holds in
+their own loops:
 
 1. **What has changed?** At the start of every increment, and of every retry after a cutback, the topology update
    (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`) runs the
@@ -96,7 +98,8 @@ A solver solves; what the discrete system is made of, the model says. ``NIST``, 
 
    Every solver updates its discrete system before it solves the increment, by one path
    (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem`), which only the
-   ``Change`` decides:
+   ``Change`` decides (``MeshfreeExplicitDynamic`` updates it after the particles advanced, on the kernel functions they
+   reach then):
 
    .. code-block:: python
 
@@ -217,7 +220,7 @@ A model of EdelweissMeshfree answers differently, with the same solvers:
 * Only finite element nodes carry a total solution from increment to increment. The material point method and RKPM
   are incremental on the current configuration -- the cells are reset and the kernel functions move with their
   particles, while the state lives in the material points and particles -- so the values at the nodes of the grid and
-  of the kernel functions are coefficients of one increment, and start every rebuilt discrete system at zero.
+  of the kernel functions are coefficients of one increment, and start every new discrete system at zero.
 * Before the cells are computed, each cell interpolates the solution increment to its material points, and the
   material points evaluate their material; the cells then integrate the result.
 

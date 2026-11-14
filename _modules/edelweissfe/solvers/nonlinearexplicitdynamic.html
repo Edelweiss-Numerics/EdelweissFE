@@ -451,6 +451,7 @@
     <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">"prevTimeStep"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
         <span class="s2">"_netForce"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="s2">"_numberingOfNetForce"</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="s2">"_externalWork"</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="s2">"_energyAtStepStart"</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="c1"># The energy-balance warnings are given once per step, not again after a resume.</span>
@@ -514,6 +515,10 @@
         <span class="c1">#: can tell a resumed step (whose checkpoint holds it) from a cold one, which forms it from the</span>
         <span class="c1">#: state of the model (see :meth:`formNetForceOfTheModelsState`).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The digest of the numbering the net force is a vector of</span>
+        <span class="c1">#: (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`), which the checkpoint holds with it: a</span>
+        <span class="c1">#: resumed step takes the net force over only if its numbering is the one rebuilt from the resumed model.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfNetForce</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The inertia and the damping of every degree of freedom of the current discrete system, the</span>
         <span class="c1">#: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see</span>
         <span class="c1">#: :meth:`_assembleLumpedOperators`.</span>
@@ -626,15 +631,11 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># The net force of the checkpoint on a resumed step, None on a cold one.</span>
-            <span class="n">resumedNetForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span>
+            <span class="n">resumedNetForce</span><span class="p">,</span> <span class="n">numberingOfResumedNetForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfNetForce</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">updateDiscreteSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">resumedNetForce</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">resumedNetForce</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="s2">"The checkpoint holds a net force of </span><span class="si">{:}</span><span class="s2"> entries, but the discrete system rebuilt from "</span>
-                        <span class="s2">"the resumed model has </span><span class="si">{:}</span><span class="s2">."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">resumedNetForce</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">))</span>
-                    <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">checkNumberingOfRestartedVectors</span><span class="p">(</span><span class="n">numberingOfResumedNetForce</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">resumedNetForce</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">formNetForceOfTheModelsState</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
@@ -1463,7 +1464,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">firstOrderFields</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">secondOrderFields</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">linearMomentumFields</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nonMechanicalSecondOrderFields</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">ids_1st</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_mechanicalEnergy</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ids_1st</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_mechanicalEnergy</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfNetForce</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="NED.onNewNumbering">
@@ -1495,6 +1497,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfNetForce</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">digest</span>
 
         <span class="c1"># After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new</span>
         <span class="c1"># nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).</span>

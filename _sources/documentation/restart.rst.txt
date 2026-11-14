@@ -107,10 +107,14 @@ The model is first rebuilt from the same input file, then restored in this order
        parameter of the step) and the time average fluxes of the Abaqus convergence criterion, the
        implicit dynamic solver's conservation check and whether the initial acceleration of the step
        is still to be computed (in a checkpoint written after the zero increment, it is: the first
-       real increment computes it), the explicit solver's last increment, net force, accumulated
-       external work and the energy at the start of its step. The resumed step extrapolates the last
-       accepted increments only if its first discrete system numbers the degrees of freedom as they
-       are numbered (see :doc:`solvers`)
+       real increment computes it), the explicit solver's last increment, net force with the digest of the numbering it is a
+       vector of, accumulated external work and the energy at the start of its step. The resumed step
+       extrapolates the last accepted increments only if its first discrete system numbers the degrees
+       of freedom as they are numbered (see :doc:`solvers`); the explicit solver takes the net force
+       over only then, and refuses to resume otherwise, also from a checkpoint that holds no digest. The
+       connectivity is not part of a checkpoint: it is found anew by the first search of the resumed run, which
+       can give another numbering than the checkpointed one, e.g. in a meshfree model with unbonded kernel functions
+       and a neighbour-list skin, which can admit other kernel functions)
 
 Going back to a checkpoint within a run
 ---------------------------------------
