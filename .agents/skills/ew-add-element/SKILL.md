@@ -24,6 +24,9 @@ from edelweissfe.elements.base.displacementtlelement import (
 ```
 - **Reuse**: Shared shape functions, Gauss quadrature rules, and $B$-matrix routines in `edelweissfe/elements/` and `edelweissfe/numerics/`.
 - **Properties**: Support string-keyed properties via `*elementproperty`.
+- **Residual sign**: every method adds a residual contribution `P` and its tangent `K = dP/dU`: `computeKernels` the
+  internal forces, `computeDistributedLoad`/`computeBodyForce` the *negative* external load (see "The residual and the
+  tangent" in `doc/source/developer/residualandtangent.rst`).
 
 ## 3. Registration
 1. **Metadata**: In `edelweissfe/elements/library.py` (node count, DOFs per node, integration points).
@@ -37,5 +40,5 @@ from edelweissfe.elements.base.displacementtlelement import (
 
 ## 4. Tests & Documentation
 - **Tests**: Follow [`ew-create-regression-test`](../ew-create-regression-test/SKILL.md) using `*modelGenerator`.
-- **Docs**: Follow [`ew-documentation`](../ew-documentation/SKILL.md) (update `doc/source/documentation/elements.rst`).
+- **Docs**: Follow [`ew-documentation`](../ew-documentation/SKILL.md) (update `doc/source/model/elements.rst`).
 - **Review**: Follow [`ew-code-review`](../ew-code-review/SKILL.md).

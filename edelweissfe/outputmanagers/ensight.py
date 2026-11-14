@@ -261,8 +261,11 @@ class EnsightUnstructuredPart:
             if printElementLabels:
                 writeCInt(f, np.asarray([elNumber for elNumber in elements.keys()], np.int32))
 
-            for nodeIndices in elements.values():
-                writeCInt(f, np.asarray(nodeIndices, np.int32)[:] + 1)
+            # The connectivity table of the whole shape in ONE write (every element of a shape has the same number of nodes, so this is the
+            # same byte stream as writing the elements one by one). ndarray.tofile on a file object flushes, duplicates the descriptor and
+            # synchronizes the file position at every call, about 100 microseconds on a network file system: one call per element made the
+            # time of the geometry write proportional to the number of elements, and it is repeated after every mesh change.
+            writeCInt(f, np.asarray(list(elements.values()), np.int32) + 1)
 
 
 class EnsightTimeSet:
@@ -754,8 +757,7 @@ def createUnstructuredPartFromElementSet(setName, elementSet: list, partID: int)
             elementDict[elShape] = dict()
         elNodeIndices = []
         for node in element.visualizationNodes:
-            # if the node is already in the dict, get its index,
-            # else insert it, and get the current idx = counter. increase the counter
+            # get the node's index, inserting it with idx = counter if new
             idx = partNodes.setdefault(node, nodeCounter)
             elNodeIndices.append(idx)
             if idx == nodeCounter:
@@ -799,10 +801,8 @@ def createUnstructuredPartFromRigidBody(bodyName, rigidBody, partID: int):
         The id of this part.
     """
 
-    # the node list must follow getVisualizationNodes()'s order, since that is the
-    # order in which RigidBodyFieldOutput.getVisualizationField() reports per-node
-    # results - deriving it from the facets instead (e.g. by first-seen order, or
-    # excluding nodes unreferenced by any facet) would misalign or drop entries.
+    # the node list must follow getVisualizationNodes()'s order, in which
+    # RigidBodyFieldOutput.getVisualizationField() reports per-node results.
     visualizationNodes = rigidBody.getVisualizationNodes()
     nodeIndices = {node: idx for idx, node in enumerate(visualizationNodes)}
 
@@ -894,9 +894,8 @@ class OutputManager(OutputManagerBase):
         configSetName = None
         configIsNodeSet = None
 
-        # A repeated `>>configuration` is not rejected: every scalar option is last-wins, but
-        # `configSetName` carries over from an earlier block if the last one names neither nSet nor
-        # elSet.
+        # Repeated `>>configuration` blocks: last wins, but `configSetName` carries over from an earlier
+        # block if the last one names neither nSet nor elSet.
         for configurationBlock in configurations:
             self.intermediateSaveInterval = configurationBlock.intermediateSaveInterval
             transient = configurationBlock.transient
@@ -1085,9 +1084,7 @@ class OutputManager(OutputManagerBase):
         # change with adaptive mesh refinement and stay 1:1 aligned with the variable time steps.
 
     def initializeStep(self, step):
-        # intermediateSaveInterval/minDTForOutput overrides are pushed directly by
-        # applyOptionsOverride as soon as a step's >>options block is constructed, so there is
-        # nothing to do here.
+        # step overrides arrive via applyOptionsOverride
         pass
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
@@ -1121,13 +1118,8 @@ class OutputManager(OutputManagerBase):
             self.journal.message("Skipping output".format(), self.identification, 1)
             return
 
-        # No time has passed since the last frame, so there is nothing new to record. This is a
-        # step's priming zero increment: on a resumed run it reports the time the checkpoint was
-        # taken at, which already has a frame on disk. Writing a second frame there duplicates the
-        # data and leaves the .case file's time values non-strictly-increasing, which the format
-        # does not allow and which makes a reader pair variables with the wrong geometry. The
-        # sentinel timeAtLastOutput of -1e16 is what keeps a cold start's own first frame, where no
-        # time has passed either but nothing has been written yet.
+        # No time has passed (e.g. a resumed run's priming zero increment): a second frame would break the
+        # strictly increasing .case time values. The initial timeAtLastOutput of -1e16 keeps a cold start's first frame.
         if timeSinceLastOutput <= 0.0:
             return
 
@@ -1203,11 +1195,7 @@ class OutputManager(OutputManagerBase):
         # register the current time for variables
         self.ensightCase.setCurrentTime(self.transientVariableTAndFSetNumber, model.time)
 
-        # Rewrite the small .case every step so the on-disk step count always matches the committed
-        # data even if the job aborts before finalizeJob() (the L-panel dies on GCDP return-mapping).
-        # A trailing partial geometry step written just before an abort is simply not counted here, so
-        # the reader never overruns it. The .case is tiny text and the data files are already appended
-        # every step, so there is no benefit to gating this behind intermediateSaveInterval.
+        # Rewrite the .case every step, so it matches the data on disk even if the job aborts before finalizeJob().
         self.ensightCase.finalize(replaceTimeValuesByEnumeration=False, closeFileHandes=False)
 
     def finalizeStep(

@@ -96,10 +96,7 @@ cdef class MarmotHypoElasticMaterial:
 
         self._material = NULL
 
-        # np.ascontiguousarray() alone would return the caller's own array unchanged if it is
-        # already contiguous float64, which would let a later in-place mutation of it silently
-        # change this material's behavior, since Marmot only stores the pointer. copy=True
-        # forces an array this instance owns exclusively.
+        # copy=True: Marmot only stores the pointer, so this instance must own the array exclusively.
         self._materialProperties = np.array(materialProperties, dtype=float, order="C", copy=True)
 
         cdef string materialName_ = materialName.encode("UTF-8")
@@ -114,9 +111,7 @@ cdef class MarmotHypoElasticMaterial:
         except Exception:
             self._material = NULL
 
-        # Marmot's factory throws on an unregistered name rather than returning NULL, so the
-        # uppercase retry has to be its own try/except -- nesting it inside the one above would
-        # never run it, since the first call's exception would already have unwound past it.
+        # Marmot's factory throws on an unregistered name, so the uppercase retry needs its own try/except.
         if self._material == NULL:
             try:
                 self._material = MarmotMaterialHypoElasticFactory.createMaterial(

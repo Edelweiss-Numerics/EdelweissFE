@@ -45,8 +45,7 @@ class PointMass(BaseElement):
         self.mass = mass
         self._use_rotation = inertia is not None
 
-        # Normalize the rotary inertia to one value per rotational DOF. PointMass is only ever
-        # used by DiscreteRigidBody, which is 3D-only (enforced by the generator and constraint).
+        # One rotary inertia per rotational DOF; PointMass is only used by the 3D-only DiscreteRigidBody.
         if inertia is None:
             self.inertia = np.zeros(3)
         else:
@@ -156,7 +155,8 @@ class PointMass(BaseElement):
         **kwargs,
     ):
         """
-        Apply a body force (e.g., gravity) to the point mass.
+        Add the residual contribution of a body force (e.g., gravity) on the point mass, the negative
+        of the force it applies.
 
         Unlike continuum elements, where ``load`` is a force *per unit volume* that gets integrated
         over the element, a point mass has no volume: ``load`` is interpreted as a force *per unit
@@ -165,7 +165,7 @@ class PointMass(BaseElement):
         without a Dirichlet BC on its reference point ("free") settle to quasi-static equilibrium
         under self-weight and contact reaction.
         """
-        P[: self.domainSize] += self.mass * load[: self.domainSize]
+        P[: self.domainSize] -= self.mass * load[: self.domainSize]
 
     def computeCriticalTimeStepForExplicitDynamics(self, Q=None, *args, **kwargs) -> float:
         return np.inf
@@ -189,7 +189,7 @@ class PointMass(BaseElement):
         return 0.0
 
     def computeKernels(
-        self, P: np.ndarray, K: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float, *args, **kwargs
+        self, K: np.ndarray, P: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float, *args, **kwargs
     ):
         pass
 
@@ -218,9 +218,7 @@ class PointMass(BaseElement):
 
     @property
     def hasMaterial(self) -> bool:
-        # Deliberately True, not an oversight: this bypasses FEModel._prepareElements' blanket
-        # materialAssigned check (which would otherwise reject any model containing a PointMass),
-        # while setMaterial below still raises loudly if a section is ever actually assigned to one.
+        # Deliberately True: passes FEModel's material-assigned check; setMaterial still raises.
         return True
 
     def initializeElement(self):

@@ -34,10 +34,10 @@ import io
 from edelweissfe.journal.journal import Journal, displayWidth
 
 LEVEL = 2
-TREE = """LGMRES(tolerance=ForcingTolerance(minimum=0.0001, maximum=0.001), maxIterations=1000, restart=50)
-└─ SchurComplement(blockFactors=U, S̃=A_kk − A_kb A_bb⁻¹ A_bk, local)
-   ├─ solveA_bb: DirectSolver(backend=superlu)
-   └─ preconditionS: TwoLevel(coarse space=rigid-body modes, prolongation=smoothed, coarse solve=AMG V-cycle)
+TREE = """LGMRES(tolerance=EisenstatWalkerTolerance(minimum=0.0001, maximum=0.001), maxIterations=1000, restart=50)
+└─ SchurComplement(blockFactors=upper, S̃=A_kk − A_kb A_bb⁻¹ A_bk, local)
+   ├─ condensedBlockSolve: DirectSolver(package=superlu)
+   └─ schurComplementSolve: TwoLevel(coarse space=rigid-body modes, prolongation=smoothed, coarse solve=AMG V-cycle)
 
 from solver.py (sha256 b88a93da5088)"""
 
@@ -77,7 +77,7 @@ def test_a_long_line_of_a_tree_continues_below_its_own_text():
     root = next(i for i, line in enumerate(lines) if line.startswith("| LGMRES("))
     assert lines[root + 1].startswith("|   ")
     # the last child's long line continues under the tree's own vertical line: there is none below "└─"
-    twoLevel = next(i for i, line in enumerate(lines) if "preconditionS: TwoLevel" in line)
+    twoLevel = next(i for i, line in enumerate(lines) if "schurComplementSolve: TwoLevel" in line)
     assert lines[twoLevel + 1].startswith("|      ")
     # no text is lost by the wrapping
     text = " ".join(line[1:-1].strip() for line in lines[1:-1])

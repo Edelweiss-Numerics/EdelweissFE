@@ -172,8 +172,7 @@ class MeshPlotSaveFigureJob:
     width: float = schemaField(description="Figure width in points.", dtype=float, default=469.47)
     scale: float = schemaField(description="Scaling applied to the width.", dtype=float, default=1.0)
     heightRatio: float = schemaField(
-        # 0.0 is the plotter's "use the golden ratio" sentinel (`float(heightRatio) or golden_mean`
-        # in `Plotter._fancyFigSize`), and is what the legacy default of `False` evaluated to.
+        # 0.0 is the plotter's "use the golden ratio" sentinel (see `Plotter._fancyFigSize`)
         description="Height/width ratio; 0 selects the golden ratio.",
         dtype=float,
         default=0.0,

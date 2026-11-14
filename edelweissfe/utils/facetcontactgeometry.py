@@ -174,10 +174,8 @@ def line2GapGradientHessian(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> t
     w_dBlock = {k: dn_dBlock[k].T @ r + dr_dBlock[k].T @ n for k in blocks}
     w = np.concatenate([w_dBlock[k] for k in blocks])
 
-    # r rotated into the eHat/normal frame -- required because dn_dBlock = rotateMinus90 @
-    # dEHat_dBlock, so contracting r with n's own index is equivalent to contracting
-    # rotateMinus90^T @ r with eHat's index instead (rotateMinus90 is constant, applied on the
-    # left, so it commutes out of the contraction this way).
+    # Since dn_dBlock = rotateMinus90 @ dEHat_dBlock, contracting r with n's index equals contracting
+    # rotateMinus90^T @ r with eHat's index.
     rRotated = rotateMinus90.T @ r
     rRotatedDotEHat = rRotated.dot(eHat)
 
@@ -464,39 +462,18 @@ def closestFacetCandidates(queryPoints: np.ndarray, facetCoords: list, searchDis
 
     radius = nearestCentroidDistance + rMax
     if searchDistance is not None:
-        # A facet farther than searchDistance is rejected by the caller regardless, and its
-        # closed domain is at least |x - C| - r away, so nothing within searchDistance can have
-        # its centroid beyond searchDistance + rMax.
+        # The caller rejects facets beyond searchDistance; no facet within it has its centroid beyond
+        # searchDistance + rMax.
         radius = np.minimum(radius, searchDistance + rMax)
 
-    # The bound above is exact in real arithmetic and query_ball_point includes its boundary, so
-    # a facet that exactly ties -- the ordinary case on a structured or symmetric contact mesh --
-    # sits precisely ON the radius, where the rounding of the sum that produced it can land an
-    # ulp low and drop it from the candidate list. That would silently pick a different facet
-    # than the exhaustive sweep, against what this docstring promises. A few ulps of relative
-    # margin restores the superset property; it widens the ball by a distance many orders below
-    # any mesh dimension, so it admits no facet that the exhaustive sweep would not also see.
+    # A few ulps of margin: a facet that exactly ties sits ON the radius, and rounding must not drop it.
     radius = radius * (1.0 + 8.0 * np.finfo(float).eps)
 
     ballCandidates = tree.query_ball_point(queryPoints, radius)
 
-    # The ball is sized by rMax, the largest facet radius anywhere on the surface, so on a surface
-    # of uniform facets it is about as tight as a centroid bound can be -- and on a refined one it
-    # is not tight at all. Measured on the h-adaptive anchor pry-out model, whose concrete top
-    # surface carries 1.2 mm facets next to 34 mm ones: rMax = 24.54 mm against a mean nearest-
-    # centroid distance of 0.78 mm, so the radius is 97 % rMax and admits 457 of 4212 facets for
-    # every point. The same call on that model's other contact surface, 192 facets with
-    # rMax = 2.33 mm, admits 8.6. One global rMax makes the whole surface pay for its largest
-    # element.
-    #
-    # So reject, per facet, what its own radius already rules out. Facet i's closed domain is at
-    # least |x - C_i| - r_i away, and d* <= d0 from the bound above, so a facet with
-    # |x - C_i| - r_i > d0 is strictly farther than the winner and can neither win nor tie. It is
-    # the same argument the ball radius rests on, applied with each facet's own r_i instead of the
-    # largest one, and it removes only facets the exhaustive sweep would have evaluated and
-    # discarded -- the selected facet, and the caller's ascending-index tie-breaking among equally
-    # close ones, are untouched. The comparison keeps the ulp margin for exactly the reason the
-    # radius above does: a tie sits precisely on the boundary.
+    # The ball uses the global rMax, which is loose on a refined surface. Refine per facet: its closed
+    # domain is at least |x - C_i| - r_i away and d* <= d0, so a facet with |x - C_i| - r_i > d0 can
+    # neither win nor tie. Same ulp margin as above.
     tolerance = 1.0 + 8.0 * np.finfo(float).eps
 
     # Evaluated for all (point, ball candidate) pairs at once, with the same arithmetic per pair as

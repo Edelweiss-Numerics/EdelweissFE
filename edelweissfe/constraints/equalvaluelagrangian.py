@@ -80,7 +80,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
     .. note::
        This constraint requires a node set of *fixed* size. It needs ``len(nSet) - 1`` Lagrange
-       multipliers, and those scalar variables are allocated exactly once, when the equation system
+       multipliers, and those scalar variables are allocated exactly once, when the discrete system
        is first set up. A node set that grows in-place during the simulation (e.g. by adaptive mesh
        refinement) can therefore not be supported, and is rejected in :meth:`updateConnectivity`.
        Use the penalty variant ``equalValuePenalty`` instead, which re-sizes itself per increment.
@@ -121,7 +121,6 @@ class Constraint(ConstraintBase, MeshDependent):
         self._nodes = nSet
         self._lastSeenTopologyVersion = model.topology.version
         model.topology.registerMeshDependent(self)
-        self.nNodes = len(self._nodes)
         self.nMultipliers = len(self._nodes) - 1
 
         self._nDof = self.sizeField * self.nNodes + self.nMultipliers
@@ -134,13 +133,11 @@ class Constraint(ConstraintBase, MeshDependent):
         )
         self.indices_multipliers = slice(self.sizeField * self.nNodes, self._nDof)
 
-        self._fieldsOnNodes = [
+        self._fields = [
             [
                 theField,
             ]
         ] * self.nNodes
-
-        self.active = True
 
     @classmethod
     def fromConstraintDefinition(
@@ -157,8 +154,8 @@ class Constraint(ConstraintBase, MeshDependent):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
@@ -184,7 +181,7 @@ class Constraint(ConstraintBase, MeshDependent):
         raise Exception(
             "Constraint '{:}' (equalValueLagrangian) does not support a node set that changes "
             "size during the simulation: its {:} Lagrange multipliers are allocated once, when "
-            "the equation system is first set up, and cannot grow with the node set (e.g. under "
+            "the discrete system is first set up, and cannot grow with the node set (e.g. under "
             "adaptive mesh refinement). Use the penalty variant 'equalValuePenalty' on this node "
             "set instead, or constrain a node set that is not refined.".format(self._name, self.nMultipliers)
         )
@@ -192,26 +189,24 @@ class Constraint(ConstraintBase, MeshDependent):
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nNodes - 1
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: np.ndarray,
         timeStep: TimeStep,
     ):
-        if not self.active:
-            return
-
         val_master = U_np[self.index_master]
         vals_slaves = U_np[self.indices_slaves]
         multipliers = U_np[self.indices_multipliers]
 
+        # the constraints g_s = u_slave_s - u_master: lambda^T dg/du on the nodes, g on the multipliers
         gs = vals_slaves - val_master
 
-        PExt[self.index_master] -= -np.sum(multipliers)
-        PExt[self.indices_slaves] -= multipliers
-        PExt[self.indices_multipliers] -= gs
+        P[self.index_master] += -np.sum(multipliers)
+        P[self.indices_slaves] += multipliers
+        P[self.indices_multipliers] += gs
 
         K[self.index_master, self.indices_multipliers] += -1.0
 

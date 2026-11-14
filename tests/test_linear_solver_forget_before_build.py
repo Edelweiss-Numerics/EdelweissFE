@@ -55,6 +55,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     Multiplicative,
     OnField,
     Preconditioner,
+    RebuildPolicy,
     SchurComplement,
 )
 from edelweissfe.linsolve.composition.schurcomplement import (  # noqa: E402
@@ -71,8 +72,7 @@ def _composed(root, fields):
 
 
 def _newPattern(A):
-    """``A`` with one more stored entry, an explicit zero: a new sparsity pattern, for which the composed solver asks
-    for a rebuild."""
+    """``A`` with one more stored entry, an explicit zero: a new sparsity pattern."""
     A = A.tocoo()
     n = A.shape[0]
     return sp.csr_matrix((np.append(A.data, 0.0), (np.append(A.row, 0), np.append(A.col, n - 1))), shape=A.shape)
@@ -81,7 +81,11 @@ def _newPattern(A):
 def test_a_krylov_rebuild_forgets_every_hierarchy_before_it_builds_one(monkeypatch):
     A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
     amgs = [AMG(), AMG()]
-    root = LGMRES(Multiplicative([OnField(f.name, amg) for f, amg in zip(fields, amgs)]), FixedTolerance(1e-8))
+    root = LGMRES(
+        Multiplicative([OnField(f.name, amg) for f, amg in zip(fields, amgs)]),
+        FixedTolerance(1e-8),
+        rebuild=RebuildPolicy(reusePreconditioner=True),
+    )
     solver = _composed(root, fields)
     solver(A, b)
 
@@ -93,6 +97,8 @@ def test_a_krylov_rebuild_forgets_every_hierarchy_before_it_builds_one(monkeypat
         return original(*arguments)
 
     monkeypatch.setattr(amgModule, "buildFieldHierarchy", build)
+    solver.onNewMatrixPattern()
+    assert all(amg.hierarchy is None for amg in amgs), "dropped when the pattern is announced, before it is built"
     solver(_newPattern(A), b)
     assert root.lastRebuildReason == "pattern"
     # the first build of the rebuild finds no old hierarchy, the second only the one just built
@@ -111,8 +117,8 @@ def test_the_schur_complement_drops_its_old_complement_and_child_before_it_forms
     A, b, barDofs = barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     child = AMG()
-    schur = condensingGivenDofs(SchurComplement(["bars"], preconditionS=child), barDofs)
-    root = LGMRES(schur, FixedTolerance(1e-8))
+    schur = condensingGivenDofs(SchurComplement(["bars"], schurComplementSolve=child), barDofs)
+    root = LGMRES(schur, FixedTolerance(1e-8), rebuild=RebuildPolicy(reusePreconditioner=True))
     solver = _composed(root, fields)
     solver(A, b)
     assert schur.S_tilde is not None and child.hierarchy is not None
@@ -163,8 +169,8 @@ def test_a_new_model_forgets_the_tree_at_once_and_keeps_what_is_reused_on_purpos
     scratch = root._krylov
 
     model = SimpleNamespace(nodeFields={damage.name: SimpleNamespace(dimension=1, nodes=[])})
-    dofManager = SimpleNamespace(idcsOfFieldsInDofVector={damage.name: slice(0, n)})
-    solver.setModel(model, dofManager)
+    numbering = SimpleNamespace(idcsOfFieldsInDofVector={damage.name: slice(0, n)})
+    solver.setModel(model, numbering)
     assert amg.hierarchy is None
     # the scratch vectors of the Krylov solve are sized for the system, not built for its matrix
     assert root._krylov is scratch
@@ -193,7 +199,6 @@ def test_a_csr_generator_and_its_matrix_form_no_reference_cycle():
     """The matrix's pattern arrays keep the C++ core alive, not the generator: a replaced generator is freed by
     reference counting, and its matrix stays valid without it."""
     A = displacementDamageSystem(n=6, coupling="symmetric")[0].tocoo()
-    vij = SimpleNamespace(I=A.row.astype(np.intc), J=A.col.astype(np.intc), nDof=A.shape[0])
 
     def generatorsAlive():
         return sum(isinstance(obj, CSRGenerator) for obj in gc.get_objects())
@@ -202,7 +207,7 @@ def test_a_csr_generator_and_its_matrix_form_no_reference_cycle():
     gc.disable()
     try:
         before = generatorsAlive()
-        generator = CSRGenerator(vij)
+        generator = CSRGenerator(A.row.astype(np.intc), A.col.astype(np.intc), A.shape[0])
         matrix = generator.updateInPlace(A.data.copy())
         assert generatorsAlive() == before + 1
         del generator
@@ -211,3 +216,38 @@ def test_a_csr_generator_and_its_matrix_form_no_reference_cycle():
         assert np.allclose(matrix @ x, A @ x)
     finally:
         gc.enable()
+
+
+def _samePatternSizeOtherPattern(A):
+    """``A`` with one stored off-diagonal entry moved to another column of its row: as many stored entries, another
+    sparsity pattern (a slave that slides to a neighbouring facet of the same size)."""
+    A = A.tocoo()
+    stored = set(zip(A.row.tolist(), A.col.tolist()))
+    k = next(k for k in range(len(A.data)) if A.row[k] != A.col[k])
+    column = next(c for c in range(A.shape[0]) if (A.row[k], c) not in stored)
+    col = A.col.copy()
+    col[k] = column
+    return sp.csr_matrix((A.data, (A.row, col)), shape=A.shape)
+
+
+def test_a_new_pattern_with_the_same_number_of_stored_entries_does_not_reuse_the_hierarchy():
+    A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
+    amgs = [AMG(), AMG()]
+    root = LGMRES(
+        Multiplicative([OnField(f.name, amg) for f, amg in zip(fields, amgs)]),
+        FixedTolerance(1e-8),
+        rebuild=RebuildPolicy(reusePreconditioner=True),
+    )
+    solver = _composed(root, fields)
+    solver(A, b)
+    built = [amg.hierarchy for amg in amgs]
+
+    moved = _samePatternSizeOtherPattern(A)
+    assert moved.nnz == A.nnz and (moved != A).nnz > 0
+
+    # announced by the nonlinear solver before it builds the new pattern: forgotten, then built anew
+    solver.onNewMatrixPattern()
+    assert all(amg.hierarchy is None for amg in amgs)
+    solver(moved, b)
+    assert root.lastRebuildReason == "pattern"
+    assert all(amg.hierarchy is not None and amg.hierarchy is not old for amg, old in zip(amgs, built))

@@ -85,8 +85,7 @@ class DiscreteRigidBody(RigidBody):
         if self.mass is not None:
             from edelweissfe.elements.pointmass import PointMass
 
-            # Element numbers come from the model allocator (topology pipeline), which removes the
-            # label-collision risk the old max()+1 counter carried.
+            # Element numbers come from the model allocator (topology pipeline).
             (el_num,) = model.topology.reserveElementNumbers(1)
             self.pointMassElement = PointMass(el_num, [self.rpNode], model, self.mass, self.inertia)
             model.createElement(self.pointMassElement)
@@ -112,7 +111,7 @@ class DiscreteRigidBody(RigidBody):
             the sum of the first and third entries.
         """
         disp_field = self.model.nodeFields.get("displacement")
-        if disp_field is None or "U" not in disp_field or self.rpNode not in disp_field.nodes:
+        if disp_field is None or self.rpNode not in disp_field.nodes:
             raise RuntimeError(
                 f"Discrete rigid body '{self.name}': reference point node is not part of the model's "
                 "'displacement' NodeField -- the model may not be fully initialized yet."
@@ -121,7 +120,7 @@ class DiscreteRigidBody(RigidBody):
 
         R = np.eye(3)
         rot_field = self.model.nodeFields.get("rotation")
-        if rot_field is not None and "U" in rot_field and self.rpNode in rot_field.nodes:
+        if rot_field is not None and self.rpNode in rot_field.nodes:
             theta = rot_field["U"][rot_field.indexOfNode(self.rpNode)]
             R = rotationMatrixFromPseudoVector(theta)
 
@@ -160,14 +159,8 @@ class DiscreteRigidBody(RigidBody):
     def updateKinematics(self, timeStep=None):
         currentCoords, _ = self._currentAndReferenceSurfaceCoordinates()
 
-        # Deviating from the usual EdelweissFE convention, the surface nodes'
-        # coordinates hold the *current* configuration: the output managers
-        # write the transient geometry of the moving body from them, and the
-        # AABB proximity checks of the contact constraints rely on them. The
-        # reference configuration is retained via the RP node's coordinates
-        # and initialRelativePositions. The surface nodes are not degrees of
-        # freedom themselves -- they carry no FieldVariables and are not part
-        # of any NodeField -- so nothing else needs to be updated here.
+        # Unlike the usual EdelweissFE convention, the surface nodes' coordinates hold the *current*
+        # configuration (used by output and contact AABB checks); they carry no field variables.
         for i, node in enumerate(self.surfaceNodes):
             node.coordinates[:] = currentCoords[i]
 

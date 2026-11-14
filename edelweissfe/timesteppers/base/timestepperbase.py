@@ -63,9 +63,8 @@ class TimeStepperBase(ABC):
     identification = "TimeStepper"
 
     #: The attributes that make up the stepper's progress within the step, by type; see
-    #: :mod:`~edelweissfe.utils.checkpointedstate`. Not its configuration (step length, increment
-    #: bounds, the maximum number of increments): a resumed run takes that from its own input file,
-    #: so it can be changed between runs, e.g. to raise the maximum number of increments.
+    #: :mod:`~edelweissfe.utils.checkpointedstate`. Not its configuration, which a resumed run takes
+    #: from its own input file.
     checkpointedState: dict | None = None
 
     @abstractmethod
@@ -128,7 +127,8 @@ class TimeStepperBase(ABC):
         Raises
         ------
         ReachedMinIncrementSize
-            If the increment cannot be reduced any further.
+            If the increment cannot be reduced any further: it is at or below the minimum size. The last
+            increment of a step, the remainder of the step, may be below it.
         """
 
     @abstractmethod

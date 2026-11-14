@@ -147,10 +147,8 @@ class Constraint(ConstraintBase, MeshDependent):
         self.constrainedNSet = constrainedNSet
         self.loadNSet = loadNSet
 
-        # the target total load, never mutated -- the per-node share (self.unitResidual, built in
-        # _rebuildDerivedState) is (re)derived from this against the *current* size of loadNSet, so
-        # a mid-run AMR growth of loadNSet keeps the documented normalizeLoad semantics (constant
-        # total load, or a fixed per-node load) instead of freezing them at construction-time size
+        # the target total load, never mutated: the per-node share (self.unitResidual) is rederived from
+        # it against the current size of loadNSet, which may grow under AMR
         self._targetLoadVector = np.fromstring(configuration.loadVector, dtype=float, sep=",")
         self._normalizeLoad = configuration.normalizeLoad
 
@@ -162,8 +160,6 @@ class Constraint(ConstraintBase, MeshDependent):
         self.offset = configuration.offset
 
         self._nDim = model.domainSize
-
-        self.active = True
 
         self.constrainedValue = 0.0
 
@@ -195,7 +191,7 @@ class Constraint(ConstraintBase, MeshDependent):
         AMR) since the last increment."""
         self._nodes = list(self.loadNSet) + list(self.constrainedNSet)
 
-        self._fieldsOnNodes = [
+        self._fields = [
             [
                 self.theField,
             ]
@@ -223,8 +219,8 @@ class Constraint(ConstraintBase, MeshDependent):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
@@ -240,10 +236,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildDerivedState()
         return True
 
-    def applyConstraint(self, U_np, dU, PExt, K, timeStep: TimeStep):
-        if not self.active:
-            return
-
+    def computeKernels(self, U_np, dU, P, K, timeStep: TimeStep):
         sBL = self.startBlock_loadNodes
         eBL = self.endBlock_loadNodes
         sBC = self.startBlock_constrainedNodes
@@ -262,5 +255,6 @@ class Constraint(ConstraintBase, MeshDependent):
 
         t = self.unitResidual
 
-        PExt[sBL:eBL] = -t * loadFactor
-        K[sBL:eBL, sBC:eBC] = np.outer(t, dLoadFactor_ddU)
+        # the controlled load acts on the load nodes as -t * loadFactor; P is its negative
+        P[sBL:eBL] += t * loadFactor
+        K[sBL:eBL, sBC:eBC] += np.outer(t, dLoadFactor_ddU)

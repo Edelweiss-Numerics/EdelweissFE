@@ -34,4 +34,4 @@ bash scripts/format_cython_files.sh  # if Cython linting issues occur
 ## 5. Maintenance & PR Targeting
 - [ ] **Agent Guidance**: Update `AGENTS.md`, `CONTRIBUTING.md`, or `.agents/skills/` if workflows change.
 - [ ] **Conventional Commits**: `<type>(<scope>): <summary>` (`feat(...)`, `fix(...)`).
-- [ ] **PR Target**: `master` for bug fixes; `next_v<YY>.<MM>` for features/enhancements.
+- [ ] **PR Target**: `master`, the development branch (releases are tags `v<YY>.<MM>`).

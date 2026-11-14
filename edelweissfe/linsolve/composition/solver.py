@@ -63,6 +63,7 @@ from edelweissfe.linsolve.composition.base import (
     MatrixChange,
     Preconditioner,
     SetUpContext,
+    requireEachComponentOnce,
 )
 from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
@@ -115,7 +116,8 @@ class ComposedLinearSolver(LinearSolver):
     Per call it finds what changed and hands it down the tree as a
     :class:`~edelweissfe.linsolve.composition.base.MatrixChange`: ``"first"`` (nothing built yet), ``"model"``
     (after :meth:`setModel`), ``"reload"`` (a new tree from a hot reload), ``"amr"`` (another field layout or size),
-    ``"pattern"`` (another number of stored entries, an O(1) proxy for the sparsity pattern), or only new values.
+    ``"pattern"`` (the nonlinear solver announced a new sparsity pattern, see :meth:`onNewMatrixPattern`), or only new
+    values.
     Whether a right-hand side jumped by more than ``residualGrowthFactor`` (a new increment) is passed along too; the
     Krylov solver decides what it means.
 
@@ -129,9 +131,9 @@ class ComposedLinearSolver(LinearSolver):
     verbosity
         ``"silent"``, ``"warning"`` (default: nothing on a normal solve; a warning for a slow or unconverged one),
         ``"info"`` (the structure of the solver at the first solve, in a frame, and the "linear solve" column of the
-        nonlinear solver's table) or ``"debug"`` (also each continuation of a Krylov solve, and why the
+        nonlinear solver's table) or ``"debug"`` (also each true-residual restart of a Krylov solve, and why the
         preconditioner was rebuilt or reused, in that column).
-    warnOuterIterations
+    warningOuterIterations
         A solve with more outer iterations than this gets a warning (a sign that the preconditioner no longer fits).
         A solve that misses its tolerance gets a warning of its own, whatever this says.
     dumps
@@ -139,8 +141,8 @@ class ComposedLinearSolver(LinearSolver):
         for an offline replay. ``None`` (default): none.
     nodeCoordinates
         ``{fieldName: (nNodes, dimension) array}``, coordinates to use instead of the model's (an offline replay).
-    p1Maps
-        ``{fieldName: (isCorner, edgeEndpoints)}``, P1 maps to use instead of those derived from the model.
+    midsideCorners
+        ``{fieldName: (isCorner, edgeEndpoints)}``, midside corners to use instead of those derived from the model.
     """
 
     identification = _IDENTIFICATION
@@ -154,10 +156,10 @@ class ComposedLinearSolver(LinearSolver):
         root: Preconditioner,
         residualGrowthFactor: float = 4.0,
         verbosity: str = "warning",
-        warnOuterIterations: int = 100,
+        warningOuterIterations: int = 100,
         dumps: SolveDumps = None,
         nodeCoordinates: dict = None,
-        p1Maps: dict = None,
+        midsideCorners: dict = None,
     ):
         if not isinstance(root, Preconditioner):
             raise TypeError(
@@ -170,17 +172,17 @@ class ComposedLinearSolver(LinearSolver):
             )
         if not residualGrowthFactor > 1.0:
             raise ValueError("ComposedLinearSolver: residualGrowthFactor must be greater than 1")
-        if warnOuterIterations < 0:
-            raise ValueError("ComposedLinearSolver: warnOuterIterations must not be negative")
+        if warningOuterIterations < 0:
+            raise ValueError("ComposedLinearSolver: warningOuterIterations must not be negative")
         self.root = root
         self.residualGrowthFactor = residualGrowthFactor
         self.verbosity = verbosity
-        self.warnOuterIterations = warnOuterIterations
+        self.warningOuterIterations = warningOuterIterations
         self.dumps = dumps
         self._givenCoordinates = {
             name: np.asarray(coordinates, dtype=float) for name, coordinates in (nodeCoordinates or {}).items()
         }
-        self._givenP1Maps = dict(p1Maps or {})
+        self._givenMidsideCorners = dict(midsideCorners or {})
         #: The solver script the tree was built by (see :meth:`fromScript`), ``None`` for a tree built in Python.
         self.script = None
         #: Whether the tree is built again whenever the solver script changes on disk (see :meth:`_hotReload`).
@@ -191,9 +193,9 @@ class ComposedLinearSolver(LinearSolver):
         self._rootBeforeReload = None
         self._reloaded = False
         self._coordinateCache = {}
-        self._p1MapCache = {}
-        #: The stored entries of the last matrix: a new count is a new sparsity pattern.
-        self.lastNnz = None
+        self._midsideCornersCache = {}
+        #: Whether the sparsity pattern was announced to change since the last solve (:meth:`onNewMatrixPattern`).
+        self._patternChanged = False
         #: The right-hand side norm of the last solve, ``None`` before the first one and after a new model.
         self.lastResidualNorm = None
         self._fields = None
@@ -228,17 +230,24 @@ class ComposedLinearSolver(LinearSolver):
 
     # ----- what the nonlinear solver hands over -----
 
-    def setModel(self, model, dofManager) -> None:
+    def setModel(self, model, numbering) -> None:
         """Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built
-        for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear
-        solver builds the new equation system before that."""
-        self.root.forget()
-        super().setModel(model, dofManager)
+        for the previous model is forgotten right away (:meth:`onNewMatrixPattern`): the tree is built anew at the next
+        solve, and the nonlinear solver builds the new discrete system before that."""
+        self.onNewMatrixPattern()
+        super().setModel(model, numbering)
         self._coordinateCache.clear()
-        self._p1MapCache.clear()
+        self._midsideCornersCache.clear()
         self._modelChanged = True
         self.lastResidualNorm = None
-        self.root.setModel(model, dofManager)
+        self.root.setModel(model, numbering)
+
+    def onNewMatrixPattern(self) -> None:
+        """Forget what the tree built for the old sparsity pattern (the hierarchies, the factorizations); the tree is
+        built anew at the next solve, for the reason ``"pattern"``. What is bound to the model -- the field layout, the
+        node coordinates -- stays."""
+        self.root.forget()
+        self._patternChanged = True
 
     def coordinatesOf(self, fieldName: str) -> "np.ndarray | None":
         """The node coordinates of a field in its dof order: given ones first, else the model's, else ``None``."""
@@ -251,29 +260,40 @@ class ComposedLinearSolver(LinearSolver):
             self._coordinateCache[fieldName] = np.array([node.coordinates for node in nodeField.nodes], dtype=float)
         return self._coordinateCache[fieldName]
 
-    def p1MapOf(self, fieldName: str):
-        """The P1 corner/midside map of a field: a given one first, else derived from the model, else ``None``."""
-        if fieldName in self._givenP1Maps:
-            return self._givenP1Maps[fieldName]
+    def midsideCornersOf(self, fieldName: str):
+        """The midside corners of a field (which nodes are corners, and the corners of each midside node): a given one
+        first, else derived from the model, else ``None``. An element whose topology the corner-node interpolation
+        does not know is an error (:class:`~edelweissfe.numerics.p1topology.UnsupportedElementTopology`)."""
+        if fieldName in self._givenMidsideCorners:
+            return self._givenMidsideCorners[fieldName]
         if self._model is None:
             return None
-        if fieldName not in self._p1MapCache:
-            from edelweissfe.numerics.p1topology import buildP1Map
+        if fieldName not in self._midsideCornersCache:
+            from edelweissfe.numerics.p1topology import buildMidsideCorners
 
-            with performancetiming.timeit("p1 topology"):
-                isCorner, edgeEndpoints, warnings = buildP1Map(self._model, fieldName)
-            for warning in warnings:
-                self._log("warning", warning)
-            self._p1MapCache[fieldName] = (isCorner, edgeEndpoints)
-        return self._p1MapCache[fieldName]
+            with performancetiming.timeit("midside corners"):
+                isCorner, edgeEndpoints, conflictingRows = buildMidsideCorners(self._model, fieldName)
+            if conflictingRows.size:
+                self._log(
+                    "info",
+                    "{:} nodes of the field '{:}' get conflicting edge endpoints from different elements (e.g. at an "
+                    "AMR refinement interface): they are corners of the corner-node interpolation".format(
+                        conflictingRows.size, fieldName
+                    ),
+                )
+            self._midsideCornersCache[fieldName] = (isCorner, edgeEndpoints)
+        return self._midsideCornersCache[fieldName]
 
     # ----- the solve -----
 
     @property
-    def needsStableSparsityPattern(self) -> bool:
-        """A Krylov solver reuses its preconditioner across solves, which a new sparsity pattern defeats; a direct
-        solve factorizes anew every time."""
-        return self.root.containsKrylovSolver
+    def needsPrunedSystemMatrix(self) -> bool:
+        """Whether the tree factorizes (a block of) the system matrix directly
+        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.containsDirectSolver`), whose reordering is
+        sensitive to explicitly stored zeros, and no Krylov solver of the tree keeps its preconditioner across solves
+        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.reusesPreconditioner`), which a pattern pruned
+        anew in every iteration would defeat. A tree of Krylov solvers and AMG, the default, does not need it."""
+        return self.root.containsDirectSolver and not self.root.reusesPreconditioner
 
     @property
     def reportsSolveSummary(self) -> bool:
@@ -312,7 +332,7 @@ class ComposedLinearSolver(LinearSolver):
         context = SetUpContext(
             fields=tuple(fields),
             coordinatesOf=self.coordinatesOf,
-            p1MapOf=self.p1MapOf,
+            midsideCornersOf=self.midsideCornersOf,
             model=self._model,
             journal=self._journal,
             log=self._log,
@@ -325,7 +345,7 @@ class ComposedLinearSolver(LinearSolver):
             reason = "reload"
         elif fields != self._fields:
             reason = "amr"
-        elif A.nnz != self.lastNnz:
+        elif self._patternChanged:
             reason = "pattern"
         else:
             reason = None
@@ -373,18 +393,19 @@ class ComposedLinearSolver(LinearSolver):
             self.root.update(A, change)
         self._rootBeforeReload = None
         if self._fields is None or self._reloaded:
-            # after the first set-up: a combination made per field shows its corrections only then
+            # after the first set-up: a combination made per field has made its corrections only then
+            requireEachComponentOnce(self.root)
             self._logFramed("info", "composed linear solver", str(self.root) + self._scriptLine())
         x = np.column_stack([self.root(np.ascontiguousarray(r)) for r in rightHandSides.T]).reshape(b.shape)
         record = self.root.solveRecord()
         condensedDofs = self.root.condensedDofs()
         self.root.finishSolve()
 
-        patternChanged = self.lastNnz is not None and A.nnz != self.lastNnz
+        patternChanged = self._patternChanged
+        self._patternChanged = False
         self._fields = fields
         self._modelChanged = False
         self._reloaded = False
-        self.lastNnz = A.nnz
         self.lastResidualNorm = residualNorm
         if record is not None:
             self._report(record, change, time.time() - start)
@@ -408,16 +429,16 @@ class ComposedLinearSolver(LinearSolver):
             iters=record.iterations,
             residual=record.residual,
             residualMet=record.converged,
-            retries=record.continuations,
+            retries=record.trueResidualRestarts,
             detailLines=detailLines,
         )
-        if record.iterations > self.warnOuterIterations:
+        if record.iterations > self.warningOuterIterations:
             self._log(
                 "warning",
                 "solve #{:} needed {:} outer Krylov iterations, above the warning threshold of {:}. Likely a "
                 "preconditioner-quality problem, not a physics one -- worth checking whether the Jacobian changed "
                 "sharply since the last rebuild of the preconditioner.".format(
-                    self._solveCount, record.iterations, self.warnOuterIterations
+                    self._solveCount, record.iterations, self.warningOuterIterations
                 ),
             )
         if record.converged:
@@ -425,18 +446,20 @@ class ComposedLinearSolver(LinearSolver):
         if record.capHit:
             self._log(
                 "warning",
-                "solve #{:} did not converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} continuations, and a pass "
-                "of the Krylov solver stopped at its iteration cap. The cap is a budget, not a tolerance: a solve that "
-                "needs more is a preconditioning problem -- the preconditioner is rebuilt for the next "
-                "solve.".format(self._solveCount, record.residual, record.eta, record.continuations),
+                "solve #{:} did not converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} true-residual restarts, and "
+                "a pass of the Krylov solver stopped at its iteration cap. The cap is a budget, not a tolerance: a "
+                "solve that needs more is a preconditioning problem -- the preconditioner is rebuilt for the next "
+                "solve.".format(self._solveCount, record.residual, record.eta, record.trueResidualRestarts),
             )
         elif record.scaledSystem:
             self._log(
                 "warning",
-                "solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} continuations, though "
-                "the Krylov solve converged its own (scaled) residual: the gap between the scaled and the true "
-                "residual, which more continuations or a GapCompensation close; a rebuilt preconditioner does "
-                "not.".format(self._solveCount, record.residual, record.eta, record.continuations),
+                "solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} true-residual "
+                "restarts, though the Krylov solve converged its own (scaled) residual: the gap between the scaled and "
+                "the true residual, which more true-residual restarts or a ResidualGapCompensation close; a rebuilt "
+                "preconditioner does not.".format(
+                    self._solveCount, record.residual, record.eta, record.trueResidualRestarts
+                ),
             )
         else:
             self._log(
@@ -457,7 +480,7 @@ class ComposedLinearSolver(LinearSolver):
         slow = False
         if record is not None:
             state = {**dataclasses.asdict(record), **state, "previousIterations": self._previousIterations}
-            slow = record.iterations > self.dumps.thresholdOr(self.warnOuterIterations) or (
+            slow = record.iterations > self.dumps.thresholdOr(self.warningOuterIterations) or (
                 record.capHit and not record.converged
             )
         self.dumps.afterSolve(
@@ -474,15 +497,17 @@ class ComposedLinearSolver(LinearSolver):
         )
 
     def _dumpedGeometry(self, fields: list) -> dict:
-        """What a replay without the model needs of the fields (``nodeCoordinates`` and ``p1Maps`` of the adapter):
-        the node coordinates of every vector field, and the P1 maps the tree asked for, as ``{name: array}``."""
+        """What a replay without the model needs of the fields (``nodeCoordinates`` and ``midsideCorners`` of the
+        adapter): the node coordinates of every vector field, and the midside corners the tree asked for, as
+        ``{name: array}``."""
         geometry = {}
         for field in fields:
             coordinates = self.coordinatesOf(field.name) if field.dimension > 1 else None
             if coordinates is not None:
                 geometry[field.name + "_coordinates"] = coordinates
-        for name, (isCorner, edgeEndpoints) in {**self._p1MapCache, **self._givenP1Maps}.items():
-            geometry[name + "_isCorner"], geometry[name + "_edgeEndpoints"] = isCorner, edgeEndpoints
+        for name, midsideCorners in {**self._midsideCornersCache, **self._givenMidsideCorners}.items():
+            if midsideCorners is not None:
+                geometry[name + "_isCorner"], geometry[name + "_edgeEndpoints"] = midsideCorners
         return geometry
 
     # ----- the solver script -----
@@ -538,7 +563,7 @@ class ComposedLinearSolver(LinearSolver):
         self._rootBeforeReload = self.root
         self.root = tree
         if self._model is not None:
-            self.root.setModel(self._model, self._dofManager)
+            self.root.setModel(self._model, self._numbering)
         self._reloaded = True
         self._log("warning", "{:}: the tree is replaced; it is set up on this solve:\n{:}".format(header, self.root))
 

@@ -554,10 +554,8 @@ class Generator(GeneratorBase):
         if not (0 < coreFraction < 1 / math.sqrt(2)):
             raise Exception("coreFraction must be in (0, 1/sqrt(2)) so the core block stays inside the cylinder.")
 
-        # split nR (elements along the radius, center to outer surface) between the core block's own
-        # half-width subdivision and the rings, keeping elements in both regions similarly sized: since
-        # the core spans [0, coreFraction*radius] and the rings span [coreFraction*radius, radius], an
-        # even element size along the full radius gives nCoreHalf = round(coreFraction * nR).
+        # split nR between the core block's half-width and the rings with similar element sizes: the
+        # core spans [0, coreFraction*radius], so nCoreHalf = round(coreFraction * nR).
         nCoreHalf = max(1, min(nR - 1, round(coreFraction * nR)))
         nRing = nR - nCoreHalf
         nCore = 2 * nCoreHalf
@@ -584,9 +582,7 @@ class Generator(GeneratorBase):
         outerQuadMask = np.zeros(len(quadsLin), dtype=bool)
         outerQuadMask[-nBoundary:] = True
 
-        # likewise, the last `nBoundary` corner nodes are exactly the outer boundary loop. Determining
-        # the outer nodes this way (rather than by checking coordinates against `radius`) keeps it
-        # correct even if curvedBoundary=False.
+        # likewise, the last `nBoundary` corner nodes are exactly the outer boundary loop.
         isOuterCorner2D = np.zeros(len(nodesLin), dtype=bool)
         isOuterCorner2D[-nBoundary:] = True
 
@@ -611,11 +607,8 @@ class Generator(GeneratorBase):
         if order == 2:
             isOuter2D[quads2D[outerQuadMask, 5]] = True
 
-        # the mesh is exactly symmetric about both local axes (`nCore` is always even), so the two
-        # diametral lines through the center, parallel to the global in-plane axes `iU` and `iV`,
-        # consist of nodes with local v=0 and local u=0, respectively; their intersection is the
-        # single center node. Only needed on the top/bottom (always "full") layers, hence based on
-        # `nodes2D` only.
+        # the mesh is symmetric about both local axes (`nCore` is even): the center lines parallel to
+        # `iU` and `iV` are the nodes with v=0 and u=0; their intersection is the center node.
         isCenterLineU2D = np.isclose(nodes2D[:, 1], 0.0, atol=tol)
         isCenterLineV2D = np.isclose(nodes2D[:, 0], 0.0, atol=tol)
         isCenter2D = isCenterLineU2D & isCenterLineV2D

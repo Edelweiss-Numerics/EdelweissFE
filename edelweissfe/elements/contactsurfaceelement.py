@@ -124,10 +124,8 @@ class ContactFacetElementBase(BaseElement):
         self._referenceCoordinates = np.array([n.coordinates for n in self._nodes])
         self._weightTransform = None
 
-        # Default per-node tributary area shares: an equal split of the facet's own measure.
-        # The surface element generator overrides these for facets triangulating a linear quad
-        # face, where the unique consistent lumping (face area / 4 per corner) differs from the
-        # per-triangle split (see the generator).
+        # Default per-node tributary area shares: an equal split of the facet's measure (the surface
+        # element generator may override these).
         _, measure = facetNormalAndMeasure(self._referenceCoordinates)
         self._nodalAreaShares = np.full(self._nNodes, measure / self._nNodes)
 
@@ -252,7 +250,7 @@ class ContactFacetElementBase(BaseElement):
     ):
         pass
 
-    def computeKernels(self, P: np.ndarray, K: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float):
+    def computeKernels(self, K: np.ndarray, P: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float):
         pass
 
     def computeKernelsExplicit(self, P: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float):

@@ -30,15 +30,72 @@
 Two criteria are available, selected by the solver option ``convergenceCriterion``:
 
 ``legacy`` (default)
-    The original EdelweissFE criterion. A field is converged if
+    EdelweissFE's own criterion. Field by field, it compares the largest flux residual :math:`r_{\\max}` with the
+    spatial average flux :math:`\\bar{q}` of the *current* iteration, computed from the element fluxes only, and the
+    largest correction :math:`c_{\\max}` with an absolute tolerance and with a tolerance relative to
+    :math:`\\Delta u_{\\max}`, the largest increment of the field in the current increment. A field is converged if
 
     .. math::
 
-        r_{\\max} \\leq \\max(R \\, \\bar{q}, 10^{-7}) \\quad \\text{and} \\quad c_{\\max} < C,
+        \\left( r_{\\max} \\leq R_a \\;\\text{or}\\; r_{\\max} \\leq R \\, \\bar{q} \\right)
+        \\quad \\text{and} \\quad
+        \\left( c_{\\max} < C_a \\;\\text{or}\\; c_{\\max} < C \\, \\Delta u_{\\max} \\right),
 
-    with the *absolute* correction tolerance :math:`C` (``fieldCorrectionTolerance``), the residual tolerance
-    :math:`R` (``fluxResidualTolerance``, ``fluxResidualToleranceAlternative`` from iteration 15 on), and the
-    spatial average flux :math:`\\bar{q}` of the *current* iteration, computed from the element fluxes only.
+    with the tolerances of the field:
+
+    * :math:`R`, the flux residual tolerance relative to the spatial average flux (``fluxResidualTolerance``),
+      replaced by ``fluxResidualToleranceAlternative`` from iteration :math:`I` (``iterationsForAlternativeTolerance``)
+      on, where a Newton iteration that converges only slowly may stop at a looser tolerance;
+    * :math:`R_a`, the absolute flux residual tolerance (``absoluteFluxResidualTolerance``): a floor for a field whose
+      flux is so small that a relative tolerance would ask for the round-off of the residual;
+    * :math:`C_a`, the absolute correction tolerance (``fieldCorrectionTolerance``);
+    * :math:`C`, the correction tolerance relative to the largest increment (``relativeFieldCorrectionTolerance``);
+      the default 0 accepts a correction by its absolute size only.
+
+    The tolerances of each field are set with ``*updateConfiguration``, for instance
+
+    .. code-block:: edelweiss
+
+        *updateConfiguration, configuration=absoluteFluxResidualTolerance
+        displacement=1e-10
+
+    and default to :mod:`edelweissfe.config.phenomena`. Three rules, set by solver options, are off by default:
+
+    * Zero flux (``zeroFluxThreshold``, :math:`\\bar{q}_0`): a field whose spatial average flux does not exceed
+      :math:`\\bar{q}_0` carries no flux its residual could be compared with, so its flux residual counts as
+      converged. An example is a nonlocal damage field before the onset of damage.
+    * Zero increment (``zeroIncrementThreshold``, :math:`\\Delta u_0`): a field whose largest increment does not
+      exceed :math:`\\Delta u_0` has not moved, so there is no increment to relate its correction to; its correction
+      counts as converged.
+    * Minimum iterations (``minimumIterations``, :math:`n`): no flux residual counts as converged before iteration
+      :math:`n`, so an increment takes at least :math:`n` Newton iterations. With :math:`n = 0`, a prediction that
+      already satisfies the criterion is accepted as it is. The zero flux rule needs :math:`n \\geq 1`, and refuses
+      a smaller :math:`n`: before the first correction, the elements of a model at rest report no flux at all.
+
+    The scalar variables (e.g., Lagrange multipliers) are checked like a field, with the tolerances of the entry
+    ``scalar variables``. No element flux acts on them, so their flux residual is compared with the tolerances
+    directly, as if their spatial average flux were one, and the zero flux rule does not apply to them: it would
+    accept any residual of theirs for a threshold of one or more.
+
+    Two parameter sets of this criterion are in use: EdelweissFE's defaults, which are those of the original
+    criterion, and the settings of EdelweissMeshfree's solvers (for every field):
+
+    ======================================  ==============================  ==================
+    parameter                               EdelweissFE                     EdelweissMeshfree
+    ======================================  ==============================  ==================
+    ``fluxResidualTolerance``               per field, see phenomena        1e-4
+    ``fluxResidualToleranceAlternative``    per field, see phenomena        1e-3
+    ``iterationsForAlternativeTolerance``   15                              5
+    ``absoluteFluxResidualTolerance``       1e-7, scalar variables 0        1e-14
+    ``fieldCorrectionTolerance``            per field, see phenomena        1e-14
+    ``relativeFieldCorrectionTolerance``    0                               1e-3
+    ``zeroFluxThreshold``                   off                             1e-9
+    ``zeroIncrementThreshold``              off                             1e-13
+    ``minimumIterations``                   0                               1
+    ======================================  ==============================  ==================
+
+    EdelweissMeshfree also counts the residual growths of a diverging iteration differently: its solvers set the
+    solver options ``countFirstResidualAsGrowth`` and ``countGrowthOfConvergedFields`` to False.
 
 ``abaqus``
     The criterion of Abaqus/Standard ("Convergence criteria for nonlinear problems", Abaqus Analysis User's
@@ -57,9 +114,12 @@ Two criteria are available, selected by the solver option ``convergenceCriterion
     flux, :math:`\\tilde{q}` is the time average flux of the previous step or, in the first step, the initial value
     :math:`\\tilde{q}^0` (Abaqus' "initial value of time average force", ``1e-2``).
 
-    A field whose current spatial average flux is below :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is
-    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. A field with
-    :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case).
+    A field with :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case),
+    whether it carries flux or not. Otherwise, a field whose current spatial average flux is below
+    :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is converged if
+    :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`.
+
+    The criterion is formulated for fields; the scalar variables are checked by the ``legacy`` criterion.
 
     Not implemented: the estimate of the next correction from the convergence rate (Abaqus accepts an increment
     if it predicts a small enough correction), and the detection of inactive regions for the spatial average.
@@ -71,7 +131,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
 
 
 @dataclass
@@ -101,6 +162,11 @@ class FieldConvergence:
 
 class ConvergenceCriterionBase(ABC):
     """Base class for the field-wise convergence criteria of the implicit solvers."""
+
+    #: The state this criterion carries from one increment to the next, checkpointed with the solver; see
+    #: :mod:`~edelweissfe.utils.checkpointedstate`. Every criterion declares it, an empty mapping if it carries
+    #: nothing: one whose declaration is still None cannot be checkpointed.
+    checkpointedState: dict | None = None
 
     def startStep(self, previousCriterion: "ConvergenceCriterionBase | None"):
         """Called at the beginning of each step.
@@ -158,8 +224,31 @@ class ConvergenceCriterionBase(ABC):
         """
 
     @abstractmethod
+    def checkScalarVariables(
+        self, R: np.ndarray, ddU: np.ndarray | None, dU: np.ndarray, iterationCounter: int
+    ) -> FieldConvergence:
+        """Check the convergence of the scalar variables (e.g., Lagrange multipliers), together as one column.
+
+        Parameters
+        ----------
+        R
+            The residual of the scalar variables.
+        ddU
+            The current correction of the scalar variables, None if no correction was computed yet in this increment.
+        dU
+            The current increment of the scalar variables.
+        iterationCounter
+            The current iteration number.
+
+        Returns
+        -------
+        FieldConvergence
+            The convergence state of the scalar variables.
+        """
+
+    @abstractmethod
     def computeSpatialAveragedFluxes(
-        self, F: DofVector, FConstraints: DofVector, theDofManager: DofManager
+        self, F: DofVector, FConstraints: DofVector, locations: DofLocations
     ) -> dict[str, float]:
         """Compute the spatial average flux of every field.
 
@@ -169,8 +258,9 @@ class ConvergenceCriterionBase(ABC):
             The accumulated absolute element fluxes.
         FConstraints
             The accumulated absolute constraint fluxes.
-        theDofManager
-            The DofManager.
+        locations
+            The locations of the entities in the discrete system, which know the number of accumulated nodal fluxes of
+            every field, and whose numbering knows the indices of the fields.
 
         Returns
         -------
@@ -180,44 +270,163 @@ class ConvergenceCriterionBase(ABC):
 
 
 class LegacyConvergenceCriterion(ConvergenceCriterionBase):
-    """The original EdelweissFE criterion; see the module documentation.
+    """EdelweissFE's own criterion; see the module documentation.
 
     Parameters
     ----------
     fluxResidualTolerances
-        The relative flux residual tolerances per field.
-    fluxResidualTolerancesAlt
-        The relative flux residual tolerances per field from iteration 15 on.
+        :math:`R` per field: the flux residual tolerances relative to the spatial average flux.
+    fluxResidualTolerancesAlternative
+        The relative flux residual tolerances per field from iteration :math:`I` on.
+    absoluteFluxResidualTolerances
+        :math:`R_a` per field: the absolute flux residual tolerances.
     fieldCorrectionTolerances
-        The absolute correction tolerances per field.
+        :math:`C_a` per field: the absolute correction tolerances.
+    relativeFieldCorrectionTolerances
+        :math:`C` per field: the correction tolerances relative to the largest increment of the field.
+    iterationsForAlternativeTolerance
+        :math:`I`, the iteration from which on the alternative flux residual tolerances apply.
+    zeroFluxThreshold
+        :math:`\\bar{q}_0`, the spatial average flux up to which a field carries no flux; None for no zero flux rule.
+    zeroIncrementThreshold
+        :math:`\\Delta u_0`, the largest increment up to which a field has not moved; None for no zero increment rule.
+    minimumIterations
+        :math:`n`, the iteration before which no flux residual counts as converged.
+
+    Raises
+    ------
+    ValueError
+        If the zero flux rule is on with :math:`n < 1`.
     """
 
-    def __init__(self, fluxResidualTolerances: dict, fluxResidualTolerancesAlt: dict, fieldCorrectionTolerances: dict):
+    #: Nothing: every decision is taken from the current iteration alone.
+    checkpointedState = {}
+
+    def __init__(
+        self,
+        fluxResidualTolerances: dict[str, float],
+        fluxResidualTolerancesAlternative: dict[str, float],
+        absoluteFluxResidualTolerances: dict[str, float],
+        fieldCorrectionTolerances: dict[str, float],
+        relativeFieldCorrectionTolerances: dict[str, float],
+        iterationsForAlternativeTolerance: int,
+        zeroFluxThreshold: float | None,
+        zeroIncrementThreshold: float | None,
+        minimumIterations: int,
+    ):
+        if zeroFluxThreshold is not None and minimumIterations < 1:
+            raise ValueError(
+                "zeroFluxThreshold needs minimumIterations >= 1, got {:}: before the first correction, the elements of a "
+                "model at rest report no flux, and the zero flux rule would accept the prediction".format(
+                    minimumIterations
+                )
+            )
+
         self.fluxResidualTolerances = fluxResidualTolerances
-        self.fluxResidualTolerancesAlt = fluxResidualTolerancesAlt
+        self.fluxResidualTolerancesAlternative = fluxResidualTolerancesAlternative
+        self.absoluteFluxResidualTolerances = absoluteFluxResidualTolerances
         self.fieldCorrectionTolerances = fieldCorrectionTolerances
+        self.relativeFieldCorrectionTolerances = relativeFieldCorrectionTolerances
+        self.iterationsForAlternativeTolerance = iterationsForAlternativeTolerance
+        self.zeroFluxThreshold = zeroFluxThreshold
+        self.zeroIncrementThreshold = zeroIncrementThreshold
+        self.minimumIterations = minimumIterations
 
     def checkField(self, field, R, ddU, dU, spatialAveragedFlux, iterationCounter):
-        fluxResidualTolerances = (
-            self.fluxResidualTolerances if iterationCounter < 15 else self.fluxResidualTolerancesAlt
-        )
-
         indexOfMax = np.argmax(np.abs(R))
         fluxResidual = abs(R[indexOfMax])
         correction = np.linalg.norm(ddU, np.inf) if ddU is not None else 0.0
 
         return FieldConvergence(
             fluxResidual,
-            fluxResidual <= max(fluxResidualTolerances[field] * spatialAveragedFlux, 1e-7),
+            self.fluxResidualConverged(field, fluxResidual, spatialAveragedFlux, iterationCounter),
             correction,
-            correction < self.fieldCorrectionTolerances[field],
+            self.correctionConverged(field, correction, dU),
             indexOfMax,
         )
 
-    def computeSpatialAveragedFluxes(self, F, FConstraints, theDofManager):
+    def checkScalarVariables(self, R, ddU, dU, iterationCounter):
+        # No element flux acts on the scalar variables: their residual is compared with the tolerances directly, and the
+        # zero flux rule does not apply to them (see fluxResidualConverged).
+        return self.checkField("scalar variables", R, ddU, dU, None, iterationCounter)
+
+    def fluxResidualConverged(
+        self, field: str, fluxResidual: float, spatialAveragedFlux: float, iterationCounter: int
+    ) -> bool:
+        """The flux residual part of the criterion.
+
+        Parameters
+        ----------
+        field
+            The name of the field.
+        fluxResidual
+            The largest absolute flux residual :math:`r_{\\max}` of the field.
+        spatialAveragedFlux
+            The spatial average flux :math:`\\bar{q}` of the field; None for the scalar variables, on which no element
+            flux acts: their flux residual is compared with the tolerances directly, as if :math:`\\bar{q}` were one,
+            and the zero flux rule, which tells a field that carries no element flux, does not apply to them.
+        iterationCounter
+            The current iteration number.
+
+        Returns
+        -------
+        bool
+            True if the flux residual is converged.
+        """
+
+        if iterationCounter < self.minimumIterations:
+            return False
+
+        if fluxResidual <= self.absoluteFluxResidualTolerances[field]:
+            return True
+
+        relativeTolerances = (
+            self.fluxResidualTolerances
+            if iterationCounter < self.iterationsForAlternativeTolerance
+            else self.fluxResidualTolerancesAlternative
+        )
+
+        if spatialAveragedFlux is None:
+            return fluxResidual <= relativeTolerances[field]
+
+        # 'not above' rather than 'at most': a field without any element flux (a NaN average) carries no flux either
+        if self.zeroFluxThreshold is not None and not spatialAveragedFlux > self.zeroFluxThreshold:
+            return True
+
+        return fluxResidual <= relativeTolerances[field] * spatialAveragedFlux
+
+    def correctionConverged(self, field: str, correction: float, dU: np.ndarray) -> bool:
+        """The correction part of the criterion.
+
+        Parameters
+        ----------
+        field
+            The name of the field.
+        correction
+            The largest absolute correction :math:`c_{\\max}` of the field.
+        dU
+            The current increment of the field.
+
+        Returns
+        -------
+        bool
+            True if the correction is converged.
+        """
+
+        if correction < self.fieldCorrectionTolerances[field]:
+            return True
+
+        largestIncrement = np.linalg.norm(dU, np.inf)
+
+        if self.zeroIncrementThreshold is not None and not largestIncrement > self.zeroIncrementThreshold:
+            return True
+
+        return correction < self.relativeFieldCorrectionTolerances[field] * largestIncrement
+
+    def computeSpatialAveragedFluxes(self, F, FConstraints, locations):
         return {
-            field: max(1e-10, np.linalg.norm(F[theDofManager.idcsOfFieldsInDofVector[field]], 1) / nDof)
-            for field, nDof in theDofManager.nAccumulatedNodalFluxesFieldwise.items()
+            field: np.linalg.norm(F[locations.numbering.idcsOfFieldsInDofVector[field]], 1) / nDof
+            for field, nDof in locations.nAccumulatedNodalFluxesFieldwise.items()
         }
 
 
@@ -226,6 +435,8 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
 
     Parameters
     ----------
+    scalarVariableCriterion
+        The criterion that checks the scalar variables, which Abaqus' criterion does not cover: the ``legacy`` one.
     residualTolerance
         :math:`R_n`, the flux residual tolerance relative to the time average flux.
     correctionTolerance
@@ -244,8 +455,16 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         :math:`\\tilde{q}^0`, the time average flux of a field that has not carried flux yet, in the first step.
     """
 
+    #: The time average flux of every field, as the converged increments of the step and the previous step left it.
+    checkpointedState = {
+        "_sumOfConvergedSpatialAveragedFluxes": dict,
+        "_nIncrementsWithFlux": dict,
+        "_timeAveragedFluxOfPreviousStep": dict,
+    }
+
     def __init__(
         self,
+        scalarVariableCriterion: ConvergenceCriterionBase,
         residualTolerance: float = 5e-3,
         correctionTolerance: float = 1e-2,
         residualToleranceAlternative: float = 2e-2,
@@ -255,6 +474,7 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         linearResidualTolerance: float = 1e-8,
         initialTimeAveragedFlux: float = 1e-2,
     ):
+        self.scalarVariableCriterion = scalarVariableCriterion
         self.residualTolerance = residualTolerance
         self.correctionTolerance = correctionTolerance
         self.residualToleranceAlternative = residualToleranceAlternative
@@ -329,16 +549,15 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         largestIncrement = np.linalg.norm(dU, np.inf)
         timeAveragedFlux = self.timeAveragedFlux(field, spatialAveragedFlux)
 
-        if not self._carriesFlux(field, spatialAveragedFlux):
-            # A field without flux and without residual (e.g., a nonlocal field before the onset of damage) has
-            # nothing left to iterate on, even if its correction is pure round-off of the size of its increment.
-            correctionConverged = fluxResidual == 0.0 or (
-                ddU is not None and correction <= self.zeroFluxCorrectionTolerance * largestIncrement
-            )
-            return FieldConvergence(fluxResidual, True, correction, correctionConverged, indexOfMax)
-
+        # The linear case comes first, with or without flux: a field whose residual is negligible (e.g., a nonlocal
+        # field before the onset of damage, whose residual is round-off or exactly zero) has nothing left to iterate
+        # on, even if its correction is pure round-off of the size of its increment.
         if fluxResidual <= self.linearResidualTolerance * timeAveragedFlux:
             return FieldConvergence(fluxResidual, True, correction, True, indexOfMax)
+
+        if not self._carriesFlux(field, spatialAveragedFlux):
+            correctionConverged = ddU is not None and correction <= self.zeroFluxCorrectionTolerance * largestIncrement
+            return FieldConvergence(fluxResidual, True, correction, correctionConverged, indexOfMax)
 
         residualTolerance = (
             self.residualTolerance
@@ -354,12 +573,15 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
             indexOfMax,
         )
 
-    def computeSpatialAveragedFluxes(self, F, FConstraints, theDofManager):
+    def checkScalarVariables(self, R, ddU, dU, iterationCounter):
+        return self.scalarVariableCriterion.checkScalarVariables(R, ddU, dU, iterationCounter)
+
+    def computeSpatialAveragedFluxes(self, F, FConstraints, locations):
         return {
             field: (
-                np.linalg.norm(F[theDofManager.idcsOfFieldsInDofVector[field]], 1)
-                + np.linalg.norm(FConstraints[theDofManager.idcsOfFieldsInDofVector[field]], 1)
+                np.linalg.norm(F[locations.numbering.idcsOfFieldsInDofVector[field]], 1)
+                + np.linalg.norm(FConstraints[locations.numbering.idcsOfFieldsInDofVector[field]], 1)
             )
             / nDof
-            for field, nDof in theDofManager.nAccumulatedNodalFluxesFieldwise.items()
+            for field, nDof in locations.nAccumulatedNodalFluxesFieldwise.items()
         }

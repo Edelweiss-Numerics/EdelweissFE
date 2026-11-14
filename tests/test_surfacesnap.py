@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """End-to-end test of the surfaceSnap model modifier (see the ``surfaceSnap`` section of
-doc/source/documentation/modelmodifiers.rst) against a real (small) FEModel, driven through the
+doc/source/analysis/modelmodifiers.rst) against a real (small) FEModel, driven through the
 actual ``*modelModifier`` .inp pipeline together with hAdaptivity -- not just the geometry math in
 isolation.
 
@@ -236,9 +236,6 @@ def _buildModel(tmp_path: Path, midsideNodes: str, maxLevel: int = 1, nSectors: 
     model.prepareYourself(journal)
     model.advanceToTime(0.0)
 
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
     return model, wallLabels
@@ -464,9 +461,6 @@ maxInc=1.0, minInc=1.0, maxNumInc=1, maxIter=25, stepLength=1
     model = fillFEModelFromInputFile(model, inputfile, journal)
     model.prepareYourself(journal)
     model.advanceToTime(0.0)
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
     return model, wallLabels
 

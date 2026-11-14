@@ -72,10 +72,8 @@ class AnalyticalField(AnalyticalFieldBase):
         configuration
             The options this analytical field accepts; defaults to all-defaults.
         """
-        # gstools is imported lazily: its Cython extension does not declare
-        # free-threading support, so importing it re-enables the GIL process-wide
-        # and would disable thread-parallel computations for ALL simulations,
-        # even those not using random fields.
+        # gstools is imported lazily: importing it re-enables the GIL process-wide, as its Cython
+        # extension does not declare free-threading support.
         try:
             import gstools
         except ModuleNotFoundError as e:

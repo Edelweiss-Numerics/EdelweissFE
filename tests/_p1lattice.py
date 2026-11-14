@@ -26,8 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """A small Hex20-like lattice and its Dirichlet-eliminated, equilibrated 3D vector operator, shared by the
-p-two-grid tests: corner nodes on a cubic grid, one exclusive midside node on every grid edge, in a shuffled
-node order, a vector-Laplacian-like 3x3-coupled operator with a mild non-symmetric part, fully clamped nodes on
+corner-node two-level cycle tests: corner nodes on a cubic grid, one exclusive midside node on every grid edge, in a
+shuffled node order, a vector-Laplacian-like 3x3-coupled operator with a mild non-symmetric part, fully clamped nodes on
 one face and a single constrained component on another (partially constrained nodes)."""
 
 import numpy as np
@@ -89,12 +89,24 @@ def dirichletDofs(coords):
     return np.sort(np.r_[(3 * clamped[:, None] + np.arange(3)).ravel(), 3 * sliding + 2])
 
 
-def fineChebyshevTree(npre: int = 1, npost: int = 1, degree: int = 5, powerIters: int = 300) -> dict:
-    """The AMGCL tree of a p-two-grid's fine smoother: ``npre`` and ``npost`` Chebyshev sweeps of ``degree`` on
-    [0.01, 1.1] times the spectral radius, estimated by ``powerIters`` power iterations. The defaults are the smoother
-    the p-two-grid's recorded numbers were made with (BlockAMGSolver's p-two-grid defaults)."""
-    return {
-        "relax": {"type": "chebyshev", "degree": degree, "lower": 0.01, "higher": 1.1, "power_iters": powerIters},
-        "npre": npre,
-        "npost": npost,
-    }
+def fineChebyshevTree(npre: int = 1, npost: int = 1, degree: int = 5, spectralRadiusSteps: int = None) -> dict:
+    """The AMGCL tree of a corner-node two-level cycle's fine smoother: ``npre`` and ``npost`` Chebyshev sweeps of
+    ``degree`` on [0.01, 1.1] times the spectral radius, estimated by ``spectralRadiusSteps`` Arnoldi steps, or by the
+    default estimate (10 steps) for ``None``."""
+    relax = {"type": "chebyshev", "degree": degree, "lower": 0.01, "higher": 1.1}
+    if spectralRadiusSteps is not None:
+        relax["spectralRadiusSteps"] = spectralRadiusSteps
+    return {"relax": relax, "npre": npre, "npost": npost}
+
+
+def orphanSystem():
+    """The lattice with a midside dof that is free while both corners of its edge are constrained in that component
+    (issue #223: a symmetry plane and a tie): on the y = 0 face the z component is constrained, but at one midside node
+    of an edge in that face it is not."""
+    coords, isCorner, edgeEndpoints = lattice(5)
+    dofs = dirichletDofs(coords)
+    onFace = (coords[:, 1] == 0.0) & (coords[:, 0] > 0.0)
+    orphan = np.nonzero(~isCorner & onFace & onFace[edgeEndpoints[:, 0]] & onFace[edgeEndpoints[:, 1]])[0][0]
+    dofs = dofs[dofs != 3 * orphan + 2]
+    As, scaling = latticeSystem(coords, dofs)
+    return As, scaling, coords, isCorner, edgeEndpoints, orphan

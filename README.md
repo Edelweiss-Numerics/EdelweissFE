@@ -1,5 +1,5 @@
-[![documentation](https://github.com/EdelweissFE/EdelweissFE/actions/workflows/sphinx.yml/badge.svg)](https://edelweiss-numerics.github.io/EdelweissFE)
-[![codecov](https://codecov.io/gh/EdelweissFE/EdelweissFE/graph/badge.svg)](https://codecov.io/gh/EdelweissFE/EdelweissFE)
+[![documentation](https://github.com/Edelweiss-Numerics/EdelweissFE/actions/workflows/sphinx.yml/badge.svg)](https://edelweiss-numerics.github.io/EdelweissFE)
+[![codecov](https://codecov.io/gh/Edelweiss-Numerics/EdelweissFE/graph/badge.svg)](https://codecov.io/gh/Edelweiss-Numerics/EdelweissFE)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![DOI](https://zenodo.org/badge/1095513352.svg)](https://doi.org/10.5281/zenodo.17603044)
 
@@ -61,7 +61,7 @@ An *environment* is a separate folder that contains everything EdelweissFE needs
 tested with, without touching anything else on your computer. Create it with:
 
 ```console
-conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.10.04
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.11.09
 ```
 
 Always use this separate environment for EdelweissFE. If it ever breaks, delete it
@@ -71,7 +71,7 @@ Always use this separate environment for EdelweissFE. If it ever breaks, delete 
 
 ```console
 conda activate edelweissfe
-git clone --branch next_v26.11 https://github.com/Edelweiss-Numerics/EdelweissFE.git
+git clone https://github.com/Edelweiss-Numerics/EdelweissFE.git
 cd EdelweissFE
 pip install -e .
 ```
@@ -109,7 +109,7 @@ EdelweissFE (on Windows, see the [installation documentation](doc/source/install
 
 ```console
 conda activate edelweissfe
-git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
+git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
 cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 cmake --build ../Marmot/build -j && cmake --install ../Marmot/build
 pip install -e .

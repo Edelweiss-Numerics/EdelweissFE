@@ -11,7 +11,6 @@ extensions = [
     "edelweissfe.materials.marmot.marmothypoelastic",
     "edelweissfe.materials.marmot.marmotgradientenhancedhypoelastic",
     "edelweissfe.utils.elementresultcollector",
-    "edelweissfe.numerics.csrgenerator",
     "edelweissfe.numerics.csrgeneratorv2",
     "edelweissfe.solvers.base.dirichlet",
     "edelweissfe.linsolve.amgcl.amgcl",

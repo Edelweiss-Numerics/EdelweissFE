@@ -34,7 +34,7 @@ dependencies:
   - make
   - libboost-devel
   - amgcl
-  # Build dependencies of Marmot.
+  # Build dependencies of Marmot; Eigen is also one of the AMGCL extension (amgcl-spectral-radius.hpp).
   - eigen
   - autodiff=1.1.2
   - fastor
@@ -44,6 +44,7 @@ dependencies:
   - sphinx
   - sphinx_rtd_theme>=3.1.0
   - numpydoc
+  - sphinxcontrib-bibtex
   - docutils
   # Intel MKL enables the PARDISO solver (Linux, Windows); it does not exist for macOS, where PARDISO is not built.
   - mkl  # [linux64]

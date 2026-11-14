@@ -327,9 +327,7 @@ class Plotter:
         fig, ax = self.figsWithAxes[figureID]
         fig.set_size_inches(self._fancyFigSize(scale, width, heightRatio))
         fig.tight_layout(pad=0.15)
-        # Saving a .pgf figure invokes pdflatex to compute text metrics, regardless of
-        # text.usetex (which only controls whether LaTeX renders the text *content*) -- so this
-        # must be gated the same way, not attempted unconditionally.
+        # Saving .pgf invokes pdflatex for text metrics even without text.usetex, so gate it on LaTeX too.
         if self._latexAvailable:
             fig.savefig("{}.pgf".format(fileName))
         fig.savefig("{}.pdf".format(fileName))

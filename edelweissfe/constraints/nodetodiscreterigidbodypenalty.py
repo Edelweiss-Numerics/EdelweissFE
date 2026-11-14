@@ -37,8 +37,7 @@ from edelweissfe.constraints.base.penaltylaw import (
 )
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
-    fillRigidBodyContactIndices,
-    rigidBodyContactContributionSize,
+    rigidBodyContactLocalEntries,
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
@@ -63,7 +62,7 @@ surface of a :class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBod
 This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if an AMR refinement
 (e.g. :mod:`~edelweissfe.modelmodifiers.adaptivity.hadaptivity`) adds nodes to the watched slave
 ``nSet`` (a boundary reaching into a refined region), the new nodes are picked up and protected from
-penetrating the rigid body at the constraint's own next :meth:`updateConnectivity` tick -- no
+penetrating the rigid body when the topology update refreshes the mesh dependents -- no
 separate wiring needed. There is no per-slave history to preserve across the rebuild (unlike the
 deformable-surface/tie facet constraints): every quantity is recomputed fresh from the current
 geometry every Newton iteration.
@@ -136,7 +135,7 @@ class Constraint(ConstraintBase, MeshDependent):
     where :math:`J_r` is the right Jacobian of the SO(3) exponential map (see
     :func:`~edelweissfe.utils.rotations.rightJacobianSO3`), and ``dPhysicalSpin_dTheta`` maps a perturbation of the *stored*
     rotation pseudo-vector DOF onto the physical (spatial) infinitesimal rotation it actually
-    produces (see :meth:`Constraint.applyConstraint`). The plain physical moment
+    produces (see :meth:`Constraint.computeKernels`). The plain physical moment
     :math:`\\mathbf{r}_s \\times \\mathbf{n}_s` is only the exact gap gradient w.r.t. the RP
     rotation DOF when the RP has zero *total accumulated* rotation (where
     ``dPhysicalSpin_dTheta = I``); in general the ``dPhysicalSpin_dTheta``:math:`^T` factor is
@@ -151,11 +150,13 @@ class Constraint(ConstraintBase, MeshDependent):
     finite differences of the underlying closed-form gap function).
 
     The penalty normal force is :math:`f_n = k \\, g_s` (``type=linear``, constant tangent :math:`k`)
-    or :math:`f_n = \\tfrac{1}{2} k \\, g_s^2` (``type=quadratic``, tangent :math:`k \\, g_s`), and is
-    assembled -- exactly like :mod:`~edelweissfe.constraints.nodetorigidsurfacepenalty` -- as
+    or :math:`f_n = \\tfrac{1}{2} k \\, g_s^2` (``type=quadratic``, tangent :math:`k \\, g_s`). The contact
+    force on the nodes is :math:`-f_n \\, \\mathbf{w}_s`, so -- exactly like
+    :mod:`~edelweissfe.constraints.nodetorigidsurfacepenalty` -- the residual contribution and its
+    tangent are
 
     .. math::
-        P_{ext} \\mathrel{-{=}} f_n \\, \\mathbf{w}_s \\, , \\qquad
+        P \\mathrel{+{=}} f_n \\, \\mathbf{w}_s \\, , \\qquad
         K \\mathrel{+{=}} k \\, (\\mathbf{w}_s \\otimes \\mathbf{w}_s)
 
     Both :math:`\\mathbf{n}_s` and :math:`\\mathbf{r}_s` are recomputed from the current, total
@@ -166,7 +167,7 @@ class Constraint(ConstraintBase, MeshDependent):
     linearization of :math:`\\mathbf{w}_s` with respect to all of
     :math:`(\\mathbf{u}_s, \\mathbf{u}_{RP}, \\boldsymbol{\\theta}_{RP})`, valid for any accumulated
     rotation, not just a small-angle approximation (verified against finite differences); see the
-    inline comments in :meth:`Constraint.applyConstraint`. Because :math:`\\mathbf{w}_s` is now
+    inline comments in :meth:`Constraint.computeKernels`. Because :math:`\\mathbf{w}_s` is now
     exactly the gap gradient (no residual approximation left), this tangent is the true, symmetric
     Hessian of the gap function restricted to the implemented blocks. Not included: the
     :math:`\\boldsymbol{\\theta}_{RP}\\boldsymbol{\\theta}_{RP}` self-block -- symmetric on its own
@@ -263,7 +264,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._referenceCoords = np.array([n.coordinates for n in self.slaveNodes])
 
         self._nodes = self.slaveNodes + [self.rpNode]
-        self._fieldsOnNodes = [["displacement"]] * self.nSlaves + [["displacement", "rotation"]]
+        self._fields = [["displacement"]] * self.nSlaves + [["displacement", "rotation"]]
         self._nDof = self.nSlaves * self.nDim + self.rprpDof
 
         # Local DOF index blocks, in the order [slave_0, slave_1, ..., RP displacement, RP rotation].
@@ -283,44 +284,31 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildFromSlaveNodes()
         return True
 
-    def updateConnectivity(self, model: FEModel) -> bool:
-        # refreshed by TopologyPipeline.refreshMeshDependents; nothing extra to do at this tick
-        return False
-
     @property
     def nodes(self) -> list:
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
         return self._nDof
 
-    def getVIJContributionSize(self) -> int:
-        """No coupling between different slave nodes: one shared RP self-block, plus per-slave
-        self-block and slave-RP coupling blocks."""
-        return rigidBodyContactContributionSize(self.rprpDof, [self.nDim] * self.nSlaves)
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """No coupling between different slave nodes: one shared RP self-block, plus per-slave self-block and
+        slave-RP coupling blocks (see :func:`rigidBodyContactLocalEntries`)."""
+        return rigidBodyContactLocalEntries(self._indicesOfRPInLocal, self._indicesOfSlaveInLocal)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyContactStiffnessView:
-        return RigidBodyContactStiffnessView(flat_view, self.rprpDof, [self.nDim] * self.nSlaves)
+    def shapeBlock(self, values: np.ndarray) -> RigidBodyContactStiffnessView:
+        return RigidBodyContactStiffnessView(values, self.rprpDof, [self.nDim] * self.nSlaves)
 
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        fillRigidBodyContactIndices(
-            idcs[self._indicesOfRPInLocal],
-            [idcs[slaveIndices] for slaveIndices in self._indicesOfSlaveInLocal],
-            I_,
-            J_,
-            offset,
-        )
-
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: RigidBodyContactStiffnessView,
         timeStep: TimeStep,
     ):
@@ -329,18 +317,12 @@ class Constraint(ConstraintBase, MeshDependent):
         uSlaves = np.array([U_np[idcs] for idcs in self._indicesOfSlaveInLocal])
         coords = self._referenceCoords + uSlaves
 
-        # The rigid body's own querySurface() would otherwise fall back to
-        # getCurrentKinematics(), which reads the RP's pose from NodeFields --
-        # only refreshed once per *converged* increment. Mid-Newton-iteration,
-        # that pose would be one increment stale relative to U_np (used above for
-        # the slave coordinates), decoupling the RP DOFs from the contact residual.
-        # Compute the current RP kinematics directly from this constraint's own
-        # local U_np slice instead, so slave and RP kinematics are always consistent.
+        # RP kinematics from this iterate's U_np, not from the NodeFields (updated only per converged
+        # increment), so slave and RP kinematics stay consistent within the Newton loop.
         u_rp = U_np[self._indicesOfRPDispInLocal]
         theta_rp = U_np[self._indicesOfRPRotInLocal]
-        # dPhysicalSpin_dTheta maps a perturbation of the *stored* pseudo-vector DOF theta_rp onto the
-        # physical (spatial) infinitesimal rotation it actually produces -- the identity only at
-        # theta_rp = 0; see DiscreteRigidBody.poseFromDofs and the class docstring.
+        # dPhysicalSpin_dTheta maps a perturbation of the stored pseudo-vector theta_rp onto the physical
+        # infinitesimal rotation; see DiscreteRigidBody.poseFromDofs.
         rpCurrent, R, dPhysicalSpin_dTheta = self.rigidBody.poseFromDofs(u_rp, theta_rp)
         kinematics = (u_rp, R, self.rpNode.coordinates)
 
@@ -361,27 +343,24 @@ class Constraint(ConstraintBase, MeshDependent):
             f_n = -normalForce
 
             w_p = -n_s
-            # dPhysicalSpin_dTheta^T maps the physical moment r_s x n_s onto the generalized force
-            # conjugate to the *stored* rotation pseudo-vector DOF -- exact for any accumulated RP
-            # rotation, not just theta_rp=0 (where dPhysicalSpin_dTheta=I and this reduces to the naive
-            # r_s x n_s). See class docstring.
+            # dPhysicalSpin_dTheta^T maps the moment r_s x n_s onto the force conjugate to the stored
+            # rotation DOF; see class docstring.
             w_rp = np.concatenate((n_s, dPhysicalSpin_dTheta.T @ np.cross(r_s, n_s)))
 
             pIdcs = self._indicesOfSlaveInLocal[s]
             rpIdcs = self._indicesOfRPInLocal
 
-            PExt[pIdcs] -= f_n * w_p
-            PExt[rpIdcs] -= f_n * w_rp
+            # the contact force on the slave and on the rigid body is -f_n * w; P is its negative
+            P[pIdcs] += f_n * w_p
+            P[rpIdcs] += f_n * w_rp
 
             K.K_ss[s] += stiffness * np.outer(w_p, w_p)
             K.K_srp[s] += stiffness * np.outer(w_p, w_rp)
             K.K_rps[s] += stiffness * np.outer(w_rp, w_p)
             K.K_rprp += stiffness * np.outer(w_rp, w_rp)
 
-            # Geometric stiffness from the rigid rotation of the (locally flat) facet normal, and from
-            # dPhysicalSpin_dTheta(theta_rp) itself, with the RP rotation. Each block below is named
-            # after the derivative it is (see the class docstring for the theta_rp-theta_rp self-block,
-            # which is not included here):
+            # Geometric stiffness from the rigid rotation of the facet normal with the RP (the
+            # theta_rp-theta_rp self-block is not included; see class docstring):
             #   dn_dTheta    = d(n_s)/d(theta_rp)     = -skew(n_s) @ dPhysicalSpin_dTheta
             #   dMoment_dUs  = d(r_s x n_s)/d(u_s)     = -skew(n_s)
             #   dMoment_dUrp = d(r_s x n_s)/d(u_rp)    = skew(n_s)

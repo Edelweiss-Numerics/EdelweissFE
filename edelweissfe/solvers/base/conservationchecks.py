@@ -53,23 +53,19 @@ them to the functions here.
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.dofnumbering import DofNumbering
 
 #: Default tolerance on the relative change, across one topology change, of a field's total
-#: coefficient. Conservation is a geometric identity, but the assembly is Gauss quadrature, exact
-#: only to a polynomial order, and a distorted hexa20's Jacobian is not polynomial. Measured on the
-#: anchor pry-out, one live refinement moves the total mass by 4.63e-08 relative; a real refinement
-#: or assembly error would be O(1).
+#: coefficient. Conservation is a geometric identity, but Gauss quadrature on distorted elements is
+#: not exact; a real refinement or assembly error would be O(1).
 CONSERVATION_TOLERANCE = 1e-6
 
-#: Tolerance on the accumulated drift of any one total over a whole step: a single change being
-#: within tolerance does not bound a run with hundreds of refinements. At the measured 4.63e-08 per
-#: change this permits over two thousand of them.
+#: Tolerance on the accumulated drift of any one total over a whole step of many topology changes.
 CUMULATIVE_DRIFT_TOLERANCE = 1e-4
 
 
 def linearMomentum(
-    massTimesVelocity: np.ndarray, dofManager: DofManager, fieldNames: list[str], model: FEModel
+    massTimesVelocity: np.ndarray, numbering: DofNumbering, fieldNames: list[str], model: FEModel
 ) -> np.ndarray:
     """The linear momentum of the given fields, per spatial component.
 
@@ -84,9 +80,9 @@ def linearMomentum(
     ----------
     massTimesVelocity
         The mass applied to the velocity -- :math:`m \\odot v` for a lumped mass, :math:`M v` for a
-        consistent one -- as a vector over the dof manager's degrees of freedom.
-    dofManager
-        The manager that vector is indexed by.
+        consistent one -- as a vector over the degrees of freedom of the numbering.
+    numbering
+        The numbering that vector is indexed by.
     fieldNames
         The fields whose inertia is a mass; any other has no linear momentum.
     model
@@ -105,11 +101,10 @@ def linearMomentum(
 
     total = None
     for fieldName in fieldNames:
-        indices = dofManager.idcsOfFieldsInDofVector[fieldName]
+        indices = numbering.idcsOfFieldsInDofVector[fieldName]
         dimension = model.nodeFields[fieldName].dimension
         contribution = np.asarray(massTimesVelocity[indices]).reshape((-1, dimension)).sum(axis=0)
-        # numpy would broadcast a shape (1,) contribution onto every component of a shape (3,)
-        # total instead of refusing to add them
+        # numpy would silently broadcast a (1,) contribution onto a (3,) total
         if total is not None and contribution.shape != total.shape:
             raise ValueError(
                 "Field {:} has dimension {:} against {:} for the fields before it, so their momenta "
@@ -171,8 +166,7 @@ class ConservationCheck:
         The owning solver's identification, for the journal.
     """
 
-    #: The drift accumulated over the step, and which totals were warned about: carried from one
-    #: increment to the next, so a resumed step continues them.
+    #: The drift accumulated over the step, and which totals were warned about.
     checkpointedState = {"_cumulativeDrift": dict, "_warned": set}
 
     def __init__(self, journal, identification: str):

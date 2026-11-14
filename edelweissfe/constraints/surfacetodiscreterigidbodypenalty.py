@@ -44,8 +44,7 @@ from edelweissfe.constraints.base.penaltylaw import (
 )
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
-    fillRigidBodyContactIndices,
-    rigidBodyContactContributionSize,
+    rigidBodyContactLocalEntries,
 )
 from edelweissfe.constraints.base.surfacecontactpenaltyschema import (
     SurfaceContactPenaltySchema,
@@ -161,10 +160,12 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     ------------------
     With the normal force :math:`f_n` and :math:`\\mathrm{d}f_n/\\mathrm{d}g` from
     :func:`~edelweissfe.constraints.base.penaltylaw.normalPenaltyForce`, evaluated for
-    :math:`p\\,J_q`, each closed point contributes
+    :math:`p\\,J_q`, each closed point exerts the force
+    :math:`-f_n \\, \\partial g_q / \\partial \\boldsymbol{q}` on the nodes, so it adds the residual
+    contribution and its tangent
 
     .. math::
-        P_{ext} \\mathrel{-{=}} f_n \\, \\frac{\\partial g_q}{\\partial \\boldsymbol{q}} , \\qquad
+        P \\mathrel{+{=}} f_n \\, \\frac{\\partial g_q}{\\partial \\boldsymbol{q}} , \\qquad
         K \\mathrel{+{=}} \\frac{\\mathrm{d}f_n}{\\mathrm{d}g} \\,
         \\frac{\\partial g_q}{\\partial \\boldsymbol{q}} \\otimes \\frac{\\partial g_q}{\\partial \\boldsymbol{q}}
         + f_n \\, \\frac{\\partial^2 g_q}{\\partial \\boldsymbol{q}^2} .
@@ -173,7 +174,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     ------------------
     The constraint acts on the parent-face nodes of every slave facet (displacement), followed by the
     RP (displacement and rotation). This footprint does not depend on the contact search, so a search
-    never changes the equation system. The stiffness is one block per slave facet plus the shared RP
+    never changes the discrete system. The stiffness is one block per slave facet plus the shared RP
     block, see :mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`. A fixed rigid body is
     simply one whose RP carries Dirichlet conditions; the RP reaction is then the support force.
 
@@ -198,6 +199,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = SurfaceToDiscreteRigidBodyPenaltySchema
+
+    #: The contact searches for the closest triangles as the bodies move, though the nodes it couples stay.
+    connectivityChangesWithMotion = True
 
     #: Journal sender tag.
     identification = "RigidSurfaceContact"
@@ -240,8 +244,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.nQuadraturePoints = configuration.nQuadraturePoints
         self.searchDistance = configuration.searchDistance
 
-        # Validates the rigid surface (closed, triangles only, no zero-area triangles) right away,
-        # rather than at the first contact search.
+        # Validates the rigid surface (closed, triangles only, no zero-area triangles).
         self._rigidTriangles, self._rigidTriangleNormals = rigidBody.referenceTriangles()
 
         self._buildFromSlaveSurface(slaveSurface)
@@ -290,7 +293,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         # Degrees of freedom: all parent-face nodes of each slave facet, facet by facet, then the RP.
         nFacets = len(self.slave.facets)
         self._nodes = [node for nodes in self.slave.parentNodes for node in nodes] + [self.rpNode]
-        self._fieldsOnNodes = [["displacement"]] * (len(self._nodes) - 1) + [["displacement", "rotation"]]
+        self._fields = [["displacement"]] * (len(self._nodes) - 1) + [["displacement", "rotation"]]
         self.nSlaveDof = nFacets * self.nParentNodes * self.nDim
         self._nDof = self.nSlaveDof + self.rpDofCount
         self._slaveBlockSizes = [self.nParentNodes * self.nDim] * nFacets
@@ -318,8 +321,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
@@ -364,17 +367,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         candidatesPerPoint = closestFacetCandidates(bodyFramePoints, list(self._rigidTriangles), self.searchDistance)
 
-        # Beyond an edge or a vertex, several triangles share the same (clamped) closest point. Of
-        # those, the one whose plane the point lies farthest in front of measures the gap correctly;
-        # any other would support the point by its infinite plane where the body is not. STL
-        # coordinates are single precision, hence the tolerance for "the same distance".
+        # Beyond an edge or a vertex, several triangles share the same closest point; the one whose plane
+        # the point lies farthest in front of measures the gap correctly. Tolerance: STL is single precision.
         allVertices = self._rigidTriangles.reshape(-1, 3)
         equalDistanceTolerance = 1e-6 * np.linalg.norm(allVertices.max(axis=0) - allVertices.min(axis=0))
 
-        # All (point, candidate) pairs are evaluated at once; only the selection below, which depends
-        # on the best candidate so far, is a scan -- over the candidate ranks, for all points at once.
-        # Every quantity is formed as in a pair-by-pair evaluation, and the scan visits each point's
-        # candidates in their order, so the choice is bit-identical to a pair-by-pair scan.
+        # All (point, candidate) pairs are evaluated at once; the selection below scans the candidate ranks,
+        # for all points at once, in each point's candidate order.
         pointIndices, triangleIndices = candidatePairs(candidatesPerPoint)
         pairPoints = bodyFramePoints[pointIndices]
         pairTriangles = self._rigidTriangles[triangleIndices]
@@ -453,30 +452,28 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._searchClosestRigidTriangles(model)
         return True
 
-    def getVIJContributionSize(self) -> int:
-        return rigidBodyContactContributionSize(self.rpDofCount, self._slaveBlockSizes)
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        slaveBlockLocalIndices = [np.arange(first, first + m) for first, m in self._slaveBlockOffsets()]
+        return rigidBodyContactLocalEntries(np.arange(self.nSlaveDof, self.nDof), slaveBlockLocalIndices)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyContactStiffnessView:
-        return RigidBodyContactStiffnessView(flat_view, self.rpDofCount, self._slaveBlockSizes)
-
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        slaveBlockGlobalIndices = [idcs[first : first + m] for first, m in self._slaveBlockOffsets()]
-        fillRigidBodyContactIndices(idcs[self.nSlaveDof :], slaveBlockGlobalIndices, I_, J_, offset)
+    def shapeBlock(self, values: np.ndarray) -> RigidBodyContactStiffnessView:
+        return RigidBodyContactStiffnessView(values, self.rpDofCount, self._slaveBlockSizes)
 
     def _slaveBlockOffsets(self) -> list[tuple[int, int]]:
         """The first local index and the size of each slave facet's block."""
         m = self.nParentNodes * self.nDim
         return [(f * m, m) for f in range(len(self.slave.facets))]
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: RigidBodyContactStiffnessView | None,
         timeStep: TimeStep,
     ):
-        """Evaluate the contact forces, and the tangent unless ``K`` is None (explicit runs)."""
+        """Add the residual contribution of the contact, the negative of its forces on the slave nodes and on
+        the rigid body, and the tangent unless ``K`` is None (explicit runs)."""
 
         self.totalNormalForce = 0.0
         self._normalForceCurrent[:] = 0.0
@@ -513,15 +510,16 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._normalForceCurrent[closed] = normalForces
         self.totalNormalForce = float(normalForces.sum())
 
-        # Slave nodes: PExt -= f_n N_a n, summed over the quadrature points of each facet.
+        # The force on the slave nodes is -f_n N_a n, summed over the quadrature points of each facet.
         slaveForces = -self._normalForceCurrent[:, None, None] * self._shapeFunctions[:, :, None] * normals[:, None, :]
-        PExt[: self.nSlaveDof] += slaveForces.reshape((nFacets, nQuadraturePoints, -1)).sum(axis=1).ravel()
+        P[: self.nSlaveDof] -= slaveForces.reshape((nFacets, nQuadraturePoints, -1)).sum(axis=1).ravel()
 
-        # RP: PExt -= f_n dg/du_RP = f_n n, and PExt -= f_n dg/dtheta = f_n S^T (r x n).
+        # The force on the RP is -f_n dg/du_RP = f_n n, and the force conjugate to its rotation DOF is
+        # -f_n dg/dtheta = f_n S^T (r x n).
         forceOnRigidBody = normalForces @ normals[closed]
         momentOnRigidBody = normalForces @ np.cross(leverArms[closed], normals[closed])
-        PExt[self.nSlaveDof : self.nSlaveDof + nDim] += forceOnRigidBody
-        PExt[self.nSlaveDof + nDim :] += dPhysicalSpin_dTheta.T @ momentOnRigidBody
+        P[self.nSlaveDof : self.nSlaveDof + nDim] -= forceOnRigidBody
+        P[self.nSlaveDof + nDim :] -= dPhysicalSpin_dTheta.T @ momentOnRigidBody
 
         if K is not None:
             self._addTangent(

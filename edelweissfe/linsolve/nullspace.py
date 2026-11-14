@@ -29,16 +29,16 @@ Solver-independent: both functions are pure geometry/linear algebra over a
 :class:`~edelweissfe.linsolve.base.FieldBlock`, its diagonal-equilibration scaling, and (for the
 richer basis) its node coordinates -- no solver-instance state. Any algebraic-multigrid-style
 preconditioner needing an elasticity near-null-space can use them; today
-:class:`~edelweissfe.linsolve.composition.amg.AMG` and the p-two-grid cycle do, to
+:class:`~edelweissfe.linsolve.composition.amg.AMG` and the corner-node two-level cycle do, to
 seed AMGCL's smoothed-aggregation coarsening. A block backend takes :func:`translationNullspace` alone
-(``blockTranslationNullspace``): its node-major layout gives every node a diagonal block of weights. Which fields
-have rotations among their modes is :func:`carriesRigidBodyModes`.
+(``AMG(nearNullspace=...)``, translations on a block backend): its node-major layout gives every node a diagonal block
+of weights. Which fields have rotations among their modes is :func:`carriesRigidBodyModes`.
 
 :func:`rigidBodyNullspace` (translations *and* rotations) is preferred whenever node coordinates are
 available: measured fewer isolated per-field outer iterations than :func:`translationNullspace`
 alone on real captured production systems, and unlike translations alone, robust to both thread
-count and the Chebyshev ``power_iters`` setting. It costs one extra pass over the field's diagonal
-scaling vector plus a handful of elementwise operations on the node coordinates -- O(nNodes),
+count and the accuracy of the Chebyshev smoother's spectral radius estimate. It costs one extra pass over the field's
+diagonal scaling vector plus a handful of elementwise operations on the node coordinates -- O(nNodes),
 negligible against the AMG hierarchy build it feeds.
 """
 

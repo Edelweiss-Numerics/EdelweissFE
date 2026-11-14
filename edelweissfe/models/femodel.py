@@ -29,6 +29,7 @@
 
 # @author: Matthias Neuner
 
+import itertools
 import textwrap
 from operator import attrgetter
 
@@ -38,15 +39,22 @@ import numpy as np
 from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.change import Change
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.modelchange import TopologyRecord
 from edelweissfe.models.topologypipeline import TopologyPipeline
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.numerics.parallelizationutilities import (
-    chunked_iterable,
     getNumberOfWorkerThreads,
-    getThreadPool,
+    mapChunksInParallel,
 )
 from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
-from edelweissfe.utils.exceptions import RestartError, TopologyError
+from edelweissfe.utils.exceptions import (
+    MeshChangedSinceCheckpoint,
+    RestartError,
+    TopologyError,
+)
 from edelweissfe.variables.fieldvariable import FieldVariable
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
@@ -184,8 +192,8 @@ class FEModel:
         constraints.
         """
 
-        for constraint in self.constraints.values():
-            for node, nodeFields in zip(constraint.nodes, constraint.fieldsOnNodes):
+        for constraint in itertools.chain(self.constraints.values(), self.multiPointConstraints.values()):
+            for node, nodeFields in zip(constraint.nodes, constraint.fields):
                 for field in nodeFields:
                     if field not in node.fields:
                         node.fields[field] = FieldVariable(node, field)
@@ -256,7 +264,7 @@ class FEModel:
         if name in self.scalarVariables:
             raise Exception("ScalarVariable with name {:} already exists!".format(name))
 
-        self.scalarVariables[name] = ScalarVariable()
+        self.scalarVariables[name] = ScalarVariable(name)
         return self.scalarVariables[name]
 
     def _createAndAssignScalarVariableForConstraints(self, journal: Journal):
@@ -354,10 +362,8 @@ class FEModel:
                     self.nodeFields[field] = newNodeField
 
         journal.message("Assembling ScalarVariables", self.identification)
-        # rebuilding scalarVariables cold-starts every value (ScalarVariable() defaults to 0.0), which
-        # would silently discard converged Lagrange-multiplier values on every AMR refinement, even
-        # though node fields are warm-started. Snapshot by name and restore the overlapping subset so
-        # unchanged constraints keep their converged multiplier and only genuinely new ones cold-start.
+        # Rebuilding cold-starts every value: restore the converged Lagrange multipliers of unchanged
+        # constraints by name, so that only new ones start at zero.
         previousScalarVariableValues = {name: v.value for name, v in self.scalarVariables.items()}
         self.scalarVariables = dict()
         self._createAndAssignScalarVariableForConstraints(journal)
@@ -406,9 +412,188 @@ class FEModel:
         self._prepareElements(journal)
         self.topology.recordSetupFingerprint()
 
+    def activeConstraints(self) -> list:
+        """The constraints that take part in the discrete system: all constraints, in their order, that are active,
+        i.e. switched on and within reach (see
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).
+
+        Returns
+        -------
+        list[ConstraintBase]
+            The active constraints.
+        """
+
+        return [constraint for constraint in self.constraints.values() if constraint.active]
+
+    def activeScalarVariables(self) -> list:
+        """The scalar variables (e.g. Lagrange multipliers) of the active constraints, constraint by constraint: the
+        scalar variables that are numbered in the discrete system (see :meth:`activeConstraints`).
+
+        Returns
+        -------
+        list[ScalarVariable]
+            The scalar variables.
+        """
+
+        return [
+            scalarVariable for constraint in self.activeConstraints() for scalarVariable in constraint.scalarVariables
+        ]
+
+    def updateConnectivity(self) -> Change:
+        """Bring the connectivity up to date with the converged state, before an increment, and say what that changed
+        in the discrete system: which nodes the entities couple, and which entities take part. Called by the solvers'
+        topology update at the start of every increment and of every retry after a cutback, before the increment is
+        proposed (see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), and by
+        an explicit solver at its ``contact-update-frequency``.
+
+        In a finite element model, the elements keep their nodes, and only a constraint may change what it couples: a
+        contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves its
+        material points through a background grid, and its particles carry their kernel functions along: it reassigns
+        them here first, then lets its constraints follow.
+
+        Only the constraints that are switched on are updated
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,
+        so that they can find themselves within reach again. A constraint switched off from outside rests until it is
+        switched on again, and is updated at the start of the next increment then. The comparison of which constraints
+        take part starts with this call, so it holds only if ``active`` is switched from outside between steps, never
+        between two calls within a step (a ``modelupdate`` takes effect before the step begins, which starts from a new
+        discrete system). A constraint reports only that its
+        nodes changed (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity`), and sets
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach`; the model compares which
+        constraints take part, and which scalar variables they bring, before and after, and classifies the change:
+
+        * a constraint took part or does not any more, or couples other nodes, and the scalar variables of the active
+          constraints are the same: :attr:`~edelweissfe.models.change.Change.LOCATIONS`;
+        * the scalar variables of the active constraints changed: :attr:`~edelweissfe.models.change.Change.NUMBERING`;
+        * neither: :attr:`~edelweissfe.models.change.Change.NONE`.
+
+        A constraint that is switched on but out of reach is updated too, and a change of its nodes is reported
+        whether or not it takes part: the answer is then :attr:`~edelweissfe.models.change.Change.LOCATIONS`, so a
+        solver rebuilds for a constraint that has no rows.
+
+        A change of the connectivity is not a change of the mesh: it neither moves nodes nor creates them
+        (:attr:`~edelweissfe.models.change.Change.MESH` is the topology update's to report), so a solver does not
+        re-equilibrate after it (``equilibrateAfterModelChange``).
+
+        Returns
+        -------
+        Change
+            What changed.
+        """
+
+        scalarVariablesBefore = self.activeScalarVariables()
+        activeBefore = self.activeConstraints()
+
+        # A list, not a generator in any(): every constraint must update, not just those up to the first change.
+        nodesChanged = any(
+            [constraint.updateConnectivity(self) for constraint in self.constraints.values() if constraint.switchedOn]
+        )
+
+        if self.activeScalarVariables() != scalarVariablesBefore:
+            return Change.NUMBERING
+        if nodesChanged or self.activeConstraints() != activeBefore:
+            return Change.LOCATIONS
+        return Change.NONE
+
+    def setNewmarkParametersOfEntities(self, beta: float, gamma: float):
+        """Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by
+        ``NIST`` and every solver derived from it -- the implicit solvers and ``NEST`` -- at the start of every step,
+        so that the solver is the one source of the parameters. With :math:`\\beta = \\gamma = 0`, which every
+        quasi-static solver passes, such an entity carries no inertia.
+
+        In a finite element model, no entity integrates its own inertia: the elements report their mass, and a
+        dynamic solver integrates the nodes. An entity that carries its state in itself, velocity and acceleration
+        included, integrates the Newmark scheme at its own evaluation points; a model with such entities passes the
+        parameters on to them.
+
+        Parameters
+        ----------
+        beta
+            The Newmark parameter :math:`\\beta`; 0 for no inertia.
+        gamma
+            The Newmark parameter :math:`\\gamma`; 0 for no inertia.
+        """
+
+    def elementsWithKernels(self) -> list:
+        """The elements of the model that take part in a discrete system: those that carry kernels (see
+        :attr:`~edelweissfe.elements.base.baseelement.BaseElement.hasKernels`). An entity of the element container that
+        carries geometry only, e.g. a contact facet, has no block in the system matrix and takes no part; its nodes
+        have rows only if an element that carries kernels couples them, see :meth:`buildDiscreteSystem`.
+
+        Returns
+        -------
+        list
+            The elements, in the order of the element container.
+        """
+
+        return [element for element in self.elements.values() if element.hasKernels]
+
+    def indicesRelatedByMultiPointConstraints(self, numbering: DofNumbering) -> np.ndarray:
+        """The indices of the degrees of freedom that the multi-point constraints of the model relate, as slaves and as
+        masters, in the given numbering.
+
+        Parameters
+        ----------
+        numbering
+            The numbering of the degrees of freedom.
+
+        Returns
+        -------
+        np.ndarray
+            The indices, in no particular order, with repetitions.
+        """
+
+        return np.fromiter(
+            (
+                index
+                for constraint in self.multiPointConstraints.values()
+                for slave, masters in constraint.getMultiPointConstraints(numbering)
+                for index in (slave, *(master for master, _ in masters))
+            ),
+            dtype=int,
+        )
+
+    def buildDiscreteSystem(self) -> DiscreteSystem:
+        """Build the discrete system of the model as it is now: number its degrees of freedom, and say which elements
+        and which constraints contribute to it, see :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. Called
+        by a solver whenever it (re)builds its discrete system: at the start of a step, and after the topology update
+        reported a change that needs one (:class:`~edelweissfe.models.change.Change`).
+
+        The discrete system of a finite element model holds the node fields, the elements that carry kernels, and the
+        active constraints with their scalar variables (e.g. Lagrange multipliers); the elements are those of
+        :meth:`elementsWithKernels`. A constraint that is not active (see
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
+        scalar variables, which would otherwise be unknowns without an equation.
+
+        Every degree of freedom that is numbered must be in the location of an entity, or related by a multi-point
+        constraint, or it would have no row in the system matrix: a node that only an entity without kernels touches
+        (e.g. a contact facet) has none, and the discrete system is not built.
+
+        Returns
+        -------
+        DiscreteSystem
+            The discrete system.
+
+        Raises
+        ------
+        ValueError
+            If a numbered degree of freedom is in no location; the error names the node and the field.
+        """
+
+        numbering = DofNumbering(self.nodeFields.values(), self.activeScalarVariables(), self.nodeSets.values())
+        locations = DofLocations(numbering, self.elementsWithKernels(), self.activeConstraints())
+        locations.checkEveryDofIsLocated(self.indicesRelatedByMultiPointConstraints(numbering))
+
+        return DiscreteSystem(self, locations)
+
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and
         set the new time.
+
+        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that
+        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
+        frictional history of a contact switched off for a step.
 
         Parameters
         ----------
@@ -420,14 +605,32 @@ class FEModel:
 
         self._acceptElementStates()
 
-        # Left serial deliberately. Measured on the 337 471-dof explicit anchor pry-out model, where
-        # the element loop below costs 19.09 ms per call: these two together cost 0.015 ms, i.e. less
-        # than a tenth of a percent of it. There is nothing here to parallelize.
-        for constraint in self.constraints.values():
+        # Serial: negligible next to the element loop.
+        for constraint in self.activeConstraints():
             constraint.acceptLastState()
 
         for mpc in self.multiPointConstraints.values():
             mpc.acceptLastState()
+
+    def advanceVelocity(self, timeIncrement: float):
+        """Advance the velocity of the model by its acceleration over a time increment, :math:`\\boldsymbol{V}
+        \\leftarrow \\boldsymbol{V} + \\Delta t \\, \\boldsymbol{A}`, in every node field, on every node.
+
+        An explicit solver integrates the velocity staggered half an increment behind the solution within its step,
+        and publishes the acceleration at the end of every increment. At the end of its step, it advances the velocity
+        by the half increment it lags behind, so that the step leaves the velocity at its end time, as every solver
+        does (see the documentation page *Node field results*). Where the acceleration is zero, the velocity stays as
+        it is. The model does this itself, without a discrete system: a step resumed at its very end has built none.
+
+        Parameters
+        ----------
+        timeIncrement
+            The time increment.
+        """
+
+        for nodeField in self.nodeFields.values():
+            velocity = nodeField["V"]
+            velocity += timeIncrement * nodeField["A"]
 
     def _acceptElementStates(self):
         """Let every element accept its computed state, across the available threads.
@@ -445,34 +648,24 @@ class FEModel:
         """
 
         elements = self.elements
-        numThreads = getNumberOfWorkerThreads()
-
-        if numThreads == 1 or len(elements) < numThreads:
-            for element in elements.values():
-                element.acceptLastState()
-            return
 
         def acceptChunk(chunk):
             for element in chunk:
                 element.acceptLastState()
 
-        # The same chunk granularity the parallel element computation uses: four chunks per thread,
-        # enough to even out the spread between cheap facet elements and expensive solid ones
-        # without paying dispatch overhead per element.
-        chunkSize = max(1, len(elements) // (numThreads * 4))
-        chunks = chunked_iterable(elements.values(), chunkSize)
-
-        # list(), not a bare call: Executor.map is lazy, and leaving the iterator unconsumed would
-        # return here with workers still writing element state.
-        list(getThreadPool(numThreads).map(acceptChunk, chunks))
+        if len(elements) < getNumberOfWorkerThreads():  # too few to be worth handing to the pool
+            acceptChunk(elements.values())
+        else:
+            mapChunksInParallel(elements.values(), acceptChunk)
 
     def writeRestart(self, restartFile: h5py.File):
         """Write the current (converged) state of the model to a restart checkpoint.
 
         Does not serialize model topology (nodes/elements/sets/sections/materials) -- only state
         that a rebuild from the original ``.inp`` file cannot reproduce: node field values, element
-        quadrature-point history, scalar variables (e.g. Lagrange multipliers), and stateful
-        constraints' internal history (e.g. frictional contact).
+        quadrature-point history, scalar variables (e.g. Lagrange multipliers), stateful
+        constraints' internal history (e.g. frictional contact), and the additional parameters
+        (e.g. the load parameter of the arc length method).
 
         Parameters
         ----------
@@ -487,12 +680,16 @@ class FEModel:
         nodeFieldsGroup = f.create_group("nodeFields")
         for nf in self.nodeFields.values():
             nodeFieldGroup = nodeFieldsGroup.create_group(nf.name)
-            for entryName, entryValues in nf._values.items():
-                nodeFieldGroup.create_dataset(entryName, data=entryValues)
+            for entryName in NodeField.ENTRIES:
+                nodeFieldGroup.create_dataset(entryName, data=nf[entryName])
 
         scalarVariablesGroup = f.create_group("scalarVariables")
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariablesGroup.attrs[name] = scalarVariable.value
+
+        additionalParametersGroup = f.create_group("additionalParameters")
+        for name, value in self.additionalParameters.items():
+            additionalParametersGroup.attrs[name] = value
 
         writeRestartDataOf(f.create_group("modelModifiers"), self.modelModifiers)
 
@@ -502,10 +699,8 @@ class FEModel:
 
         writeRestartDataOf(f.create_group("constraints"), self.constraints)
 
-        # The ordered record of every applied model-modifier decision (e.g. AMR refinements). A
-        # resumed run replays these through the modifiers' own apply() -- see readRestart and
-        # TopologyPipeline.replayHistory -- rather than serializing the resulting topology directly, so there
-        # is exactly one code path that mutates topology, live or replayed.
+        # The ordered record of every applied model-modifier decision (e.g. AMR refinements). A resumed run
+        # replays these (see readRestart), so that a single code path mutates topology, live or replayed.
         historyGroup = f.create_group("topologyHistory")
         historyGroup.attrs["setupFingerprint"] = self.topology.setupFingerprint()
         historyGroup.attrs["count"] = len(self.topology.history)
@@ -521,8 +716,12 @@ class FEModel:
     def readRestart(self, restartFile: h5py.File, journal: Journal = None):
         """Read the state of the model from a restart checkpoint written by :meth:`writeRestart`.
 
-        The model must already have been rebuilt from the original ``.inp`` file (same topology)
-        and :meth:`prepareYourself` called, before this is called.
+        Either the model has been rebuilt from the original ``.inp`` file and :meth:`prepareYourself`
+        called -- a resumed run -- or it is the very model the checkpoint was written from, going back
+        to it within the run (see :meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`).
+        Of the recorded topology decisions, those the model has not applied yet are replayed: all of
+        them for a rebuilt model, none for a model going back. A model whose mesh has changed since
+        the checkpoint cannot go back to it, since a mesh change cannot be undone.
 
         Parameters
         ----------
@@ -530,39 +729,62 @@ class FEModel:
             An open, readable :class:`h5py.File` (or group) to read the checkpoint from.
         journal
             Optional Journal for the progress messages of the topology replay.
+
+        Raises
+        ------
+        RestartError
+            If the model is not the one the checkpoint was written from, before anything is restored, or
+            if the checkpoint does not hold every entry of a node field (see
+            :attr:`~edelweissfe.fields.nodefield.NodeField.ENTRIES`).
+        MeshChangedSinceCheckpoint
+            If the model's mesh has changed since the checkpoint was written, before anything is restored.
         """
 
         f = restartFile
 
-        self.time = f.attrs["time"]
-
-        # Must run before every restore below: replaying the topology history can materialize
-        # elements/nodes a plain rebuild from the .inp file cannot reproduce (e.g. AMR-refined
-        # children) -- the node-field and element-statevar restores that follow address elements by
-        # label and would silently miss anything not already in self.elements/self.nodeFields yet.
+        # Checked before anything is restored, so that a refused checkpoint leaves the model as it is.
         historyGroup = f["topologyHistory"]
         if self.topology.setupFingerprint() != historyGroup.attrs["setupFingerprint"]:
             raise RestartError(
                 "the model rebuilt from the input file is not the one the checkpoint was written from: "
                 "its mesh (nodes, elements, coordinates, numbering) differs"
             )
-        records = []
-        for index in range(int(historyGroup.attrs["count"])):
-            recordGroup = historyGroup["{:06d}".format(index)]
-            records.append(
-                TopologyRecord(
-                    modifier=str(recordGroup.attrs["modifier"]),
-                    roundNumber=int(recordGroup.attrs["roundNumber"]),
-                    time=float(recordGroup.attrs["time"]),
-                    plan={entryName: values[:] for entryName, values in recordGroup.items()},
-                    fingerprint=str(recordGroup.attrs["fingerprint"]),
+        recordGroups = [historyGroup["{:06d}".format(index)] for index in range(int(historyGroup.attrs["count"]))]
+        appliedRecords = self.topology.history
+        if any(
+            (applied.modifier, applied.roundNumber, applied.fingerprint)
+            != (str(group.attrs["modifier"]), int(group.attrs["roundNumber"]), str(group.attrs["fingerprint"]))
+            for applied, group in zip(appliedRecords, recordGroups)
+        ):
+            raise RestartError("the topology decisions of the model differ from those the checkpoint records")
+        if len(appliedRecords) > len(recordGroups):
+            raise MeshChangedSinceCheckpoint(appliedRecords[len(recordGroups)])
+        for fieldName, storedField in f["nodeFields"].items():
+            if set(storedField.keys()) != set(NodeField.ENTRIES):
+                raise RestartError(
+                    "the checkpoint holds the entries {:} of node field {:}, not {:}".format(
+                        ", ".join(sorted(storedField.keys())), fieldName, ", ".join(NodeField.ENTRIES)
+                    )
                 )
+
+        self.time = f.attrs["time"]
+
+        # Must run before every restore below: the replay materializes elements/nodes (e.g. AMR-refined
+        # children) which those restores address by label.
+        records = [
+            TopologyRecord(
+                modifier=str(recordGroup.attrs["modifier"]),
+                roundNumber=int(recordGroup.attrs["roundNumber"]),
+                time=float(recordGroup.attrs["time"]),
+                plan={entryName: values[:] for entryName, values in recordGroup.items()},
+                fingerprint=str(recordGroup.attrs["fingerprint"]),
             )
+            for recordGroup in recordGroups[len(appliedRecords) :]
+        ]
         self.topology.replayHistory(records, journal)
         readRestartDataInto(f["modelModifiers"], self.modelModifiers)
-        # Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed
-        # mesh here, as part of restoring the model: the uninterrupted run's consumers had caught up
-        # with every change before the checkpoint was written, so a resumed run must start the same.
+        # Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed mesh, as
+        # they were when the checkpoint was written.
         self.topology.refreshMeshDependents()
 
         for nf in self.nodeFields.values():
@@ -570,20 +792,16 @@ class FEModel:
             if storedField is None:
                 raise RestartError("the checkpoint holds no node field {:}".format(nf.name))
 
-            # Iterate the checkpoint's entries, not the model's -- entries created only later by a
-            # solver (e.g. the explicit solver's 'V') would otherwise never be restored.
-            for entryName, storedValues in storedField.items():
-                if entryName not in nf:
-                    nf.createFieldValueEntry(entryName)
-                storedValues.read_direct(nf[entryName])
+            for entryName in NodeField.ENTRIES:
+                storedField[entryName].read_direct(nf[entryName])
 
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariable.value = f["scalarVariables"].attrs[name]
 
-        # One uniform loop, by element number, with no skip set and nothing swallowed -- sound only
-        # because the replay above reproduces the original numbering exactly, verified against the
-        # recorded fingerprint. A missing element here means the replayed model does not match the
-        # one checkpointed, which must be reported, not silently skipped.
+        self.additionalParameters = dict(f["additionalParameters"].attrs)
+
+        # Sound only because the replay reproduces the original numbering exactly (verified by fingerprint):
+        # a missing element means a mismatched model and must be reported.
         for elementKey, stateVars in f["elements"].items():
             elNumber = int(elementKey)
             element = self.elements.get(elNumber)

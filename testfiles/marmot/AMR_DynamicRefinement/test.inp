@@ -1,6 +1,6 @@
 ** Dynamic h-adaptivity regression test -- exercises the full *modelModifier path end to end:
 ** marking -> octree refinement -> model mutation -> nodal warm-start -> quadrature-point state
-** transfer -> hanging-node MPC -> equation-system rebuild -> solve on the refined mesh.
+** transfer -> hanging-node MPC -> discrete system rebuild -> solve on the refined mesh.
 ** Two coarse C3D20 elements form a cantilever; bending concentrates stress at the fixed end,
 ** so the stress marker refines exactly one element (2 -> 9 active, 13 hanging nodes), creating a
 ** 2:1 hanging interface that the MPC couples across the displacement field. (Multi-field

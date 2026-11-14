@@ -110,7 +110,7 @@ class DisplacementElement(DisplacementElementBase):
         Parameters
         ----------
         P
-            The external load vector gets calculated.
+            The residual contribution to augment, the internal forces.
         K
             The stiffness matrix gets calculated.
         U
@@ -168,7 +168,7 @@ class DisplacementElement(DisplacementElementBase):
         Parameters
         ----------
         P
-            The internal load vector gets calculated.
+            The residual contribution to augment, the internal forces.
         U
             The current solution vector.
         dU

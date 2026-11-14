@@ -195,9 +195,10 @@ class _FieldOutputBase:
         self.f_export = fExport_x
         self.timeHistory = []
         self.export = export
-        #: The size of the export file the run has written so far. Before its first write, a
-        #: process truncates the file to it: a cold run starts the file afresh, and a resumed run
-        #: drops whatever the interrupted run wrote after its checkpoint.
+        #: The size of the export file the run has written so far. Before its first write after
+        #: a start or a restored checkpoint, the file is truncated to it: a cold run starts the file
+        #: afresh, a resumed run drops whatever the interrupted run wrote after its checkpoint, and
+        #: a step falling back to a checkpoint drops the rows of the increments it discards.
         self._exportedBytes = 0
         self._exportFileTruncated = False
         self._reshape_to_dimensions = reshape_to_dimensions
@@ -402,6 +403,7 @@ class _FieldOutputBase:
 
         self.timeHistory = [float(t) for t in data["timeHistory"]]
         self._exportedBytes = int(data["exportedBytes"])
+        self._exportFileTruncated = False
         if self.appendResults:
             self.result, offset = [], 0
             for shape in data["resultShapes"]:
@@ -513,7 +515,8 @@ class NodeFieldOutput(_FieldOutputBase):
     nodeField
         The NodeField, on which this FieldOutput operates.
     result
-        The name of the result entry in the NodeField.
+        The name of the result entry in the NodeField, one of
+        :attr:`~edelweissfe.fields.nodefield.NodeField.ENTRIES`.
     model
         The model tree instance.
     journal
@@ -526,6 +529,11 @@ class NodeFieldOutput(_FieldOutputBase):
         Export the results to a file.
     fExport_x
         Apply a math function on the results before exporting.
+
+    Raises
+    ------
+    KeyError
+        If the result is not an entry a node field holds.
     """
 
     def __init__(
@@ -540,6 +548,12 @@ class NodeFieldOutput(_FieldOutputBase):
         export: str = None,
         fExport_x: Callable = None,
     ):
+        if result not in NodeField.ENTRIES:
+            raise KeyError(
+                "field output {:}: a node field holds the results {:}, not '{:}'".format(
+                    name, ", ".join(NodeField.ENTRIES), result
+                )
+            )
         self.entry = result
         self.fieldName = nodeField.name
         self._nodeField = nodeField

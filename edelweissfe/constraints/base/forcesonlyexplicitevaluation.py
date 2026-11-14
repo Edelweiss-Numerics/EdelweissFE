@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-A mixin for constraints whose :meth:`applyConstraint` can skip the tangent when handed ``K=None``.
+A mixin for constraints whose :meth:`computeKernels` can skip the tangent when handed ``K=None``.
 """
 
 import numpy as np
@@ -38,26 +38,26 @@ class ForcesOnlyExplicitEvaluation:
     """Evaluate a constraint in an explicit solver without building a tangent.
 
     The base implementation of
-    :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`
+    :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`
     asks for a tangent container through the ordinary sparse-stiffness protocol and then discards it.
     For contact constraints that container is large -- one dense block per contact point, of order
     50 MB per increment on the anchor pry-out -- and filling it costs one outer product per point.
 
     A constraint that inherits this mixin (listed *before*
     :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`) instead runs its one
-    :meth:`applyConstraint` loop with ``K=None``. One loop rather than two, so the physics cannot
-    drift between the implicit and the explicit path. :meth:`applyConstraint` must therefore skip
+    :meth:`computeKernels` loop with ``K=None``. One loop rather than two, so the physics cannot
+    drift between the implicit and the explicit path. :meth:`computeKernels` must therefore skip
     every tangent contribution when ``K`` is None.
     """
 
-    def applyConstraintExplicit(
+    def computeKernelsExplicit(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         timeStep: TimeStep,
     ):
-        """Evaluate the constraint forces only, by calling :meth:`applyConstraint` with ``K=None``.
+        """Add the constraint's residual contribution only, by calling :meth:`computeKernels` with ``K=None``.
 
         Parameters
         ----------
@@ -65,10 +65,11 @@ class ForcesOnlyExplicitEvaluation:
             The current solution, restricted to this constraint's degrees of freedom.
         dU
             The current solution increment, likewise restricted.
-        PExt
-            The local residual / force vector to augment.
+        P
+            The residual contribution to augment, with the sign described in
+            :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.
         timeStep
             The current time step.
         """
 
-        self.applyConstraint(U_np, dU, PExt, None, timeStep)
+        self.computeKernels(U_np, dU, P, None, timeStep)

@@ -30,24 +30,46 @@
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     chunked_iterable,
     getNumberOfWorkerThreads,
     getThreadPool,
+    mapChunksOnWorkers,
 )
+from edelweissfe.numerics.systemmatrixassembly import SystemMatrixAssembly
 from edelweissfe.timesteppers.timestep import TimeStep
 
 
 def computeElementsInParallel(
-    elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, K: VIJSystemMatrix, F: DofVector, timeStep: TimeStep
-) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
+    elements: list,
+    Un1: DofVector,
+    dU: DofVector,
+    P: DofVector,
+    K: SystemMatrixAssembly,
+    F: DofVector,
+    timeStep: TimeStep,
+) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
     """
     Compute the elements in parallel for quasi-static anlysis.
 
+    The elements are anything that contributes like an element (a block of the system matrix and a part of the
+    internal forces, see :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`) and is located in
+    the DofVector: the finite elements, and the cells and particles of a meshfree model alike (see
+    :attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elements`). Every element writes its forces
+    into its own part of a scatter vector, and every worker thread writes the tangents of its elements through blocks of
+    its own (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`). Each worker
+    handles a fixed share of the elements in a fixed order (see
+    :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers`), so that no two threads write through
+    the same blocks at the same time. On the VIJ path every block is a slice of its own, and the assembled matrix does
+    not depend on the timing of the threads; on the direct path the workers add their blocks to the shared entries of
+    the CSR matrix atomically, in an order set by their timing, so the matrix agrees from run to run to round-off (see
+    :ref:`system-matrix-assembly`).
+
     Parameters
     ----------
-    elements : dict
+    elements : list
         The elements to compute.
     Un1 : DofVector
         The displacement vector.
@@ -55,8 +77,8 @@ def computeElementsInParallel(
         The displacement increment vector.
     P : DofVector
         The internal force vector.
-    K : VIJSystemMatrix
-        The stiffness matrix.
+    K : SystemMatrixAssembly
+        The stiffness matrix being assembled; one worker per thread.
     F : DofVector
         The flux vector.
     timeStep : TimeStep
@@ -66,8 +88,8 @@ def computeElementsInParallel(
     -------
     P : DofVector
         The internal force vector.
-    K : VIJSystemMatrix
-        The stiffness matrix.
+    K : SystemMatrixAssembly
+        The stiffness matrix being assembled.
     F : DofVector
         The flux vector.
     """
@@ -79,27 +101,18 @@ def computeElementsInParallel(
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
-    # Process a CHUNK of elements per task, not just one, to keep the per-task
-    # dispatch overhead negligible compared to the actual element computation.
-    def computeElementsWorker(elementChunk):
+    # One chunk of elements per call, to keep the dispatch overhead negligible.
+    def computeElementsOfWorker(worker, elementChunk):
+        blocks = K.blocksOfWorker(worker)
         for element in elementChunk:
             Pe = scatter_P[element]
             Ue = Un1[element]
             dUe = dU[element]
-            Ke = K[element]
+            Ke = blocks[element]
             element.computeKernels(Ke, Pe, Ue, dUe, time, dT)
+        blocks.flush()
 
-    numThreads = getNumberOfWorkerThreads()
-
-    if numThreads == 1:
-        # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize
-        computeElementsWorker(elements.values())
-    else:
-        chunkSize = max(1, len(elements) // (numThreads * 4))
-        chunks = chunked_iterable(elements.values(), chunkSize)
-
-        executor = getThreadPool(numThreads)
-        list(executor.map(computeElementsWorker, chunks))
+    mapChunksOnWorkers(elements, computeElementsOfWorker, K.numberOfWorkers)
 
     scatter_P.assembleInto(P)
     scatter_P.assembleInto(F, absolute=True)
@@ -109,19 +122,15 @@ def computeElementsInParallel(
 
 #: How many chunks of elements each thread is handed in the explicit element loop, so that the
 #: executor can balance unequal chunks dynamically; see :func:`computeElementsInParallelForExplicit`.
-#: Raising it costs one plan entry and one buffer allocation per chunk, and buys finer balancing,
-#: so it pays until the chunks get small enough for that per-chunk cost to show.
 _chunksPerThread = 16
 
 
-#: Single-entry cache of the per-chunk gather plan; see :func:`_chunkedGatherPlan`. One entry
-#: suffices because a solver works on one element set at a time, and holding a reference to the
-#: entity mapping it was built for keeps that mapping alive, so identity comparison against it is
-#: sound (a freed dict could otherwise have its id reused by a different one).
+#: Single-entry cache of the per-chunk gather plan; see :func:`_chunkedGatherPlan`. It holds
+#: references to the mappings it was built for, which keeps identity comparison against them sound.
 _gatherPlanCache = None
 
 
-def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetMap: dict, chunkSize: int) -> list:
+def _chunkedGatherPlan(elements: list, locations: DofLocations, scatterOffsetMap: dict, chunkSize: int) -> list:
     """Build, or reuse, the flat gather index plan for one chunking of the elements.
 
     Each chunk gets the concatenation of its elements' DOF indices, the offsets at which each
@@ -130,18 +139,18 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
     buffers, and write the chunk's forces back with one fancy-index.
 
     The plan is only valid for the element set and DOF layout it was built from. h-adaptivity
-    rebuilds the DofManager on every topology change, which produces a fresh
-    ``idcsOfHigherOrderEntitiesInDofVector`` dict and a fresh scatter layout, so identity of those
-    mappings is what detects a stale plan. The element count and chunk size are compared as well:
-    those would catch a rebuild that somehow preserved the mapping objects, and a stale plan here
+    rebuilds the discrete system on every topology change, and a change of the connectivity makes new locations
+    (locations are never changed), each with a fresh scatter layout, so identity of the locations and of the
+    layout is what detects a stale plan. The element count and chunk size are compared as well:
+    those would catch a rebuild that somehow preserved the objects, and a stale plan here
     would silently gather the wrong degrees of freedom rather than fail.
 
     Parameters
     ----------
     elements
         The elements to compute, in the order they will be chunked.
-    entitiesInDofVector
-        The entity-to-DOF-index mapping the plan is built against.
+    locations
+        The locations of the entities, the plan is built against.
     scatterOffsetMap
         The entity-to-``(offset, size)`` layout of the scatter buffer the forces are written to.
     chunkSize
@@ -155,51 +164,40 @@ def _chunkedGatherPlan(elements: dict, entitiesInDofVector: dict, scatterOffsetM
 
     global _gatherPlanCache
 
-    # Read the global ONCE. Checking the guard against the global and then returning the plan out
-    # of the global again is a time-of-check-to-time-of-use gap: with the GIL disabled, another
-    # thread reaching this function between the two can replace the entry, and the caller would be
-    # handed a plan that was never checked against its own elements -- the exact silent wrong-DOF
-    # failure the guard below exists to prevent. A tuple is replaced atomically, so one read is
-    # a consistent snapshot; the worst a race can then do is have both threads rebuild the plan.
+    # Read the global once: under PYTHON_GIL=0 another thread may replace it between check and use.
+    # The tuple is replaced atomically, so one read is a consistent snapshot.
     cached = _gatherPlanCache
 
     if (
         cached is not None
-        and cached[0] is entitiesInDofVector
+        and cached[0] is locations
         and cached[1] == chunkSize
         and cached[2] == len(elements)
-        # The scatter layout is rebuilt whenever the entity mapping is, but it is a separate
-        # object, and the plan stores positions into it -- so it is compared in its own right.
+        # The plan stores positions into the scatter layout, so it is compared in its own right.
         and cached[5] is scatterOffsetMap
-        # Keyed on the collection itself, not just its length: the plan stores the chunked
-        # ELEMENTS, so a second caller in the same increment passing a different but equal-length
-        # subset against the same DofManager would otherwise be handed a plan for the wrong
-        # elements with correctly shaped buffers -- the silent wrong-DOF failure this cache is
-        # documented to guard against. Only NEDParallel calls this today, always with
-        # model.elements, so this is latent rather than live.
+        # The plan stores the chunked elements, so an equal-length different collection must miss.
         and cached[4] is elements
     ):
         return cached[3]
 
     plan = []
-    for chunk in chunked_iterable(elements.values(), chunkSize):
-        indicesPerElement = [entitiesInDofVector[element] for element in chunk]
+    for chunk in chunked_iterable(elements, chunkSize):
+        indicesPerElement = [locations[element] for element in chunk]
         offsets = np.zeros(len(chunk) + 1, dtype=np.intp)
         np.cumsum([len(indices) for indices in indicesPerElement], out=offsets[1:])
 
-        # Where this chunk's forces belong in the scatter buffer, laid out in the same order as
-        # the chunk's own force buffer -- so the write back is one indexed assignment.
+        # The chunk's slots in the scatter buffer, in the order of its own force buffer.
         scatterSlots = [scatterOffsetMap[element] for element in chunk]
         scatterIndices = np.concatenate([np.arange(offset, offset + size) for offset, size in scatterSlots])
 
         plan.append((chunk, np.concatenate(indicesPerElement), offsets, scatterIndices))
 
-    _gatherPlanCache = (entitiesInDofVector, chunkSize, len(elements), plan, elements, scatterOffsetMap)
+    _gatherPlanCache = (locations, chunkSize, len(elements), plan, elements, scatterOffsetMap)
     return plan
 
 
 def computeElementsInParallelForExplicit(
-    elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, timeStep: TimeStep
+    elements: list, Un1: DofVector, dU: DofVector, P: DofVector, timeStep: TimeStep
 ) -> tuple[DofVector, float]:
     """Evaluate the explicit element kernels across the available threads.
 
@@ -231,36 +229,26 @@ def computeElementsInParallelForExplicit(
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
-    # Both vectors come from DofManager.constructDofVector, which hands every DofVector the same
-    # idcsOfHigherOrderEntitiesInDofVector object -- so one index plan serves both. Assert it
-    # rather than assume it: gathering dU through indices built for a different layout would
-    # produce wrong forces silently.
-    if dU.entitiesInDofVector is not Un1.entitiesInDofVector:
+    # One index plan serves both vectors only if they share the same locations.
+    if dU.locations is not Un1.locations:
         raise ValueError(
-            "The solution and increment vectors carry different entity mappings, so a shared "
+            "The solution and increment vectors are wrapped with different locations, so a shared "
             "gather plan cannot be used for both."
         )
 
-    # Plain ndarray aliases: the gather below indexes them directly, bypassing the DofVector
-    # entity lookup entirely for the hot path. Taken from the vector's own cached view rather than
-    # built here, so this shares the one alias every entity access already goes through.
+    # Plain ndarray views, so the gather bypasses the DofVector entity lookup.
     Un1_plain = Un1.asPlainArray()
     dU_plain = dU.asPlainArray()
 
     def compute_chunk(plannedChunk) -> float:
         chunkElements, flatIndices, offsets, scatterIndices = plannedChunk
 
-        # One gather per chunk rather than two per element. The elements then take views into
-        # these buffers, which allocate nothing.
+        # One gather per chunk; the elements take views into these buffers.
         gatheredU = Un1_plain[flatIndices]
         gatheredDU = dU_plain[flatIndices]
 
-        # The chunk's OWN force buffer, rather than a view into the scatter buffer per element.
-        # Taking that view is what stopped this loop from scaling once the GIL was gone: a view
-        # holds a reference to the buffer it looks into, and the scatter buffer is one object
-        # every thread looks into, so every element made all the cores take turns updating the
-        # single reference count in it. This buffer is reached by one thread only, and the shared
-        # one is written once per chunk instead of once per element.
+        # The chunk's own force buffer: per-element views into the shared scatter buffer would make
+        # all threads contend on its reference count under PYTHON_GIL=0.
         Pe = np.zeros(offsets[-1])
 
         chunk_psi = 0.0
@@ -271,26 +259,19 @@ def computeElementsInParallelForExplicit(
             element.computeKernelsExplicit(Pe[begin:end], gatheredU[begin:end], gatheredDU[begin:end], time, dT)
             chunk_psi += element.computeInternalEnergy()
 
-        # Each element owns its slot in the scatter buffer and appears in exactly one chunk, so
-        # this assigns rather than accumulates -- as the per-element writes it replaces did.
+        # Each element owns its slot in the scatter buffer, so this assigns rather than accumulates.
         scatter_P[scatterIndices] = Pe
 
         return chunk_psi
 
     numThreads = getNumberOfWorkerThreads()
 
-    # Many small chunks per thread rather than one large one each, because the elements are not
-    # equally expensive: a quadrature point that is yielding or damaging pays for a return mapping
-    # that an elastic one does not, so the elements at a propagating front cost several times what
-    # the bulk costs. Those elements sit next to each other in the mesh, and therefore next to each
-    # other in element order, so chunks cut from that order are systematically unequal -- and with
-    # one chunk per thread the whole map waits for whichever thread drew the front. Handing the
-    # executor many more chunks than it has threads lets it even that out as it goes: a thread that
-    # drew cheap elements comes back for more work instead of idling.
+    # Many small chunks per thread for load balancing: inelastic elements (e.g. at a damage front) are
+    # more expensive and adjacent in element order.
     chunk_size = (
         max(1, len(elements) // (numThreads * _chunksPerThread)) if numThreads > 1 else min(len(elements), 4000)
     )
-    plan = _chunkedGatherPlan(elements, Un1.entitiesInDofVector, scatter_P.offsetMap, chunk_size)
+    plan = _chunkedGatherPlan(elements, Un1.locations, scatter_P.offsetMap, chunk_size)
 
     if numThreads == 1:
         # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize

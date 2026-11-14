@@ -25,12 +25,19 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 """The adaptive time stepper as a state machine: a proposal changes nothing, an accepted increment
-advances the step, a rejected one is retried smaller from exactly where the step stood."""
+advances the step, a rejected one is retried smaller from exactly where the step stood, down to the minimum size,
+which it shares with the simple time stepper."""
 
 import pytest
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.steps.adaptivestep import AdaptiveStep
+from edelweissfe.steps.adaptivestepforexplicitsimulations import (
+    AdaptiveStepForExplicitSimulations,
+)
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
+from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
@@ -46,6 +53,52 @@ def _timeStepper(**overrides) -> AdaptiveTimeStepper:
     )
     kwargs.update(overrides)
     return AdaptiveTimeStepper(**kwargs)
+
+
+def _simpleTimeStepper(**overrides) -> SimpleTimeStepper:
+    kwargs = dict(
+        currentTime=0.0,
+        stepLength=1.0,
+        startIncrement=0.1,
+        maxIncrement=1.0,
+        minIncrement=0.01,
+        maxNumberIncrements=100,
+        journal=Journal(verbose=False),
+    )
+    kwargs.update(overrides)
+    return SimpleTimeStepper(**kwargs)
+
+
+@pytest.mark.parametrize("makeZeroIncrementFirst", [True, False])
+def test_an_adaptive_step_begins_with_a_zero_increment_unless_told_otherwise(makeZeroIncrementFirst):
+    step = AdaptiveStep(
+        0,
+        FEModel(2),
+        None,
+        Journal(verbose=False),
+        {},
+        None,
+        [],
+        {},
+        startInc=0.25,
+        maxInc=0.25,
+        makeZeroIncrementFirst=makeZeroIncrementFirst,
+    )
+
+    first = step.timeStepper.proposeTimeStep()
+
+    assert first.timeIncrement == (0.0 if makeZeroIncrementFirst else 0.25)
+
+
+def test_an_explicit_step_always_begins_with_the_zero_increment_and_refuses_to_leave_it_out():
+    def explicitStep(**options):
+        return AdaptiveStepForExplicitSimulations(
+            0, FEModel(2), None, Journal(verbose=False), {}, None, [], {}, startInc=0.25, maxInc=0.25, **options
+        )
+
+    assert explicitStep().timeStepper.proposeTimeStep().timeIncrement == 0.0
+    with pytest.raises(ValueError, match="always begins with the zero increment"):
+        explicitStep(makeZeroIncrementFirst=False)
 
 
 def test_the_first_increment_is_a_zero_increment():
@@ -156,9 +209,36 @@ def test_a_failed_zero_increment_cannot_be_cut_back():
         timeStepper.rejectTimeStep(0.5)
 
 
+def test_a_failed_first_increment_of_nonzero_size_is_cut_back():
+    timeStepper = _timeStepper(makeZeroIncrementFirst=False)
+    timeStepper.proposeTimeStep()
+    timeStepper.rejectTimeStep(0.5)
+    retry = timeStepper.proposeTimeStep()
+
+    assert retry.number == 0
+    assert retry.stepProgressIncrement == 0.05
+
+
 def test_more_increments_than_allowed_are_refused():
     timeStepper = _timeStepper(makeZeroIncrementFirst=False, maxNumberIncrements=2)
     for _ in range(3):
         timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
     with pytest.raises(ReachedMaxIncrements):
         timeStepper.proposeTimeStep()
+
+
+@pytest.mark.parametrize("timeStepperOf", [_timeStepper, _simpleTimeStepper], ids=["adaptive", "simple"])
+def test_a_failed_remainder_below_the_minimum_increment_is_not_retried(timeStepperOf):
+    """The last increment of a step is what remains of the step, and may be smaller than the minimum increment. If it
+    fails, no smaller increment is left to retry: the cutback to the minimum size would be clamped to the remainder
+    again, and the step would retry it for ever, since a rejection does not count towards the maximum number of
+    increments. A step that may fall back to a restart checkpoint must get the chance to."""
+
+    timeStepper = timeStepperOf(startIncrement=0.3, maxIncrement=0.3, minIncrement=0.2)
+    for _ in range(4):  # the zero increment and three of 0.3
+        timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+
+    remainder = timeStepper.proposeTimeStep()
+    assert remainder.stepProgressIncrement == pytest.approx(0.1)
+    with pytest.raises(ReachedMinIncrementSize):
+        timeStepper.rejectTimeStep(0.5)

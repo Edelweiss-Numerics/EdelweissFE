@@ -153,7 +153,7 @@ def test_the_algorithm_step_by_step():
     # the displacement field: its translations here, given only the field layout, and all rigid-body modes given the
     # model (setModel).
     def blockGaussSeidelTree():
-        return Multiplicative([OnField(field.name, AMG(tree=dict(FIELD_AMG))) for field in fieldBlocks])
+        return Multiplicative([OnField(field.name, AMG(amgclTree=dict(FIELD_AMG))) for field in fieldBlocks])
 
     for tree in (
         LGMRES(DiagonalScaling(blockGaussSeidelTree()), tolerance=FixedTolerance(1e-10)),

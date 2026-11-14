@@ -86,6 +86,25 @@ class RestartError(Exception):
     topology that does not match the one the checkpoint was written from."""
 
 
+class MeshChangedSinceCheckpoint(RestartError):
+    """The model's mesh has changed since the checkpoint was written, and a mesh change cannot be
+    undone: the model cannot go back to the checkpoint.
+
+    Parameters
+    ----------
+    firstChange
+        The first topology decision the model applied after the checkpoint was written, a
+        :class:`~edelweissfe.models.modelchange.TopologyRecord`.
+    """
+
+    def __init__(self, firstChange):
+        super().__init__(
+            "the mesh has changed since the checkpoint was written (model modifier {:} at time {:}), and a mesh "
+            "change cannot be undone".format(firstChange.modifier, firstChange.time)
+        )
+        self.firstChange = firstChange
+
+
 class TopologyError(Exception):
     """An illegal attempt to change the model topology: creating or deleting an entity outside a
     :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes` window, or claiming an element

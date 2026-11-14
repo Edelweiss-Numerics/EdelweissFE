@@ -149,9 +149,7 @@ class Generator(GeneratorBase):
         inertia = _parseVector(configuration.inertia)
         rpCoordinate = _parseVector(configuration.rpCoordinate)
 
-        # All of these are 3-component quantities (Cartesian vectors, or the diagonal inertia
-        # [Ixx, Iyy, Izz]). Validate up front so a mistyped option fails clearly here rather than
-        # silently creating wrong-sized coordinate/inertia arrays that break downstream.
+        # all of these are 3-component quantities (vectors, or the diagonal inertia [Ixx, Iyy, Izz])
         for argName, vector in (
             ("translation", translation),
             ("inertia", inertia),
@@ -274,9 +272,8 @@ def generateDiscreteRigidBodyFromMeshFile(
 
     journal.message(f"Discrete rigid body '{name}': {len(points)} surface nodes, mass={mass}.", "discreteRigidBody", 1)
 
-    # The surface nodes and the reference point below are labelled consecutively. Unless the
-    # caller pins the first label explicitly, the labels come from the model's monotonic allocator
-    # (TopologyPipeline.reserveNodeNumbers) rather than from max(model.nodes).
+    # The surface nodes and the reference point are labelled consecutively, from the model's node
+    # allocator unless the caller pins the first label.
     rigidNodes = []
     nodeLabel = start_label if start_label is not None else model.topology.reserveNodeNumbers(len(points) + 1).start
     for point in points:
@@ -299,8 +296,7 @@ def generateDiscreteRigidBodyFromMeshFile(
     referencePoint = Node(nodeLabel, np.asarray(rpCoordinate))
     model.createNode(referencePoint)
     if start_label is not None:
-        # Caller-pinned labels bypass the allocator, so lift it above them; otherwise a later
-        # allocation could hand out a label this body already occupies.
+        # caller-pinned labels bypass the allocator, so lift it above them
         model.topology.adoptSetupNodeNumbers()
 
     rpNodeSetName = f"{name}_rp"
@@ -349,10 +345,8 @@ def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
     """
     mesh = pv.read(filename)
     if isinstance(mesh, pv.MultiBlock):
-        # Exodus files come back as nested MultiBlocks that include empty side/node-set blocks, which
-        # pyvista>=0.49 refuses to combine (VTKExecutionError), so merge only the non-empty blocks.
-        # merge_points=False, as combine() did: pv.merge() would otherwise weld coincident but logically
-        # distinct points of different blocks, silently changing the surface topology.
+        # Exodus files contain empty side/node-set blocks, which pyvista cannot combine: merge only the
+        # non-empty ones. merge_points=False keeps coincident points of different blocks distinct.
         blocks = list(mesh.recursive_iterator(skip_none=True, skip_empty=True))
         if not blocks:
             raise ValueError(f"The discrete rigid body surface file '{filename}' contains no points.")
@@ -361,14 +355,12 @@ def _readGenericSurfaceMesh(filename: str, translation: np.ndarray = None):
     surf = mesh.extract_surface(algorithm="dataset_surface")
     surf.compute_normals(cell_normals=True, point_normals=False, inplace=True)
 
-    # points must come from surf, not mesh, since extract_surface() can drop/renumber
-    # points relative to the input mesh - faces below index into surf's point array.
+    # points must come from surf, not mesh: extract_surface() can drop/renumber points
     points = surf.points.copy()
     if translation is not None:
         points = points + np.asarray(translation)
         surf.points = points
 
-    # PyVista renamed PolyData.cells -> PolyData.faces for this flat VTK cell-array representation.
     cells = surf.faces
     faces = []
     elementTypes = []

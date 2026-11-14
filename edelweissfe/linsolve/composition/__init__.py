@@ -30,10 +30,10 @@
 A solver script next to the input file holds only the math::
 
     from edelweissfe.linsolve.composition import (
-        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoLevel,
+        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModesPerAggregate, TwoLevel,
     )
 
-    displacement = OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))
+    displacement = OnField("displacement", TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))
     damage = OnField("nonlocal damage", AMG())
     blockGaussSeidel = Multiplicative([displacement, damage])
     linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel))
@@ -74,10 +74,10 @@ from edelweissfe.linsolve.composition.direct import DirectSolver
 from edelweissfe.linsolve.composition.krylov import (
     FGMRES,
     LGMRES,
+    EisenstatWalkerTolerance,
     FixedTolerance,
-    ForcingTolerance,
-    GapCompensation,
     RebuildPolicy,
+    ResidualGapCompensation,
     SolveRecord,
 )
 from edelweissfe.linsolve.composition.presets import blockAMG
@@ -90,8 +90,8 @@ from edelweissfe.linsolve.composition.solver import (
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
 from edelweissfe.linsolve.composition.twolevel import (
     CoarseSpace,
-    P1Interpolation,
-    RigidBodyModes,
+    CornerNodeInterpolation,
+    RigidBodyModesPerAggregate,
     TwoLevel,
 )
 
@@ -106,17 +106,17 @@ __all__ = [
     "DirectSolver",
     "FGMRES",
     "FixedTolerance",
-    "ForcingTolerance",
-    "GapCompensation",
+    "EisenstatWalkerTolerance",
+    "ResidualGapCompensation",
     "Jacobi",
     "LGMRES",
     "MatrixChange",
     "Multiplicative",
     "OnField",
-    "P1Interpolation",
+    "CornerNodeInterpolation",
     "Preconditioner",
     "RebuildPolicy",
-    "RigidBodyModes",
+    "RigidBodyModesPerAggregate",
     "SchurComplement",
     "SetUpContext",
     "SolveDumps",

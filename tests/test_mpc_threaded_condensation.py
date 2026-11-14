@@ -171,8 +171,6 @@ def test_plain_expression_needs_no_fill_in():
 
 def test_fill_in_added_to_the_csr_generator_pattern():
     """The CSR generator assembles the fill-in as stored zeros, and its matrix condenses in place."""
-    from types import SimpleNamespace
-
     csrgeneratorv2 = pytest.importorskip("edelweissfe.numerics.csrgeneratorv2")
     n = 150
     K = _randomSparseK(n, density=0.05, seed=9).tocoo()
@@ -180,7 +178,7 @@ def test_fill_in_added_to_the_csr_generator_pattern():
     rows = np.concatenate([K.row, K.row]).astype(np.intc)
     columns = np.concatenate([K.col, K.col]).astype(np.intc)
     V = np.concatenate([0.25 * K.data, 0.75 * K.data])
-    generator = csrgeneratorv2.CSRGenerator(SimpleNamespace(I=rows, J=columns, nDof=n))
+    generator = csrgeneratorv2.CSRGenerator(rows, columns, n)
     reference = generator.updateCSR(V)
 
     records = _randomRecords(n, 30, 9)
@@ -202,12 +200,10 @@ def test_fill_in_added_to_the_csr_generator_pattern():
 
 
 def test_a_matrix_obtained_before_add_to_pattern_keeps_its_pattern():
-    from types import SimpleNamespace
-
     csrgeneratorv2 = pytest.importorskip("edelweissfe.numerics.csrgeneratorv2")
     n = 150
     K = _randomSparseK(n, density=0.05, seed=10).tocoo()
-    generator = csrgeneratorv2.CSRGenerator(SimpleNamespace(I=K.row.astype(np.intc), J=K.col.astype(np.intc), nDof=n))
+    generator = csrgeneratorv2.CSRGenerator(K.row.astype(np.intc), K.col.astype(np.intc), n)
     old = generator.updateInPlace(K.data)
     reference = old.copy()
     mpc = MultiPointConstraintTransformation(_randomRecords(n, 30, 10), n, useThreadedCondensation=True)
@@ -217,12 +213,10 @@ def test_a_matrix_obtained_before_add_to_pattern_keeps_its_pattern():
 
 
 def test_a_pattern_array_obtained_before_add_to_pattern_stays_valid_without_its_matrix():
-    from types import SimpleNamespace
-
     csrgeneratorv2 = pytest.importorskip("edelweissfe.numerics.csrgeneratorv2")
     n = 150
     K = _randomSparseK(n, density=0.05, seed=11).tocoo()
-    generator = csrgeneratorv2.CSRGenerator(SimpleNamespace(I=K.row.astype(np.intc), J=K.col.astype(np.intc), nDof=n))
+    generator = csrgeneratorv2.CSRGenerator(K.row.astype(np.intc), K.col.astype(np.intc), n)
     old = generator.updateInPlace(K.data)
     indptr, indices = old.indptr, old.indices
     referenceIndptr, referenceIndices = indptr.copy(), indices.copy()

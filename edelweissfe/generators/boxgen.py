@@ -153,14 +153,12 @@ class Generator(GeneratorBase):
         zLayers = np.linspace(z0, z0 + lZ, nNodesZ)
 
         def carriesElementNode(ix, iy, iz):
-            # A 20-node hexahedron has nodes at corners and edge midpoints only, i.e. at grid
-            # positions with at most one odd index. The remaining positions are kept in the local
-            # grid (it is sliced into node sets further below) but never become model nodes.
+            # A 20-node hexahedron has nodes at corners and edge midpoints only, i.e. at grid positions
+            # with at most one odd index; the others stay in the local grid but never become model nodes.
             return testEl.nNodes == 8 or testEl.nNodes == 20 and sum(np.mod([ix, iy, iz], 2)) < 2
 
-        # Node labels come from the model's monotonic allocator (TopologyPipeline.reserveNodeNumbers), not
-        # from max(model.nodes). Only the positions that carry an element node consume a label, so
-        # the batch is sized by that count and the labels are exactly the ones handed out before.
+        # Node labels come from the model's allocator (TopologyPipeline.reserveNodeNumbers), one per
+        # position that carries an element node.
         nElementNodes = sum(
             1
             for ix in range(nNodesX)
@@ -202,9 +200,7 @@ class Generator(GeneratorBase):
         # fmt: off
 
         elements = []
-        # Element numbers come from the model's monotonic allocator (TopologyPipeline.reserveElementNumbers),
-        # not from max(model.elements). Reserved one at a time so the count need not be predicted;
-        # nothing else mints during this loop, so the numbers are consecutive exactly as before.
+        # Element numbers come from the model's allocator (TopologyPipeline.reserveElementNumbers).
         for ix in range(nX):
             for iy in range(nY):
                 for iz in range(nZ):

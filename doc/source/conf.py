@@ -58,7 +58,11 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.autosectionlabel",
     "numpydoc",
+    "sphinxcontrib.bibtex",
 ]
+
+bibtex_bibfiles = ["publications.bib"]
+bibtex_default_style = "unsrt"
 
 templates_path = ["_templates"]
 exclude_patterns = []
@@ -75,7 +79,7 @@ autoclass_content = "init"
 napoleon_use_admonition_for_notes = True
 numpydoc_show_class_members = True
 numpydoc_class_members_toctree = False
-numpydoc_show_inherited_class_members = True
+numpydoc_show_inherited_class_members = {"edelweissfe.models.change.Change": False}
 
 
 # -- Options for HTML output -------------------------------------------------

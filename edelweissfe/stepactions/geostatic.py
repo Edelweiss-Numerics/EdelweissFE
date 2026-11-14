@@ -180,7 +180,7 @@ class StepAction(StepActionBase):
             journal,
         )
 
-    def applyAtStepEnd(self, model, stepMagnitude=None):
+    def applyAtStepEnd(self, model):
         if not self.active:
             return
 
@@ -189,7 +189,6 @@ class StepAction(StepActionBase):
         self.journal.printSeperationLine()
 
         model.nodeFields["displacement"]["U"][:] = 0
-        # U[self.theDofManager.indicesOfFieldsInDofVector["displacement"]] = 0.0
 
         self.active = False
 

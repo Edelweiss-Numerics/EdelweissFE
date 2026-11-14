@@ -46,13 +46,13 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
 
     between a slave degree of freedom :math:`u_s` and master degrees of freedom :math:`u_{m_a}`.
     The solver collects these records from all multi-point constraints in the model, condenses
-    the slave degrees of freedom out of the equation system (implicit solvers), or folds slave
+    the slave degrees of freedom out of the system of equations (implicit solvers), or folds slave
     masses/forces onto the masters and slaves the kinematics directly (explicit dynamics). See
     :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`.
 
     Multi-point constraints are defined via the ``*constraint`` keyword like ordinary constraints,
     but live in :attr:`~edelweissfe.models.femodel.FEModel.multiPointConstraints` and stay outside
-    the DofManager and the constraint assembly loop entirely.
+    the numbering of the degrees of freedom and the constraint assembly loop entirely.
 
     A degree of freedom may be claimed as slave by at most one multi-point constraint of a model --
     the condensation operator rejects duplicate claims. Constraints that build their slave set
@@ -65,10 +65,8 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
     #: storing their records elsewhere override :meth:`claimedSlaveNodes` instead.
     _records: list = []
 
-    #: Whether a slave DOF of this constraint may be left to a constraint earlier in model order that
-    #: claims it too (its record is then dropped). A constraint without a stand-in for its equation --
-    #: the hanging-node constraint: nothing else keeps a hanging node on the coarse face -- sets this
-    #: to False, and a dropped record is then an error, not a log line.
+    #: Whether a slave DOF of this constraint may be left to an earlier constraint that claims it too
+    #: (its record is then dropped). If False (e.g. hanging nodes), a dropped record is an error.
     mayYieldSlaveToEarlierClaim: bool = True
 
     @classmethod
@@ -111,14 +109,14 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
         """
 
     @abstractmethod
-    def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
+    def getMultiPointConstraints(self, numbering) -> list[tuple[int, list[tuple[int, float]]]]:
         """Return the linear dependency records of this constraint in global degree-of-freedom
-        indices of the given DofManager.
+        indices of the given numbering.
 
         Parameters
         ----------
-        dofManager
-            The current :class:`~edelweissfe.numerics.dofmanager.DofManager`, used to resolve
+        numbering
+            The current :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, used to resolve
             (node, field, component) to global degree-of-freedom indices.
 
         Returns
@@ -150,3 +148,19 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
 
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""
+
+    @property
+    def nodes(self) -> list:
+        """The nodes this constraint needs fields on, as for
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.nodes`.
+
+        The default is none: the slaves and masters of most multi-point constraints are element
+        nodes, which already carry their fields.
+        """
+        return []
+
+    @property
+    def fields(self) -> list:
+        """The fields this constraint needs on each of :attr:`nodes`, as for
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.fields`."""
+        return []

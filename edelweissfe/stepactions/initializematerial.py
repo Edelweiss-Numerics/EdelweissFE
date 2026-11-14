@@ -113,7 +113,7 @@ class StepAction(StepActionBase):
 
         return cls(name, model.elementSets[elSetName])
 
-    def applyAtStepEnd(self, model, stepMagnitude=None):
+    def applyAtStepEnd(self, model):
         self.active = False
 
     def applyAtStepStart(self, model):

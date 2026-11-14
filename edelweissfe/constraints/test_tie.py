@@ -13,7 +13,7 @@ from edelweissfe.constraints.base.multipointconstraintbase import (
 from edelweissfe.constraints.tie import Constraint as TieConstraint
 from edelweissfe.elements.contactsurfaceelement import Line2ContactFacet
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
@@ -51,9 +51,9 @@ class TestTieConstraint(unittest.TestCase):
 
         tie = TieConstraint("my_tie", self.model, slaveSurface="slave_facets", masterSurface="master_facets")
 
-        dofManager = DofManager([], [], [], [], [])
+        numbering = DofNumbering([])
         with self.assertRaises(KeyError) as ctx:
-            tie.getMultiPointConstraints(dofManager)
+            tie.getMultiPointConstraints(numbering)
         self.assertIn("has no 'displacement' field defined", str(ctx.exception))
 
     def test_existing_nodeset_collision_raises(self):
@@ -83,7 +83,7 @@ class TestTieConstraint(unittest.TestCase):
             def __init__(self):
                 self.accepted = False
 
-            def getMultiPointConstraints(self, dofManager):
+            def getMultiPointConstraints(self, numbering):
                 return []
 
             def acceptLastState(self):

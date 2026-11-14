@@ -187,9 +187,7 @@ class StepManager:
         """
 
         def printActionDefinition(intro, options):
-            # A single call: Journal.message() owns all wrapping/indentation for this line, so it
-            # stays consistent with every other multi-line message in the log instead of pre-wrapping
-            # here against a width Journal itself has no knowledge of.
+            # A single call, so Journal.message() handles the wrapping.
             journal.message(
                 intro + " [" + ", ".join(("{:}={:}".format(k, v) for k, v in options.items())) + "]",
                 self.identification,
@@ -213,10 +211,8 @@ class StepManager:
                     )
                 actionNamesInThisStep.add(action.name)
 
-                # Both paths go through the adapter seam on StepActionBase rather than calling
-                # __init__/updateStepAction directly, so that a step action with a real typed
-                # constructor and one still consuming the raw definition dict are driven
-                # identically from here -- see StepActionBase.fromStepActionDefinition.
+                # Both paths go through StepActionBase's definition adapters; see
+                # StepActionBase.fromStepActionDefinition.
                 if action.name in self.stepActions[action.module]:
                     self.stepActions[action.module][action.name].updateStepActionFromDefinition(
                         action.kwargs, jobInfo, model, fieldOutputController, journal

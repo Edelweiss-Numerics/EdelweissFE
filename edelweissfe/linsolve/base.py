@@ -37,8 +37,8 @@ the information -- a solver that needs more than the default overrides it; every
 default that does nothing harmful.
 
 :meth:`setModel` hands a solver the live :class:`~edelweissfe.models.femodel.FEModel` and
-:class:`~edelweissfe.numerics.dofmanager.DofManager` it is solving for. Everything a solver may want is
-derivable from those two objects (the field layout from the ``DofManager``, node coordinates and element
+:class:`~edelweissfe.numerics.dofnumbering.DofNumbering` it is solving for. Everything a solver may want is
+derivable from those two objects (the field layout from the ``DofNumbering``, node coordinates and element
 topology from the ``FEModel``), so a solver that wants more than the default field-structure bookkeeping
 (e.g. the composed solver reading node coordinates for a rigid-body near null-space, or building a P1
 topology map) keeps the references and computes what it needs on its own schedule -- the driver need not
@@ -117,39 +117,28 @@ class LinearSolver:
     _journal = None
     _fieldStructure: "list[FieldBlock] | None" = None
     _model = None
-    _dofManager = None
+    _numbering = None
 
-    #: Display name for this solver's own log lines (e.g. a "linear solve" column's debug detail).
-    #: Overridden by a solver that wants its messages attributed to something other than the generic
-    #: base name -- e.g. ``ComposedLinearSolver`` sets this to its own identification string.
+    #: Display name for this solver's own log lines; overridden by solvers with their own name.
     identification = "LinearSolver"
 
-    #: Whether this solver reports per-solve diagnostics (an iteration count, a residual, etc.) that
-    #: the nonlinear solver can render as an extra "linear solve" column in its own convergence table.
-    #: ``False`` for solvers with nothing iterative to report -- a direct factorization has no
-    #: per-solve iteration count or residual, so there is nothing there worth a column. A solver
-    #: overriding this to ``True`` must also populate :attr:`lastSolveSummary` after every
-    #: :meth:`__call__`.
+    #: Whether this solver reports per-solve diagnostics (iterations, residual) for an extra "linear
+    #: solve" column in the nonlinear solver's convergence table. If ``True``, :attr:`lastSolveSummary`
+    #: must be populated after every :meth:`__call__`.
     reportsSolveSummary = False
 
-    #: The most recent call's diagnostics as a :class:`LinearSolveSummary`, or ``None`` before any
-    #: call, or for a solver that never overrides :attr:`reportsSolveSummary`. Read by the nonlinear
-    #: solver immediately after calling this solver, to build its per-iteration row -- never pushed
-    #: proactively, since the caller alone knows when "this iteration's row" is being assembled.
+    #: The most recent call's diagnostics as a :class:`LinearSolveSummary`, or ``None``; read by the
+    #: nonlinear solver right after each call.
     lastSolveSummary: "LinearSolveSummary | None" = None
 
-    #: Whether this solver benefits from the system matrix keeping the same sparsity pattern from one
-    #: Newton iteration to the next -- i.e. whether it does something *across* solves that a changing
-    #: pattern defeats (a Krylov solver reuses a preconditioner built for the old pattern; a direct
-    #: factorization like PARDISO's starts from scratch on every solve regardless and has nothing to
-    #: lose). ``False`` here, inherited by every solver that does not override it. Read by
-    #: :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`'s
-    #: "auto" default (``None``, unset in the input file) to decide whether pruning the
-    #: multi-point-condensed system's explicit zeros -- which changes its pattern on almost every
-    #: iteration -- is worth it *for this solver*: pruned (``True``) unless the solver says it needs
-    #: the pattern stable, in which case it is left alone (``False``) so hierarchy reuse can engage.
-    #: An explicit ``true``/``false`` in the input file always overrides this.
-    needsStableSparsityPattern = False
+    #: Whether this solver wants the explicitly stored zeros compacted out of the multi-point-condensed system matrix
+    #: before it solves. A direct factorization does (its reordering is sensitive to the extra structural entries); a
+    #: Krylov solver with an AMG preconditioner does not (a stored zero is no strong connection: the same iterations,
+    #: and the compaction costs a copy of the matrix and a pass over it in every Newton iteration); one that reuses its
+    #: preconditioner must not have it (the pruned pattern changes on almost every iteration). Read by the "auto"
+    #: default of :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`; an
+    #: explicit ``true``/``false`` in the input file overrides it.
+    needsPrunedSystemMatrix = False
 
     def setJournal(self, journal) -> None:
         """Receive the shared :class:`~edelweissfe.journal.journal.Journal` instance.
@@ -159,44 +148,56 @@ class LinearSolver:
         """
         self._journal = journal
 
-    def setModel(self, model, dofManager) -> None:
-        """Receive the live model and DOF manager this solver is being asked to solve for.
+    def setModel(self, model, numbering) -> None:
+        """Receive the live model and numbering of the degrees of freedom this solver is being asked to solve for.
 
-        Called by the nonlinear solver whenever the equation system is (re)built -- i.e. on the first
-        solve and again after any AMR/connectivity change. The default implementation derives and
+        Called by the nonlinear solver whenever the discrete system gets a new numbering -- i.e. on the first
+        solve and again after a change of the mesh or of the scalar variables (a change of the connectivity alone
+        keeps the numbering, and is announced by :meth:`onNewMatrixPattern`). The default implementation derives and
         stores the per-field DOF-block structure (name, DOF range, nodal dimension) any field-split
         solver needs -- equivalent to calling :meth:`setFieldStructure` with those blocks -- and keeps
-        ``model``/``dofManager`` themselves on ``self._model``/``self._dofManager`` for a solver that
+        ``model``/``numbering`` themselves on ``self._model``/``self._numbering`` for a solver that
         wants to go further (e.g. node coordinates for a rigid-body near null-space, or a P1 topology
         map) without the driver having to know about it.
 
-        A solver overriding this should normally call ``super().setModel(model, dofManager)`` first to
+        A solver overriding this should normally call ``super().setModel(model, numbering)`` first to
         get the field-structure bookkeeping for free, then do whatever else it needs.
 
         Parameters
         ----------
         model
             The live :class:`~edelweissfe.models.femodel.FEModel`.
-        dofManager
-            The live :class:`~edelweissfe.numerics.dofmanager.DofManager` describing the current
-            equation system's layout.
+        numbering
+            The live :class:`~edelweissfe.numerics.dofnumbering.DofNumbering` of the current
+            discrete system.
         """
         self._model = model
-        self._dofManager = dofManager
+        self._numbering = numbering
         self._fieldStructure = [
             FieldBlock(fieldName, fieldIndices.start, fieldIndices.stop, model.nodeFields[fieldName].dimension)
-            for fieldName, fieldIndices in dofManager.idcsOfFieldsInDofVector.items()
+            for fieldName, fieldIndices in numbering.idcsOfFieldsInDofVector.items()
         ]
+
+    def onNewMatrixPattern(self) -> None:
+        """The sparsity pattern of the system matrix is about to change: a change of the connectivity (e.g. a contact
+        search, which couples other nodes) gives the discrete system new locations on the same numbering, and with them
+        a new pattern. Whatever this solver built for the old pattern (a hierarchy, a factorization) is of no use
+        for the new one and is dropped, before the nonlinear solver builds the new pattern, so that nothing is held
+        twice. What is bound to the model and the numbering (:meth:`setModel`) stays.
+
+        The default holds nothing bound to a pattern. A change of the numbering is a new pattern as well, and calls
+        this from :meth:`setModel`.
+        """
 
     def setFieldStructure(self, fields: "list[FieldBlock]") -> None:
         """Receive the ordered field blocks of the DOF vector directly (in DOF order), bypassing
         :meth:`setModel`.
 
         An escape hatch for a caller that knows the field-block layout but has no full
-        ``FEModel``/``DofManager`` to hand over -- e.g. an offline probe script driving a solver
+        ``FEModel``/``DofNumbering`` to hand over -- e.g. an offline probe script driving a solver
         directly on a captured ``(A, b)`` system. A live run goes through :meth:`setModel` instead,
         whose default implementation computes exactly this and stores it the same way; a solver that
-        only ever needs the field-block structure (not the model/dofManager references themselves)
+        only ever needs the field-block structure (not the model/numbering references themselves)
         does not need to care which path supplied it.
 
         Only field-split solvers (e.g. a composed solver with ``OnField`` corrections) read it; every

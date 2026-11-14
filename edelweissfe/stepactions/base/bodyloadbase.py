@@ -30,12 +30,18 @@ from abc import abstractmethod
 
 import numpy as np
 
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
+from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 
 
-class BodyLoadBase(StepActionBase):
+class BodyLoadBase(LoadBase):
+    """A load per unit volume on a set of elements, such as gravity: each element integrates it over its volume,
+    see :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeBodyForce`."""
+
     @property
     @abstractmethod
     def elementSet(self) -> ElementSet:
@@ -68,3 +74,48 @@ class BodyLoadBase(StepActionBase):
         np.ndarray
             The magnitude.
         """
+
+    def assembleLoad(
+        self,
+        P: DofVector,
+        K: SystemMatrixBlocks | None,
+        U_np: DofVector,
+        dU: DofVector,
+        timeStep: TimeStep,
+        locations: DofLocations,
+    ):
+        """Let every element of the element set add the residual contribution of the body force, the negative of
+        the external load, and its tangent; see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
+        Only the elements that are located act: an element set may also hold entities the discrete system leaves
+        out, e.g. the contact facets of ``all``, which carry no material and have no block in the system matrix.
+
+        Parameters
+        ----------
+        P
+            The global residual contribution vector to augment.
+        K
+            The global system matrix to augment; None for an explicit solver, which needs no tangent.
+        U_np
+            The current global solution.
+        dU
+            The global solution increment.
+        timeStep
+            The current time step.
+        locations
+            The locations of the entities in the discrete system, from which the load finds where it acts.
+        """
+
+        time = timeStep.totalTime
+        dT = timeStep.timeIncrement
+
+        force = self.getCurrentLoad(timeStep)
+        for el in self.elementSet:
+            if el not in locations:
+                continue
+
+            Pe = np.zeros(el.nDof)
+            Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
+
+            el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
+
+            P[el] += Pe

@@ -1,7 +1,7 @@
 ** A two-level cycle spelled out in the solver script (see solver.py): damped Jacobi, a coarse correction on the
 ** linear (P1) interpolant of the quadratic mesh -- its prolongation P built in the script from the corner/midside
-** map of the displacement field -- with one AMG cycle on the coarse problem, and damped Jacobi again, accelerated by
-** LGMRES. The model is a linear-elastic plane-strain cantilever of quadratic elements (CPE8, 1138 displacement dofs).
+** map of the displacement field, which also says that the coarse dofs are the displacement field on the corner nodes --
+** with one cycle of the rigid-body coarse level on that coarse field, and damped Jacobi again, accelerated by LGMRES. The model is a linear-elastic plane-strain cantilever of quadratic elements (CPE8, 1138 displacement dofs).
 ** Requires the optional amgcl extension; skipped where it is not built.
 *material, name=linearelastic, id=linearelastic, provider=edelweiss
 210000.0, 0.15

@@ -78,7 +78,7 @@ def test_the_structure_view_shows_one_line_per_component_with_the_roles_of_the_c
 def test_the_structure_of_the_block_amg_preset_before_it_has_seen_a_matrix():
     """Its corrections are made per field at the first set-up; before, the view says so."""
     lines = views.structure(blockAMG()).splitlines()
-    assert len(lines) == 3 and "ForcingTolerance" in lines[0] and "Multiplicative" in lines[2]
+    assert len(lines) == 3 and "EisenstatWalkerTolerance" in lines[0] and "Multiplicative" in lines[2]
 
 
 def test_the_formula_puts_each_child_in_the_place_of_its_role():
@@ -88,11 +88,20 @@ def test_the_formula_puts_each_child_in_the_place_of_its_role():
 
 
 def test_the_schur_complement_formula_and_steps():
-    schur = SchurComplement(["a marker"], preconditionS=AMG(), solveA_bb=DirectSolver(), blockFactors="LU")
+    schur = SchurComplement(
+        ["a marker"], schurComplementSolve=AMG(), condensedBlockSolve=DirectSolver(), blockFactors="both"
+    )
     assert views.formula(schur) == "BlockLU[A⁻¹, AMG(A)⁻¹]"
-    assert [step.child for step in schur.describe().steps] == ["solveA_bb", "preconditionS", "solveA_bb"]
+    assert [step.child for step in schur.describe().steps] == [
+        "condensedBlockSolve",
+        "schurComplementSolve",
+        "condensedBlockSolve",
+    ]
     assert schur.describe().parameters["S̃"] == "A_kk − A_kb A_bb⁻¹ A_bk, local"
-    assert SchurComplement(["a marker"], preconditionS=AMG(), approximation="none").describe().parameters["S̃"] == "A_kk"
+    assert (
+        SchurComplement(["a marker"], schurComplementSolve=AMG(), approximation="none").describe().parameters["S̃"]
+        == "A_kk"
+    )
 
 
 def test_the_run_statistics_annotate_every_component():

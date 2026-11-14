@@ -44,7 +44,7 @@ is one test for each:
   re-solves it from equilibrium. That has to fire exactly on those increments and nowhere else.
 * **Nothing else changed.** The highest-risk part of this feature is not the adaptive path at all:
   it is that the re-arm might fire on an ordinary multi-step deck that never refines anything --
-  a step boundary rebuilds the ``DofManager`` too. That is pinned by running a two-step deck twice,
+  a step boundary rebuilds the discrete system too. That is pinned by running a two-step deck twice,
   once as shipped and once with the re-arm suppressed, and requiring the two to agree bit for bit.
 """
 
@@ -56,9 +56,12 @@ from edelweissfe.models.topologypipeline import TopologyPipeline
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.utils.inputfileparser import parseInputFile
 
+#: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
+pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
+
 #: The unpatched methods, captured once at import -- a test that runs the solver more than once must
 #: wrap THESE rather than whatever is currently on the class, or the wrappers chain. Same reason as
-#: in test_explicit_operator_reuse.py.
+#: in test_ned_discrete_system_path.py.
 _TRUE_ENSURE = NonlinearImplicitDynamic._updateNewmarkSystem
 _TRUE_REPORT = NonlinearImplicitDynamic.reportTopologyChangeConservation
 _TRUE_INITIAL_ACCELERATION = NonlinearImplicitDynamic._computeInitialAcceleration
@@ -177,10 +180,10 @@ class _Recorder:
     initialAccelerations
         The step time at which each equilibrium solve for the acceleration was started.
     builds
-        One entry per (re)built Newmark system: its DofManager and the interpolated velocity and
+        One entry per (re)built Newmark system: its discrete system and the interpolated velocity and
         acceleration it was built with, sampled BEFORE any re-equilibration, as
-        ``(dofManager, [(node, component, V, A)])``. The manager is kept, not merely identified:
-        CPython reuses the address of a collected object, so ``id()`` of a discarded manager can
+        ``(discreteSystem, [(node, component, V, A)])``. The discrete system is kept, not merely identified:
+        CPython reuses the address of a collected object, so ``id()`` of a discarded system can
         equal ``id()`` of its successor.
     """
 
@@ -215,18 +218,18 @@ def _instrument(monkeypatch, suppressRearm: bool = False) -> _Recorder:
             V = np.asarray(system.V)
             A = np.asarray(system.A)
             for fieldName in system.dynamicFields:
-                indices = system.dofManager.idcsOfFieldsInDofVector[fieldName]
+                indices = system.system.numbering.idcsOfFieldsInDofVector[fieldName]
                 dimension = model.nodeFields[fieldName].dimension
                 for offset, index in enumerate(range(indices.start, indices.stop)):
                     samples.append(
                         (
-                            system.dofManager.getNodeForIndexInDofVector(index),
+                            system.system.numbering.getNodeForIndexInDofVector(index),
                             offset % dimension,
                             V[index],
                             A[index],
                         )
                     )
-            recorder.builds.append((system.dofManager, samples))
+            recorder.builds.append((system.system, samples))
 
         return system
 
@@ -449,7 +452,7 @@ stepLength=1.0, startInc={DT}, maxInc={DT}, minInc=1e-6, maxNumInc=3, maxIter=25
 def test_a_two_step_deck_without_adaptivity_is_bit_identical_to_before_the_change(tmp_path, monkeypatch):
     """**The highest-risk item of this feature.**
 
-    A step boundary rebuilds the ``DofManager`` -- unconditionally, since ``solveStep`` sets it to
+    A step boundary rebuilds the discrete system -- unconditionally, since ``solveStep`` sets it to
     ``None`` first -- so the identity check that detects a refinement fires there too, on every
     existing multi-step deck. Two gates stop it from re-arming anything there: the Newmark system
     is also dropped at a step start, so the "not the first build" condition is false; and the
@@ -458,7 +461,7 @@ def test_a_two_step_deck_without_adaptivity_is_bit_identical_to_before_the_chang
     once with the re-arm neutralised, and the two final states must agree to the last bit.
 
     The second step deliberately prescribes a different set of degrees of freedom from the first,
-    so the two steps really do present different equation systems rather than accidentally the
+    so the two steps really do present different discrete systems rather than accidentally the
     same one.
     """
 
@@ -466,7 +469,7 @@ def test_a_two_step_deck_without_adaptivity_is_bit_identical_to_before_the_chang
     shippedModel, _ = _run(tmp_path, "two_step_shipped", _deck(steps=_TWO_STEPS, nX=2, lX=4.0))
     shippedState = _finalState(shippedModel)
     shippedCalls = list(shipped.initialAccelerations)
-    shippedDofManagers = [dofManager for dofManager, _ in shipped.builds]
+    shippedSystems = [discreteSystem for discreteSystem, _ in shipped.builds]
     monkeypatch.undo()
 
     asBefore = _instrument(monkeypatch, suppressRearm=True)
@@ -474,12 +477,12 @@ def test_a_two_step_deck_without_adaptivity_is_bit_identical_to_before_the_chang
     asBeforeState = _finalState(asBeforeModel)
     monkeypatch.undo()
 
-    # The deck has to actually cross a step boundary with a rebuilt DofManager, or this proves
+    # The deck has to actually cross a step boundary with a rebuilt discrete system, or this proves
     # nothing at all.
-    assert len(shippedDofManagers) == 2, shippedDofManagers
+    assert len(shippedSystems) == 2, shippedSystems
     assert (
-        shippedDofManagers[0] is not shippedDofManagers[1]
-    ), "the two steps shared a DofManager, so this deck is not the case at risk"
+        shippedSystems[0] is not shippedSystems[1]
+    ), "the two steps shared a discrete system, so this deck is not the case at risk"
 
     # No topology change, so nothing may be reported and the acceleration may be solved exactly
     # once per step -- at each step's own start, which is what solveStep already decided.
@@ -520,7 +523,7 @@ def test_suppressing_the_rearm_does_change_an_adaptive_run(tmp_path, monkeypatch
 
 def test_a_rebuild_without_a_topology_change_does_not_re_equilibrate(tmp_path, monkeypatch):
     """A constraint reporting that its connectivity changed -- a contact candidate list, most of
-    all -- rebuilds the equation system without moving a single node. There is then no interpolated
+    all -- rebuilds the discrete system without moving a single node. There is then no interpolated
     acceleration to replace and no conservation statement to make, and restarting the acceleration
     of the whole model there would be both wrong and, repeated per increment, expensive.
 
@@ -545,7 +548,7 @@ def test_a_rebuild_without_a_topology_change_does_not_re_equilibrate(tmp_path, m
     _run(tmp_path, "connectivity_only", _deck(nX=2, lX=4.0))
 
     assert calls["n"] > 3, "the forced connectivity change never happened"
-    assert len(recorder.builds) == 2, "the equation system was not rebuilt mid-step; nothing was exercised"
+    assert len(recorder.builds) == 2, "the discrete system was not rebuilt mid-step; nothing was exercised"
     assert not recorder.conservation, "a rebuild that moved no node reported a topology change"
     assert recorder.initialAccelerations == [0.0], recorder.initialAccelerations
 

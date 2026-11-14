@@ -33,7 +33,7 @@ The keyword line holds only its identity, ``name`` and ``type``; the data lines 
 block in its ``linsolver=`` option::
 
     *linearSolver, name=fast, type=blockamg
-    rigidBodyCoarseLevel=false
+    rigidBodyModesPerAggregate=false
 
     *solver, solver=NIST, name=theSolver
     linsolver=fast

@@ -187,19 +187,17 @@ class AbqModelConstructor:
                         del elementSets[name]
                 else:
                     els = [elements[elNum] for elNum in elNumbers]
-                # dict.fromkeys deduplicates while preserving first-occurrence order -- a plain
-                # set() here would make facet numbering, slave-node order, and closest-facet tie
-                # breaking depend on Python's hash-based set iteration order instead.
+                # dict.fromkeys deduplicates in first-occurrence order (a set() would make the order hash-dependent)
                 elementSets[name] = ElementSet(name, list(dict.fromkeys(els)))
             else:
                 els = []
                 for line in data:
                     for elSet in line:
                         els += list(elementSets[elSet])
-                # A name-union *ELSET must also become a proper ElementSet (not a bare list), or
-                # it is unhashable and breaks any consumer that caches by set identity (e.g.
-                # NodeField.subset()).
-                elementSets[name] = ElementSet(name, set(els))
+                # Must be a proper (hashable) ElementSet, as consumers cache by set identity. Deduplicated in
+                # first-occurrence order: a set() of elements iterates in memory-address order, which differs from run
+                # to run, and so would the numbering of everything a generator creates while looping over this set.
+                elementSets[name] = ElementSet(name, list(dict.fromkeys(els)))
 
         # generate dictionary of nodeObjects belonging to a specified nodeset
         # or generate nodeset by generate definition in inputfile
@@ -335,10 +333,8 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        # Multi-point / geometric-adjustment constraints (e.g. Tie with adjust=True) are
-        # instantiated first so that any in-place reference coordinate adjustments take effect
-        # before subsequent constraints (e.g. penalty contact) cache reference nodal coordinates
-        # by value. Order within each category is preserved.
+        # Multi-point constraints first: their reference coordinate adjustments (e.g. Tie with adjust=True)
+        # must take effect before other constraints cache reference coordinates by value.
         def isMPCDefinition(definition):
             constraintType = CaseInsensitiveDict(definition)["type"]
             return issubclass(getConstraintClass(constraintType), MultiPointConstraintBase)
@@ -359,7 +355,7 @@ class AbqModelConstructor:
             constraint = constraintClass.fromConstraintDefinition(name, kwargs, model, journal=self.journal)
 
             # Multi-point (DOF-elimination) constraints contribute nothing to the load vector or
-            # system matrix and must stay outside the DofManager/assembly machinery.
+            # system matrix and must stay outside the numbering/assembly machinery.
             if issubclass(constraintClass, MultiPointConstraintBase):
                 model.multiPointConstraints[name] = constraint
             else:
@@ -455,9 +451,7 @@ class AbqModelConstructor:
                     "class attribute (see `edelweissfe.utils.schema.OptionSchemaProvider`)."
                 )
 
-            # Validate/coerce the parsed options into the section's own schema, then construct it.
-            # `moduleOptions` carries the nested `>>` sub-keyword blocks
-            # (`>>materialParameterFromField`, `>>writeMaterialPropertiesToFile`).
+            # Validate/coerce the parsed options (incl. the `>>` sub-keyword blocks) into the section's schema.
             try:
                 configuration = buildSchemaFromOptions(
                     sectionSchema,

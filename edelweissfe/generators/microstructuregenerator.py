@@ -169,9 +169,8 @@ class Generator(GeneratorBase):
                 elements_per_block.append(newEl)
                 idx += 1
 
-            # not set(...): ElementSet already deduplicates and keeps the order it is fed, whereas a set
-            # of identity-hashed elements would fix the member order from object addresses instead of the
-            # mesh -- and that order reaches facet/element numbering downstream (see hadaptivity.py).
+            # not set(...): the member order must follow the mesh, not object addresses, since it reaches
+            # facet/element numbering downstream; ElementSet deduplicates by itself.
             model.elementSets[f"{name}_block-{block_id + 1}"] = ElementSet(
                 f"{name}_block-{block_id + 1}", elements_per_block
             )
@@ -293,9 +292,7 @@ def replicateMesh(
 
         for k, node in nodes_to_shift:
             new_nodes.append(node + shift)
-            # len(model.nodes) + 1 was a positional guess, not an allocator, and would silently
-            # overwrite a live node the moment the label range had a gap. The rest of this function
-            # addresses nodes as `label - 1` into all_nodes, so keep the association in that form.
+            # The rest of this function addresses nodes as `label - 1` into all_nodes.
             (label,) = model.topology.reserveNodeNumbers(1)
             associated_nodes.append([k, label - 1])
             _node = Node(label, np.array(new_nodes[-1]))
@@ -326,21 +323,14 @@ def replicateMesh(
                 for nid in el:
                     k = np.where(associated_nodes_array[:, 0] == nid)[0][0]
                     new_el.append(int(associated_nodes_array[k, 1]))
-                # len(model.elements) + 1 was not merely unidiomatic: element numbers are never
-                # recycled, so the dict has gaps, and len()+1 could land on a live element and
-                # silently overwrite it.
                 (elNumber,) = model.topology.reserveElementNumbers(1)
                 newEl = elementType(elTypeName, elNumber)
                 nodeList = [model.nodes[nid + 1] for nid in new_el]
                 newEl.setNodes(nodeList)
                 model.createElement(newEl)
-                # Keep the element itself, not a positional guess: element numbers come from the
-                # allocator and are never recycled, so len(model.elements) says nothing about which
-                # number this element got (the same reason the creation above no longer uses it).
                 newElements.append(newEl)
 
-            # create new element set becaus elsets are immutable -- not set(...): ElementSet already
-            # deduplicates and keeps the order it is fed (see the block-assignment loop above)
+            # create new element set becaus elsets are immutable; not set(...), see above
             model.elementSets[elset_name] = ElementSet(
                 elset_name,
                 list(model.elementSets[elset_name].elements) + newElements,

@@ -110,8 +110,6 @@ class Constraint(ConstraintBase, MeshDependent):
         self.penalty = configuration.penalty
         self._nodes = nSet
 
-        self.active = True
-
         self._lastSeenTopologyVersion = model.topology.version
         model.topology.registerMeshDependent(self)
         self._rebuildDerivedState()
@@ -137,7 +135,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self.indices_component = slice(self.component, self._nDof + self.component, self.sizeField)
 
-        self._fieldsOnNodes = [
+        self._fields = [
             [
                 self.theField,
             ]
@@ -148,8 +146,8 @@ class Constraint(ConstraintBase, MeshDependent):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
@@ -165,20 +163,17 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildDerivedState()
         return True
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: np.ndarray,
         timeStep: TimeStep,
     ):
-        if not self.active:
-            return
-
         values = U_np[self.indices_component]
 
-        PExt[self.indices_component] -= self.penalty * values
+        P[self.indices_component] += self.penalty * values
 
         diag = np.diag(K)
         diag.setflags(write=True)  # bug in numpy

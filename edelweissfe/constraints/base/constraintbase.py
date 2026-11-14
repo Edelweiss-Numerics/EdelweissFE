@@ -26,30 +26,90 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 import numpy as np
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.vijentitybase import VIJEntityBase
+from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
+    BaseNodeCouplingEntity,
+)
+from edelweissfe.numerics.systemmatrixcontributor import (
+    SystemMatrixContributorBase,
+    countEntriesOfBlock,
+)
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
-    #: Scratch buffer for the tangent that :meth:`applyConstraintExplicit` computes and discards.
-    #: Declared here so every constraint has it without touching its constructor; replaced by an
-    #: instance-level array on first use, and re-allocated only when the DOF footprint changes.
+class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixContributorBase):
+    #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block
+    #: the constraint has in the discrete system it is evaluated in; None until its first evaluation there (see
+    #: :meth:`prepareExplicitEvaluation`).
     _discardedTangentScratch = None
 
     #: The state this constraint carries from one increment to the next, by attribute name and type;
-    #: see :mod:`~edelweissfe.utils.checkpointedstate`. Every constraint declares it -- an empty
-    #: mapping if it carries none -- or overrides :meth:`getRestartData` and :meth:`setRestartData`.
-    #: Undeclared, it cannot be checkpointed.
+    #: see :mod:`~edelweissfe.utils.checkpointedstate`. Every constraint declares it (empty if it carries
+    #: none) or overrides :meth:`getRestartData` and :meth:`setRestartData`.
     checkpointedState: dict | None = None
+
+    #: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:
+    #: e.g. a contact constraint whose partner is far away is not, and takes no part in the discrete system then (see
+    #: :attr:`active`). A constraint sets it there; the model sees the change of :attr:`active` itself (see
+    #: :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). A constraint that does not check stays within
+    #: reach.
+    withinReach: bool = True
+
+    #: Whether this constraint is switched on from outside; see :attr:`switchedOn`.
+    _switchedOn: bool = True
+
+    @property
+    def switchedOn(self) -> bool:
+        """Whether this constraint is switched on from outside, e.g. by a ``modelupdate`` step action, which switches it
+        through :attr:`active`. A constraint switched off from outside rests: the model does not locate it anew
+        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), it accepts no state (:meth:`acceptLastState`),
+        so that its history stays as it was, and the solvers neither evaluate it nor refuse it. A solver that cannot
+        handle a constraint refuses it while it is switched on, even out of reach: it may come within reach during the
+        step.
+
+        Returns
+        -------
+        bool
+            Whether the constraint is switched on.
+        """
+
+        return self._switchedOn
+
+    @property
+    def active(self) -> bool:
+        """Whether this constraint takes part in the discrete system, while it is :attr:`switchedOn` and
+        :attr:`withinReach`. A constraint that does not take part gets no degrees of freedom and adds nothing to the
+        residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the discrete system with it, so
+        that they leave no empty rows behind.
+
+        Setting it switches the constraint on or off from outside, e.g. by a ``modelupdate`` step action at the start
+        of a step. A switch-off from outside lasts until the constraint is switched on again from outside, whatever the
+        constraint finds in reach; switched on again, it takes part while it is within reach.
+
+        A solver evaluates exactly the constraints that took part when its discrete system was built, and the model
+        sees a change of ``active`` only through the constraints it updates itself
+        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). Therefore ``active`` is switched from outside
+        only between steps, by a ``modelupdate`` before the step begins, which starts from a new discrete system.
+
+        Returns
+        -------
+        bool
+            Whether the constraint takes part in the discrete system.
+        """
+
+        return self._switchedOn and self.withinReach
+
+    @active.setter
+    def active(self, switchedOn: bool):
+        self._switchedOn = switchedOn
 
     @classmethod
     def fromConstraintDefinition(
@@ -87,8 +147,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         :func:`~ConstraintBase.getNumberOfAdditionalNeededScalarVariables` and
         :func:`~ConstraintBase.assignAdditionalScalarVariables`, which are called at the beginning of an analysis.
 
-        If scalar variables are used, EdelweissFE expects the layout of the external load vector PExt
-        (and the stiffness) to be of the form
+        If scalar variables are used, EdelweissFE expects the layout of the residual contribution ``P``
+        (and of the tangent) to be of the form
 
         .. code-block:: console
 
@@ -122,9 +182,21 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         """The nodes this constraint is acting on."""
 
     @property
+    def nNodes(self) -> int:
+        """The number of nodes this constraint is acting on."""
+
+        return len(self.nodes)
+
+    @property
     @abstractmethod
-    def fieldsOnNodes(self) -> list:
+    def fields(self) -> list:
         """The fields on the nodes this constraint is acting on."""
+
+    @property
+    def dofIndicesPermutation(self) -> None:
+        """None: the layout of a constraint is nodewise, followed by its scalar variables."""
+
+        return None
 
     @property
     @abstractmethod
@@ -132,13 +204,15 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         """The total number of degrees of freedom this constraint is associated with."""
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        """Called once at the start of every increment, before the global equation system is
+        """Called once at the start of every increment, before the global discrete system is
         (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
-        contact pairs) and declare whether its ``nodes``/``fieldsOnNodes``/``nDof`` footprint has
-        changed since the last call.
+        contact pairs) and declare whether the nodes it couples (``nodes``/``fields``/``nDof``) have
+        changed since the last call. A constraint that is not always within reach also sets
+        :attr:`withinReach` here; it does not report the change of :attr:`active` itself, the model compares it (see
+        :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`).
 
         The default implementation does nothing and reports no change, which is correct for every
-        constraint whose DOF footprint is fixed at construction (i.e. every constraint that does
+        constraint whose nodes are fixed at construction (i.e. every constraint that does
         not override this method).
 
         Parameters
@@ -149,8 +223,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         Returns
         -------
         bool
-            True if this constraint's contribution to the global system has changed and the
-            equation system must be rebuilt before the next Newton solve.
+            True if the nodes this constraint couples have changed.
         """
 
         return False
@@ -158,7 +231,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     def acceptLastState(self):
         """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
         is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of
-        the last (converged) Newton iterate to its history.
+        the last (converged) Newton iterate to its history. Only an :attr:`active` constraint is called: one that took
+        no part in the increment keeps its history.
 
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""
@@ -213,21 +287,41 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
 
         self.scalarVariables = scalarVariables
 
-    def applyConstraintExplicit(
+    def prepareExplicitEvaluation(self):
+        """Called by an explicit solver whenever the constraint is located anew in its discrete system (a rebuilt
+        one, or one whose constraints are re-located), before it evaluates the constraint there with
+        :meth:`computeKernelsExplicit`.
+
+        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation
+        sizes it, once, for the block the constraint has now. The size is the number of entries of the block
+        (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists
+        its entries means building the list: once per discrete system, not in every increment. A constraint that
+        evaluates its forces without a tangent needs nothing here.
+
+        A solver that evaluates constraints itself, rather than through
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`, calls this
+        whenever the constraint is located anew: the default :meth:`computeKernelsExplicit` does not size its tangent
+        again on its own, and a block whose size has changed (a contact with other slave nodes) would not fit it.
+        """
+
+        self._discardedTangentScratch = None
+
+    def computeKernelsExplicit(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         timeStep: TimeStep,
     ):
-        """Evaluate this constraint without producing a tangent matrix.
+        """Add this constraint's contribution to the residual, without a tangent.
 
-        Used by explicit solvers where no system tangent matrix is assembled. The default
-        implementation forwards to :meth:`applyConstraint` with a dummy tangent contribution
-        so existing constraints remain functional without modification.
-
-        Constraints where tangent computation is costly should override this method to evaluate
-        only the residual / force vector directly.
+        The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear
+        system and so has no use for a tangent. This default calls :meth:`computeKernels` with a
+        scratch tangent that is thrown away, so that every constraint also works in an explicit
+        analysis; the scratch is sized once per discrete system: a solver that evaluates constraints itself calls
+        :meth:`prepareExplicitEvaluation` whenever the constraint is located anew.
+        A constraint whose tangent is costly overrides it, e.g. through
+        :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.
 
         Parameters
         ----------
@@ -235,49 +329,67 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
             The current solution, restricted to this constraint's degrees of freedom.
         dU
             The current solution increment, likewise restricted.
-        PExt
-            The local residual / force vector to augment.
+        P
+            The residual contribution to augment, with the sign described in :meth:`computeKernels`.
         timeStep
             The current time step.
         """
 
-        # nDof**2 for any constraint that does not override getVIJContributionSize, allocated on
-        # every increment for a tangent no explicit solver reads. Kept and re-zeroed instead: the
-        # zeroing preserves the previous semantics exactly, whatever applyConstraint assumes about
-        # the buffer it is handed.
-        size = self.getVIJContributionSize()
+        # The discarded tangent buffer is sized once per discrete system, and re-zeroed in every increment.
         scratch = self._discardedTangentScratch
-        if scratch is None or scratch.size != size:
-            scratch = self._discardedTangentScratch = np.zeros(size)
+        if scratch is None:
+            scratch = self._discardedTangentScratch = np.zeros(countEntriesOfBlock(self))
         else:
             scratch[:] = 0.0
 
-        K = self.shapeVIJContribution(scratch)
-        self.applyConstraint(U_np, dU, PExt, K, timeStep)
+        K = self.shapeBlock(scratch)
+        self.computeKernels(U_np, dU, P, K, timeStep)
 
     @abstractmethod
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
-        V: np.ndarray,
+        P: np.ndarray,
+        K: np.ndarray,
         timeStep: TimeStep,
     ):
-        """Apply the constraint.  Add the contributions to the external load vector and the system matrix.
+        """Add this constraint's contribution ``P`` to the residual, and its tangent ``K = dP/dU``.
+
+        A constraint follows the rule every element and every load follows (see
+        :ref:`residual-and-tangent-convention`): ``P`` is the force the constraint needs at its
+        degrees of freedom, i.e. the *negative* of the force it exerts on the nodes, exactly as an
+        element of the same mechanics would add its internal force. A penalty spring of stiffness
+        :math:`k` that pulls a degree of freedom :math:`u` towards :math:`\\bar{u}`, for example, adds
+
+        .. math::
+
+            P \\mathrel{+}= k\\,(u - \\bar{u}), \\qquad K \\mathrel{+}= k .
+
+        A Lagrange multiplier constraint :math:`g(\\boldsymbol{u}) = 0` adds
+        :math:`\\boldsymbol{\\lambda}^T \\partial g / \\partial \\boldsymbol{u}` to the rows of its nodes
+        and :math:`g` to the rows of its multipliers.
+
+        Both ``P`` and ``K`` are augmented, never overwritten. ``K`` must be the derivative of what is
+        added to ``P``: a test can then check it by finite differences, which also catches a ``P``
+        whose sign alone is wrong. A ``P`` and a ``K`` negated together pass that check, so a test
+        checks the direction of the forces the constraint exerts as well.
 
         Parameters
         ----------
         U_np
-            The current total solution vector.
+            The current solution, restricted to this constraint's degrees of freedom; its own scalar
+            variables (e.g. Lagrange multipliers) come last.
         dU
-            The current increment since the last time the constraint was applied.
-        PExt
-            The external load vector.
+            The solution increment since the last converged state, likewise restricted.
+        P
+            The residual contribution to augment.
         K
-            The system (stiffness) matrix.
-        dT
-            The time increment.
-        time
-            The current step and total time.
+            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeBlock` gives it (a
+            dense ``nDof x nDof`` view unless the constraint declares a sparser pattern). A
+            constraint that inherits
+            :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`
+            is also called with ``K=None`` and must then skip the tangent.
+        timeStep
+            The current time step.
         """

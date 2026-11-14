@@ -44,7 +44,7 @@ run_tests_edelweissfe ./testfiles/marmot/ --create     # (re)generate U.ref refe
 pytest edelweissfe/numerics/test_numerics.py           # unit tests
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#adding--running-tests) for test creation guidelines, and [CONTRIBUTING.md](CONTRIBUTING.md#pull-requests) for CI Marmot branch resolution and PR target branch conventions (`master` for bugfixes, `next_v<YY>.<MM>` for features).
+See [CONTRIBUTING.md](CONTRIBUTING.md#adding--running-tests) for test creation guidelines, and [CONTRIBUTING.md](CONTRIBUTING.md#pull-requests) for CI Marmot branch resolution and the PR target branch (`master`).
 
 ## Linting, formatting & commit conventions
 
@@ -106,7 +106,7 @@ maxInc=1.0, minInc=1e-8, maxNumInc=1000, maxIter=100
 >>dirichlet, name=left, nSet=left, field=displacement, 1=0, 2=0, 3=0
 ```
 
-Full keyword/syntax reference: `doc/source/documentation/syntax.rst` and `doc/source/documentation/keywords.rst`.
+Full keyword/syntax reference: `doc/source/syntax.rst` and `doc/source/keywords.rst`.
 
 ### Plugin-registry pattern for extensibility
 
@@ -144,11 +144,14 @@ the `edelweissfe` CLI and `run_tests_edelweissfe`):
   (`edelweissfe/numerics/parallelizationutilities.py::getThreadPool`). `ScatterDofVector` uses precomputed layout
   templates (`ScatterDofVectorTemplate`) and `np.bincount` for lock-free parallel accumulation. Third-party C
   extensions lacking free-threading tags (e.g. `gstools`) are imported lazily to keep the GIL disabled.
-- **CSR Matrix Assembly**: High-performance assembly via `CSRGenerator` and OpenMP-accelerated `CSRGeneratorV2`
-  (`edelweissfe/numerics/`). In-place assembly (`updateInPlace`) avoids reallocating sparsity patterns across iterations.
+  Loops over independent entities use `mapChunksInParallel`, array passes use `forEachSliceInParallel` (same module),
+  and tests choose their thread count with the `workerThreads` fixture of `tests/conftest.py`, as without free
+  threading the helpers run serially whatever `OMP_NUM_THREADS` says.
+- **CSR Matrix Assembly**: OpenMP-accelerated `CSRGenerator` and `DirectCSRAssembler`
+  (`edelweissfe/numerics/csrgeneratorv2.pyx`, C++ core in `_csrcore.h`). In-place assembly (`updateInPlace`) avoids reallocating sparsity patterns across iterations.
 - **Dirichlet BC Enforcement**: Optimized in `edelweissfe/solvers/base/dirichlet.pyx`. Off-diagonal entries are
   zeroed explicitly to preserve the CSR sparsity structure (avoiding costly `eliminate_zeros()` rebuilds) and allow
-  linear solvers to reuse symbolic factorizations. Dirichlet indices are memoized per BC/DofManager.
+  linear solvers to reuse symbolic factorizations. Dirichlet indices are memoized per BC/DofNumbering.
 
 #### Linear Solvers (`edelweissfe/linsolve/`)
 Every linear solver is a composed solver (`edelweissfe/linsolve/composition/`, a tree of components such as `LGMRES`,
@@ -157,7 +160,7 @@ Every linear solver is a composed solver (`edelweissfe/linsolve/composition/`, a
 `edelweissfe/linsolve/types.py`, registry category `linsolver`), named by a `*solver`'s `linsolver=` (or a type name
 for its defaults); Python: `getLinSolverByName(type, options)`.
 - **Direct solvers** (`type=pardiso`, `superlu`, `umfpack`, `klu`, `petsclu`, `mumps`, `panuapardiso`): the one leaf
-  `DirectSolver(backend)`; backends in `linsolve/<name>/` (registry category `directsolver`). MKL PARDISO is the
+  `DirectSolver(package)`; packages in `linsolve/<name>/` (registry category `directsolver`). MKL PARDISO is the
   default, with optional symbolic factorization reuse (`reuseSymbolicFactorization`, off by default).
 - **`type=blockamg`**: the `blockAMG()` preset, field-split block AMG for coupled multi-field problems (AMGCL).
 - **`type=custom`**: a solver script binding the tree to its global `linearSolver`.
@@ -190,8 +193,6 @@ for its defaults); Python: `getLinSolverByName(type, options)`.
 
 ### Documentation
 
-Sphinx docs live in `doc/source/documentation/*.rst`, one file per subsystem (elements, materials, solvers,
-linsolvers, constraints, contacttheory, rigidbodies, steps, stepactions, generators, fields, dofmanager,
-parallelization, etc.) — check the relevant `.rst` file first when working on an unfamiliar subsystem,
-since these describe intended design/usage, not just API.
+Sphinx docs live in `doc/source/`, one directory per sidebar section (`model/`, `analysis/`, `output/`, `theory/`, `developer/`, plus `syntax.rst` and `keywords.rst`); what goes where is described in `CONTRIBUTING.md` (Documenting New Features).
+Check the relevant `.rst` file first when working on an unfamiliar subsystem, since these describe intended design/usage, not just API.
 

@@ -35,7 +35,7 @@ module docstring states.
 
 Uses ``AT2PHASEFIELD`` because it is part of every public Marmot build, and it declares the optional
 ``density``/``nonlocalViscosity``/``microInertia`` material properties (idx 4/5/6) through
-``MarmotMaterialGeneralGradientEnhancedHypoElastic``, the base class every gradient-enhanced
+``Marmot::Materials::MaterialGradientEnhancedHypoElastic``, the base class every gradient-enhanced
 hypoelastic material shares -- so the multi-field bookkeeping it exercises is that of all of them.
 
 ``AT2PHASEFIELD`` requires ``density`` and ``nonlocalViscosity`` (idx 4/5) under ``NID``, which a
@@ -44,10 +44,14 @@ property.
 """
 
 import numpy as np
+import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.utils.inputfileparser import parseInputFile
+
+#: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
+pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 
 # A small enough tip force that the elastic strain energy stays far below what would drive the
 # phase field away from (near-)zero -- the point of this test is the multi-field bookkeeping, not
@@ -105,13 +109,12 @@ def test_displacement_is_dynamic_nonlocal_damage_stays_quasistatic(tmp_path):
     displacementField = model.nodeFields["displacement"]
     nonlocalField = model.nodeFields["nonlocal damage"]
 
-    # the mechanical field is time-integrated: it has V/A entries, and the tip actually moved
-    assert "V" in displacementField and "A" in displacementField
+    # the mechanical field is time-integrated: the tip actually moved
     assert np.max(np.abs(displacementField["V"])) > 0.0
 
     # the nonlocal field carries no Newmark state at all -- carriesLinearMomentum is False for it,
-    # so the input-file driver never pre-creates V/A there in the first place
-    assert "V" not in nonlocalField and "A" not in nonlocalField
+    # so its V/A entries stay at rest
+    assert not np.any(nonlocalField["V"]) and not np.any(nonlocalField["A"])
 
     # near-elastic regime: unlike GCDP, AT2PhaseField's phase field has no yield-like threshold, so
     # it is never bit-exactly zero once any strain energy exists -- but the applied force is far too
@@ -134,9 +137,9 @@ def test_the_discarded_nonlocal_inertia_is_warned_about_once(tmp_path, monkeypat
     trueWarn = NonlinearImplicitDynamic._warnAboutDiscardedInertia
     warned = []
 
-    def recordingWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly):
+    def recordingWarn(self, affectedDofs):
         before = set(self._fieldsWarnedAboutDiscardedInertia)
-        trueWarn(self, Mvij, dampingVIJIndices, couplesDynamicOnly)
+        trueWarn(self, affectedDofs)
         warned.extend(self._fieldsWarnedAboutDiscardedInertia - before)
 
     monkeypatch.setattr(NonlinearImplicitDynamic, "_warnAboutDiscardedInertia", recordingWarn)
@@ -146,3 +149,27 @@ def test_the_discarded_nonlocal_inertia_is_warned_about_once(tmp_path, monkeypat
     finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
 
     assert warned == ["nonlocal damage"], warned
+
+
+def test_a_field_kept_quasi_static_is_written_at_rest(tmp_path, monkeypatch):
+    """The nonlocal field, which this solver keeps quasi-static, is at rest, and the model receives exactly that at
+    acceptance -- also when the step before left it moving, as the explicit solver does, which integrates it in
+    time."""
+
+    beginStep = NonlinearImplicitDynamic.beginStep
+
+    def beginStepAfterAMovingNonlocalField(self, step, model, fieldOutputController, outputmanagers):
+        nonlocalField = model.nodeFields["nonlocal damage"]
+        nonlocalField["V"][:] = 1.0
+        nonlocalField["A"][:] = 2.0
+        beginStep(self, step, model, fieldOutputController, outputmanagers)
+
+    monkeypatch.setattr(NonlinearImplicitDynamic, "beginStep", beginStepAfterAMovingNonlocalField)
+
+    path = tmp_path / "nid_gc3d8_at2_at_rest.inp"
+    path.write_text(DECK)
+    model, _ = finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
+
+    nonlocalField = model.nodeFields["nonlocal damage"]
+    assert not np.any(nonlocalField["V"]) and not np.any(nonlocalField["A"])
+    assert np.max(np.abs(model.nodeFields["displacement"]["V"])) > 0.0

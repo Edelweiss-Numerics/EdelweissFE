@@ -24,7 +24,7 @@
  *  the top level directory of EdelweissFE.
  * ---------------------------------------------------------------------
  *
- * A thin C++ shim around Marmot's MarmotMaterialGeneralGradientEnhancedHypoElastic.
+ * A thin C++ shim around Marmot's Marmot::Materials::MaterialGradientEnhancedHypoElastic.
  *
  * It exists for three reasons:
  *
@@ -55,13 +55,13 @@
 namespace EdelweissFE {
 
   /**
-   * @brief Non-templated facade for MarmotMaterialGeneralGradientEnhancedHypoElastic< nNonlocal >.
+   * @brief Non-templated facade for Marmot::Materials::MaterialGradientEnhancedHypoElastic< nNonlocal >.
    * @tparam nNonlocal The number of nonlocal variables.
    */
   template < int nNonlocal >
   class GradientEnhancedHypoElasticShim {
 
-    using Material = MarmotMaterialGeneralGradientEnhancedHypoElastic< nNonlocal >;
+    using Material = Marmot::Materials::MaterialGradientEnhancedHypoElastic< nNonlocal >;
 
     /// Eigen rejects RowMajor storage for matrices with a single column, and for a single
     /// column the two storage orders coincide anyway.
@@ -84,7 +84,7 @@ namespace EdelweissFE {
       : ownedMaterialProperties( materialProperties, materialProperties + nMaterialProperties )
     {
       try {
-        material = MarmotLibrary::MarmotMaterialGeneralGradientEnhancedHypoElasticFactory<
+        material = Marmot::Registry::MaterialGradientEnhancedHypoElasticFactory<
           nNonlocal >::createMaterial( materialName,
                                        ownedMaterialProperties.data(),
                                        static_cast< int >( ownedMaterialProperties.size() ),
@@ -99,7 +99,7 @@ namespace EdelweissFE {
         for ( auto& c : upperName )
           c = static_cast< char >( toupper( c ) );
         try {
-          material = MarmotLibrary::MarmotMaterialGeneralGradientEnhancedHypoElasticFactory<
+          material = Marmot::Registry::MaterialGradientEnhancedHypoElasticFactory<
             nNonlocal >::createMaterial( upperName,
                                          ownedMaterialProperties.data(),
                                          static_cast< int >( ownedMaterialProperties.size() ),
@@ -131,7 +131,7 @@ namespace EdelweissFE {
 
     double getDensity( const double* stateVars ) const { return material->getDensity( stateVars ); }
 
-    StateView getStateView( const std::string& stateName, double* stateVars ) const
+    Marmot::Utilities::StateView getStateView( const std::string& stateName, double* stateVars ) const
     {
       return material->getStateView( stateName, stateVars );
     }
@@ -178,9 +178,9 @@ namespace EdelweissFE {
     {
       // Named maps rather than temporaries: `Eigen::Map< T >( ptr ) = value;` would be
       // parsed as a declaration of a variable named `ptr`, not as an assignment.
-      Eigen::Map< Marmot::Vector6d > stressMap( stress );
-      Eigen::Map< NonlocalVector >   KLocalMap( KLocal );
-      Eigen::Map< NonlocalVector >   cMap( c );
+      Eigen::Map< Marmot::Math::Vector6d > stressMap( stress );
+      Eigen::Map< NonlocalVector >         KLocalMap( KLocal );
+      Eigen::Map< NonlocalVector >         cMap( c );
 
       Eigen::Map< Stiffness >      dStress_dStrainMap( dStress_dStrain );
       Eigen::Map< StressNonlocal > dStress_dKMap( dStress_dK );
@@ -190,7 +190,7 @@ namespace EdelweissFE {
       Eigen::Map< NonlocalMatrix > d2c_dK2Map( d2c_dK2 );
 
       typename Material::increment inc;
-      inc.dStrain = Eigen::Map< const Marmot::Vector6d >( dStrain );
+      inc.dStrain = Eigen::Map< const Marmot::Math::Vector6d >( dStrain );
       inc.K       = Eigen::Map< const NonlocalVector >( K );
       inc.dK      = Eigen::Map< const NonlocalVector >( dK );
       inc.time    = time;

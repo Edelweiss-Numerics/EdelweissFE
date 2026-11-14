@@ -33,11 +33,17 @@ from abc import abstractmethod
 
 import numpy as np
 
-from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
+from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
+from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 
 
-class DistributedLoadBase(StepActionBase):
+class DistributedLoadBase(LoadBase):
+    """A load per unit area on a surface, such as a pressure: each element of the surface integrates it over its
+    loaded face, see :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeDistributedLoad`."""
+
     @property
     @abstractmethod
     def surface(self) -> dict:
@@ -69,3 +75,48 @@ class DistributedLoadBase(StepActionBase):
         np.ndarray
             The magnitude.
         """
+
+    def assembleLoad(
+        self,
+        P: DofVector,
+        K: SystemMatrixBlocks | None,
+        U_np: DofVector,
+        dU: DofVector,
+        timeStep: TimeStep,
+        locations: DofLocations,
+    ):
+        """Let every element of the surface add the residual contribution of the load on its face, the negative of
+        the external load, and its tangent; see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
+        Only the elements that are located act, as for a body load.
+
+        Parameters
+        ----------
+        P
+            The global residual contribution vector to augment.
+        K
+            The global system matrix to augment; None for an explicit solver, which needs no tangent.
+        U_np
+            The current global solution.
+        dU
+            The global solution increment.
+        timeStep
+            The current time step.
+        locations
+            The locations of the entities in the discrete system, from which the load finds where it acts.
+        """
+
+        time = timeStep.totalTime
+        dT = timeStep.timeIncrement
+
+        load = self.getCurrentLoad(timeStep)
+        for faceID, elementSet in self.surface.items():
+            for el in elementSet:
+                if el not in locations:
+                    continue
+
+                Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
+                Pe = np.zeros(el.nDof)
+
+                el.computeDistributedLoad(self.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
+
+                P[el] += Pe

@@ -57,23 +57,25 @@ from edelweissfe.linsolve.nullspace import (
 
 #: The coarsening and the smoother every vector field's default tree shares, whatever its dimension (why each value,
 #: and the measurements behind them: "Why the defaults are what they are" in
-#: ``doc/source/documentation/fieldsplitmeasurements.rst``):
+#: ``doc/source/theory/fieldsplitmeasurements.rst``):
 #:
-#: - ``estimate_spectral_radius`` with 20 power iterations: a sharper weight of the prolongation smoother of smoothed
-#:   aggregation than the Gershgorin bound;
+#: - ``estimate_spectral_radius``: a sharper weight of the prolongation smoother of smoothed aggregation than the
+#:   Gershgorin bound;
 #: - Chebyshev of degree 16 after the coarse correction only (``npre`` 0, ``npost`` 1): for the same number of
-#:   preconditioner applications, one high-degree post-smoothing sweep beat a symmetric V(1,1) cycle of low degree;
-#: - its spectral radius from 300 power iterations: AMGCL's default (0) is the pessimistic Gershgorin bound, and a
-#:   power iteration starts from a vector seeded per OpenMP thread, so a short one leaves the bound dependent on the
-#:   thread count.
+#:   preconditioner applications, one high-degree post-smoothing sweep beat a symmetric V(1,1) cycle of low degree.
+#:
+#: Both spectral radii -- of the smoother and of the prolongation smoothing -- are estimated by ``spectralRadiusSteps``
+#: Arnoldi steps (default 10) from a start vector seeded per row, the same at any thread count
+#: (``edelweissfe/linsolve/amgcl/amgcl-spectral-radius.hpp``; "The spectral radius estimate of the Chebyshev smoother"
+#: in ``fieldsplitmeasurements.rst``); the trees leave the default. ``spectralRadiusSteps`` is EdelweissFE's own key,
+#: not AMGCL's.
 _VECTOR_FIELD_TREE = {
     "coarsening": {
         "type": "smoothed_aggregation",
         "aggr": {"eps_strong": 0.01},
         "estimate_spectral_radius": True,
-        "power_iters": 20,
     },
-    "relax": {"type": "chebyshev", "degree": 16, "power_iters": 300, "lower": 0.01, "higher": 1.1},
+    "relax": {"type": "chebyshev", "degree": 16, "lower": 0.01, "higher": 1.1},
     "npre": 0,
     "npost": 1,
 }
@@ -81,35 +83,62 @@ _SCALAR_FIELD_TREE = {
     "coarsening": {"type": "smoothed_aggregation"},
     "relax": {"type": "chebyshev"},
 }
+#: The smoother of the corner-node two-level cycle, ``TwoLevel(coarseSpace=CornerNodeInterpolation())``: Chebyshev of
+#: degree 8 on the interval from 0.03 to 1.1 times the spectral radius, on the quadratic field and, in the
+#: ``blockAMG()`` preset, on the rigid-body coarse level of its coarse solve (:func:`defaultCornerNodeTwoLevelTree`). A
+#: sweep of degree 8 costs half the matrix products of one of degree 16, and the corner-node two-level cycle needs
+#: fewer than twice the outer iterations with it, so it is faster (:ref:`measured-corner-node-two-level-smoother`).
+#: ``AMG()`` and the rigid-body coarse level alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`): there, degree 8 gains
+#: nothing.
+_CORNER_NODE_TWO_LEVEL_SMOOTHER = {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1}
 
 
 def defaultFieldTree(dimension: int) -> dict:
     """The default AMGCL preconditioner tree of a field, from its nodal dimension: :data:`_VECTOR_FIELD_TREE` for a
     vector field, a Chebyshev-smoothed smoothed aggregation with AMGCL's defaults for a scalar field (e.g.
-    ``nonlocal damage``). A copy: the trees are nested, and a caller may adapt the one it gets. The backend the tree is
-    built on (block size, precision) is chosen apart from it, see :func:`backendOf`."""
+    ``nonlocal damage``), but the smoother's margin ``higher`` 1.1 above the estimated spectral radius, the default of
+    EdelweissFE's Chebyshev smoother (see ``amgcl-chebyshev.hpp``). A copy: the trees are nested, and a caller may adapt
+    the one it gets. The backend the tree is built on (block size, precision) is chosen apart from it, see
+    :func:`backendOf`."""
     return copy.deepcopy(_VECTOR_FIELD_TREE if dimension > 1 else _SCALAR_FIELD_TREE)
 
 
-def checkBackend(owner: str, backendBlockSize, backendPrecision, blockTranslationNullspace=None) -> None:
+def defaultCornerNodeTwoLevelTree() -> dict:
+    """The default AMGCL tree of the corner-node two-level cycle on a 3D displacement field,
+    ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, and the tree the ``blockAMG()`` preset gives the rigid-body
+    coarse level of its coarse solve (any other field keeps :func:`defaultFieldTree`): the default tree of a vector
+    field (:data:`_VECTOR_FIELD_TREE`) with the smoother of the corner-node two-level cycle
+    (:data:`_CORNER_NODE_TWO_LEVEL_SMOOTHER`). The corner-node two-level cycle reads only the smoother of its tree
+    (``relax``, ``npre``, ``npost``), the rigid-body coarse level the whole tree. A copy, as :func:`defaultFieldTree`.
+    """
+    tree = defaultFieldTree(3)
+    tree["relax"] = dict(_CORNER_NODE_TWO_LEVEL_SMOOTHER)
+    return tree
+
+
+#: The near null-spaces :class:`AMG` builds its hierarchy from, see :func:`backendOf`.
+NEAR_NULLSPACES = ("rigidBodyModes", "translations", None)
+
+
+def checkBackend(owner: str, backendBlockSize, backendPrecision, nearNullspace="rigidBodyModes") -> None:
     """Raise, naming ``owner``, for a backend AMGCL does not have, at construction (``None`` is the default of the
     field, see :func:`backendOf`): ``backendBlockSize`` 1 (scalar entries), 2 or 3 (node-wise blocks),
-    ``backendPrecision`` ``"double"`` or ``"float"`` (2x2 blocks only in double), ``blockTranslationNullspace`` a
-    bool."""
+    ``backendPrecision`` ``"double"`` or ``"float"`` (2x2 blocks only in double), ``nearNullspace`` one of
+    :data:`NEAR_NULLSPACES`."""
     if backendBlockSize not in (None, 1, 2, 3):
         raise ValueError("{:}: backendBlockSize must be 1, 2 or 3, got {!r}".format(owner, backendBlockSize))
     if backendPrecision not in (None, "double", "float"):
         raise ValueError("{:}: backendPrecision must be 'double' or 'float', got {!r}".format(owner, backendPrecision))
     if backendBlockSize == 2 and backendPrecision == "float":
         raise ValueError("{:}: 2x2 blocks are stored in double only, got backendPrecision 'float'".format(owner))
-    if blockTranslationNullspace not in (None, True, False):
+    if not (nearNullspace is None or (isinstance(nearNullspace, str) and nearNullspace in NEAR_NULLSPACES)):
         raise ValueError(
-            "{:}: blockTranslationNullspace must be true or false, got {!r}".format(owner, blockTranslationNullspace)
+            "{:}: nearNullspace must be 'rigidBodyModes', 'translations' or None, got {!r}".format(owner, nearNullspace)
         )
 
 
 def backendOf(
-    owner: str, field, tree: dict, backendBlockSize=None, backendPrecision=None, blockTranslationNullspace=None
+    owner: str, field, amgclTree: dict, backendBlockSize=None, backendPrecision=None, nearNullspace="rigidBodyModes"
 ):
     """The AMGCL backend a one-field component builds on for the field (:class:`AMG`,
     :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`): what it was given, the field's default for what it
@@ -120,24 +149,32 @@ def backendOf(
     - ``backendPrecision``: ``"float"`` on 3x3 blocks, which keeps the setup in double and stores only the matrices the
       cycle reads in float (measured faster at the same iterations), else ``"double"`` -- on the scalar backend float
       would build the whole hierarchy in single precision, its spectral-radius estimates included;
-    - ``blockTranslationNullspace``: on a block backend, smoothed aggregation from the translations :math:`D^{-1} t`
-      of the scaled block (:func:`~edelweissfe.linsolve.nullspace.translationNullspace`) instead of AMGCL's constant
-      blocks, which are :math:`D`-weighted translations; it changes nothing on the scalar backend, whose near
-      null-space is set from the field (see :func:`buildFieldHierarchy`).
+    - ``nearNullspace``, what smoothed aggregation starts from, in the variables of the scaled block (divided by
+      :math:`D`, see :mod:`~edelweissfe.linsolve.nullspace`): ``"rigidBodyModes"`` (the default) the field's
+      rigid-body modes as far as the backend and the field hold them -- translations and rotations of a displacement
+      field on the scalar backend (:func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`), the translations on
+      a block backend (which takes the translations at most) and for any other vector field; ``"translations"`` the
+      translations :math:`D^{-1} t` (:func:`~edelweissfe.linsolve.nullspace.translationNullspace`); ``None`` none
+      given, AMGCL's own: constant blocks on a block backend, which are :math:`D`-weighted translations, the constant
+      on the scalar backend. A scalar field always takes AMGCL's constant.
 
-    Raises, naming ``owner`` and the field, for blocks that do not match the field, and for block translations without
-    smoothed aggregation.
+    Raises, naming ``owner`` and the field, for blocks that do not match the field, and for a near null-space on a
+    block backend without smoothed aggregation.
 
     Returns
     -------
     tuple
-        ``(backendBlockSize, backendPrecision, blockTranslationNullspace)``.
+        ``(backendBlockSize, backendPrecision, nearNullspace)``, the near null-space as built: ``"rigidBodyModes"``,
+        ``"translations"`` or ``None``.
     """
     blockSize = (
         backendBlockSize if backendBlockSize is not None else (field.dimension if field.dimension in (2, 3) else 1)
     )
     precision = backendPrecision if backendPrecision is not None else ("float" if blockSize == 3 else "double")
-    translations = blockSize > 1 and blockTranslationNullspace is not False
+    if field.dimension == 1 or nearNullspace is None:
+        nearNullspace = None
+    elif nearNullspace == "rigidBodyModes" and (blockSize > 1 or not carriesRigidBodyModes(field)):
+        nearNullspace = "translations"
     if blockSize > 1 and blockSize != field.dimension:
         raise ValueError(
             "{:} on the field '{:}': backendBlockSize {:} does not match the field's dimension {:}".format(
@@ -147,15 +184,16 @@ def backendOf(
     if blockSize == 2 and precision == "float":
         raise ValueError("{:} on the field '{:}': 2x2 blocks are stored in double only".format(owner, field.name))
     # AMGCL's defaults: class amg, coarsening.type smoothed_aggregation
-    coarsening = tree.get("coarsening", {})
+    coarsening = amgclTree.get("coarsening", {})
     coarseningType = coarsening.get("type", "smoothed_aggregation") if isinstance(coarsening, dict) else None
-    if translations and (tree.get("class", "amg") != "amg" or coarseningType != "smoothed_aggregation"):
+    onBlocks = blockSize > 1 and nearNullspace is not None
+    if onBlocks and (amgclTree.get("class", "amg") != "amg" or coarseningType != "smoothed_aggregation"):
         raise ValueError(
-            "{:} on the field '{:}': the block translations (blockTranslationNullspace, the default on a block "
-            "backend) need smoothed aggregation (coarsening.type); set blockTranslationNullspace=False for another "
+            "{:} on the field '{:}': the near null-space on a block backend (nearNullspace, the translations by "
+            "default) needs smoothed aggregation (coarsening.type); set nearNullspace=None for another "
             "coarsening".format(owner, field.name)
         )
-    return blockSize, precision, translations
+    return blockSize, precision, nearNullspace
 
 
 def isSignificant(values, rows, cols, sqrtAbsDiagonal: np.ndarray, tau: float) -> np.ndarray:
@@ -216,9 +254,10 @@ def droppedSmallEntries(A: sp.csr_matrix, dropTolerance: float, lumpDroppedEntri
 
 
 def preconditionerMatrix(A, dropTolerance: float, lumpDroppedEntries: bool, statistics) -> sp.csr_matrix:
-    """The matrix a one-field preconditioner (:class:`AMG`, :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`)
-    is built on: :math:`A` itself, or with ``dropTolerance > 0`` its filtered copy (:func:`droppedSmallEntries`),
-    with the stored entries before and after recorded in the component's ``statistics``."""
+    """The matrix a one-field preconditioner (:class:`AMG`,
+    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`) is built on: :math:`A` itself, or with
+    ``dropTolerance > 0`` its filtered copy (:func:`droppedSmallEntries`), with the stored entries before and after
+    recorded in the component's ``statistics``."""
     matrix = A.matrix()
     if dropTolerance <= 0.0:
         return matrix
@@ -228,37 +267,36 @@ def preconditionerMatrix(A, dropTolerance: float, lumpDroppedEntries: bool, stat
     return filtered
 
 
-def fieldTreeOf(owner: str, tree: "dict | None", field) -> dict:
-    """The AMGCL tree a one-field component builds on: ``tree``, or the default tree of the field's dimension
-    (:func:`defaultFieldTree`); raises, naming ``owner`` and the field, if ``tree`` is not a tree."""
-    if tree is None:
-        return defaultFieldTree(field.dimension)
-    if not isinstance(tree, dict):
+def fieldTreeOf(owner: str, amgclTree: "dict | None", field, defaultTree) -> dict:
+    """The AMGCL tree a one-field component builds on: ``amgclTree``, or the component's default for the field,
+    ``defaultTree(field)`` (built only then); raises, naming ``owner`` and the field, if ``amgclTree`` is not a
+    tree."""
+    if amgclTree is None:
+        return defaultTree(field)
+    if not isinstance(amgclTree, dict):
         raise ValueError(
-            "{:} on the field '{:}': its tree must be an AMGCL preconditioner tree (a dict), got {!r}".format(
-                owner, field.name, tree
+            "{:} on the field '{:}': its amgclTree must be an AMGCL preconditioner tree (a dict), got {!r}".format(
+                owner, field.name, amgclTree
             )
         )
-    return tree
+    return amgclTree
 
 
-def buildFieldHierarchy(block, tree: dict, backend: tuple, scaling, coords, diagonalBlock):
+def buildFieldHierarchy(block, amgclTree: dict, backend: tuple, scaling, coords, diagonalBlock):
     """One AMGCL hierarchy for a field's scaled diagonal block :math:`\\hat A_{ii}` (``diagonalBlock``, a callable
     that returns it, so that it is cut out only now), with the field's near null-space.
 
-    A vector field on the scalar backend takes its rigid-body modes with ``coords`` (see
-    :func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`), else its translations; on a block backend the
-    translations with ``blockTranslationNullspace``, else AMGCL's constant blocks; a scalar field takes AMGCL's default
-    constant.
+    The near null-space is the one :func:`backendOf` resolved: the rigid-body modes, with ``coords`` (else the
+    translations), the translations, or none given (AMGCL's constant blocks, or its constant).
 
     Parameters
     ----------
     block
         The field's :class:`~edelweissfe.linsolve.base.FieldBlock`.
-    tree
-        The field's AMGCL tree, forwarded verbatim.
+    amgclTree
+        The field's AMGCL tree, with EdelweissFE's own key ``spectralRadiusSteps`` (see :data:`_VECTOR_FIELD_TREE`).
     backend
-        ``(backendBlockSize, backendPrecision, blockTranslationNullspace)``, see :func:`backendOf`.
+        ``(backendBlockSize, backendPrecision, nearNullspace)``, see :func:`backendOf`.
     scaling
         The field's scaling :math:`D_i`.
     coords
@@ -273,17 +311,17 @@ def buildFieldHierarchy(block, tree: dict, backend: tuple, scaling, coords, diag
     """
     from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
 
-    backendBlockSize, backendPrecision, blockTranslationNullspace = backend
+    backendBlockSize, backendPrecision, nearNullspace = backend
     hierarchy = PyAMGCLSolver(
         {
-            "precond": tree,
+            "precond": amgclTree,
             "backendPrecision": backendPrecision,
             "backendBlockSize": backendBlockSize,
         }
     )
-    if block.dimension > 1 and (backendBlockSize == 1 or blockTranslationNullspace):
+    if nearNullspace is not None:
         with performancetiming.timeit("nullspace construction"):
-            if coords is not None:
+            if nearNullspace == "rigidBodyModes" and coords is not None:
                 nullspace = rigidBodyNullspace(block, coords, scaling)
             else:
                 nullspace = translationNullspace(block, scaling)
@@ -302,15 +340,16 @@ class AMG(Preconditioner):
 
     Parameters
     ----------
-    tree
-        The AMGCL parameter tree, forwarded verbatim; ``None``: the default tree of the field's dimension
-        (:func:`defaultFieldTree`).
-    backendBlockSize, backendPrecision, blockTranslationNullspace
-        The AMGCL backend: scalar entries (1) or node-wise blocks (2, 3), stored in ``"double"`` or ``"float"``, and
-        on blocks whether smoothed aggregation starts from the field's translations; ``None``: the field's default,
-        see :func:`backendOf`.
-    rigidBodyNullspace
-        Whether a displacement field on the scalar backend takes its rotations too (needs node coordinates).
+    amgclTree
+        The AMGCL parameter tree, with EdelweissFE's own key ``spectralRadiusSteps`` (see
+        :data:`_VECTOR_FIELD_TREE`); ``None``: the default tree of the field's dimension (:func:`defaultFieldTree`).
+    backendBlockSize, backendPrecision
+        The AMGCL backend: scalar entries (1) or node-wise blocks (2, 3), stored in ``"double"`` or ``"float"``;
+        ``None``: the field's default, see :func:`backendOf`.
+    nearNullspace
+        What smoothed aggregation starts from: ``"rigidBodyModes"`` (the default; the rotations of a displacement field
+        on the scalar backend need node coordinates, a block backend takes the translations), ``"translations"``, or
+        ``None`` (AMGCL's own); see :func:`backendOf`.
     dropTolerance, lumpDroppedEntries
         Build the hierarchy on the filtered matrix, see :func:`droppedSmallEntries`; ``0`` (the default) builds it
         on the matrix itself.
@@ -318,46 +357,41 @@ class AMG(Preconditioner):
 
     def __init__(
         self,
-        tree: dict = None,
+        amgclTree: dict = None,
         backendBlockSize: int = None,
         backendPrecision: str = None,
-        blockTranslationNullspace: bool = None,
-        rigidBodyNullspace: bool = True,
+        nearNullspace: "str | None" = "rigidBodyModes",
         dropTolerance: float = 0.0,
         lumpDroppedEntries: bool = False,
     ):
         if not dropTolerance >= 0.0:
             raise ValueError("AMG: dropTolerance must not be negative, got {!r}".format(dropTolerance))
-        checkBackend("AMG", backendBlockSize, backendPrecision, blockTranslationNullspace)
+        checkBackend("AMG", backendBlockSize, backendPrecision, nearNullspace)
         super().__init__()
-        self.tree = tree
+        self.amgclTree = amgclTree
         self.backendBlockSize = backendBlockSize
         self.backendPrecision = backendPrecision
-        self.blockTranslationNullspace = blockTranslationNullspace
-        self.rigidBodyNullspace = rigidBodyNullspace
+        self.nearNullspace = nearNullspace
         self.dropTolerance = dropTolerance
         self.lumpDroppedEntries = lumpDroppedEntries
 
     def _forget(self) -> None:
         self.hierarchy = None
         self._field = None
+        # the near null-space the hierarchy was built with, as far as the backend and the field hold the one asked for
+        self._builtNearNullspace = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
         field = context.onlyField("AMG")
         self._field = field
-        tree = fieldTreeOf("AMG", self.tree, field)
-        backend = backendOf(
-            "AMG", field, tree, self.backendBlockSize, self.backendPrecision, self.blockTranslationNullspace
-        )
-        onScalarBackend = backend[0] == 1
-        coords = (
-            context.coordinates(field.name)
-            if onScalarBackend and self.rigidBodyNullspace and carriesRigidBodyModes(field)
-            else None
-        )
+        amgclTree = fieldTreeOf("AMG", self.amgclTree, field, lambda field: defaultFieldTree(field.dimension))
+        backend = backendOf("AMG", field, amgclTree, self.backendBlockSize, self.backendPrecision, self.nearNullspace)
+        coords = context.coordinates(field.name) if backend[2] == "rigidBodyModes" else None
+        # the rotations need the node coordinates; without them, the hierarchy takes the translations
+        self._builtNearNullspace = "translations" if backend[2] == "rigidBodyModes" and coords is None else backend[2]
         self.hierarchy = buildFieldHierarchy(
             field,
-            tree,
+            amgclTree,
             backend,
             context.scalingOf(slice(None)),
             coords,
@@ -376,10 +410,14 @@ class AMG(Preconditioner):
         backend = {
             "backendBlockSize": self.backendBlockSize,
             "backendPrecision": self.backendPrecision,
-            "blockTranslationNullspace": self.blockTranslationNullspace,
         }
-        parameters = {"tree": "default" if self.tree is None else "given"}
+        parameters = {"amgclTree": "default" if self.amgclTree is None else "given"}
         parameters.update({key: value for key, value in backend.items() if value is not None})
+        # the near null-space as built, once it is, where it differs from the one asked for (a block backend takes the
+        # translations at most); before, the one asked for, where it is not the default
+        nearNullspace = self._builtNearNullspace if self._field is not None else self.nearNullspace
+        if nearNullspace != self.nearNullspace or self.nearNullspace != "rigidBodyModes":
+            parameters["nearNullspace"] = nearNullspace
         if self.dropTolerance > 0.0:
             parameters["dropTolerance"] = self.dropTolerance
             parameters["lumpDroppedEntries"] = self.lumpDroppedEntries

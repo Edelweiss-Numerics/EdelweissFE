@@ -31,41 +31,33 @@ import numpy as np
 
 class VIJSystemMatrix(np.ndarray):
     """
-    Represents the value vector `V` of a COO (VIJ triple) sparse matrix.
+    The value vector `V` of a VIJ (COO) system matrix: one value per entry of the block of every entity, the entities
+    one after the other, in the layout of a
+    :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`, which holds the row and column
+    indices `I` and `J` of the values.
 
-    `VIJSystemMatrix` stores matrix entry values for sparse global systems (Coordinate format),
-    maintaining associated row indices `I`, column indices `J`, and an `entitiesInVIJ` mapping.
-    It supports entity-aware indexing to slice, reshape, and assign local entity matrices directly.
+    Indexed by an entity, it is the entity's view of its block, so that an entity writes its block into it directly.
 
     Parameters
     ----------
-    nDof : int
-        The dimension (number of rows/columns) of the system matrix.
-    I : ndarray
-        The 1D integer array of global row indices.
-    J : ndarray
-        The 1D integer array of global column indices.
-    entitiesInVIJ : dict
-        A dictionary mapping entities to their starting offset index in `V`.
+    nEntries : int
+        The number of values.
+    vijSliceOfEntity : dict
+        A dictionary mapping entities to the slice of `V` that holds the values of their block.
     """
 
-    def __new__(cls, nDof: int, I: np.ndarray, J: np.ndarray, entitiesInVIJ: dict):  # noqa: E741
-        obj = np.zeros_like(I, dtype=float).view(cls)
+    #: The slice of the values of every entity; None for an array derived from one without it.
+    vijSliceOfEntity: dict | None = None
 
-        obj.nDof = nDof
-        obj.I = I  # noqa: E741
-        obj.J = J
-        obj.entitiesInVIJ = entitiesInVIJ
-
+    def __new__(cls, nEntries: int, vijSliceOfEntity: dict):
+        obj = np.zeros(nEntries, dtype=float).view(cls)
+        obj.vijSliceOfEntity = vijSliceOfEntity
         return obj
 
     def __array_finalize__(self, obj):
-        if obj is None:
-            return
-        self.nDof = getattr(obj, "nDof", None)
-        self.I = getattr(obj, "I", None)  # noqa: E741
-        self.J = getattr(obj, "J", None)  # noqa: E741
-        self.entitiesInVIJ = getattr(obj, "entitiesInVIJ", None)
+        # a view, a copy or the result of an operation keeps the layout of the value array it comes from
+        if isinstance(obj, VIJSystemMatrix):
+            self.vijSliceOfEntity = obj.vijSliceOfEntity
 
     def __getitem__(self, key):
         """
@@ -81,18 +73,13 @@ class VIJSystemMatrix(np.ndarray):
         ndarray or float
             Sub-array or shaped entity matrix view.
         """
-        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
+        # An entity of the layout first, as the DOF vectors do; any other key is an index of the array. What the
+        # entity does with its values is not caught: an error in it is the entity's.
+        try:
+            vijSlice = self.vijSliceOfEntity[key]
+        except (KeyError, TypeError):
             return super().__getitem__(key)
-
-        if self.entitiesInVIJ is not None:
-            try:
-                idxInVIJ = self.entitiesInVIJ[key]
-                size = key.getVIJContributionSize()
-                flat_view = super().__getitem__(slice(idxInVIJ, idxInVIJ + size))
-                return key.shapeVIJContribution(flat_view)
-            except (KeyError, TypeError, AttributeError):
-                pass
-        return super().__getitem__(key)
+        return key.shapeBlock(super().__getitem__(vijSlice))
 
     def __setitem__(self, key, value):
         """
@@ -105,19 +92,12 @@ class VIJSystemMatrix(np.ndarray):
         value : array_like or float
             Value(s) to assign.
         """
-        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
+        try:
+            vijSlice = self.vijSliceOfEntity[key]
+        except (KeyError, TypeError):
             super().__setitem__(key, value)
             return
-
-        if self.entitiesInVIJ is not None:
-            try:
-                idxInVIJ = self.entitiesInVIJ[key]
-                size = key.getVIJContributionSize()
-                super().__setitem__(slice(idxInVIJ, idxInVIJ + size), value)
-                return
-            except (KeyError, TypeError, AttributeError):
-                pass
-        super().__setitem__(key, value)
+        super().__setitem__(vijSlice, value)
 
     def copy(self, order: str = "C") -> "VIJSystemMatrix":
         """
@@ -134,11 +114,6 @@ class VIJSystemMatrix(np.ndarray):
             A new `VIJSystemMatrix` instance with copied values and metadata.
         """
         new_mat = super().copy(order).view(VIJSystemMatrix)
-        new_mat.nDof = self.nDof
-        if self.I is not None:
-            new_mat.I = self.I.copy()  # noqa: E741
-        if self.J is not None:
-            new_mat.J = self.J.copy()
-        if self.entitiesInVIJ is not None:
-            new_mat.entitiesInVIJ = self.entitiesInVIJ.copy()
+        if self.vijSliceOfEntity is not None:
+            new_mat.vijSliceOfEntity = self.vijSliceOfEntity.copy()
         return new_mat

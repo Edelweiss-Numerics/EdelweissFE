@@ -9,7 +9,7 @@ on:
   # Pushes to the long-lived branches only: a branch with an open pull request is tested by the
   # pull_request event, and testing every push as well would run each workflow twice.
   push:
-    branches: [master, next_v26.11]
+    branches: [master]
   pull_request:
   workflow_dispatch:
 

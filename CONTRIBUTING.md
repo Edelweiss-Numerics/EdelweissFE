@@ -36,7 +36,7 @@ PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/
 ```
 
 ### 2. With Marmot (Native C++ Element & Material Formulations)
-Build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `next_v26.11`) into `$CONDA_PREFIX` first;
+Build [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/) (branch `master`) into `$CONDA_PREFIX` first;
 its dependencies (Eigen, autodiff, Fastor) and AMGCL are already in the environment:
 ```bash
 pip install -v -e .
@@ -128,32 +128,32 @@ Before opening a new issue, search existing issues and pull requests to avoid du
 We follow the GitHub flow: **fork → branch → PR → review → merge**.
 
 ### Target Branches
-- **Bug fixes (`fix`)**: Open pull requests targeting the `master` branch.
-- **Features, enhancements, and refactoring (`feat`, `refactor`, `perf`, etc.)**: Open pull requests targeting the upcoming release branch: `next_v<YY>.<MM>` (e.g., `next_v26.11`).
+All pull requests (fixes, features, refactoring) target `master`, the development branch. Releases are tags on
+`master` (`v<YY>.<MM>`, e.g. `v26.11`).
 
 ### Workflow
-1. **Fork** the repository and create a feature/bugfix branch from the appropriate target base (`master` for fixes, `next_v<YY>.<MM>` for features):
+1. **Fork** the repository and create a feature/bugfix branch from `master`:
    ```bash
    # For a bug fix:
    git checkout -b fix/<short-scope>-<concise-topic> origin/master
 
    # For a new feature / refactoring:
-   git checkout -b feat/<short-scope>-<concise-topic> origin/next_v26.11
+   git checkout -b feat/<short-scope>-<concise-topic> origin/master
    ```
 2. **Develop & Format**: Make your changes and verify that `pre-commit run --all-files` passes locally.
 3. **Build & Test**: Ensure the package builds cleanly (`pip install -v -e .`) and all relevant tests pass (`run_tests_edelweissfe`).
-4. **Open a PR**: Target the correct branch (`master` for bug fixes, `next_v<YY>.<MM>` for features/enhancements), provide a clear title following Conventional Commits, and link relevant issues.
+4. **Open a PR**: Target `master`, provide a clear title following Conventional Commits, and link relevant issues.
 
 ### Synchronizing with Marmot
 If your changes depend on features or fixes in [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/), ensure the Marmot-side branch is named identically to your EdelweissFE branch. CI automatically resolves and checks out matching Marmot branches during test runs.
 
 ### PR Checklist
-- [ ] PR targets the correct branch (`master` for bugfixes, `next_v<YY>.<MM>` for features/enhancements).
+- [ ] PR targets `master`.
 - [ ] PR title follows Conventional Commits format.
 - [ ] `pre-commit run --all-files` passes cleanly.
 - [ ] Project builds cleanly via `pip install -e .` (`-v` to see the Marmot extensions being built).
 - [ ] All tests pass locally via `run_tests_edelweissfe ./testfiles/edelweiss-only/` (and `./testfiles/marmot/`).
-- [ ] New features, keywords, or options are documented in `doc/source/documentation/`.
+- [ ] New features, keywords, or options are documented in `doc/source/` (see [Documenting New Features](#documenting-new-features)).
 - [ ] New features or bug fixes include a regression test deck (`test.inp` + `U.ref`).
 
 ---
@@ -170,8 +170,21 @@ sphinx-build ./doc/source/ ./docs -b html
 
 ### Documenting New Features
 When adding new functionality:
-- **Subsystem documentation**: Add or update the corresponding topic page in `doc/source/documentation/*.rst` (e.g. `elements.rst`, `materials.rst`, `solvers.rst`, `linsolvers.rst`, `constraints.rst`, `contacttheory.rst`).
-- **Input language & keywords**: Update `doc/source/documentation/keywords.rst` and provide clear docstrings on keyword handlers registered with `InputSystemRegistry`.
+- **Subsystem documentation**: Add or update the corresponding topic page. The pages are grouped by what the reader does:
+  - `doc/source/model/` -- defining the model: mesh, generators, sets, sections, elements, materials, analytical fields,
+    constraints, rigid bodies.
+  - `doc/source/analysis/` -- running the analysis: steps, step actions, nonlinear and linear solvers, model modifiers,
+    parallelization.
+  - `doc/source/output/` -- output managers, field outputs, node field results, plotting.
+  - `doc/source/theory/` -- the theory behind a method (contact, adaptivity, the field-split AMG preconditioner); usage
+    belongs on the pages above, which link here.
+  - `doc/source/developer/` -- architecture and internals for extending EdelweissFE (input system, models, topology
+    pipeline, restart, numbering and locations of the degrees of freedom, assembly, API references).
+  - `doc/source/syntax.rst` and `doc/source/keywords.rst` -- input file syntax and the keyword reference.
+
+  Each directory is one captioned section of the sidebar; a new page is added to the matching `toctree` in
+  `doc/source/index.rst`.
+- **Input language & keywords**: Update `doc/source/keywords.rst` and provide clear docstrings on keyword handlers registered with `InputSystemRegistry`.
 - **CLI module documentation**: Ensure docstrings are descriptive; users can query module documentation using `edelweissfe --doc=<module>`.
 
 ---

@@ -29,6 +29,7 @@
 
 # @author: Matthias Neuner
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -38,10 +39,14 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.linsolve import createLinearSolver
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
-from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
+from edelweissfe.numerics.dofvector import DofVector
+from edelweissfe.numerics.systemmatrixassembly import (
+    DirectCSRSystemMatrixAssembly,
+    SystemMatrixAssembly,
+    VIJSystemMatrixAssembly,
+)
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.convergencecriteria import (
     AbaqusConvergenceCriterion,
@@ -61,6 +66,26 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
+
+
+class QuasiNewtonFallback:
+    """The quasi-Newton fallback of one attempt of an increment (solver option ``fallBackToQuasiNewton``): once the
+    residual has grown more often than the step option ``maxGrowIter`` allows, the increment continues with the tangent
+    of its first iteration instead of being cut back. A tangent that is not updated converges only linearly, but it
+    cannot switch abruptly either, as a tangent of materials switching between loading and unloading does.
+
+    Parameters
+    ----------
+    isEnabled
+        Whether the option is on; only then is the tangent of the first iteration kept.
+    """
+
+    def __init__(self, isEnabled: bool):
+        self.isEnabled = isEnabled
+        #: True once the increment continues with the tangent of its first iteration.
+        self.isEngaged = False
+        #: The tangent of the first iteration, in CSR layout and condensed, without the Dirichlet rows and columns.
+        self.tangentOfFirstIteration = None
 
 
 @dataclass(frozen=True)
@@ -85,7 +110,30 @@ class NISTSchema:
         description="The default number of allowed residual growths.", dtype=int, default=10
     )
     extrapolation: str | None = schemaField(
-        description="The extrapolation strategy for new increments (off|linear).", dtype=str, default="linear"
+        description=(
+            "The prediction a new increment starts its Newton iterations from (off|linear|quadratic): none, the "
+            "last accepted increment scaled to the new size, or the parabola through the last three accepted states "
+            "(linear while only one accepted increment of the step of nonzero size is available)."
+        ),
+        dtype=str,
+        default="linear",
+    )
+    retryWithoutExtrapolation: bool | None = schemaField(
+        description=(
+            "If an extrapolated increment fails, attempt it once more from a zero prediction before cutting it back. "
+            "A failed increment then also keeps the accepted history the next attempt extrapolates from."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    extrapolateAcrossConnectivityChange: bool | None = schemaField(
+        description=(
+            "Keep extrapolating across a rebuild of the discrete system caused by a change of the connectivity alone "
+            "(e.g., a contact search), as long as the rebuilt system numbers the degrees of freedom as before. Off: "
+            "every rebuild starts the increment from a zero prediction."
+        ),
+        dtype=bool,
+        default=False,
     )
     extrapolateAfterModelChange: bool | None = schemaField(
         description=(
@@ -103,7 +151,10 @@ class NISTSchema:
             "first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "
             "increment, zero time increment) so the subsequent load-advancing increment starts from an "
             "equilibrated state. Intended for softening problems where remeshing near the process zone "
-            "otherwise couples the load advance with the warm-start settling transient in one solve. Note: "
+            "otherwise couples the load advance with the warm-start settling transient in one solve. Under arc "
+            "length control (NISTPArcLength with a controller), the re-equilibration is an arc length increment of "
+            "size zero: the controlled quantity is held where the last accepted increment left it, and the load "
+            "parameter is solved for, and with it the loads and the prescribed displacements it scales. Note: "
             "the equilibration solve integrates materials with dT=0, which suits rate-independent models; "
             "rate-dependent materials see no time advance during it (by design)."
         ),
@@ -125,25 +176,35 @@ class NISTSchema:
             "this particular iteration, so the pattern changes on almost every Newton iteration -- "
             "which defeats any linear solver that relies on a stable pattern across iterations (e.g. "
             "blockamg reusing a per-field AMG hierarchy built for the old one). Left unset (the "
-            "default), the choice is automatic: pruned unless the linear solver in force reports that "
-            "it needs the pattern stable "
-            "(:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`), in which "
-            "case pruning is skipped so that solver's own reuse can engage. An explicit True/False "
-            "here always wins over the automatic choice. Pruning exists in the first place because it "
-            "was needed for PARDISO: its reordering is sensitive to the extra structural entries on "
-            "these path-dependent condensed systems, and keeping them has been observed to drift from "
-            "the converged reference path -- only turn it off for a solver that does not share that "
-            "sensitivity, and verify the load path against a reference run."
+            "default), the choice is automatic: pruned if the linear solver in force reports that it "
+            "needs it "
+            "(:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which a "
+            "direct factorization does -- PARDISO's reordering is sensitive to the extra structural "
+            "entries on these path-dependent condensed systems, and keeping them has been observed to "
+            "drift from the converged reference path -- and a Krylov solver with an AMG preconditioner "
+            "does not: it gives the same iterations with and without the stored zeros, and pruning "
+            "costs it a copy of the matrix and a pass over it in every Newton iteration. An explicit "
+            "True/False here always wins over the automatic choice; turn pruning off for a direct "
+            "solver only after verifying the load path against a reference run."
         ),
         dtype=bool,
         default=None,
         documentedDefault="auto",
     )
+    systemMatrixAssembly: str | None = schemaField(
+        description=(
+            "How the blocks of the elements, constraints and loads are summed into the system matrix (vij|direct): "
+            "staged in a value array of the VIJ pattern's length and gathered into CSR, or scattered into CSR right "
+            "away, without that array. See the documentation page on the system matrix assembly."
+        ),
+        dtype=str,
+        default="vij",
+    )
     useThreadedMPCCondensation: bool | None = schemaField(
         description=(
             "Condense the multi-point-constraint system matrix, T^T K T + C, in place, with an "
             "OpenMP-threaded kernel, instead of with SciPy's single-threaded CSR routines, which build a "
-            "second matrix. The CSR pattern of K gains, once per equation system, the entries where a "
+            "second matrix. The CSR pattern of K gains, once per discrete system, the entries where a "
             "master collects the couplings of its slaves; the result does not depend on the number of "
             "threads. Explicit zeros (the slave columns among them) are pruned from a copy according to "
             "pruneCondensedMatrixZeros. Off by default."
@@ -161,6 +222,40 @@ class NISTSchema:
         default=0,
         optionName="report-performance-frequency",
     )
+    lineSearch: bool | None = schemaField(
+        description=(
+            "Scale the Newton correction by the step length at which a parabola, fitted to the largest residual "
+            "evaluated at the trial step lengths lineSearchStepLengths, is smallest (a quadratic line search)."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    lineSearchAfterIterations: int | None = schemaField(
+        description=(
+            "The line search starts after this many iterations of an increment, at least 0: the first correction of an "
+            "increment, which makes the prescribed increments, is never scaled."
+        ),
+        dtype=int,
+        default=5,
+    )
+    lineSearchEveryIterations: int | None = schemaField(
+        description="From then on, the line search is done in every iteration whose number is a multiple of this.",
+        dtype=int,
+        default=2,
+    )
+    lineSearchStepLengths: str | None = schemaField(
+        description="The trial step lengths of the line search, comma-separated, at least three.",
+        dtype=str,
+        default="0.8, 1.0, 1.2",
+    )
+    fallBackToQuasiNewton: bool | None = schemaField(
+        description=(
+            "Instead of cutting an increment back once the residual grew more often than maxGrowIter allows, "
+            "continue it with the tangent of its first iteration (a quasi-Newton method); maxIter still applies."
+        ),
+        dtype=bool,
+        default=False,
+    )
     convergenceCriterion: str | None = schemaField(
         description=(
             "The convergence criterion of the Newton iterations, legacy (the original EdelweissFE one) or abaqus "
@@ -168,6 +263,57 @@ class NISTSchema:
         ),
         dtype=str,
         default="legacy",
+    )
+    iterationsForAlternativeTolerance: int | None = schemaField(
+        description=(
+            "legacy criterion: I, the iteration from which on the flux residual is checked against "
+            "fluxResidualToleranceAlternative instead of fluxResidualTolerance."
+        ),
+        dtype=int,
+        default=15,
+    )
+    zeroFluxThreshold: float | None = schemaField(
+        description=(
+            "legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its "
+            "residual could be compared with, so its flux residual counts as converged; needs minimumIterations >= 1, "
+            "and refuses a smaller one. Off if not set."
+        ),
+        dtype=float,
+        default=None,
+        documentedDefault="off",
+    )
+    zeroIncrementThreshold: float | None = schemaField(
+        description=(
+            "legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is "
+            "no increment to relate its correction to, and its correction counts as converged. Off if not set."
+        ),
+        dtype=float,
+        default=None,
+        documentedDefault="off",
+    )
+    minimumIterations: int | None = schemaField(
+        description=(
+            "legacy criterion: no flux residual counts as converged before this iteration, so an increment takes at "
+            "least this many Newton iterations; 0 accepts a prediction that already satisfies the criterion."
+        ),
+        dtype=int,
+        default=0,
+    )
+    countFirstResidualAsGrowth: bool | None = schemaField(
+        description=(
+            "Residual growths (the step option maxGrowIter): the residual history of a field starts from zero, so the "
+            "first checked residual of an increment counts as a growth; if False, counting starts with the second."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    countGrowthOfConvergedFields: bool | None = schemaField(
+        description=(
+            "Residual growths (the step option maxGrowIter): count a growth of the flux residual of a field also in "
+            "an iteration in which this field is converged and only other fields keep the iterations going."
+        ),
+        dtype=bool,
+        default=True,
     )
     abaqusResidualTolerance: float | None = schemaField(
         description="abaqus criterion: R_n, the flux residual tolerance relative to the time average flux.",
@@ -225,6 +371,10 @@ class NIST(NonlinearSolverBase):
     supportsMPC = True
     supportsModelModifiers = True
 
+    #: The ways of summing the system matrix (option ``systemMatrixAssembly``) this solver supports, see
+    #: :meth:`createSystemMatrixAssembly`.
+    systemMatrixAssemblies = {"vij": VIJSystemMatrixAssembly, "direct": DirectCSRSystemMatrixAssembly}
+
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTSchema
 
@@ -233,13 +383,27 @@ class NIST(NonlinearSolverBase):
         "defaultCriticalIter": 5,
         "defaultMaxGrowingIter": 10,
         "extrapolation": "linear",
+        "retryWithoutExtrapolation": False,
+        "extrapolateAcrossConnectivityChange": False,
         "extrapolateAfterModelChange": True,
         "equilibrateAfterModelChange": False,
         "linsolver": "",
         "pruneCondensedMatrixZeros": None,
+        "systemMatrixAssembly": "vij",
         "useThreadedMPCCondensation": False,
         "report-performance-frequency": 0,
+        "lineSearch": False,
+        "lineSearchAfterIterations": 5,
+        "lineSearchEveryIterations": 2,
+        "lineSearchStepLengths": "0.8, 1.0, 1.2",
+        "fallBackToQuasiNewton": False,
         "convergenceCriterion": "legacy",
+        "iterationsForAlternativeTolerance": 15,
+        "zeroFluxThreshold": None,
+        "zeroIncrementThreshold": None,
+        "minimumIterations": 0,
+        "countFirstResidualAsGrowth": True,
+        "countGrowthOfConvergedFields": True,
         "abaqusResidualTolerance": 5e-3,
         "abaqusCorrectionTolerance": 1e-2,
         "abaqusResidualToleranceAlternative": 2e-2,
@@ -250,23 +414,32 @@ class NIST(NonlinearSolverBase):
         "abaqusInitialTimeAveragedFlux": 1e-2,
     }
 
-    #: The convergence criterion of the current step.
-    convergenceCriterion = None
-
-    #: The predictor's state between increments: the last accepted increment and its dU.
-    checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
+    #: The predictor's state between increments: the last accepted increment and its dU, for a quadratic
+    #: extrapolation the accepted increment before it and its dU, and the digest of the numbering of the degrees of
+    #: freedom these dU are vectors of; and the state of the convergence criterion.
+    checkpointedState = {
+        "prevTimeStep": TimeStep,
+        "dUOfLastIncrement": np.ndarray,
+        "timeStepOfIncrementBeforeLast": TimeStep,
+        "dUOfIncrementBeforeLast": np.ndarray,
+        "dofNumberingOfLastIncrement": str,
+        "convergenceCriterion": ConvergenceCriterionBase,
+    }
 
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 
-        self.fieldCorrectionTolerances = jobInfo["fieldCorrectionTolerance"]
+        # the tolerances of the legacy criterion per field, see edelweissfe.solvers.base.convergencecriteria
         self.fluxResidualTolerances = jobInfo["fluxResidualTolerance"]
-        self.fluxResidualTolerancesAlt = jobInfo["fluxResidualToleranceAlternative"]
+        self.fluxResidualTolerancesAlternative = jobInfo["fluxResidualToleranceAlternative"]
+        self.absoluteFluxResidualTolerances = jobInfo["absoluteFluxResidualTolerance"]
+        self.fieldCorrectionTolerances = jobInfo["fieldCorrectionTolerance"]
+        self.relativeFieldCorrectionTolerances = jobInfo["relativeFieldCorrectionTolerance"]
 
         self.options = self.SolverSpecificOptions.copy()
-        # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
-        # are user typos and must not be swallowed
-        self._updateOptions(kwargs, journal, strict=True)
+        # the *solver datalines belong only to this solver: unknown entries are typos
+        declaredOptions = self._updateOptions(kwargs, journal, strict=True)
+        self.refuseOptionsThatMeanNothing(self.options, declaredOptions)
         #: The ``*linearSolver`` blocks of the input file by name, which linsolver= may name (none without an input file).
         self.linearSolverDefinitions = jobInfo.get("linearSolvers", {})
         #: The linear solver, and the ``linsolver`` it was made for (see :meth:`selectLinearSolverForStep`).
@@ -275,14 +448,79 @@ class NIST(NonlinearSolverBase):
 
         #: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).
         self.prevTimeStep = None
-        #: The solution increment of the last accepted increment.
-        self.dU = None
+        #: The solution increment of the last accepted increment, kept for the predictor: a copy, since the working
+        #: increment of the discrete system changes in every iteration, and the model's entry ``dU`` is a result,
+        #: which no solver reads back.
+        self.dUOfLastIncrement = None
+        #: The accepted increment before :attr:`prevTimeStep`, kept for a quadratic extrapolation only (else None).
+        self.timeStepOfIncrementBeforeLast = None
+        #: The solution increment of :attr:`timeStepOfIncrementBeforeLast`.
+        self.dUOfIncrementBeforeLast = None
+        #: The digest of the numbering of the degrees of freedom of the discrete system the last increment was accepted
+        #: in (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`): :attr:`dUOfLastIncrement` is a
+        #: vector of it, and so is :attr:`dUOfIncrementBeforeLast`, which is kept only as long as the prediction
+        #: survives the change of the discrete system (see :meth:`predictionSurvives`).
+        self.dofNumberingOfLastIncrement = None
+        #: The convergence criterion of the current step, created when the step begins (None before).
+        self.convergenceCriterion = None
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Apply an override of this solver's options, see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyOptionsOverride`; an override that
+        sets an option where it means nothing is refused before anything of it applies (see
+        :meth:`refuseOptionsThatMeanNothing`).
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+        """
+
+        # the options this solver checks have the same schema field and option name
+        self.refuseOptionsThatMeanNothing(self.options | fieldValues, fieldValues.keys())
+        super().applyOptionsOverride(fieldValues)
+
+    def refuseOptionsThatMeanNothing(self, options: dict, declaredOptions) -> None:
+        """Refuse an option that a declaration of options sets where it means nothing, with the options in force after
+        the declaration. A declaration is the definition of the solver (its ``*solver`` datalines, or the arguments of
+        its constructor), or an ``>>options`` block of a step. Refused are:
+
+        * ``retryWithoutExtrapolation`` and ``extrapolateAcrossConnectivityChange`` switched on with
+          ``extrapolation=off``: there is no prediction to retry without, nor one to keep across a rebuild;
+        * an option of the abaqus criterion (``abaqus...``) with ``convergenceCriterion=legacy``.
+
+        An option the declaration does not set is not refused: an option set for some steps keeps its value in a step
+        that switches off what it acts on, and rests there.
+
+        Parameters
+        ----------
+        options
+            The options in force after the declaration.
+        declaredOptions
+            The names of the options the declaration sets.
+
+        Raises
+        ------
+        ValueError
+            If the declaration sets an option where it means nothing.
+        """
+
+        for name in ("retryWithoutExtrapolation", "extrapolateAcrossConnectivityChange"):
+            if name in declaredOptions and options[name] and options["extrapolation"] == "off":
+                raise ValueError("{:} means nothing with extrapolation=off: no increment is predicted".format(name))
+
+        abaqusCriterionOptions = sorted(name for name in declaredOptions if name.startswith("abaqus"))
+        if abaqusCriterionOptions and options["convergenceCriterion"] == "legacy":
+            raise ValueError(
+                "{:}: an option of the abaqus convergence criterion means nothing with "
+                "convergenceCriterion=legacy".format(", ".join(abaqusCriterionOptions))
+            )
 
     def selectLinearSolverForStep(self) -> None:
         """Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the
         previous step if it names the same, else a new one.
 
-        A kept solver builds anew for the step's equation system (``setModel``) and frees what it built before. A new
+        A kept solver builds anew for the step's discrete system (``setModel``) and frees what it built before. A new
         solver per step would leave the previous one to Python's cyclic garbage collector whenever its tree refers
         back to itself (a function in a solver script, whose globals hold the tree), and the steps' matrices would
         pile up."""
@@ -294,14 +532,82 @@ class NIST(NonlinearSolverBase):
         self.linSolverName = self.options["linsolver"]
         self.linSolver.setJournal(self.journal)
 
-    def forgetEquationSystem(self) -> None:
-        """Drop the equation system of the last build -- the DOF manager, the system matrix and its CSR generator,
-        the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the next one is built,
-        never both at once."""
-        self.theDofManager = None
-        self.csrGenerator = None
-        self.mpcTransformation = None
+    def forgetDiscreteSystem(self) -> None:
+        """Drop the discrete system of the last build -- with its numbering and locations, the system matrix assembly
+        and its CSR pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the
+        next one is built, never both at once."""
+
+        super().forgetDiscreteSystem()
         self._U = self._dU = self._P = self._K = None
+
+    def onNewNumbering(self):
+        """Build what is sized by the numbering of the new discrete system: the linear solver's view of the degrees of
+        freedom, which it is re-pushed on every new numbering so that it tracks the mesh across refinement; the layout of
+        the convergence table; the solution, its increment and the force, the solution read from the model; and the
+        multi-point-constraint condensation, which is reconciled with the Dirichlet boundary conditions of the actions
+        of the step (``self._stepActions``, set when the step begins).
+
+        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering`.
+        """
+
+        system = self.system
+        numbering = system.numbering
+
+        # Fields are laid out in contiguous slices: report the block structure per field.
+        for fieldName, fieldIndices in numbering.idcsOfFieldsInDofVector.items():
+            self.journal.message(
+                "field '{:}': {:} dof, [{:}, {:})".format(
+                    fieldName, fieldIndices.stop - fieldIndices.start, fieldIndices.start, fieldIndices.stop
+                ),
+                self.identification,
+                2,
+            )
+
+        with performancetiming.timeit("linear solver setup"):
+            self.linSolver.setModel(system.modelForLinearSolver, numbering)
+
+        presentVariableNames = list(numbering.idcsOfFieldsInDofVector.keys())
+
+        if numbering.idcsOfScalarVariablesInDofVector:
+            presentVariableNames += [
+                "scalar variables",
+            ]
+
+        self.convergenceTable = ConvergenceTable(presentVariableNames, self.linSolver.reportsSolveSummary)
+
+        self._U = system.locations.constructDofVector()
+        self._P = system.locations.constructDofVector()
+        self._dU = system.locations.constructDofVector()
+
+        self.readStateFromModel(self._U)
+
+        self.buildAndCheckMPCTransformation()
+
+    def onNewLocations(self):
+        """Build what is derived from the locations of the new discrete system: the vectors are wrapped with them, the
+        values kept, the linear solver is told that the sparsity pattern changes
+        (:meth:`~edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern`), and the system matrix assembly is built
+        with the CSR pattern the locations determine, with room for the entries the multi-point-constraint condensation
+        adds, so that it can be done in place: the assembly writes the matrix of the pattern it is built on. The
+        assembly of the previous locations is gone before the next one is built, never both at once.
+
+        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations`.
+        """
+
+        locations = self.system.locations
+
+        self._U = self._U.onLocations(locations)
+        self._dU = self._dU.onLocations(locations)
+        self._P = self._P.onLocations(locations)
+
+        # What the linear solver built for the old pattern is dropped before the new pattern is built, never both at
+        # once; what it holds of the model and the numbering stays.
+        self.linSolver.onNewMatrixPattern()
+        self._K = None
+        with performancetiming.timeit("system matrix pattern"):
+            self._K = self.createSystemMatrixAssembly(
+                self.mpcTransformation.condensedPatternFillIn if self.mpcTransformation is not None else None
+            )
 
     def beginStep(
         self,
@@ -325,37 +631,74 @@ class NIST(NonlinearSolverBase):
             The output managers.
         """
 
-        # self.options already reflects every >>options, name=<this solver's name>, ... block applied
-        # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
-        # re-declared (edelweissfe.stepactions.options.StepAction), and an override sticks until
-        # changed again -- there is nothing to reset or re-fetch here.
+        self._stepActions = step.actions
+
+        # self.options already reflects every >>options block applied so far (see applyOptionsOverride).
         self.selectLinearSolverForStep()
 
         convergenceCriterion = self.createConvergenceCriterion()
         convergenceCriterion.startStep(self.convergenceCriterion)
         self.convergenceCriterion = convergenceCriterion
 
-        # The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily, at the
-        # start of whichever increment first needs it -- either the very first one, or any later
-        # one where the topology update reports a change of the mesh or of a constraint's DOF
-        # footprint (e.g. a dynamic contact candidate list).
-        self.forgetEquationSystem()
+        # The discrete system (numbering, locations, VIJ pattern, CSR pattern, system matrix assembly) is (re)built
+        # lazily in the first increment, and whenever the topology update reports a change (see Change).
+        self.forgetDiscreteSystem()
 
-        # The predictor's state between increments: the last accepted increment and its dU. A step
-        # starts without; a resumed step then takes over the checkpointed ones.
+        if self.options["systemMatrixAssembly"] not in self.systemMatrixAssemblies:
+            raise ValueError(
+                "{:} supports systemMatrixAssembly={:}, not '{:}'".format(
+                    self.identification, "|".join(self.systemMatrixAssemblies), self.options["systemMatrixAssembly"]
+                )
+            )
+
+        if self.options["extrapolation"] not in ("off", "linear", "quadratic"):
+            raise ValueError(
+                "Unknown extrapolation '{:}', use off, linear or quadratic".format(self.options["extrapolation"])
+            )
+
+        if self.options["lineSearch"]:
+            stepLengths = self.lineSearchStepLengths()
+            if len(set(stepLengths)) < 3 or min(stepLengths) <= 0.0:
+                raise ValueError(
+                    "lineSearchStepLengths: a parabola needs at least three different positive step lengths, got "
+                    "{:}".format(stepLengths)
+                )
+            # The first correction of an increment makes the prescribed increments, which a line search would scale.
+            if self.options["lineSearchAfterIterations"] < 0:
+                raise ValueError("lineSearchAfterIterations must not be negative")
+            if self.options["lineSearchEveryIterations"] < 1:
+                raise ValueError("lineSearchEveryIterations must be at least 1")
+
+        # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.prevTimeStep = None
-        self.dU = None
+        self.dUOfLastIncrement = None
+        self.timeStepOfIncrementBeforeLast = None
+        self.dUOfIncrementBeforeLast = None
+        self.dofNumberingOfLastIncrement = None
 
         self.validateModelCapabilities(model)
 
+        model.setNewmarkParametersOfEntities(*self.newmarkParametersOfEntities())
+
         self.applyStepActionsAtStepStart(model, step)
 
-        # The step's table reports its rows against this wall clock, so the two start together.
-        # Whatever was timed before the step -- a checkpoint's topology replay, a caller's own timed
-        # work -- would otherwise be counted in the rows but not in the wall clock, and the share
-        # left unaccounted would be off by that much: far below zero on a large refined model.
+        # The timing table and the step's wall clock must start together.
         performancetiming.reset()
         self._stepWallClockTic = perf_counter()
+
+    def newmarkParametersOfEntities(self) -> tuple[float, float]:
+        """The Newmark parameters :math:`(\\beta, \\gamma)` that the entities of the model which integrate their own
+        inertia take at the start of every step (see
+        :meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`). A quasi-static solver does not
+        integrate in time: :math:`(0, 0)`, no inertia, whatever the entities were given before.
+
+        Returns
+        -------
+        tuple[float, float]
+            :math:`\\beta` and :math:`\\gamma`.
+        """
+
+        return 0.0, 0.0
 
     def prepareIncrement(self, step, model: FEModel, isRetry: bool):
         """The topology update, at the start of every increment; see
@@ -372,20 +715,15 @@ class NIST(NonlinearSolverBase):
             the state the retry starts from.
         """
 
-        # The separator opens this increment's block here, before the topology update, so that what the
-        # update reports (refinement, contact status) heads the increment it belongs to instead of
-        # trailing the previous one.
+        # Before the topology update, so that its messages head this increment's block.
         self.journal.printSeperationLine()
 
-        topologyUpdate = self.updateTopologyAndConnectivity(model, step, offerModelModifiers=not isRetry)
-        self._modelHasChanged = topologyUpdate.topologyChanged
-        self._connectivityHasChanged = (
-            topologyUpdate.meshDependentsRefreshed or topologyUpdate.constraintConnectivityChanged
-        )
+        self._change = self.updateTopologyAndConnectivity(model, step, offerModelModifiers=not isRetry)
 
     def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
-        """Solve the increment by Newton's method, rebuilding the equation system first if the topology
-        update changed the model, and re-equilibrating a changed model first if so configured; see
+        """Solve the increment by Newton's method, rebuilding the discrete system first if the topology
+        update changed anything (:class:`~edelweissfe.models.change.Change`), and re-equilibrating a changed mesh first
+        if so configured; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
 
         Parameters
@@ -410,13 +748,9 @@ class NIST(NonlinearSolverBase):
         maxIter = step.maxIter
         maxGrowingIter = step.maxGrowIter
         cutbackFactor = step.cutbackFactor
-        modelHasChanged = self._modelHasChanged
-        connectivityHasChanged = self._connectivityHasChanged
+        change = self._change
 
-        # The header of this increment's block (opened by the separator in prepareIncrement). Everything
-        # about the solution -- an equation-system rebuild if one is needed, the MPC/Dirichlet
-        # diagnostics that come with it, the Newton table, all of it -- is printed after it, nested one
-        # level deeper (see the messages below).
+        # The header of this increment's block; all messages below are nested one level deeper.
         self.journal.message(
             "increment {:}: {:8f}, {:8f}; time {:10f} to {:10f}".format(
                 timeStep.number,
@@ -435,93 +769,12 @@ class NIST(NonlinearSolverBase):
                 self.identification,
             )
 
-        if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
-            with performancetiming.timeit("equation system rebuild"):
-                self.forgetEquationSystem()
-                with performancetiming.timeit("dof manager"):
-                    self.theDofManager = DofManager(
-                        model.nodeFields.values(),
-                        model.scalarVariables.values(),
-                        model.elements.values(),
-                        model.constraints.values(),
-                        model.nodeSets.values(),
-                    )
-                # findDirichletIndices() keys its cache in part on self.theDofManager, so
-                # entries from the discarded manager would otherwise keep it (and everything
-                # it references) alive for the rest of the run.
-                self._dirichletIndicesCache = None
-                self.journal.message(
-                    "eq. system rebuilt: {:} dof".format(self.theDofManager.nDof),
-                    self.identification,
-                    2,
-                )
+        self.updateDiscreteSystem(model, change)
 
-                # The per-field block extents, not just the total. Fields are laid out
-                # field-major in contiguous slices, so this states the block structure of the
-                # equation system -- which is what a field-split preconditioner needs, and what
-                # tells you at a glance how a coupled model's DOFs are actually distributed.
-                for fieldName, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
-                    self.journal.message(
-                        "field '{:}': {:} dof, [{:}, {:})".format(
-                            fieldName,
-                            fieldIndices.stop - fieldIndices.start,
-                            fieldIndices.start,
-                            fieldIndices.stop,
-                        ),
-                        self.identification,
-                        2,
-                    )
+        if not self.predictionSurvives(change):
+            self.prevTimeStep = None
 
-                # The one interface point a solver needs beyond the plain (A, b) call: it
-                # derives whatever it wants (field layout, node coordinates, topology) from
-                # these itself. Re-pushed on every (re)build so it tracks the mesh across AMR.
-                with performancetiming.timeit("linear solver setup"):
-                    self.linSolver.setModel(model, self.theDofManager)
-
-                presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
-
-                if self.theDofManager.idcsOfScalarVariablesInDofVector:
-                    presentVariableNames += [
-                        "scalar variables",
-                    ]
-
-                self.convergenceTable = ConvergenceTable(presentVariableNames, self.linSolver.reportsSolveSummary)
-
-                with performancetiming.timeit("system matrix pattern"):
-                    K = self.theDofManager.constructVIJSystemMatrix()
-                    self.csrGenerator = CSRGenerator(K)
-
-                U = self.theDofManager.constructDofVector()
-                P = self.theDofManager.constructDofVector()
-                dU = self.theDofManager.constructDofVector()
-
-                for fieldName, field in model.nodeFields.items():
-                    U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
-
-                for variable in model.scalarVariables.values():
-                    U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
-
-                with performancetiming.timeit("mpc transformation build"):
-                    self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
-                with performancetiming.timeit("mpc dirichlet conflict check"):
-                    self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
-                if self.mpcTransformation is not None:
-                    # Room in the CSR pattern for the entries the condensation adds, so that it can be done in place
-                    with performancetiming.timeit("mpc condensed pattern"):
-                        self.csrGenerator.addToPattern(
-                            self.mpcTransformation.condensedPatternFillIn(self.csrGenerator.csrMatrix)
-                        )
-
-                # After a change of the mesh or of the constraint connectivity, the last accepted
-                # dU belongs to a different DOF layout, so this one increment is not extrapolated
-                # -- the same fallback as after a failed increment. Otherwise (the first build of a
-                # step) the predictor continues from it.
-                if modelHasChanged or connectivityHasChanged:
-                    self.prevTimeStep = None
-                elif self.dU is not None:
-                    dU[:] = self.dU
-                self._U, self._dU, self._P, self._K = U, dU, P, K
-        # the equation system of this increment, just built or kept from the last one
+        # the discrete system of this increment, just built or kept from the last one
         U, dU, P, K = self._U, self._dU, self._P, self._K
 
         self.incrementStatus = {
@@ -536,14 +789,9 @@ class NIST(NonlinearSolverBase):
 
         self.tableHeaderWritten = False
 
-        if modelHasChanged and equilibrateAfterModelChange:
-            # Settle the warm-started refined mesh to equilibrium at the LAST converged load
-            # before advancing the load. A synthetic time step with a zero step-progress
-            # increment holds every load at its previous absolute level (getCurrentLoad reads
-            # the absolute stepProgress) and yields a zero Dirichlet increment (getDelta reads
-            # the difference), with a zero time increment -> a pure equilibration solve. The
-            # settled U feeds the real increment below; its dU is reset there (self.prevTimeStep is
-            # None on a rebuild increment, so extrapolation zeroes dU).
+        if change == Change.MESH and equilibrateAfterModelChange:
+            # Settle the refined mesh at the LAST converged load: a time step with zero step-progress
+            # and time increment holds all loads and yields a zero Dirichlet increment.
             equilibrationTimeStep = TimeStep(
                 timeStep.number,
                 0.0,
@@ -582,51 +830,194 @@ class NIST(NonlinearSolverBase):
                 self.incrementStatus["notes"] = "re-equilibration failed: {:}".format(str(e))
                 raise IncrementFailed(str(e), cutbackFactor) from e
 
-            # Commit the settled state as a genuine converged (constant-load, zero-time)
-            # sub-increment so the real increment builds on the equilibrated state. Elements
-            # integrate strain incrementally from the COMMITTED state (computeKernels resets
-            # the trial buffer each call and forms dE = B*dU), so without this commit the
-            # settling deformation dU would be dropped from the strain/stress state while
-            # remaining in U -- leaving U inconsistent with the internal state and making the
-            # option a physics no-op. No output frame is emitted (it is an internal sub-step).
-            for fieldName, field in model.nodeFields.items():
-                self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-                self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-            for variable in model.scalarVariables.values():
-                variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+            # Commit the settled state as a converged sub-increment (no output): elements integrate
+            # incrementally from the committed state, so otherwise U and the internal state disagree.
+            self.writeResultsToModel(U, dU, P)
             model.advanceToTime(equilibrationTimeStep.totalTime)
             self._U, self._dU, self._P = U, dU, P
 
+        retryWithoutExtrapolation = self.options["retryWithoutExtrapolation"]
+
         try:
-            U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
-                U,
-                dU,
-                P,
-                K,
-                step.actions,
-                model,
-                timeStep,
-                self.prevTimeStep,
-                extrapolation,
-                maxIter,
-                maxGrowingIter,
-            )
+            try:
+                U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
+                    U,
+                    dU,
+                    P,
+                    K,
+                    step.actions,
+                    model,
+                    timeStep,
+                    self.prevTimeStep,
+                    extrapolation,
+                    maxIter,
+                    maxGrowingIter,
+                )
+            except (CutbackRequest, ReachedMaxIterations, DivergingSolution) as e:
+                if not (retryWithoutExtrapolation and self.extrapolates(extrapolation, self.prevTimeStep)):
+                    raise
+                # The prediction may have led Newton's method astray: the same increment, from a zero prediction.
+                self.journal.message(
+                    "{:}; retrying the increment without extrapolation".format(str(e)), self.identification, 1
+                )
+                U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
+                    U, dU, P, K, step.actions, model, timeStep, None, extrapolation, maxIter, maxGrowingIter
+                )
+                self.incrementStatus["notes"] = "retried without extrapolation"
 
         except CutbackRequest as e:
-            self.prevTimeStep = None
+            self.forgetPredictionAfterFailure()
             self.incrementStatus["iters"] = np.inf
             self.incrementStatus["notes"] = str(e)
             raise IncrementFailed(str(e), max(e.cutbackSize, cutbackFactor)) from e
 
         except (ReachedMaxIterations, DivergingSolution) as e:
-            self.prevTimeStep = None
+            self.forgetPredictionAfterFailure()
             self.incrementStatus["iters"] = np.inf
             self.incrementStatus["notes"] = str(e)
             raise IncrementFailed(str(e), cutbackFactor) from e
 
         self._U, self._dU, self._P = U, dU, P
         self._iterationCounter = iterationCounter
+
+    def readStateFromModel(self, U: DofVector):
+        """Read the state the next increment starts from out of the model, into the vectors of the discrete system just
+        (re)built: here, the solution, through the discrete system (see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel`). A solver that
+        integrates in time reads its velocity and acceleration as well.
+
+        Parameters
+        ----------
+        U
+            The solution vector of the discrete system, zero, overwritten.
+        """
+
+        self.system.readStateFromModel(U)
+
+    def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
+        """Write the results of a converged increment to the model, through the discrete system:
+        the incremental degrees of freedom are set to zero first, from where the next increment starts them (see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients`), then the
+        solution, its increment and the force are written (see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`), and the velocity
+        and the acceleration (see :meth:`writeVelocityAndAccelerationToModel`).
+
+        Parameters
+        ----------
+        U
+            The solution.
+        dU
+            The solution increment.
+        P
+            The internal force (with the inertial and damping forces of a solver that integrates in time); None to
+            leave the model's as it is.
+        """
+
+        self.system.zeroIncrementalCoefficients(U)
+        self.system.writeResultsToModel(U, dU, P)
+        self.writeVelocityAndAccelerationToModel()
+
+    def writeVelocityAndAccelerationToModel(self):
+        """Write the velocity and the acceleration of a converged increment to the model, as part of
+        :meth:`writeResultsToModel`. A quasi-static solver does not integrate in time: the state it accepts is at
+        rest, with zero velocity and acceleration on every field (see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel`),
+        so a dynamic step that follows starts from rest. A solver that integrates in time writes its own.
+        """
+
+        self.system.writeZeroVelocityAndAccelerationToModel()
+
+    def systemMatrixAssemblyType(self) -> type:
+        """The type of the assembly of the system matrix: the one named by the option ``systemMatrixAssembly``, one of
+        :attr:`systemMatrixAssemblies`.
+
+        Returns
+        -------
+        type
+            The type of the assembly.
+        """
+
+        return self.systemMatrixAssemblies[self.options["systemMatrixAssembly"]]
+
+    def createSystemMatrixAssembly(self, patternFillIn: Callable | None = None) -> SystemMatrixAssembly:
+        """The assembly of the system matrix of the discrete system just built (:meth:`systemMatrixAssemblyType`), with
+        its CSR pattern and :meth:`numberOfAssemblyWorkers` workers.
+
+        Parameters
+        ----------
+        patternFillIn
+            The entries the pattern must have although no entity contributes them, see
+            :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`.
+
+        Returns
+        -------
+        SystemMatrixAssembly
+            The assembly.
+        """
+
+        return self.systemMatrixAssemblyType()(self.system.locations, self.numberOfAssemblyWorkers(), patternFillIn)
+
+    def forEachChunk(self, entities: list, work: Callable[[list], None]):
+        """Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent
+        entities, other than the elements, that the model's discrete system evaluates, e.g. the material points
+        of a meshfree model (see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`). Here, one chunk of
+        all entities, in the calling thread, as the elements are computed.
+
+        Parameters
+        ----------
+        entities
+            The entities, a list.
+        work
+            Called for each chunk; it must write only to what belongs to the entities of its chunk.
+        """
+
+        work(entities)
+
+    def numberOfAssemblyWorkers(self) -> int:
+        """How many threads write blocks of the system matrix at the same time: one, the elements are computed in the
+        calling thread.
+
+        Returns
+        -------
+        int
+            The number of workers.
+        """
+
+        return 1
+
+    def predictionSurvives(self, change: Change) -> bool:
+        """Whether this increment may extrapolate the last accepted increments, after the discrete system followed
+        the change. Called once per increment, right after :meth:`updateDiscreteSystem`, with the change the increment
+        was given. The last accepted increments are vectors of the numbering they were solved in:
+
+        * after a change of the mesh (e.g., a mesh refinement), they are never extrapolated;
+        * across any other change of the connectivity they are extrapolated only with the option
+          ``extrapolateAcrossConnectivityChange``;
+        * and only if the numbering of the discrete system numbers the degrees of freedom as the last accepted
+          increments are numbered, which the digests of the two numberings tell
+          (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`; the one of the last accepted increments is
+          :attr:`dofNumberingOfLastIncrement`): e.g., at the first increment of a step that continues from a restart
+          checkpoint -- resumed, or fallen back to -- the active cells of a material point model may have changed
+          since. A prediction without the digest of its numbering has nothing to be compared with, and is dropped.
+          New locations on the same numbering are the same numbering: the prediction survives them by construction.
+
+        Parameters
+        ----------
+        change
+            The change the increment was given.
+
+        Returns
+        -------
+        bool
+            True if the prediction may extrapolate the last accepted increments.
+        """
+
+        if change == Change.MESH:
+            return False
+        if change >= Change.LOCATIONS and not self.options["extrapolateAcrossConnectivityChange"]:
+            return False
+        return self.dofNumberingOfLastIncrement == self.system.numbering.digest
 
     @performancetiming.timeit("accept increment")
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
@@ -646,28 +1037,26 @@ class NIST(NonlinearSolverBase):
         U, dU, P = self._U, self._dU, self._P
         iterationCounter = self._iterationCounter
 
-        # After an adaptive model change, the just-converged increment's dU conflates the
-        # load advance with the one-off warm-start/remesh settling transient. Optionally
-        # suppress extrapolation for the next increment (start it from a zero predictor)
-        # instead of extrapolating that polluted dU.
-        if self._modelHasChanged and not self.options["extrapolateAfterModelChange"]:
+        # The predictor's history: a quadratic extrapolation needs the accepted increment before the last one, too.
+        if self.options["extrapolation"] == "quadratic" and self.prevTimeStep is not None:
+            self.timeStepOfIncrementBeforeLast, self.dUOfIncrementBeforeLast = self.prevTimeStep, self.dUOfLastIncrement
+        else:
+            self.timeStepOfIncrementBeforeLast, self.dUOfIncrementBeforeLast = None, None
+        # After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.
+        if self._change == Change.MESH and not self.options["extrapolateAfterModelChange"]:
             self.prevTimeStep = None
         else:
             self.prevTimeStep = timeStep
-        self.dU = dU
+        # A copy: the next increment iterates on dU in place, and may fail.
+        self.dUOfLastIncrement = dU.copy()
+        self.dofNumberingOfLastIncrement = self.system.numbering.digest
         self.convergenceCriterion.acceptIncrement()
 
         if iterationCounter >= step.criticalIter:
             step.timeStepper.preventIncrementIncrease()
 
         with performancetiming.timeit("write results to nodes"):
-            for fieldName, field in model.nodeFields.items():
-                self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-                self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-
-            for variable in model.scalarVariables.values():
-                variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+            self.writeResultsToModel(U, dU, P)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -708,13 +1097,24 @@ class NIST(NonlinearSolverBase):
         """
         criterion = self.options["convergenceCriterion"]
 
+        legacyCriterion = LegacyConvergenceCriterion(
+            fluxResidualTolerances=self.fluxResidualTolerances,
+            fluxResidualTolerancesAlternative=self.fluxResidualTolerancesAlternative,
+            absoluteFluxResidualTolerances=self.absoluteFluxResidualTolerances,
+            fieldCorrectionTolerances=self.fieldCorrectionTolerances,
+            relativeFieldCorrectionTolerances=self.relativeFieldCorrectionTolerances,
+            iterationsForAlternativeTolerance=self.options["iterationsForAlternativeTolerance"],
+            zeroFluxThreshold=self.options["zeroFluxThreshold"],
+            zeroIncrementThreshold=self.options["zeroIncrementThreshold"],
+            minimumIterations=self.options["minimumIterations"],
+        )
+
         if criterion == "legacy":
-            return LegacyConvergenceCriterion(
-                self.fluxResidualTolerances, self.fluxResidualTolerancesAlt, self.fieldCorrectionTolerances
-            )
+            return legacyCriterion
 
         if criterion == "abaqus":
             return AbaqusConvergenceCriterion(
+                scalarVariableCriterion=legacyCriterion,
                 residualTolerance=self.options["abaqusResidualTolerance"],
                 correctionTolerance=self.options["abaqusCorrectionTolerance"],
                 residualToleranceAlternative=self.options["abaqusResidualToleranceAlternative"],
@@ -727,13 +1127,145 @@ class NIST(NonlinearSolverBase):
 
         raise ValueError("Unknown convergence criterion '{:}', use 'legacy' or 'abaqus'".format(criterion))
 
+    def forgetPredictionAfterFailure(self):
+        """A failed increment drops the prediction, which may have caused the failure, unless
+        ``retryWithoutExtrapolation`` has answered that already: then the accepted history is kept, and the smaller
+        increment that follows the cutback extrapolates it."""
+
+        if not self.options["retryWithoutExtrapolation"]:
+            self.prevTimeStep = None
+
+    def extrapolates(self, extrapolation: str, prevTimeStep: TimeStep | None) -> bool:
+        """Whether an increment that follows the accepted increment ``prevTimeStep`` starts from an extrapolated
+        prediction.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation, ``off``, ``linear`` or ``quadratic``.
+        prevTimeStep
+            The last accepted increment, or None if there is none to extrapolate.
+
+        Returns
+        -------
+        bool
+            True if the increment is extrapolated.
+        """
+
+        return extrapolation != "off" and prevTimeStep is not None and bool(prevTimeStep.timeIncrement)
+
+    def extrapolateLastIncrement(
+        self,
+        extrapolation: str,
+        timeStep: TimeStep,
+        dU: DofVector,
+        dirichlets: list,
+        prevTimeStep: TimeStep,
+        model,
+    ) -> tuple[DofVector, bool]:
+        """Predict the solution increment, the point Newton's method starts from, by extrapolating the last
+        accepted increments of the step. With :math:`h` the size (step progress) of the new increment and
+        :math:`h_n, \\Delta U_n` the size and the solution increment of the last accepted one:
+
+        * ``off``: no prediction, :math:`\\Delta U = 0`.
+        * ``linear``: the last increment, scaled to the new size, :math:`\\Delta U = \\Delta U_n \\, h / h_n`.
+        * ``quadratic``: the parabola through the last three accepted states, evaluated at the end of the new
+          increment. With the increment before the last one, :math:`h_{n-1}, \\Delta U_{n-1}`,
+
+          .. math::
+
+              \\Delta U = \\Delta U_n \\frac{h}{h_n}
+              + \\left( \\frac{\\Delta U_n}{h_n} - \\frac{\\Delta U_{n-1}}{h_{n-1}} \\right)
+              \\frac{h \\, (h + h_n)}{h_{n-1} + h_n},
+
+          the linear prediction plus the change of the slope of the path. It reproduces a quadratic path exactly. While
+          only one accepted increment of the step of nonzero size is available, the prediction is linear.
+
+        The prescribed degrees of freedom take their prescribed increment.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation.
+        timeStep
+            The new increment.
+        dU
+            The solution increment to predict, overwritten.
+        dirichlets
+            The active dirichlet boundary conditions.
+        prevTimeStep
+            The last accepted increment, or None for no prediction.
+        model
+            The model tree.
+
+        Returns
+        -------
+        tuple[DofVector,bool]
+            - The predicted solution increment.
+            - True if an extrapolation was performed.
+        """
+
+        if not self.extrapolates(extrapolation, prevTimeStep):
+            dU[:] = 0.0
+            return dU, False
+
+        weightOfLast, weightOfBeforeLast = self.extrapolationWeights(extrapolation, timeStep, prevTimeStep)
+        np.multiply(self.dUOfLastIncrement, weightOfLast, out=dU)
+        if weightOfBeforeLast is not None:
+            dU += weightOfBeforeLast * self.dUOfIncrementBeforeLast
+
+        dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
+
+        return dU, True
+
+    def extrapolationWeights(
+        self, extrapolation: str, timeStep: TimeStep, prevTimeStep: TimeStep
+    ) -> tuple[float, float | None]:
+        """The weights of the last accepted increment and of the one before it in the prediction of
+        :meth:`extrapolateLastIncrement`: :math:`\\Delta U = w_n \\, \\Delta U_n + w_{n-1} \\, \\Delta U_{n-1}`, with
+
+        .. math::
+
+            w_n = \\frac{h}{h_n} + \\frac{c}{h_n}, \\qquad w_{n-1} = -\\frac{c}{h_{n-1}}, \\qquad
+            c = \\frac{h \\, (h + h_n)}{h_{n-1} + h_n}
+
+        for a quadratic extrapolation, and :math:`w_n = h / h_n` alone for a linear one. Every quantity that follows
+        the path of the solution is predicted with these weights, e.g. the load parameter of the arc length method,
+        too.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation, ``linear`` or ``quadratic``.
+        timeStep
+            The new increment.
+        prevTimeStep
+            The last accepted increment, which the prediction extrapolates.
+
+        Returns
+        -------
+        tuple[float,float|None]
+            - The weight of the last accepted increment.
+            - The weight of the accepted increment before it, None for a linear prediction.
+        """
+
+        h = timeStep.stepProgressIncrement
+        h_n = prevTimeStep.stepProgressIncrement
+
+        if extrapolation == "quadratic" and self.extrapolates(extrapolation, self.timeStepOfIncrementBeforeLast):
+            h_nm1 = self.timeStepOfIncrementBeforeLast.stepProgressIncrement
+            curvatureFactor = h * (h + h_n) / (h_nm1 + h_n)
+            return h / h_n + curvatureFactor / h_n, -(curvatureFactor / h_nm1)
+
+        return h / h_n, None
+
     def solveIncrement(
         self,
         U_n: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
-        stepActions: list,
+        K: SystemMatrixAssembly,
+        stepActions: dict,
         model: FEModel,
         timeStep: TimeStep,
         prevTimeStep: TimeStep,
@@ -741,34 +1273,47 @@ class NIST(NonlinearSolverBase):
         maxIter: int,
         maxGrowingIter: int,
     ) -> tuple[DofVector, DofVector, DofVector, int, dict]:
-        """Standard Newton-Raphson scheme to solve for an increment.
+        """Newton's method for the solution increment of an increment. It starts from the prediction
+        (:meth:`extrapolateLastIncrement`), and every iteration
+
+        1. evaluates the model at the iterate (:meth:`assembleResidualAndTangent`) and imposes the Dirichlet boundary
+           conditions on the residual,
+        2. checks the iterate for convergence -- except the first iterate of an increment without a prediction, if it
+           needs a correction first (:meth:`firstIterateNeedsCorrection`),
+        3. solves the linearized system for the correction (:meth:`solveForCorrection`),
+        4. and moves the iterate by the correction (:meth:`applyCorrection`), scaled by the step length of a line
+           search, if one is due, which evaluates the trial states :meth:`setTrialState` sets.
+
+        This is the Newton loop of every implicit solver. The dynamics enter it through :meth:`initializeIncrement`,
+        :meth:`assembleAdditionalTerms` and :meth:`finalizeIncrement`
+        (:class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`). The arc length method makes
+        the load parameter an unknown of the iterations, through the predictor and the methods of steps 2 to 4
+        (:meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement`).
 
         Parameters
         ----------
-        Un
-            The old solution vector.
+        U_n
+            The solution at the start of the increment.
         dU
-            The old solution increment.
+            The solution increment, overwritten.
         P
-            The old reaction vector.
+            The internal forces (the reaction), overwritten.
         K
-            The system matrix to be used.
-        elements
-            The dictionary containing all elements.
+            The tangent being assembled, assembled anew.
         stepActions
-            The list of active step actions.
+            The active step actions.
         model
             The model tree.
-        increment
-            The increment.
-        lastIncrementSize
-            The size of the previous increment.
+        timeStep
+            The time step.
+        prevTimeStep
+            The last accepted increment, from which the prediction extrapolates, or None.
         extrapolation
-            The type of extrapolation to be used.
+            The type of extrapolation.
         maxIter
-            The maximum number of iterations to be used.
+            The maximum number of iterations.
         maxGrowingIter
-            The maximum number of growing residuals until the Newton-Raphson is terminated.
+            The maximum number of residual growths before the increment is cut back.
 
         Returns
         -------
@@ -782,25 +1327,19 @@ class NIST(NonlinearSolverBase):
         """
 
         iterationCounter = 0
-        incrementResidualHistory = dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
+        incrementResidualHistory = {field: [] for field in self.system.numbering.idcsOfFieldsInDofVector}
 
-        elements = model.elements
-        constraints = model.constraints
-
-        R = self.theDofManager.constructDofVector()
-        F = self.theDofManager.constructDofVector()
-        FConstraints = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
-        U_np = self.theDofManager.constructDofVector()
+        R = self.system.locations.constructDofVector()
+        F = self.system.locations.constructDofVector()
+        FConstraints = self.system.locations.constructDofVector()
+        PLoadsAndConstraints = self.system.locations.constructDofVector()
+        U_np = self.system.locations.constructDofVector()
         ddU = None
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
 
         with performancetiming.timeit("step actions at increment start"):
-            # Find which global DOFs the Dirichlet BCs constrain, once up front.
+            # Find which global DOFs the Dirichlet BCs constrain, in every increment: the numbering may have changed.
             self.locateConstrainedDofs(dirichlets)
 
             self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
@@ -812,32 +1351,12 @@ class NIST(NonlinearSolverBase):
                 extrapolation, timeStep, dU, dirichlets, prevTimeStep, model
             )
 
+        quasiNewton = QuasiNewtonFallback(self.options["fallBackToQuasiNewton"])
+
         while True:
-            for geostatic in stepActions["geostatic"].values():
-                geostatic.applyAtIterationStart()
-
-            with performancetiming.timeit("reset residual and tangent"):
-                U_np[:] = U_n
-                U_np += dU
-
-                P[:] = F[:] = FConstraints[:] = PExt[:] = 0.0
-                # K holds the entries of all element matrices, far too many to zero on a single thread
-                forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
-
-            P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
-            PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep, FConstraints)
-
-            R[:] = -P
-            R += PExt
-
-            self.assembleAdditionalTerms(dU, R, F, K, timeStep)
-
-            # Condense the residual BEFORE the Dirichlet handling below: T^T folds slave-row
-            # residuals into their master rows, which may themselves carry a prescribed delta --
-            # transforming afterwards would corrupt it.
-            if self.mpcTransformation is not None:
-                R[:] = self.mpcTransformation.transformResidual(R, dU)
+            P, K, F = self.assembleResidualAndTangent(
+                U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
+            )
 
             # --- Impose the Dirichlet (prescribed-value) boundary conditions ---
             # For each constrained DOF i we overwrite its row of the linearized system
@@ -847,16 +1366,11 @@ class NIST(NonlinearSolverBase):
             #     K: zero row i, set K[i, i] = 1, and eliminate column i: R[r] -= K[r, i] R[i]
             #        for every other row r, then K[r, i] = 0   (see applyDirichletToStiffness)
             # Together these give  ddU[i] = R[i]  exactly, and keep a symmetric K symmetric.
-            if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
-                # First iteration: the constrained DOFs must still move by their
-                # prescribed increment for this step, so we ask the solve for it.
+            if iterationCounter == 0 and not isExtrapolatedIncrement and self.firstIterateNeedsCorrection(dirichlets):
+                # First iteration: the constrained DOFs still move by their prescribed increment.
                 R = self.applyDirichletToResidual(timeStep, R, dirichlets)
             else:
-                # Later iterations: the constrained DOFs already sit at their
-                # prescribed value and must not move further, so we prescribe a
-                # zero increment. This also removes them from the convergence
-                # check below: there is no force equilibrium to satisfy at a DOF
-                # whose value we dictate.
+                # Later iterations: zero increment, which also removes them from the convergence check.
                 for dirichlet in dirichlets:
                     R[dirichlet.constrainedDofIndices] = 0.0
 
@@ -867,35 +1381,527 @@ class NIST(NonlinearSolverBase):
                 if converged:
                     break
 
-                if self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
-                    self.printResidualOutlierNodes(nodesWithLargestResidual)
-                    raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
+                self.checkDivergingSolutionOrFallBack(
+                    quasiNewton, incrementResidualHistory, maxGrowingIter, nodesWithLargestResidual
+                )
 
                 if iterationCounter == maxIter:
                     self.printResidualOutlierNodes(nodesWithLargestResidual)
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
-            K_ = self.assembleStiffnessCSR(K)
+            K_ = self.assembleSystemMatrix(K, quasiNewton)
 
-            if self.mpcTransformation is not None:
-                K_ = self.mpcTransformation.transformSystemMatrix(K_)
+            ddU = self.solveForCorrection(K_, R, dirichlets)
 
-            # identity rows, and the columns eliminated into R
-            K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
+            if self.lineSearchIsDue(iterationCounter):
 
-            ddU = self.linearSolve(K_, R)
+                def largestResidualAt(stepLength):
+                    # the trial state at this step length along the correction, without the Dirichlet degrees of
+                    # freedom
+                    self.assembleResidualAndTangent(
+                        U_n,
+                        self.setTrialState(dU, ddU, stepLength),
+                        U_np,
+                        R,
+                        P,
+                        PLoadsAndConstraints,
+                        F,
+                        FConstraints,
+                        K,
+                        stepActions,
+                        model,
+                        timeStep,
+                    )
+                    for dirichlet in dirichlets:
+                        R[dirichlet.constrainedDofIndices] = 0.0
+                    return np.linalg.norm(R, np.inf)
 
-            # The condensed solve returns only the drift correction at the slave DOFs; add the
-            # master-interpolated part.
-            if self.mpcTransformation is not None:
-                ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
+                stepLength = self.quadraticLineSearch(largestResidualAt)
+            else:
+                stepLength = 1.0
 
-            dU += ddU
+            ddU = self.applyCorrection(dU, ddU, stepLength)
             iterationCounter += 1
 
         self.finalizeIncrement(model)
 
         return U_np, dU, P, iterationCounter, incrementResidualHistory
+
+    def firstIterateNeedsCorrection(self, dirichlets: list) -> bool:
+        """Whether the first iterate of an increment without a prediction -- the converged state of the last increment
+        -- needs a correction before it can be checked for convergence (see :meth:`solveIncrement`): if Dirichlet
+        boundary conditions act, whose prescribed increment the first correction makes. Without them, the first iterate
+        is checked like every later one, and is converged already if the loads have not changed. The arc length method
+        always corrects it first, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.firstIterateNeedsCorrection`.
+
+        Parameters
+        ----------
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+
+        Returns
+        -------
+        bool
+            True if the first iterate is corrected before the first convergence check.
+        """
+
+        return bool(dirichlets)
+
+    def solveForCorrection(self, K_: csr_matrix, R: DofVector, dirichlets: list) -> DofVector:
+        """Solve the linearized system of a Newton iteration, :math:`\\boldsymbol{K} \\, \\Delta\\Delta \\boldsymbol{U} =
+        \\boldsymbol{R}`, for the correction :math:`\\Delta\\Delta \\boldsymbol{U}`. The Dirichlet boundary conditions
+        replace the rows of their degrees of freedom by identity rows, and eliminate their columns into
+        :math:`\\boldsymbol{R}` (see :meth:`applyDirichletToStiffness`); with multi-point constraints, the slave degrees
+        of freedom take the part their masters interpolate. The arc length method solves for two right-hand sides here,
+        see :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveForCorrection`.
+
+        Parameters
+        ----------
+        K_
+            The system matrix of the iteration, see :meth:`assembleSystemMatrix`.
+        R
+            The right-hand side, the out-of-balance force with the Dirichlet boundary conditions imposed; the columns
+            of the Dirichlet degrees of freedom are eliminated into it.
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+
+        Returns
+        -------
+        DofVector
+            The correction.
+        """
+
+        # identity rows, and the columns eliminated into R
+        K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
+
+        ddU = self.linearSolve(K_, R)
+
+        # add the master-interpolated part at the slave DOFs
+        if self.mpcTransformation is not None:
+            ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
+
+        return ddU
+
+    def setTrialState(self, dU: DofVector, ddU: DofVector, stepLength: float) -> DofVector:
+        """Set the trial state of a line search at a step length :math:`\\alpha` along the correction, and return its
+        solution increment, :math:`\\Delta \\boldsymbol{U} + \\alpha \\, \\Delta\\Delta \\boldsymbol{U}`, at which the
+        model is evaluated next; the iterate stays where it is. The arc length method sets the load parameter of the
+        trial state, too, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState`.
+
+        Parameters
+        ----------
+        dU
+            The solution increment of the iterate.
+        ddU
+            The correction of the iterate, see :meth:`solveForCorrection`.
+        stepLength
+            The step length.
+
+        Returns
+        -------
+        DofVector
+            The solution increment of the trial state.
+        """
+
+        return dU + stepLength * ddU
+
+    def applyCorrection(self, dU: DofVector, ddU: DofVector, stepLength: float) -> DofVector:
+        """Move the iterate by the correction, scaled by the step length :math:`\\alpha` a line search chose (1 without a
+        line search): :math:`\\Delta \\boldsymbol{U} \\leftarrow \\Delta \\boldsymbol{U} + \\alpha \\, \\Delta\\Delta
+        \\boldsymbol{U}`. The arc length method moves the load parameter, too, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyCorrection`.
+
+        Parameters
+        ----------
+        dU
+            The solution increment of the iterate, moved in place.
+        ddU
+            The correction of the iterate, see :meth:`solveForCorrection`.
+        stepLength
+            The step length.
+
+        Returns
+        -------
+        DofVector
+            The correction the iterate was moved by, which the convergence check of the next iteration measures.
+        """
+
+        ddU = stepLength * ddU
+        dU += ddU
+
+        return ddU
+
+    def assembleResidualAndTangent(
+        self,
+        U_n: DofVector,
+        dU: DofVector,
+        U_np: DofVector,
+        R: DofVector,
+        P: DofVector,
+        PLoadsAndConstraints: DofVector,
+        F: DofVector,
+        FConstraints: DofVector,
+        K: SystemMatrixAssembly,
+        stepActions: dict,
+        model: FEModel,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
+        """Evaluate the model at the trial solution :math:`U_{n+1} = U_n + \\Delta U`: the right-hand side
+        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` (see :ref:`residual-and-tangent-convention`) with the terms of
+        :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. The one place
+        where the model is evaluated during the Newton iterations: called by :meth:`solveIncrement` once per
+        iteration, and by its line search once per trial step length. The loads are those at the end of the increment,
+        see :meth:`assembleLoadsAtIncrementEnd`. The Dirichlet boundary conditions are imposed by the caller.
+
+        The internal forces are those of :meth:`assembleInternalForces`, which lets the model update the material
+        points that belong to no element first.
+
+        Parameters
+        ----------
+        U_n
+            The solution at the start of the increment.
+        dU
+            The trial solution increment.
+        U_np
+            The trial solution, overwritten.
+        R
+            The residual, overwritten.
+        P
+            The internal forces (the reaction), overwritten.
+        PLoadsAndConstraints
+            The residual contributions of the loads and the constraints, overwritten.
+        F
+            The accumulated absolute element fluxes, the reference of the convergence test, overwritten.
+        FConstraints
+            The accumulated absolute constraint fluxes, overwritten.
+        K
+            The tangent being assembled, assembled anew.
+        stepActions
+            The active step actions.
+        model
+            The model tree.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,SystemMatrixAssembly,DofVector]
+            The internal forces, the tangent and the accumulated element fluxes.
+        """
+
+        for geostatic in stepActions["geostatic"].values():
+            geostatic.applyAtIterationStart()
+
+        with performancetiming.timeit("reset residual and tangent"):
+            U_np[:] = U_n
+            U_np += dU
+
+            P[:] = F[:] = FConstraints[:] = PLoadsAndConstraints[:] = 0.0
+            K.beginAssembly()
+
+        # Every element, load and constraint adds its residual contribution and the tangent of it.
+        # The elements' sum P is kept apart: it is the reaction force this increment reports.
+        P, K, F = self.assembleInternalForces(U_np, dU, P, K, F, timeStep)
+        PLoadsAndConstraints, K = self.assembleLoadsAtIncrementEnd(
+            stepActions, U_np, dU, PLoadsAndConstraints, K, timeStep
+        )
+        PLoadsAndConstraints, K = self.assembleConstraints(
+            self.system.constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
+        )
+
+        # The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance
+        # force R = f_ext - f_int.
+        R[:] = -P
+        R -= PLoadsAndConstraints
+
+        self.assembleAdditionalTerms(dU, R, F, K, timeStep)
+
+        # Condense BEFORE the Dirichlet handling: T^T folds slave rows into master rows, which may
+        # carry a prescribed delta.
+        if self.mpcTransformation is not None:
+            R[:] = self.mpcTransformation.transformResidual(R, dU)
+
+        return P, K, F
+
+    def assembleLoadsAtIncrementEnd(
+        self,
+        stepActions: dict,
+        U_np: DofVector,
+        dU: DofVector,
+        P: DofVector,
+        K: SystemMatrixAssembly,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, SystemMatrixAssembly]:
+        """Assemble the residual contributions of the loads acting at the end of the increment, and their tangents;
+        called by :meth:`assembleResidualAndTangent`. Here, these are the loads of the step at the time of the end of
+        the increment (see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleLoads`). The arc length method
+        replaces them by the dead load plus the reference load scaled by its load parameter, see
+        :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength`.
+
+        Parameters
+        ----------
+        stepActions
+            The active step actions.
+        U_np
+            The trial solution.
+        dU
+            The trial solution increment.
+        P
+            The residual contribution vector to assemble into.
+        K
+            The tangent being assembled.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,SystemMatrixAssembly]
+            The updated residual contribution vector and tangent.
+        """
+
+        return self.assembleLoads(self.collectLoads(stepActions), U_np, dU, P, K, timeStep)
+
+    #: The step lengths a line search may choose from: a shorter step would hardly move the iterate, a longer one would
+    #: trust the fitted parabola far beyond the trial step lengths.
+    lineSearchStepLengthRange = (0.1, 1.5)
+
+    def lineSearchIsDue(self, iterationCounter: int) -> bool:
+        """Whether the correction of this iteration is scaled by a line search (``lineSearch``): after
+        ``lineSearchAfterIterations`` iterations, in every iteration whose number is a multiple of
+        ``lineSearchEveryIterations``.
+
+        Parameters
+        ----------
+        iterationCounter
+            The current iteration number.
+
+        Returns
+        -------
+        bool
+            True if a line search is due.
+        """
+
+        return (
+            self.options["lineSearch"]
+            and iterationCounter > self.options["lineSearchAfterIterations"]
+            and iterationCounter % self.options["lineSearchEveryIterations"] == 0
+        )
+
+    def lineSearchStepLengths(self) -> list[float]:
+        """The trial step lengths of the line search, from the option ``lineSearchStepLengths``.
+
+        Returns
+        -------
+        list[float]
+            The trial step lengths.
+        """
+
+        return [float(stepLength) for stepLength in self.options["lineSearchStepLengths"].split(",")]
+
+    @performancetiming.timeit("line search")
+    def quadraticLineSearch(self, largestResidualAt: Callable[[float], float]) -> float:
+        """The step length :math:`\\alpha` by which a Newton correction is scaled, for a Newton iteration that
+        overshoots or oscillates (e.g., materials switching between loading and unloading).
+
+        The largest residual along the correction, :math:`\\| R(\\alpha) \\|_\\infty` with the Dirichlet degrees of
+        freedom left out, is evaluated at the trial step lengths ``lineSearchStepLengths``, and a parabola is fitted to
+        these values (least squares for more than three). The step length minimizes the parabola on
+        :attr:`lineSearchStepLengthRange`: it is the vertex of a parabola that opens upwards, limited to that range,
+        and otherwise the end of the range where the parabola is smaller. Each trial costs one evaluation of the model;
+        the next Newton iteration evaluates the chosen one.
+
+        Two kinds of trials fit no parabola:
+
+        * A trial state at which the residual is not finite, which the model could not evaluate: the trials decide
+          themselves, and the step length is the trial step length of the smallest finite residual (of equal ones, the
+          shortest), limited to the range. If no trial residual is finite, the increment is cut back.
+        * Trial residuals that are equal to round-off, which do not tell the step lengths apart: the correction is
+          taken in full, the step length is 1.
+
+        The trial states are those :meth:`setTrialState` sets: the solution increment moved along the correction
+        :math:`\\Delta\\Delta U`, and, under arc length control, the load parameter moved with it, such that every trial
+        state satisfies the controller's equation (see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState`).
+
+        Parameters
+        ----------
+        largestResidualAt
+            Evaluates the model at the trial state of a step length, and returns its largest residual, without the
+            Dirichlet degrees of freedom.
+
+        Returns
+        -------
+        float
+            The step length.
+
+        Raises
+        ------
+        DivergingSolution
+            If the residual is not finite at any trial step length.
+        """
+
+        stepLengths = self.lineSearchStepLengths()
+        largestResiduals = []
+
+        for stepLength in stepLengths:
+            largestResiduals.append(largestResidualAt(stepLength))
+            self.journal.message(
+                "line search: step length {:7.4f}, largest residual {:11.4e}".format(stepLength, largestResiduals[-1]),
+                self.identification,
+                2,
+            )
+
+        smallest, largest = self.lineSearchStepLengthRange
+
+        if not np.all(np.isfinite(largestResiduals)):
+            # no parabola fits through a residual that is not finite: the smallest finite one decides
+            finiteTrials = [
+                (largestResidual, stepLength)
+                for stepLength, largestResidual in zip(stepLengths, largestResiduals)
+                if np.isfinite(largestResidual)
+            ]
+            if not finiteTrials:
+                raise DivergingSolution("Residual not finite at any trial step length of the line search, cutting back")
+            stepLength = min(max(min(finiteTrials)[1], smallest), largest)
+        elif max(largestResiduals) - min(largestResiduals) <= 1e-12 * max(largestResiduals):
+            # a parabola fitted to round-off would choose any step length: the full correction
+            stepLength = 1.0
+        else:
+            # the minimum of the parabola on the allowed range: its vertex if it opens upwards, else an end of the range
+            parabola = np.polyfit(stepLengths, largestResiduals, 2)
+            curvature, slope, _ = parabola
+            if curvature > 0.0:
+                stepLength = min(max(-slope / (2.0 * curvature), smallest), largest)
+            else:
+                stepLength = smallest if np.polyval(parabola, smallest) <= np.polyval(parabola, largest) else largest
+
+        self.journal.message("line search: step length {:7.4f}".format(stepLength), self.identification, 2)
+
+        return stepLength
+
+    def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
+        """Check if the iterative solution scheme is diverging: if the flux residual of a field grew, from one
+        checked iteration to the next, more than ``maxGrowingIter`` times in this increment.
+
+        Two solver options decide what counts as a growth:
+
+        * ``countFirstResidualAsGrowth``: the residual history of a field starts from zero, so the first checked
+          residual of an increment is a growth already (EdelweissFE's original counting); otherwise, counting starts
+          with the second checked iteration.
+        * ``countGrowthOfConvergedFields``: a field that is converged, while other fields keep the Newton iterations
+          going, may still grow at the level of its round-off; such growths count too (EdelweissFE's original
+          counting), or are ignored.
+
+        Parameters
+        ----------
+        incrementResidualHistory
+            The convergence state of every field in each checked iteration of the increment, see
+            :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence`.
+        maxGrowingIter
+            The maximum allowed number of growths of a residual during the iterative solution scheme.
+
+        Returns
+        -------
+        bool
+            True if solution is diverging.
+        """
+
+        countFirstResidualAsGrowth = self.options["countFirstResidualAsGrowth"]
+        countGrowthOfConvergedFields = self.options["countGrowthOfConvergedFields"]
+
+        for fieldHistory in incrementResidualHistory.values():
+            nGrew = 0
+            previousFluxResidual = 0.0 if countFirstResidualAsGrowth else None
+            for fieldConvergence in fieldHistory:
+                if previousFluxResidual is not None and fieldConvergence.fluxResidual > previousFluxResidual:
+                    fieldConverged = fieldConvergence.fluxResidualConverged and fieldConvergence.correctionConverged
+                    if countGrowthOfConvergedFields or not fieldConverged:
+                        nGrew += 1
+                previousFluxResidual = fieldConvergence.fluxResidual
+
+            if nGrew > maxGrowingIter:
+                return True
+
+        return False
+
+    def checkDivergingSolutionOrFallBack(
+        self,
+        quasiNewton: QuasiNewtonFallback,
+        incrementResidualHistory: dict,
+        maxGrowingIter: int,
+        nodesWithLargestResidual: dict,
+    ):
+        """Cut an increment back whose residual grew more often than ``maxGrowingIter`` allows (see
+        :meth:`checkDivergingSolution`) -- or, with the option ``fallBackToQuasiNewton``, let it continue with the tangent
+        of its first iteration (a quasi-Newton method), see :meth:`assembleSystemMatrix`. Called by the Newton loop after
+        every check that does not converge.
+
+        Parameters
+        ----------
+        quasiNewton
+            The quasi-Newton fallback of this attempt of the increment.
+        incrementResidualHistory
+            The convergence state of every field in each checked iteration of the increment.
+        maxGrowingIter
+            The maximum allowed number of growths of a residual.
+        nodesWithLargestResidual
+            The nodes with the largest residual, per field, reported if the increment diverges.
+
+        Raises
+        ------
+        DivergingSolution
+            If the residual grew too often, and the increment does not fall back to the quasi-Newton method.
+        """
+
+        if quasiNewton.isEngaged or not self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
+            return
+
+        self.printResidualOutlierNodes(nodesWithLargestResidual)
+        if not quasiNewton.isEnabled:
+            raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
+
+        self.journal.message(
+            "Residual grew {:} times, continuing with the tangent of the first iteration".format(maxGrowingIter),
+            self.identification,
+            1,
+        )
+        quasiNewton.isEngaged = True
+
+    def assembleSystemMatrix(self, K: SystemMatrixAssembly, quasiNewton: QuasiNewtonFallback) -> csr_matrix:
+        """The system matrix of this Newton iteration, before the Dirichlet boundary conditions are imposed: the
+        tangent in CSR layout, condensed by the multi-point constraints -- or, once the increment has fallen back to the
+        quasi-Newton method, the tangent of its first iteration.
+
+        Parameters
+        ----------
+        K
+            The tangent of this iteration, assembled.
+        quasiNewton
+            The quasi-Newton fallback of this attempt of the increment, which keeps the tangent of the first iteration.
+
+        Returns
+        -------
+        csr_matrix
+            The system matrix.
+        """
+
+        if quasiNewton.isEngaged and quasiNewton.tangentOfFirstIteration is not None:
+            # Kept without the Dirichlet rows and columns: they are imposed anew, as they eliminate into this R.
+            return quasiNewton.tangentOfFirstIteration.copy()
+
+        K_ = self.assembleStiffnessCSR(K)
+
+        if self.mpcTransformation is not None:
+            K_ = self.mpcTransformation.transformSystemMatrix(K_)
+
+        # the first tangent of the increment: the one of iteration 0
+        if quasiNewton.isEnabled and quasiNewton.tangentOfFirstIteration is None:
+            quasiNewton.tangentOfFirstIteration = K_.copy()
+
+        return K_
 
     def initializeIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
         """Prepare what :meth:`assembleAdditionalTerms` needs during this increment's Newton
@@ -919,14 +1925,15 @@ class NIST(NonlinearSolverBase):
         """
 
     def assembleAdditionalTerms(
-        self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
+        self, dU: DofVector, R: DofVector, F: DofVector, K: SystemMatrixAssembly, timeStep: TimeStep
     ):
-        """Assemble terms of the equation system beyond the internal and external forces. Called
-        by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,
-        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the residual
-        :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed, and before the
-        multi-point-constraint condensation, the Dirichlet handling, the convergence test and the
-        linear solve -- which therefore all act on what is added here.
+        """Assemble terms of the discrete system beyond the internal and external forces. Called
+        by :meth:`assembleResidualAndTangent` in every evaluation of the model, next to :meth:`computeElements`,
+        :meth:`assembleLoadsAtIncrementEnd` and :meth:`assembleConstraints`: right after the right-hand side
+        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see
+        :ref:`residual-and-tangent-convention`), and before the multi-point-constraint condensation,
+        the Dirichlet handling, the convergence test and the linear solve -- which therefore all act
+        on what is added here.
 
         A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force
         :math:`M \\ddot{u}` from the residual and adds the corresponding mass term to the stiffness
@@ -941,7 +1948,7 @@ class NIST(NonlinearSolverBase):
         F
             The reference flux scale of the convergence test, to be augmented in place.
         K
-            The tangent in VIJ layout, to be augmented in place.
+            The tangent being assembled, to be augmented.
         timeStep
             The time step.
         """
@@ -965,12 +1972,11 @@ class NIST(NonlinearSolverBase):
         solve -- see ``pruneCondensedMatrixZeros`` (:class:`NISTSchema`). An explicit True/False in
         the input file always wins; left unset (``None``), the currently active ``self.linSolver``
         decides, polymorphically, via
-        :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`: pruned unless that
-        solver says it needs the pattern stable across iterations."""
+        :attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`."""
         explicit = self.options["pruneCondensedMatrixZeros"]
         if explicit is not None:
             return explicit
-        return not self.linSolver.needsStableSparsityPattern
+        return self.linSolver.needsPrunedSystemMatrix
 
     @performancetiming.timeit("dirichlet K on CSR")
     def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase], rhs=None) -> csr_matrix:
@@ -984,14 +1990,54 @@ class NIST(NonlinearSolverBase):
         # the extra structural entries to drift from the reference path; but the pattern then changes from one
         # Newton iteration to the next, so a solver like blockamg, which reuses its hierarchy, keeps them.
         #
-        # The CSR generator's own matrix (the threaded condensation works in place on it) must never be compacted:
-        # the generator scatters every update into its full-length buffer via a fixed map. A copy is pruned instead.
+        # The assembly's own matrix (the threaded condensation works in place on it) must never be compacted: the
+        # assembly writes every update into its full-length buffer via a fixed map. A copy is pruned instead.
         if self.mpcTransformation is not None and self._shouldPruneCondensedMatrixZeros():
-            if K is self.csrGenerator.csrMatrix:
+            if K is self._K.csrMatrix:
                 K = K.copy()
             K.eliminate_zeros()
 
         return K
+
+    def assembleInternalForces(
+        self, U_np: DofVector, dU: DofVector, P: DofVector, K: SystemMatrixAssembly, F: DofVector, timeStep: TimeStep
+    ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
+        """Assemble the internal forces of the model at a trial state, and their tangent: those of the elements of its
+        discrete system, see :meth:`computeElements`. First, the model updates the material points that belong to no
+        element, whose state the elements integrate (see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`; nothing to do in a
+        finite element model).
+
+        The one evaluation of the elements of the solvers that derive from NIST: in every Newton iteration and for every
+        trial state of a line search (:meth:`assembleResidualAndTangent`), in every Runge-Kutta stage of
+        :class:`~edelweissfe.solvers.nonlinearexplicitstatic.NEST`, and for the initial acceleration of
+        :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.
+
+        Parameters
+        ----------
+        U_np
+            The trial solution.
+        dU
+            The trial solution increment.
+        P
+            The internal forces, augmented.
+        K
+            The tangent being assembled.
+        F
+            The accumulated absolute element fluxes, the reference of the convergence test, augmented.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,SystemMatrixAssembly,DofVector]
+            The internal forces, the tangent and the accumulated element fluxes.
+        """
+
+        with performancetiming.timeit("material points"):
+            self.system.updateMaterialPoints(dU, timeStep, self.forEachChunk)
+
+        return self.computeElements(self.system.elements, U_np, dU, P, K, F, timeStep)
 
     @performancetiming.timeit("elements")
     def computeElements(
@@ -1000,17 +2046,22 @@ class NIST(NonlinearSolverBase):
         U_np: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         F: DofVector,
         timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
-        """Loop over all elements, and evalute them.
-        Is called by solveIncrement() in each iteration.
+    ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
+        """Loop over all elements, and evalute them: each adds its internal forces and their tangent, see
+        :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`. Is called by
+        :meth:`assembleResidualAndTangent` in each iteration.
+
+        The elements are those of the model's discrete system
+        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elements`): the finite elements, and
+        whatever else contributes like an element -- in a meshfree model, its cells and particles.
 
         Parameters
         ----------
         elements
-            The list of finite elements.
+            The list of elements.
         U_np
             The current solution vector.
         dU
@@ -1026,7 +2077,7 @@ class NIST(NonlinearSolverBase):
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix,DofVector]
+        tuple[DofVector,SystemMatrixAssembly,DofVector]
             - The modified reaction vector.
             - The modified system matrix.
             - The modified accumulated flux vector.
@@ -1035,7 +2086,7 @@ class NIST(NonlinearSolverBase):
         time = timeStep.totalTime
         dT = timeStep.timeIncrement
 
-        for el in elements.values():
+        for el in elements:
             Ke = K[el]
             Pe = np.zeros(el.nDof)
 
@@ -1043,6 +2094,9 @@ class NIST(NonlinearSolverBase):
 
             P[el] += Pe
             F[el] += abs(Pe)
+
+        # the block of the last element
+        K.flush()
 
         return P, K, F
 
@@ -1052,24 +2106,26 @@ class NIST(NonlinearSolverBase):
         constraints: list[ConstraintBase],
         U_np: DofVector,
         dU: DofVector,
-        PExt: DofVector,
-        K: VIJSystemMatrix,
+        P: DofVector,
+        K: SystemMatrixAssembly,
         timeStep: TimeStep,
         FConstraints: DofVector = None,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all constraints, and evaluate them.
-        Is called by solveIncrement() in each iteration.
+    ) -> tuple[DofVector, SystemMatrixAssembly]:
+        """Evaluate the constraints of the discrete system: each adds its residual contribution and the tangent of
+        it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`. Is called by
+        solveIncrement() in each iteration.
 
         Parameters
         ----------
         constraints
-            The list of constraints.
+            The constraints of the discrete system
+            (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`).
         U_np
             The current solution vector.
         dU
             The current solution increment vector.
-        PExt
-            The external load vector.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix.
         timeStep
@@ -1079,20 +2135,25 @@ class NIST(NonlinearSolverBase):
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix]
-            - The modified external load vector.
+        tuple[DofVector,SystemMatrixAssembly]
+            - The modified residual contribution vector.
             - The modified system matrix.
         """
 
-        for constraint in constraints.values():
+        locations = self.system.locations
+
+        for constraint in constraints:
             Kc = K[constraint]
             Pc = np.zeros(constraint.nDof)
 
-            constraint.applyConstraint(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
+            constraint.computeKernels(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
 
-            # instead of PExt[constraint] += Pe, np.add.at allows for repeated indices
-            np.add.at(PExt, PExt.entitiesInDofVector[constraint], Pc)
+            # instead of P[constraint] += Pc, np.add.at allows for repeated indices
+            np.add.at(P, locations[constraint], Pc)
             if FConstraints is not None:
-                np.add.at(FConstraints, FConstraints.entitiesInDofVector[constraint], np.abs(Pc))
+                np.add.at(FConstraints, locations[constraint], np.abs(Pc))
 
-        return PExt, K
+        # the block of the last constraint
+        K.flush()
+
+        return P, K

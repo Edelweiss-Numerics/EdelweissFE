@@ -97,19 +97,22 @@ mesh = reader.read()
 
 The `*linearSolver, type=blockamg` block sets only `verbosity=info` (one log line per linear solve, with its outer
 iteration count): every other setting is the default of the `blockAMG()` preset. The table lists its data lines with
-their defaults; `doc/source/documentation/composedlinsolvers.rst` shows the tree they build and
-`doc/source/documentation/fieldsplitmeasurements.rst` explains why the defaults are what they are.
+their defaults; `doc/source/analysis/composedlinsolvers.rst` shows the tree they build and
+`doc/source/theory/fieldsplitmeasurements.rst` explains why the defaults are what they are.
 
 | Data line | Default | Meaning |
 |---|---|---|
 | `tolerance` | adaptive | a fixed relative tolerance; unset: Eisenstat-Walker forcing between 1e-4 and 1e-3 |
-| `maxIterations` | 100 | the outer-iteration cap of one solve; a solve that reaches it rebuilds the preconditioner |
+| `maxIterations` | 100 | the outer-iteration cap of one solve; a solve that reaches it returns its iterate and is warned about |
 | `krylovOnScaledSystem` | false | the outer solve runs on `A` itself, preconditioned by `D M^-1 D`, so its residual is the true one |
 | `sweeps`, `symmetric` | 1, false | one forward block Gauss-Seidel sweep over the fields per preconditioner application |
-| `rigidBodyCoarseLevel` | true | displacement (3D): a two-level cycle on its rigid-body modes; else (and for the scalar nonlocal damage) one smoothed-aggregation AMG hierarchy |
+| `cornerNodeInterpolation` | true | a quadratic 3D displacement field, as here: a two-level cycle on its corner nodes, whose linear coarse field gets the next row; false: the displacement itself gets the next row |
+| `rigidBodyModesPerAggregate` | true | a linear 3D displacement field (here: the corner-node field): a two-level cycle on its rigid-body modes; false (and for the scalar nonlocal damage): one smoothed-aggregation AMG hierarchy |
+| `reusePreconditioner` | false | a new preconditioner for every solve; true: keep it across solves (see below) |
 | `dropTolerance`, `lumpDroppedEntries` | 0, false | build the field preconditioners on filtered blocks |
 | `verbosity` | **info** (default `warning`) | `silent`, `warning`, `info` or `debug` |
 
-The rebuild policy (rebuild when a solve needs 3 times the outer iterations of the solve the preconditioner was built
-for, and on a new increment) and the AMGCL settings of each field are those of the preset; to change them, write the
+By default every solve builds a new preconditioner. With `reusePreconditioner=true` it is kept across solves and
+rebuilt on a new increment, when a solve needs 3 times the outer iterations of the solve it was built for, or after a
+solve that reached `maxIterations`. The AMGCL settings of each field are those of the preset; to change them, write the
 tree in a `type=custom` solver script.

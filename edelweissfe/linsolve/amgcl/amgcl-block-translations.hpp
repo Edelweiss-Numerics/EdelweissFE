@@ -1,6 +1,6 @@
 /*
  * Smoothed aggregation on a block backend with the translations of the block as its near null-space
- * (EdelweissFE, AMG(blockTranslationNullspace=True) of edelweissfe/linsolve/composition/amg.py).
+ * (EdelweissFE, AMG(nearNullspace="translations") of edelweissfe/linsolve/composition/amg.py).
  *
  * smoothed_aggregation_with_translations::transfer_operators() is the one of
  * amgcl/coarsening/smoothed_aggregation.hpp (AMGCL 1.4.x) except for the tentative prolongation and the minimum
@@ -31,6 +31,7 @@
  */
 #pragma once
 
+#include "amgcl-chebyshev.hpp"
 #include "amgcl-smoothed-prolongation.hpp"
 #include <amgcl/backend/builtin.hpp>
 #include <amgcl/coarsening/smoothed_aggregation.hpp>
@@ -180,10 +181,18 @@ namespace amgcl {
     struct smoothed_aggregation_with_translations : public smoothed_aggregation< Backend > {
       /// @brief AMGCL's smoothed aggregation: the parameters, the aggregates and the coarse operator.
       typedef smoothed_aggregation< Backend > Base;
+      /// @brief smoothed_aggregation's parameters, with the spectral radius estimate for power_iters
+      /// (amgcl-chebyshev.hpp).
+      typedef smoothed_aggregation_estimate_params< Backend > params;
+
+      /// @brief How rho(D^-1 A) is estimated for the prolongation smoothing weight; the rest of the parameters is
+      /// Base's.
+      EdelweissFE::linsolve::SpectralRadiusEstimate spectralRadius;
 
       /// @brief Construct with smoothed_aggregation's parameters.
       /// @param prm the parameters; prm.nullspace must hold the translations of the finest level
-      smoothed_aggregation_with_translations( const typename Base::params& prm = typename Base::params() ) : Base( prm )
+      smoothed_aggregation_with_translations( const params& prm = params() )
+        : Base( prm ), spectralRadius( prm.spectralRadius )
       {
       }
 
@@ -216,7 +225,7 @@ namespace amgcl {
         const scalar_type omega = prolongation_smoothing_weight( A,
                                                                  this->prm.relax,
                                                                  this->prm.estimate_spectral_radius,
-                                                                 this->prm.power_iters );
+                                                                 spectralRadius );
         auto              P     = smoothed_prolongation( A, aggr.strong_connection, *P_tent, omega );
 
         return std::make_tuple( P, transpose( *P ) );

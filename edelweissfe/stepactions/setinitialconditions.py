@@ -134,7 +134,7 @@ class StepAction(StepActionBase):
             np.fromstring(configuration.values, dtype=float, sep=","),
         )
 
-    def applyAtStepEnd(self, model, stepMagnitude=None):
+    def applyAtStepEnd(self, model):
         self.active = False
 
     def applyAtStepStart(self, model):

@@ -41,29 +41,29 @@ from libcpp.string cimport string
 
 
 cdef extern from "Marmot/MarmotTypedefs.h" nogil:
-    cdef cppclass Vector6d "Marmot::Vector6d":
+    cdef cppclass Vector6d "Marmot::Math::Vector6d":
         Vector6d() nogil
         Vector6d(double*) nogil
         double& operator()(int row)
 
-    cdef cppclass Matrix6d "Marmot::Matrix6d":
+    cdef cppclass Matrix6d "Marmot::Math::Matrix6d":
         Matrix6d() nogil
         Matrix6d(double*) nogil
         double& operator()(int row, int col)
 
-    cdef cppclass Vector3d "Marmot::Vector3d":
+    cdef cppclass Vector3d "Marmot::Math::Vector3d":
         Vector3d() nogil
         Vector3d(double*) nogil
         double& operator()(int row)
 
-    cdef cppclass Matrix3d "Marmot::Matrix3d":
+    cdef cppclass Matrix3d "Marmot::Math::Matrix3d":
         Matrix3d() nogil
         Matrix3d(double*) nogil
         double& operator()(int row, int col)
 
 
 cdef extern from "Marmot/MarmotUtils.h":
-    cdef struct StateView:
+    cdef struct StateView "Marmot::Utilities::StateView":
         double *stateLocation
         int stateSize
 
@@ -84,7 +84,7 @@ cdef inline np.ndarray stateViewAsArray(StateView res):
 
 
 cdef extern from "Marmot/MarmotMaterialHypoElastic.h":
-    cdef cppclass MarmotMaterialHypoElastic nogil:
+    cdef cppclass MarmotMaterialHypoElastic "Marmot::Materials::MaterialHypoElastic" nogil:
 
         StateView getStateView(const string& stateName, double* stateVars) except +ValueError
 
@@ -134,9 +134,9 @@ cdef extern from "Marmot/MarmotMaterialHypoElastic.h":
                                    const timeInfo& timeInfo) except +ValueError
 
 
-cdef extern from "Marmot/MarmotMaterialHypoElasticFactory.h" namespace "MarmotLibrary" nogil:
+cdef extern from "Marmot/MarmotMaterialHypoElasticFactory.h" nogil:
 
-    cdef cppclass MarmotMaterialHypoElasticFactory:
+    cdef cppclass MarmotMaterialHypoElasticFactory "Marmot::Registry::MaterialHypoElasticFactory":
         @staticmethod
         MarmotMaterialHypoElastic* createMaterial(
                 const string& materialName,

@@ -55,6 +55,7 @@ from edelweissfe.constraints.base.surfacecontactpenaltyschema import (
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.numerics.systemmatrixcontributor import localEntriesOfSubBlocks
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
@@ -233,9 +234,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = SurfaceToDeformableSurfacePenaltySchema
 
-    #: Journal sender tag: a short, class-level identification, not this instance's own (potentially
-    #: long, user-chosen) name -- so the log's fixed-width sender column never has to truncate it. The
-    #: instance name is still reported in full, in the message text itself (see __init__/updateConnectivity).
+    #: The contact searches for the surface it touches.
+    connectivityChangesWithMotion = True
+
+    #: Journal sender tag: short and class-level, so that the fixed-width sender column never truncates it.
     identification = "SurfaceContact"
 
     def __init__(
@@ -330,13 +332,12 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._frozenMasterShapeFunctions = [None] * self.nPoints
         self._frozenNormals = [None] * self.nPoints
 
-        # Per-point results of the current Newton iterate, for output. _gapCurrent is also the
-        # scratch value an augmented-Lagrange update would consume once implemented.
+        # Per-point results of the current Newton iterate, for output.
         self._normalForceCurrent = np.zeros(self.nPoints)
         self._gapCurrent = np.zeros(self.nPoints)
 
         self._nodes = []
-        self._fieldsOnNodes = []
+        self._fields = []
         self._nDof = 0
 
         # Batched active-point arrays, rebuilt by every connectivity update; None means the
@@ -366,8 +367,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
@@ -385,9 +386,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def updateConnectivity(self, model: FEModel) -> bool:
         """Freeze each contact point's closest-point projection onto the master surface, and
-        redeclare the constraint's DOF footprint accordingly.
+        redeclare the nodes the constraint couples accordingly.
 
-        Called once per increment by the solver, before the equation system is (re)built. The
+        Called once per increment by the solver, before the discrete system is (re)built. The
         candidate search runs on the *flat* master facets, which keeps it robust and lets it reuse
         the node-based constraint's exact broadphase; what is frozen from it is the parametric
         location of the closest point within the facet's *parent* face, from which the parent-face
@@ -403,10 +404,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         candidatesPerPoint = closestFacetCandidates(slavePointCoords, facetCoords, self.searchDistance)
         closestFacet, closestWeights, closestDistance = closestFacets(slavePointCoords, facetCoords, candidatesPerPoint)
 
-        # The normal is a property of the facet, not of the point projecting onto it, and there are
-        # nQuadraturePoints times more points than facets. Memoised per facet for this update only;
-        # the arrays are shared between points, which is safe because nothing ever writes through
-        # _frozenNormals -- both evaluation paths only read it into a row of nBar.
+        # The normal is a property of the facet: memoised per facet for this update. The arrays are shared
+        # between points, so _frozenNormals must only ever be read.
         facetNormals = {}
 
         newAssignment = [None] * self.nPoints
@@ -438,11 +437,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         hasChanged = newAssignment != self._assignedFacetIdx
         self._assignedFacetIdx = newAssignment
 
-        # Only *assigned* points contribute DOFs. Gap activation is a per-iteration decision within
-        # the increment and deliberately does not enter here: an assigned point that happens to be
-        # open still owns its block, which is then left at zero.
+        # Only *assigned* points contribute DOFs; an assigned but open point keeps its (zero) block.
         newNodes = []
-        newFieldsOnNodes = []
+        newFields = []
         for p in range(self.nPoints):
             if newAssignment[p] is None:
                 continue
@@ -450,32 +447,25 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 self.slave.parentNodes[self.slave.pointFacet[p]] + self.facetElements[newAssignment[p]].parentFaceNodes
             )
             newNodes.extend(pointNodes)
-            newFieldsOnNodes.extend([["displacement"]] * len(pointNodes))
+            newFields.extend([["displacement"]] * len(pointNodes))
 
         if newNodes != self._nodes:
             hasChanged = True
 
         self._nodes = newNodes
-        self._fieldsOnNodes = newFieldsOnNodes
+        self._fields = newFields
         self._nDof = self.nDim * len(newNodes)
 
         self._prepareActiveArrays()
 
-        # A point that lost its facet has no gap any more, so its last value must not survive: it
-        # backs the public getGaps(), whose consumers cannot mask it because they do not know the
-        # assignment, and it would otherwise keep counting as 'closed' below forever. Zero is the
-        # neutral value this array is initialized with. Resetting here is what makes the closed
-        # count correct by construction, so it deliberately needs no mask of its own.
+        # A point that lost its facet has no gap: reset it to zero, so that getGaps() and the closed count below
+        # do not keep its last value.
         for p in range(self.nPoints):
             if newAssignment[p] is None:
                 self._gapCurrent[p] = 0.0
 
-        # Reported because the assembly cost is paid per *assigned* point while the transmitted load
-        # is carried only by the closed ones: without a searchDistance every point is assigned, so
-        # these two numbers are what tell an explicit run whether its contact cost is doing work.
-        # The closed count is from the last force evaluation, i.e. one increment behind the
-        # assignment on the same line. Emitted only when it changes -- an explicit run updates
-        # connectivity thousands of times and an unchanging pair of numbers is pure log noise.
+        # Assembly is paid per assigned point, load is carried by the closed ones (counted at the last force
+        # evaluation). Reported only when it changes.
         nAssigned = sum(1 for facetIdx in newAssignment if facetIdx is not None)
         activity = (nAssigned, int((self._gapCurrent < 0.0).sum()))
         if activity != self._lastReportedActivity:
@@ -586,12 +576,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             slaveRef[k] = self.slave.parentReferenceCoordinates[f]
             masterRef[k] = self._masterParentRefCoords[self._assignedFacetIdx[p]]
 
-        # Local DOF layout, mirroring the node declaration above exactly: each active point owns a
-        # contiguous run of (nSlaveNodes + nMasterNodes) * nDim entries, slave nodes first, and no
-        # two points share a slot -- the sharing between points happens only when the *solver*
-        # scatters this local vector into the global one. So the whole local vector is just a
-        # (nActive, blockDof) matrix, and both the displacement gather and the force scatter are
-        # plain reshapes: no index arrays, no bincount, no np.add.at.
+        # Each active point owns a contiguous run of (nSlaveNodes + nMasterNodes) * nDim local DOFs, slave nodes
+        # first, so the local vector is an (nActive, blockDof) matrix and gather/scatter are plain reshapes.
         blockDof = (nSlaveNodes + nMasterNodes) * nDim
         assert self._nDof == nActive * blockDof, "the local DOF layout is not one block per point"
 
@@ -608,7 +594,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             "blockDof": blockDof,
         }
 
-    def _applyConstraintBatched(self, U_np: np.ndarray, PExt: np.ndarray, K) -> None:
+    def _computeKernelsBatched(self, U_np: np.ndarray, P: np.ndarray, K) -> None:
         """The batched force evaluation. Physics identical to the per-point loop, expressed over all
         active points at once; see :meth:`_prepareActiveArrays`."""
 
@@ -640,16 +626,15 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         c = np.concatenate((b["Ns"][closed], -b["Nm"][closed]), axis=1)
         w = (c[:, :, None] * b["nBar"][closed][:, None, :]).reshape((len(g), -1))
 
+        # the residual contribution is the negative of the contact force on the nodes, -f_n * w
         rows = np.flatnonzero(closed)
-        PExt.reshape((-1, b["blockDof"]))[rows] += -f_n[:, None] * w
+        P.reshape((-1, b["blockDof"]))[rows] += f_n[:, None] * w
 
         self._normalForceCurrent[active[closed]] = f_n
         self.totalNormalForce = float(f_n.sum())
 
         if K is not None:
-            # The tangent is only ever requested by the implicit path, so it stays a loop: one
-            # (nSlave+nMaster)*nDim square block per point, written into the view's own per-active
-            # -point slots, which the batched form has no way to address in bulk.
+            # The tangent is only requested by the implicit path: one dense block per active point.
             for i, activeIdx in enumerate(rows):
                 K.blocks[activeIdx] += stiffness[i] * np.outer(w[i], w[i])
 
@@ -679,31 +664,28 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             if self._assignedFacetIdx[p] is not None
         ]
 
-    def getVIJContributionSize(self) -> int:
-        return sum(m * m for m in self._activeBlockSizes())
-
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        k = offset
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """One dense block per active contact point, row by row, over its slave and master DOFs."""
+        subBlocks = []
         localOffset = 0
         for m in self._activeBlockSizes():
-            blockIdcs = idcs[localOffset : localOffset + m]
+            blockIndices = np.arange(localOffset, localOffset + m)
             localOffset += m
-            I_[k : k + m * m] = np.repeat(blockIdcs, m)
-            J_[k : k + m * m] = np.tile(blockIdcs, m)
-            k += m * m
+            subBlocks.append((blockIndices, blockIndices))
+        return localEntriesOfSubBlocks(subBlocks)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> IntegratedSurfaceContactStiffnessView:
-        return IntegratedSurfaceContactStiffnessView(flat_view, self._activeBlockSizes())
+    def shapeBlock(self, values: np.ndarray) -> IntegratedSurfaceContactStiffnessView:
+        return IntegratedSurfaceContactStiffnessView(values, self._activeBlockSizes())
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: IntegratedSurfaceContactStiffnessView | None,
         timeStep: TimeStep,
     ):
-        """Evaluate the contact forces, and the tangent unless ``K`` is None.
+        """Add the residual contribution of the contact forces, and the tangent unless ``K`` is None.
 
         The local DOF walk must mirror :meth:`updateConnectivity`'s node declaration exactly: an
         unassigned point contributes no nodes there, so it must not advance ``localOffset`` here.
@@ -713,7 +695,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._normalForceCurrent[:] = 0.0
 
         if self._batched is not None:
-            self._applyConstraintBatched(U_np, PExt, K)
+            self._computeKernelsBatched(U_np, P, K)
             return
 
         localOffset = 0
@@ -749,24 +731,21 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 activeIdx += 1
                 continue
 
-            # Frozen projection: the gap is linear in the DOFs, so the gradient is constant and the
-            # geometric (Hessian) term vanishes identically. Built only for a point that is actually
-            # in contact -- without a searchDistance every point is assigned a facet and most of
-            # them are open, so this kron of 2 * nParentNodes * nDim entries would otherwise be the
-            # dominant per-increment cost of an explicit run and be discarded every time.
+            # Frozen projection: the gap is linear in the DOFs, so the gradient is constant and the geometric
+            # (Hessian) term vanishes. Built only for closed points.
             c = np.concatenate((slaveShapeFunctions, -masterShapeFunctions))
             w = np.kron(c, nBar)
 
-            # The integration weight plays the role the node-based formulation's tributary area
-            # plays, so the force laws below are identical to that constraint's, sign conventions
-            # included: f_n carries the sign of g (negative in contact) so that PExt -= f_n * w
-            # pushes the surfaces apart, and stiffness = df_n/dg is positive for g < 0.
+            # The integration weight plays the role of the node-based formulation's tributary area, with the same
+            # force laws: f_n carries the sign of g (negative in contact), so that the contact force on the nodes,
+            # -f_n * w, pushes the surfaces apart, and stiffness = df_n/dg is positive for g < 0.
             penaltyTimesArea = self.penalty * self.slave.integrationWeights[f][self.slave.pointQuadraturePoint[p]]
 
             f_n, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
 
+            # the residual contribution is the negative of that contact force
             globalIdcs = slaveIdcs + masterIdcs
-            PExt[globalIdcs] += -f_n * w
+            P[globalIdcs] += f_n * w
 
             # K is None in explicit runs -- see ForcesOnlyExplicitEvaluation.
             if K is not None:

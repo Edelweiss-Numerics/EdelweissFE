@@ -62,9 +62,7 @@ from edelweissfe.models.femodel import FEModel
 class Generator(GeneratorBase):
     """Directly execute Python code to create the model tree."""
 
-    #: This generator's datalines are raw code, not a flat option mapping -- there is nothing to
-    #: validate/coerce against a schema, so it declares none and overrides
-    #: :meth:`fromGeneratorDefinition` instead of relying on the default implementation.
+    #: Datalines are raw code, so there is no schema; see :meth:`fromGeneratorDefinition`.
     schema = None
 
     def __init__(self, name: str, model: FEModel, journal: Journal, *, codeLines: str = ""):
@@ -83,7 +81,7 @@ class Generator(GeneratorBase):
             Python source executed with ``model`` bound in its global namespace. Literal ``\\t``
             sequences are replaced by tab characters before execution, to allow indented blocks.
         """
-        cleanCodeLines = codeLines.replace(r"\t", "\t")  # literal \t sequences become tabs, used for indentation
+        cleanCodeLines = codeLines.replace(r"\t", "\t")
 
         exec(cleanCodeLines, {"model": model})
 

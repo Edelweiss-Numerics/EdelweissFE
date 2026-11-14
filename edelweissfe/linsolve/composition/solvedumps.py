@@ -31,7 +31,7 @@ Comparing solver variants by rerunning the simulation is slow and confounded: ev
 variant that changes the Newton iterates changes the sequence of matrices being compared. Dumping authentic systems
 :math:`(A, b)` once and replaying them offline -- through a
 :class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver` with ``setFieldStructure`` and the dumped
-``nodeCoordinates`` and ``p1Maps`` -- makes the comparison fast and controlled.
+``nodeCoordinates`` and ``midsideCorners`` -- makes the comparison fast and controlled.
 
 Which solves are dumped is the trigger:
 
@@ -53,11 +53,11 @@ gigabytes on disk. The solvers of all analysis steps that dump to the same direc
 
 On disk, in ``directory``: ``A_<instance>_<solve>.npz`` (SciPy, uncompressed), ``b_<instance>_<solve>.npy``,
 ``schurDofs_<instance>_<solve>.npy`` (the condensed dofs of a Schur complement, if any),
-``geometry_<instance>_<solve>.npz`` (the node coordinates of the vector fields, ``<field>_coordinates``, and the P1 maps
-the tree used, ``<field>_isCorner`` and ``<field>_edgeEndpoints``, if any) and one line per dumped solve in
+``geometry_<instance>_<solve>.npz`` (the node coordinates of the vector fields, ``<field>_coordinates``, and the midside
+corners the tree used, ``<field>_isCorner`` and ``<field>_edgeEndpoints``, if any) and one line per dumped solve in
 ``manifest.jsonl``: the field blocks and file names, and the bookkeeping of a Krylov solve in the names of its
 :class:`~edelweissfe.linsolve.composition.krylov.SolveRecord` (``iterations``, ``residual``, ``eta``, ``capHit``,
-``continuations``, ``rebuildReason``, ``scaledSystem``), with ``patternChanged``, ``newIncrement`` and
+``trueResidualRestarts``, ``rebuildReason``, ``scaledSystem``), with ``patternChanged``, ``newIncrement`` and
 ``previousIterations``. ``<instance>`` is the ordinal of the solver in the process (one per analysis step).
 """
 
@@ -80,9 +80,9 @@ class SolveDumps:
     trigger
         Which solves are dumped: ``"slow"`` (default), ``"every"``, or a collection of solve numbers.
     threshold
-        For ``"slow"``: a solve with more outer iterations than this is dumped; ``None``: the warning threshold of the solver
-        (``warnOuterIterations``), so that a dump and its warning fire on the same solves. A solve that stops at the
-        iteration cap short of its tolerance is dumped whatever the threshold.
+        For ``"slow"``: a solve with more outer iterations than this is dumped; ``None``: the warning threshold of the
+        solver (``warningOuterIterations``), so that a dump and its warning fire on the same solves. A solve that stops
+        at the iteration cap short of its tolerance is dumped whatever the threshold.
     maxDumps
         The most systems written to ``directory`` in this process, across all solvers that dump there (e.g. one per
         analysis step), context solves included: a disk-space guard for a run that degrades on every remaining solve.
@@ -180,8 +180,8 @@ class SolveDumps:
         condensedDofs
             The dofs a Schur complement condensed in this solve, or ``None``.
         geometry
-            ``{name: array}``: the node coordinates and P1 maps of the fields, written to ``geometry_*.npz`` (nothing
-            if empty).
+            ``{name: array}``: the node coordinates and midside corners of the fields, written to ``geometry_*.npz``
+            (nothing if empty).
         slow
             Whether the solve was slow (see :meth:`thresholdOr`), for the trigger ``"slow"``.
         log

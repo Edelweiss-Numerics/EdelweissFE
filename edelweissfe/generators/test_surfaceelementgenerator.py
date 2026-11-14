@@ -91,9 +91,8 @@ class TestContactFacetNodalWeights(unittest.TestCase):
         """A single straight-edged hexa20 cube of side ``_SIDE``, with its Ymin face registered as
         the surface ``theSurface``."""
 
-        # boxGen's own corner ring order, (0,0), (0,S), (S,S), (S,0) in the (x, z) plane: the
-        # generator's face tables were verified against it, and transposing two corners would
-        # reverse every face normal while leaving areas and shape-function integrals untouched.
+        # boxGen's corner ring order, (0,0), (0,S), (S,S), (S,0) in the (x, z) plane; transposing two
+        # corners would reverse every face normal.
         corners = [
             np.array([0.0, 0.0, 0.0]),
             np.array([0.0, 0.0, _SIDE]),

@@ -359,59 +359,69 @@ cdef class PyAMGCLEquilibratedSystem:
         return y
 
 
-cdef int _krylovPrecondApplyTrampoline(void* ctx, int n, const double* rhs, double* x) noexcept:
-    """The C-callable trampoline bridging amgcl::solver::lgmres's (or fgmres's) per-``apply()`` Precond callback
-    back into Python -- passed to :class:`PyAMGCLKrylovSolver` as a bare function pointer (see
-    ``amgcl-wrapper.hpp``'s ``PyPrecondApplyFn``/``PyKrylovPrecondT``).
+cdef class _PreconditionerCallback:
+    """A Python callable ``r -> M^-1 r`` (a component of the composed solver) as C++ calls it, through
+    :func:`_preconditionerCallbackTrampoline`: the preconditioner of AMGCL's outer Krylov solve
+    (:class:`PyAMGCLKrylovSolver`), and the coarse solve of the corner-node two-level cycle
+    (:class:`PyAMGCLCornerNodeTwoLevelCycle`).
 
-    ``ctx`` is the calling :class:`PyAMGCLKrylovSolver` instance itself, cast to ``void*`` and back --
-    Cython's own documented pattern for passing a Python object through an opaque C callback context.
-    No manual ``PyObject*`` reference counting is needed: ``ctx`` only ever points at ``self`` from the
-    *same*, still-on-stack :meth:`PyAMGCLKrylovSolver.solve` call that constructed it (see there), so
-    its lifetime is strictly nested inside this function's own call and never outlives it.
-
-    Declared ``noexcept`` and *not* ``nogil``: every call into this function happens nested inside
-    :meth:`PyAMGCLKrylovSolver.solve`'s own C++ call, made from a plain ``def`` method that never
-    releases the GIL (matching every other AMGCL wrapper method in this module -- the GIL only blocks
-    *other* Python threads from running during the solve; AMGCL's own OpenMP worker threads never touch
-    a Python object, so they are unaffected either way). Not releasing the GIL around the C++ call was
-    a deliberate choice, not an oversight: doing so would require re-acquiring it here (``with gil:``)
-    on every single preconditioner application -- the hottest inner loop this whole class exists to
-    speed up -- for a benefit (letting unrelated Python threads run during one linear solve) this
-    codebase's actual threading model does not use.
-
-    A Python exception raised by the preconditioner callable cannot propagate through this C
-    function-pointer boundary, so it is caught here and stashed on the calling instance instead, and the
-    function returns 1 (0 on success). The C++ side then throws, which ends AMGCL's lgmres at once, and
-    :meth:`PyAMGCLKrylovSolver.solve` re-raises the stashed exception in place of the C++ one.
+    A Python exception cannot propagate through the C function-pointer boundary: the trampoline keeps it here
+    (:attr:`pendingException`) and returns 1, the C++ side then throws, which ends its loop at once, and the caller
+    raises the kept exception in place of the C++ one (:meth:`raisePending`).
     """
-    cdef PyAMGCLKrylovSolver self = <PyAMGCLKrylovSolver> ctx
+    cdef object apply
+    cdef object pendingException
+
+    def __cinit__(self, object apply):
+        self.apply = apply
+        self.pendingException = None
+
+    def raisePending(self):
+        """Raise the exception the callable raised in the last C++ call, if it raised one."""
+        if self.pendingException is not None:
+            exc = self.pendingException
+            self.pendingException = None
+            raise exc
+
+
+cdef int _preconditionerCallbackTrampoline(void* ctx, int n, const double* rhs, double* x) noexcept:
+    """The C-callable trampoline into a :class:`_PreconditionerCallback` (``ctx``, cast to ``void*`` and back --
+    Cython's own documented pattern for passing a Python object through an opaque C callback context; see
+    ``amgcl-wrapper.hpp``'s ``PyPrecondApplyFn``): ``x <- apply(rhs)``.
+
+    No manual ``PyObject*`` reference counting is needed: the caller keeps the callback object alive for as long as C++
+    may call it (a Krylov solve for the duration of :meth:`PyAMGCLKrylovSolver.solve`, the corner-node two-level cycle
+    for its own lifetime).
+
+    Declared ``noexcept`` and *not* ``nogil``: every call happens nested inside a C++ call made from a plain ``def``
+    method that never releases the GIL (as every AMGCL wrapper method in this module), so it needs no ``with gil:`` on
+    every application of the hottest loop; AMGCL's own OpenMP worker threads never call it.
+
+    A Python exception is kept on the callback object and the function returns 1 (0 on success), see
+    :class:`_PreconditionerCallback`.
+    """
+    cdef _PreconditionerCallback callback = <_PreconditionerCallback> ctx
     cdef Py_ssize_t i
-    # rhs arrives as a `const double*` (it is AMGCL's own internal Arnoldi-vector storage, never meant
-    # to be written through) -- copied element-by-element into a fresh, ordinary (non-const) numpy
-    # array rather than wrapped in a zero-copy memoryview, which would need casting away the pointer's
-    # constness. n is the system size, so this is one pass over a vector per preconditioner
-    # application -- small against the application itself (a block Gauss-Seidel sweep of AMG cycles),
-    # which reads every matrix entry at least once.
+    # rhs is AMGCL's const internal storage: copied into a fresh numpy array rather than cast to non-const.
     cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhsArr
     cdef double[::1] xView
     try:
-        # inside the try: a MemoryError here must be stashed and re-raised like any other failure, not
-        # swallowed by this noexcept function, which would leave x stale and the solve "successful"
+        # inside the try, so that a MemoryError is stashed and re-raised like any other failure
         rhsArr = np.empty(n, dtype=np.float64)
         for i in range(n):
             rhsArr[i] = rhs[i]
-        result = self._precondCallable(rhsArr)
+        result = callback.apply(rhsArr)
         xView = np.ascontiguousarray(result, dtype=np.float64)
         if xView.shape[0] != n:
             raise ValueError(
-                "PyAMGCLKrylovSolver: preconditioner callable returned a vector of length {:} for an "
-                "input of length {:}".format(xView.shape[0], n)
+                "the preconditioner callable returned a vector of length {:} for an input of length {:}".format(
+                    xView.shape[0], n
+                )
             )
         for i in range(n):
             x[i] = xView[i]
     except BaseException as exc:
-        self._pendingException = exc
+        callback.pendingException = exc
         return 1
     return 0
 
@@ -424,7 +434,7 @@ cdef class PyAMGCLKrylovSolver:
     Bridges the preconditioner of a composed Krylov solver
     (:class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`, a Python callable, e.g. a block Gauss-Seidel
     sweep over per-field AMGCL hierarchies) to AMGCL's native ``Precond`` interface via
-    :func:`_krylovPrecondApplyTrampoline`, called once per Arnoldi vector.
+    :class:`_PreconditionerCallback`, called once per Arnoldi vector.
 
     One instance per system size (AMGCL preallocates every scratch vector for it), reused across solves
     with per-call tolerances. Every call starts from an empty augmentation subspace (``always_reset`` is
@@ -441,8 +451,6 @@ cdef class PyAMGCLKrylovSolver:
     recomputed at its exit, of the operator it iterated on: the equilibrated system, so not the true
     residual, or with ``onUnscaledOperator`` the unscaled one. lgmres's own convergence test is this
     value below ``tol``. NaN before the first solve."""
-    cdef object _precondCallable
-    cdef object _pendingException
 
     def __cinit__(self, int n, str method="lgmres", dict params=None):
         """
@@ -465,8 +473,6 @@ cdef class PyAMGCLKrylovSolver:
         self.n = n
         self.lastIterations = -1
         self.lastError = float("nan")
-        self._precondCallable = None
-        self._pendingException = None
 
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes
@@ -487,7 +493,7 @@ cdef class PyAMGCLKrylovSolver:
         applyPreconditioner
             A Python callable, ``residual (1D float64 array) -> correction (1D float64 array)`` --
             the shape of a composed preconditioner's ``__call__``. Called once per Arnoldi vector via
-            :func:`_krylovPrecondApplyTrampoline`; an exception it raises ends the AMGCL call at once and is re-raised
+            a :class:`_PreconditionerCallback`; an exception it raises ends the AMGCL call at once and is re-raised
             here.
         tol, maxiter
             This call's relative residual tolerance and maximum total Arnoldi iterations (across every
@@ -495,7 +501,7 @@ cdef class PyAMGCLKrylovSolver:
             the ``maxIterations`` of the Krylov component), set on the underlying ``amgcl::solver::lgmres`` object's own
             ``prm`` for this call.
         x0
-            Optional initial guess (warm start), e.g. a true-residual continuation of the Krylov component.
+            Optional initial guess (warm start), e.g. a true-residual restart of the Krylov component.
             Defaults to zero.
 
         AMGCL's lgmres returns ``x = 0`` at once for ``||rhs|| < 2 eps`` (about 4.4e-16), whatever the units of
@@ -528,29 +534,17 @@ cdef class PyAMGCLKrylovSolver:
         cdef int iters = 0
         cdef double error = 0.0
 
-        # self is passed through as the callback's opaque context, cast to void* and back in
-        # _krylovPrecondApplyTrampoline -- see that function's own docstring for why this needs no
-        # manual PyObject* reference counting (self is kept alive by this very call's own stack frame
-        # for as long as the cast pointer is in use).
-        self._precondCallable = applyPreconditioner
-        self._pendingException = None
-        cdef void* ctx = <void*> self
+        # the callback object is kept alive by this very call's stack frame for as long as C++ may call it
+        cdef _PreconditionerCallback callback = _PreconditionerCallback(applyPreconditioner)
         try:
             self.solver.solve(
                 system.system[0], &rhs_[0], &x_[0],
-                tol, maxiter, _krylovPrecondApplyTrampoline, ctx, iters, error, onUnscaledOperator
+                tol, maxiter, _preconditionerCallbackTrampoline, <void*> callback, iters, error, onUnscaledOperator
             )
         except RuntimeError:
             # the C++ side's report of a failed callback: raise the callback's own exception instead
-            if self._pendingException is None:
-                raise
-        finally:
-            self._precondCallable = None
-
-        if self._pendingException is not None:
-            exc = self._pendingException
-            self._pendingException = None
-            raise exc
+            callback.raisePending()
+            raise
 
         self.lastIterations = iters
         self.lastError = error
@@ -583,11 +577,46 @@ cdef object _scipyCsr(const ScalarCsr& csr, int nCols):
     )
 
 
-cdef class _PyAMGCLTwoLevel:
-    """What the two-level preconditioners share (``TwoLevelPreconditioner`` in ``amgcl-wrapper.hpp``): the cycle, the
+cdef class PyAMGCLProlongation:
+    """A prolongation ``P`` and its products, threaded: ``P^T r`` and ``P z`` with AMGCL's spmv, the Galerkin coarse
+    operator ``P^T A P`` with its SpGEMM -- what SciPy computes on one thread, for
+    :class:`~edelweissfe.linsolve.composition.combinators.CoarseCorrection`. See ``Prolongation`` in
+    ``amgcl-wrapper.hpp``."""
+    cdef Prolongation prolongation
+
+    def __init__(self, object P):
+        """P, a scipy.sparse matrix of fine rows and coarse columns: stored, with its transpose, on the C++ side."""
+        P, indptr, indices, data = _csrArrays(P)
+        self.prolongation.build(P.shape[0], P.shape[1], _intData(indptr), _intData(indices), _constDoubleData(data))
+
+    def restrict(self, object r):
+        """Returns ``P^T r`` as a new float64 array."""
+        rArray = _vector(r, self.prolongation.nFine(), "r")
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] r_c = np.empty(self.prolongation.nCoarse(), dtype=np.float64)
+        self.prolongation.restrict(_constDoubleData(rArray), _doubleData(r_c))
+        return r_c
+
+    def prolongate(self, object z_c):
+        """Returns ``P z_c`` as a new float64 array."""
+        zArray = _vector(z_c, self.prolongation.nCoarse(), "z_c")
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] z = np.empty(self.prolongation.nFine(), dtype=np.float64)
+        self.prolongation.prolongate(_constDoubleData(zArray), _doubleData(z))
+        return z
+
+    def galerkinOperator(self, object A):
+        """Returns ``P^T A P`` of a scipy.sparse matrix ``A`` as a scipy.sparse csr_matrix, columns sorted."""
+        A, indptr, indices, data = _csrArrays(A)
+        return _scipyCsr(
+            self.prolongation.galerkinOperator(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data)),
+            self.prolongation.nCoarse(),
+        )
+
+
+cdef class _PyAMGCLTwoLevelCycle:
+    """What the two-level preconditioners share (``TwoLevelCycle`` in ``amgcl-wrapper.hpp``): the cycle, the
     fine spectral radius it was built with, the timings and the report. A derived class creates the C++ object and
     points :attr:`twoLevel` at it; this class owns it (the C++ base class has a virtual destructor)."""
-    cdef TwoLevelPreconditioner* twoLevel
+    cdef TwoLevelCycle* twoLevel
 
     def __dealloc__(self):
         if self.twoLevel != NULL:
@@ -603,23 +632,9 @@ cdef class _PyAMGCLTwoLevel:
 
     @property
     def fineSpectralRadius(self):
-        """The fine operator's spectral radius the Chebyshev smoother was built with -- estimated, or
-        the one handed to ``build``."""
+        """The estimate of the fine operator's spectral radius the Chebyshev smoother was built with
+        (``amgcl-spectral-radius.hpp``)."""
         return self.twoLevel.fineSpectralRadius()
-
-    @property
-    def fineDominantVector(self):
-        """The power iteration's last iterate, the estimate of the fine operator's dominant
-        eigenvector -- hand it back to the next ``build`` with :attr:`fineSpectralRadius`. Empty
-        if the radius was used as supplied, without a re-check."""
-        return _copied(self.twoLevel.fineDominantVector())
-
-    @property
-    def fineSpectralRadiusSource(self):
-        """How the last build arrived at its fine spectral radius: ``"estimated"`` in full,
-        ``"supplied"`` and kept, ``"raised"`` by the re-check, or ``"re-estimated"`` in full because
-        the re-check found the operator stiffened beyond the smoother's margin."""
-        return self.twoLevel.fineSpectralRadiusSource().decode("utf-8")
 
     @property
     def nCoarse(self):
@@ -649,31 +664,58 @@ cdef class _PyAMGCLTwoLevel:
 
     def coarseOperator(self):
         """The Galerkin coarse operator P^T A P of the last build as its AMGCL hierarchy holds it: a scipy.sparse
-        csr_matrix, for inspection."""
+        csr_matrix, for inspection. Raises for a cycle whose coarse solve is a component of the composed solver (the
+        corner-node cycle, whose :meth:`build` returns the coarse operator instead)."""
         return _scipyCsr(self.twoLevel.coarseOperatorCsr(), self.twoLevel.nCoarse())
 
 
-cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
-    """The p-two-grid (P1) preconditioner of :mod:`edelweissfe.linsolve.composition.ptwogrid`, built and
-    applied entirely in C++: Dirichlet detection, the restricted prolongation ``P``, the Galerkin
-    coarse operator ``P^T A P``, the coarse AMGCL hierarchy, the fine Chebyshev smoother and the
-    whole two-level cycle, all OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
-    See ``PTwoGridPreconditionerT`` in ``amgcl-wrapper.hpp`` for the Dirichlet scheme and the
-    fine spectral-radius estimate.
+cdef class PyAMGCLCornerNodeTwoLevelCycle(_PyAMGCLTwoLevelCycle):
+    """The corner-node two-level cycle of :mod:`edelweissfe.linsolve.composition.cornernodetwolevelcycle`, built and
+    applied in C++: Dirichlet detection, the prolongation ``P`` of the scaled variables, the Galerkin coarse operator
+    ``P^T A P``, the fine Chebyshev smoother and the two-level cycle, all OpenMP-threaded. The coarse solve is a Python
+    callable (a component of the composed solver), called back once per cycle. See ``CornerNodeTwoLevelCycleT`` in
+    ``amgcl-wrapper.hpp`` for the prolongation and the Dirichlet scheme.
     """
-    cdef PTwoGridPreconditioner* preconditioner
+    cdef CornerNodeTwoLevelCycle* preconditioner
+    cdef _PreconditionerCallback coarseSolve
 
     def __cinit__(self, dict params):
         """
         params: {"amgcl": {<the field's AMGCL tree: relax (Chebyshev), npre, npost>}, "backendBlockSize": 1,
-        "backendPrecision": "double", "coarseHierarchyPrecision": "double", "coarse": {<the coarse level's AMGCL
-        tree>}}, the spelling of the rigid-body coarse level too (``TwoLevelCycleParameters`` in
+        "backendPrecision": "double"}, the spelling of the rigid-body coarse level too (``TwoLevelCycleParameters`` in
         ``amgcl-wrapper.hpp``). Validated here, before any build.
         """
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes
-        self.preconditioner = new PTwoGridPreconditioner(c_json)
+        self.preconditioner = new CornerNodeTwoLevelCycle(c_json)
         self.twoLevel = self.preconditioner
+
+    def setCoarseSolve(self, object coarseSolve):
+        """The coarse solve, a callable ``r_c -> A_c^-1 r_c`` (approximately) on the coarse DOFs: called once per
+        :meth:`applyPreconditioner`, and kept alive here for as long as the C++ cycle may call it. It may be set before
+        or after :meth:`build`, and replaced: the cycle calls the one set last (it reads it at every application)."""
+        self.coarseSolve = _PreconditionerCallback(coarseSolve)
+        self.preconditioner.setCoarseSolve(_preconditionerCallbackTrampoline, <void*> self.coarseSolve)
+
+    def applyPreconditioner(self, object r):
+        """One two-level cycle: returns M^-1 r as a new float64 array (Dirichlet rows solved exactly); an exception of
+        the coarse solve is raised as it is."""
+        try:
+            return _PyAMGCLTwoLevelCycle.applyPreconditioner(self, r)
+        except RuntimeError:
+            if self.coarseSolve is not None:
+                self.coarseSolve.raisePending()
+            raise
+
+    @property
+    def coarseNodes(self):
+        """Per node, whether the last build made it a coarse node (a bool array): the corner nodes, and every
+        midside node with a free DOF between two Dirichlet DOFs of its edge's corners."""
+        cdef const vector[signed char]* nodes = &self.preconditioner.coarseNodes()
+        if nodes.size() == 0:
+            return np.zeros(0, dtype=bool)
+        # astype copies: the C++ object may change it or go
+        return np.asarray(<signed char[:nodes.size()]> <signed char*> nodes.data()).astype(bool)
 
     @staticmethod
     def dirichletRows(object A):
@@ -683,60 +725,58 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         condensation included. Returns a bool array."""
         A, indptr, indices, data = _csrArrays(A)
         mask = np.zeros(A.shape[0], dtype=np.int8)
-        PTwoGridPreconditioner.dirichletRowMask(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
-                                                _writableByteData(mask))
+        CornerNodeTwoLevelCycle.dirichletRowMask(A.shape[0], _intData(indptr), _intData(indices),
+                                                 _constDoubleData(data), _writableByteData(mask))
         return mask.astype(bool)
 
-    def build(self, object A, object isCorner, object edgeEndpoints, object nullspace=None,
-              double spectralRadius=0.0, object dominantVector=None):
+    def build(self, object A, object scaling, object isCorner, object edgeEndpoints):
         """
-        Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal
-        block with its Dirichlet identity rows).
+        Build the preconditioner for A (scipy.sparse csr_matrix, the field's scaled diagonal block D A D with its
+        Dirichlet identity rows) but its coarse solve, and return the coarse operator A_c for it (scipy.sparse
+        csr_matrix on all DOFs of the :attr:`coarseNodes`, an identity row for each Dirichlet one; 0 x 0 for a field
+        without a free DOF).
 
+        scaling: (n,) float64, the diagonal of D: the weights of the prolongation.
         isCorner: (nNodes,) bool/int8; edgeEndpoints: (nNodes, 2) int, read for midside nodes only.
-        nullspace: (nFreeCoarseDofs, k) float64 coarse near null-space, or None.
-        spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
-        dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`; the
-        radius is then re-checked by a few power iterations from it (``fineRecheckIters``) and
-        raised, or re-estimated in full, if the operator has stiffened.
         """
         A, indptr, indices, data = _csrArrays(A, sortIndices=True)
+        s = np.ascontiguousarray(scaling, dtype=np.float64).reshape(-1)
+        if s.shape[0] != A.shape[0]:
+            raise ValueError("the scaling has {:} entries, but the matrix {:} rows".format(s.shape[0], A.shape[0]))
         corner = np.ascontiguousarray(isCorner, dtype=np.int8)
         endpoints = np.ascontiguousarray(np.asarray(edgeEndpoints, dtype=np.int32).reshape(-1))
         cdef int nNodes = corner.shape[0]
         if endpoints.shape[0] != 2 * nNodes or (nNodes > 0 and np.ndim(edgeEndpoints) != 2):
             raise ValueError("edgeEndpoints must have shape (nNodes, 2)")
-        B = np.zeros((0, 0)) if nullspace is None else np.ascontiguousarray(nullspace, dtype=np.float64)
-        if B.ndim != 2:
-            raise ValueError("the coarse near null-space must be a 2D array")
-        dominant = np.zeros(0) if dominantVector is None else np.ascontiguousarray(dominantVector, dtype=np.float64)
-        self.preconditioner.build(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
-                                  nNodes, _byteData(corner), _intData(endpoints),
-                                  _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1],
-                                  spectralRadius, _constDoubleData(dominant), dominant.shape[0])
+        cdef ScalarCsr coarseOperator = self.preconditioner.build(
+            A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data), _constDoubleData(s),
+            nNodes, _byteData(corner), _intData(endpoints)
+        )
+        return _scipyCsr(coarseOperator, coarseOperator.ptr.size() - 1)
 
 
-cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
-    """The rigid-body coarse level preconditioner of :mod:`edelweissfe.linsolve.composition.rigidbodycoarselevel`, built
-    and applied entirely in C++ (``RigidBodyCoarseLevelPreconditionerT`` in ``amgcl-wrapper.hpp``, its steps in
-    ``amgcl-rigid-body-coarse-level.hpp``) on the near null-space handed to :meth:`build`: the aggregates, the tentative
-    prolongation, the smoothed prolongation, the Galerkin coarse operator, the AMGCL hierarchy below it, the fine
-    Chebyshev smoother and the cycle, all OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
+cdef class PyAMGCLRigidBodyModesTwoLevelCycle(_PyAMGCLTwoLevelCycle):
+    """The two-level cycle on the rigid-body modes per aggregate of
+    :mod:`edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle`, built and applied entirely in C++
+    (``RigidBodyModesTwoLevelCycleT`` in ``amgcl-wrapper.hpp``, its steps in ``amgcl-rigid-body-coarse-level.hpp``) on
+    the near null-space handed to :meth:`build`: the aggregates, the tentative prolongation, the smoothed prolongation,
+    the Galerkin coarse operator, the AMGCL hierarchy below it, the fine Chebyshev smoother and the cycle, all
+    OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
     """
-    cdef RigidBodyCoarseLevelPreconditioner* preconditioner
+    cdef RigidBodyModesTwoLevelCycle* preconditioner
 
     def __cinit__(self, dict params):
         """
         params: {"backendBlockSize": 3, "backendPrecision": "float", "prolongation": "smoothed",
         "coarseHierarchyPrecision": "double", "amgcl": {<the field's AMGCL tree>}}, see
-        ``RigidBodyCoarseLevelPreconditioner`` in ``amgcl-wrapper.hpp``. Validated here, before any build.
+        ``RigidBodyModesTwoLevelCycle`` in ``amgcl-wrapper.hpp``. Validated here, before any build.
         """
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes
-        self.preconditioner = makeRigidBodyCoarseLevelPreconditioner(c_json)
+        self.preconditioner = makeRigidBodyModesTwoLevelCycle(c_json)
         self.twoLevel = self.preconditioner
 
-    def build(self, object A, object nullspace, double spectralRadius=0.0, object dominantVector=None):
+    def build(self, object A, object nullspace):
         """
         Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal block D A D with
         its Dirichlet identity rows, node-major with ``backendBlockSize`` DOFs per node).
@@ -744,18 +784,14 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
         nullspace: (n, M) float64, the near null-space of A whose vectors span the coarse space of every aggregate,
         already divided by the equilibration D: M = ``backendBlockSize`` (the translations) or ``backendBlockSize *
         (backendBlockSize + 1) / 2`` (all rigid-body modes).
-        spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
-        dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`, to re-check it from.
         """
         A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         B = np.ascontiguousarray(nullspace, dtype=np.float64)
         if B.ndim != 2:
             raise ValueError("the near null-space must be an (n, M) array, got the shape {:}".format(B.shape))
-        dominant = np.zeros(0) if dominantVector is None else np.ascontiguousarray(dominantVector, dtype=np.float64)
         # the C++ build checks the shape of the near null-space against the block
         self.preconditioner.build(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
-                                  _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1],
-                                  spectralRadius, _constDoubleData(dominant), dominant.shape[0])
+                                  _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1])
 
     @property
     def nAggregates(self):

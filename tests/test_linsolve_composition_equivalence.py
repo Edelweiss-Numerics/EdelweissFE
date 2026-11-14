@@ -29,14 +29,15 @@
 
 ``BlockAMGSolver`` was deleted once the composition matched it (outer iterations, rebuild decisions, solutions and
 degradation dumps, on these systems and on the workbench dumps). Its numbers on the systems below were recorded before
-the deletion (xeon, branch ``feat/linsolve-composition`` at ``ffe4b681``, ``OMP_NUM_THREADS`` 16 and 1) and are frozen
-here: the outer iterations of every solve, whether the preconditioner was rebuilt, the true-residual continuations,
-whether the tolerance was met, and ``||x||``.
+the deletion (xeon, branch ``feat/linsolve-composition`` at ``ffe4b681``) and frozen here. When the spectral radius
+estimate changed from AMGCL's power iteration to Arnoldi steps (``amgcl-spectral-radius.hpp``), the numbers were
+recorded again, with the composed solver (xeon, ``OMP_NUM_THREADS`` 16 and 1: the same iterations, which no longer
+depend on the thread count); the rebuild decisions stayed BlockAMGSolver's. Per solve: the outer iterations, whether
+the preconditioner was rebuilt, the true-residual restarts, whether the tolerance was met, and ``||x||``.
 
 ``||x||`` is compared to 1e-8 for a solve to ``1e-8``; a solve to the forcing tolerance (eta about 1e-3) leaves an
-error that depends on AMGCL's threaded reductions, so its ``||x||`` is compared to 1e-4, and its true residual is
-checked against the tolerance instead. One outer iteration count (marked) depends on the thread count: 63 with 16
-threads, 64 with one."""
+error that depends on the order of threaded reductions, so its ``||x||`` is compared to 1e-4, and its true residual is
+checked against the tolerance instead."""
 
 import json
 
@@ -54,64 +55,65 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     ComposedLinearSolver,
     DiagonalScaling,
     FixedTolerance,
-    GapCompensation,
     Multiplicative,
     OnField,
+    RebuildPolicy,
+    ResidualGapCompensation,
     SchurComplement,
     SolveDumps,
     blockAMG,
 )
 from edelweissfe.linsolve.composition.amg import droppedSmallEntries  # noqa: E402
 
-#: The numbers of BlockAMGSolver, per solve: (outer iterations, continuations, tolerance met, ||x||).
+#: The numbers of the composed solver, per solve: (outer iterations, true-residual restarts, tolerance met, ||x||).
 _TIGHT = {
-    "rigidBodyCoarseLevel": [(13, 0, True, 418.5446467044291)],
-    "translations": [(39, 0, True, 418.5446466721881)],
-    "sweeps2": [(26, 0, True, 418.5446466695883)],
-    "symmetric": [(29, 0, True, 418.5446465899491)],
-    "sweeps2symmetric": [(19, 0, True, 418.5446466862166)],
-    "drop rigidBodyCoarseLevel": [(25, 0, True, 418.54464674509273)],
-    "drop rigidBodyCoarseLevel lumped": [(25, 0, True, 418.5446467835993)],
-    "drop translations": [(42, 0, True, 418.54464669479614)],
-    "drop translations lumped": [(41, 0, True, 418.54464665267045)],
+    "rigidBodyModesPerAggregate": [(13, 0, True, 418.5446467174296)],
+    "translations": [(40, 0, True, 418.54464670055614)],
+    "sweeps2": [(26, 0, True, 418.54464656671)],
+    "symmetric": [(29, 0, True, 418.54464666115393)],
+    "sweeps2symmetric": [(20, 0, True, 418.54464669228247)],
+    "drop rigidBodyModesPerAggregate": [(25, 0, True, 418.54464673746827)],
+    "drop rigidBodyModesPerAggregate lumped": [(25, 0, True, 418.54464678508566)],
+    "drop translations": [(42, 0, True, 418.5446466908262)],
+    "drop translations lumped": [(42, 0, True, 418.5446467190722)],
 }
 _SEQUENCE = {
-    "rigidBodyCoarseLevel": [
-        (8, 0, True, 418.5460793742515),
-        (50, 0, True, 41.3224365881195),
-        (16, 0, True, 5.624813634654173),
-        (8, 0, True, 4185.460793746807),
-        (8, 0, True, 418.5460795175808),
+    "rigidBodyModesPerAggregate": [
+        (8, 0, True, 418.54618977034244),
+        (50, 0, True, 41.32241300015936),
+        (16, 0, True, 5.624814130343251),
+        (8, 0, True, 4185.461897520253),
+        (8, 0, True, 418.54618990569605),
     ],
     "translations": [
-        (26, 0, True, 418.5395109747016),
-        (53, 0, True, 41.322848129873705),
-        (64, 0, True, 5.625257367997439),
-        (26, 0, True, 4185.395109746933),
-        (26, 0, True, 418.53951112875166),
+        (27, 0, True, 418.53900395601215),
+        (59, 0, True, 41.32246698054644),
+        (63, 0, True, 5.625213216680407),
+        (27, 0, True, 4185.3900395600285),
+        (27, 0, True, 418.5390041105333),
     ],
     "scaled": [
-        (36, 1, True, 418.5374924207296),
-        (83, 1, True, 41.321731206753476),
-        (83, 1, True, 5.624729652555343),
-        (36, 1, True, 4185.374924207208),
-        (36, 1, True, 418.5374925770052),
+        (37, 1, True, 418.5379846987327),
+        (84, 1, True, 41.32191911886246),
+        (84, 1, True, 5.624716436920195),
+        (37, 1, True, 4185.379846987914),
+        (37, 1, True, 418.53798485533997),
     ],
     "scaled gapCompensated": [
-        (31, 1, True, 418.53677415477324),
-        ((63, 64), 0, True, 41.322413324377614),  # 63 with 16 threads, 64 with one
-        (68, 0, True, 5.625298919575432),
-        (29, 0, True, 4185.4561870793505),
-        (29, 0, True, 418.545618863419),
+        (32, 1, True, 418.5349612388638),
+        (64, 0, True, 41.32222237338024),
+        (68, 0, True, 5.625266798471703),
+        (30, 0, True, 4185.440114330617),
+        (30, 0, True, 418.5440115888844),
     ],
 }
 #: Whether BlockAMGSolver rebuilt its preconditioner, per solve of the sequence (its dumps' ``mustRefresh``).
 _REBUILT = {
-    "rigidBodyCoarseLevel": [True, False, True, True, True],
+    "rigidBodyModesPerAggregate": [True, False, True, True, True],
     "translations": [True, False, False, True, True],
 }
-#: BlockAMGSolver's learnt gap between the scaled and the true residual after the sequence.
-_GAP = {"scaled": 19.24, "scaled gapCompensated": 19.58}
+#: The learnt gap between the scaled and the true residual after the sequence.
+_GAP = {"scaled": 19.24, "scaled gapCompensated": 18.75}
 
 
 def _beamWithDamage(seed: int = 0, couplingStrength: float = 1e-2):
@@ -134,19 +136,21 @@ def _beamWithDamage(seed: int = 0, couplingStrength: float = 1e-2):
 
 def _composed(coordinates, fields, **presetOptions) -> ComposedLinearSolver:
     composed = ComposedLinearSolver(
-        blockAMG(**presetOptions), nodeCoordinates={"displacement": coordinates}, verbosity="silent"
+        blockAMG(rebuild=RebuildPolicy(reusePreconditioner=True), **presetOptions),
+        nodeCoordinates={"displacement": coordinates},
+        verbosity="silent",
     )
     composed.setFieldStructure(fields)
     return composed
 
 
 def _assertSolve(composed, A, b, frozen, tight: bool):
-    """One solve of ``composed`` against BlockAMGSolver's frozen ``(iterations, continuations, met, ||x||)``."""
-    iterations, continuations, met, norm = frozen
+    """One solve of ``composed`` against BlockAMGSolver's frozen ``(iterations, trueResidualRestarts, met, ||x||)``."""
+    iterations, trueResidualRestarts, met, norm = frozen
     x = composed(A, b)
     summary = composed.lastSolveSummary
     assert summary.iters in (iterations if isinstance(iterations, tuple) else (iterations,))
-    assert summary.retries == continuations
+    assert summary.retries == trueResidualRestarts
     assert summary.residualMet == met
     assert np.linalg.norm(x) == pytest.approx(norm, rel=1e-8 if tight else 1e-4)
     if met:
@@ -155,11 +159,13 @@ def _assertSolve(composed, A, b, frozen, tight: bool):
     return x
 
 
-@pytest.mark.parametrize("rigidBodyCoarseLevel", [True, False])
-def test_one_solve_has_blockamgs_numbers(rigidBodyCoarseLevel):
+@pytest.mark.parametrize("rigidBodyModesPerAggregate", [True, False])
+def test_one_solve_has_blockamgs_numbers(rigidBodyModesPerAggregate):
     A, b, fields, coordinates = _beamWithDamage()
-    composed = _composed(coordinates, fields, rigidBodyCoarseLevel=rigidBodyCoarseLevel, tolerance=FixedTolerance(1e-8))
-    (frozen,) = _TIGHT["rigidBodyCoarseLevel" if rigidBodyCoarseLevel else "translations"]
+    composed = _composed(
+        coordinates, fields, rigidBodyModesPerAggregate=rigidBodyModesPerAggregate, tolerance=FixedTolerance(1e-8)
+    )
+    (frozen,) = _TIGHT["rigidBodyModesPerAggregate" if rigidBodyModesPerAggregate else "translations"]
     _assertSolve(composed, A, b, frozen, tight=True)
     assert 1 < composed.lastSolveSummary.iters < 100
 
@@ -172,7 +178,7 @@ def test_several_and_symmetric_sweeps_have_blockamgs_numbers(sweeps, symmetric, 
     composed = _composed(
         coordinates,
         fields,
-        rigidBodyCoarseLevel=False,
+        rigidBodyModesPerAggregate=False,
         tolerance=FixedTolerance(1e-8),
         sweeps=sweeps,
         symmetric=symmetric,
@@ -181,15 +187,17 @@ def test_several_and_symmetric_sweeps_have_blockamgs_numbers(sweeps, symmetric, 
     _assertSolve(composed, A, b, frozen, tight=True)
 
 
-@pytest.mark.parametrize("rigidBodyCoarseLevel", [True, False])
-def test_a_sequence_of_solves_has_blockamgs_numbers_and_reuse_decisions(rigidBodyCoarseLevel):
+@pytest.mark.parametrize("rigidBodyModesPerAggregate", [True, False])
+def test_a_sequence_of_solves_has_blockamgs_numbers_and_reuse_decisions(rigidBodyModesPerAggregate):
     """Forcing tolerance, hierarchy reuse: new values only (reused), a shrinking right-hand side (Newton converging),
     a jump of the right-hand side (a new increment: rebuilt), and a new sparsity pattern (rebuilt)."""
     A, b, fields, coordinates = _beamWithDamage()
-    name = "rigidBodyCoarseLevel" if rigidBodyCoarseLevel else "translations"
-    composed = _composed(coordinates, fields, rigidBodyCoarseLevel=rigidBodyCoarseLevel)
+    name = "rigidBodyModesPerAggregate" if rigidBodyModesPerAggregate else "translations"
+    composed = _composed(coordinates, fields, rigidBodyModesPerAggregate=rigidBodyModesPerAggregate)
     rebuilds = []
-    for (A_k, b_k), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
+    for (A_k, b_k, newPattern), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
+        if newPattern:
+            composed.onNewMatrixPattern()
         _assertSolve(composed, A_k, b_k, frozen, tight=False)
         rebuilds.append(composed.root.lastRebuildReason)
     assert [reason is not None for reason in rebuilds] == _REBUILT[name]
@@ -212,19 +220,20 @@ def test_a_solver_keeps_no_copy_of_the_last_matrix_between_solves():
 
 
 def _newtonLikeSequence(A, b, fields, seed: int = 7):
-    """New values (reused), a shrinking right-hand side, a jump (a new increment) and a new sparsity pattern."""
+    """New values (reused), a shrinking right-hand side, a jump (a new increment) and a new sparsity pattern, which the
+    nonlinear solver announces (:meth:`onNewMatrixPattern`) before the solve that has it: ``(A, b, announced)``."""
     rng = np.random.default_rng(seed)
     perturbation = sp.diags(1.0 + 0.05 * rng.standard_normal(A.shape[0]))
     first, last = fields[1].start, fields[1].stop - 1
     newEntries = sp.csr_matrix(([1e-6, 1e-6], ([first, last], [last, first])), shape=A.shape)
     sequence = [
-        (A, b),
-        ((perturbation @ A @ perturbation).tocsr(), 0.1 * b),
-        ((perturbation @ A @ perturbation).tocsr(), 0.01 * rng.standard_normal(A.shape[0])),
-        (A, 10.0 * b),
-        ((A + newEntries).tocsr(), b),
+        (A, b, False),
+        ((perturbation @ A @ perturbation).tocsr(), 0.1 * b, False),
+        ((perturbation @ A @ perturbation).tocsr(), 0.01 * rng.standard_normal(A.shape[0]), False),
+        (A, 10.0 * b, False),
+        ((A + newEntries).tocsr(), b, True),
     ]
-    for A_k, _ in sequence:
+    for A_k, _, _ in sequence:
         A_k.sort_indices()
     return sequence
 
@@ -246,30 +255,34 @@ def test_the_filtered_matrix_keeps_the_diagonal_symmetry_and_with_lumping_the_ro
 
 
 @pytest.mark.parametrize("lump", [False, True])
-@pytest.mark.parametrize("rigidBodyCoarseLevel", [True, False])
-def test_a_drop_tolerance_has_blockamgs_numbers(rigidBodyCoarseLevel, lump):
+@pytest.mark.parametrize("rigidBodyModesPerAggregate", [True, False])
+def test_a_drop_tolerance_has_blockamgs_numbers(rigidBodyModesPerAggregate, lump):
     A, b, fields, coordinates = _beamWithDamage()
     composed = _composed(
         coordinates,
         fields,
         tolerance=FixedTolerance(1e-8),
-        rigidBodyCoarseLevel=rigidBodyCoarseLevel,
+        rigidBodyModesPerAggregate=rigidBodyModesPerAggregate,
         dropTolerance=0.01,
         lumpDroppedEntries=lump,
     )
-    name = "drop " + ("rigidBodyCoarseLevel" if rigidBodyCoarseLevel else "translations") + (" lumped" if lump else "")
+    name = (
+        "drop "
+        + ("rigidBodyModesPerAggregate" if rigidBodyModesPerAggregate else "translations")
+        + (" lumped" if lump else "")
+    )
     (frozen,) = _TIGHT[name]
     _assertSolve(composed, A, b, frozen, tight=True)
     displacement = composed.root.preconditioner.inner.corrections[0].inner
     assert displacement.statistics.sizes["nnz kept"] < displacement.statistics.sizes["nnz"]
 
 
-# ----- DiagonalScaling(LGMRES(...)): continuations and the gap compensation -----
+# ----- DiagonalScaling(LGMRES(...)): true-residual restarts and the gap compensation -----
 
 
 @pytest.mark.parametrize("gapCompensated", [False, True])
 def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_sequence(gapCompensated):
-    """The tree DiagonalScaling(LGMRES(...)): the outer iterations, continuations and solutions of blockamg's
+    """The tree DiagonalScaling(LGMRES(...)): the outer iterations, true-residual restarts and solutions of blockamg's
     krylovOnScaledSystem, with and without the gap compensation (learnt across the solves)."""
     A, b, fields, coordinates = _beamWithDamage()
     name = "scaled gapCompensated" if gapCompensated else "scaled"
@@ -277,19 +290,23 @@ def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_seque
         coordinates,
         fields,
         krylovOnScaledSystem=True,
-        gapCompensation=GapCompensation() if gapCompensated else None,
-        rigidBodyCoarseLevel=False,
+        residualGapCompensation=ResidualGapCompensation() if gapCompensated else None,
+        rigidBodyModesPerAggregate=False,
     )
-    for (A_k, b_k), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
+    for (A_k, b_k, newPattern), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
+        if newPattern:
+            composed.onNewMatrixPattern()
         _assertSolve(composed, A_k, b_k, frozen, tight=False)
     if gapCompensated:
-        assert composed.root.inner.gapCompensation.gap == pytest.approx(_GAP[name], rel=1e-2)
+        assert composed.root.inner.residualGapCompensation.gap == pytest.approx(_GAP[name], rel=1e-2)
 
 
-def test_no_continuations_on_the_scaled_system_has_blockamgs_numbers():
+def test_no_true_residual_restarts_on_the_scaled_system_has_blockamgs_numbers():
     A, b, fields, coordinates = _beamWithDamage()
-    composed = _composed(coordinates, fields, krylovOnScaledSystem=True, continuations=0, rigidBodyCoarseLevel=False)
-    _assertSolve(composed, A, b, (19, 0, False, 418.3551421303781), tight=False)
+    composed = _composed(
+        coordinates, fields, krylovOnScaledSystem=True, trueResidualRestarts=0, rigidBodyModesPerAggregate=False
+    )
+    _assertSolve(composed, A, b, (19, 0, False, 418.3153141552291), tight=False)
 
 
 # ----- the degradation dumps -----
@@ -313,7 +330,7 @@ _MANIFEST_KEYS = {
     "blocks",
     "capHit",
     "contextOffset",
-    "continuations",
+    "trueResidualRestarts",
     "eta",
     "geometryFile",
     "iterations",
@@ -337,18 +354,20 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path):
     """The files and manifest lines blockamg wrote, for every solve of a sequence (threshold 0: all dumped)."""
     A, b, fields, coordinates = _beamWithDamage()
     composed = ComposedLinearSolver(
-        blockAMG(),
+        blockAMG(rebuild=RebuildPolicy(reusePreconditioner=True)),
         nodeCoordinates={"displacement": coordinates},
         verbosity="silent",
         dumps=SolveDumps(str(tmp_path), threshold=0, maxDumps=20),
     )
     composed.setFieldStructure(fields)
     sequence = _newtonLikeSequence(A, b, fields)
-    for A_k, b_k in sequence:
+    for A_k, b_k, newPattern in sequence:
+        if newPattern:
+            composed.onNewMatrixPattern()
         composed(A_k, b_k)
     records = _manifest(tmp_path)
     assert len(records) == len(sequence)
-    for (A_k, b_k), frozen, record in zip(sequence, _MANIFEST, records):
+    for (A_k, b_k, _), frozen, record in zip(sequence, _MANIFEST, records):
         assert set(record) == _MANIFEST_KEYS
         solveCount, iterations, rebuilt, newIncrement, patternChanged, nnz, previousIterations = frozen
         assert (record["solveCount"], record["iterations"], record["rebuildReason"] is not None) == (
@@ -359,7 +378,12 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path):
         assert (record["newIncrement"], record["patternChanged"], record["nnz"]) == (newIncrement, patternChanged, nnz)
         assert record["previousIterations"] == previousIterations
         assert (record["role"], record["triggerSolveCount"], record["contextOffset"]) == ("trigger", solveCount, 0)
-        assert (record["rows"], record["continuations"], record["capHit"], record["eta"]) == (12740, 0, False, 0.001)
+        assert (record["rows"], record["trueResidualRestarts"], record["capHit"], record["eta"]) == (
+            12740,
+            0,
+            False,
+            0.001,
+        )
         assert record["blocks"] == [
             {"name": "displacement", "start": 0, "stop": 9555, "dimension": 3},
             {"name": "nonlocal damage", "start": 9555, "stop": 12740, "dimension": 1},
@@ -381,7 +405,7 @@ def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path):
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     root = LGMRES(
         condensingGivenDofs(
-            SchurComplement(["bars"], preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())]))),
+            SchurComplement(["bars"], schurComplementSolve=DiagonalScaling(Multiplicative([OnField("u", AMG())]))),
             barDofs,
         ),
         tolerance=FixedTolerance(1e-8),

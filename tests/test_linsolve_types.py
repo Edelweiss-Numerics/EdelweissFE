@@ -59,7 +59,7 @@ def test_a_direct_solver_is_one_leaf_behind_the_adapter():
     A, b = _system()
     solver = getLinSolverByName("superlu", {})
     assert isinstance(solver, ComposedLinearSolver) and isinstance(solver.root, DirectSolver)
-    assert not solver.needsStableSparsityPattern and not solver.reportsSolveSummary
+    assert solver.needsPrunedSystemMatrix and not solver.reportsSolveSummary
     x = solver(A, b)
     assert np.linalg.norm(A @ x - b) < 1e-12 * np.linalg.norm(b)
     assert solver.lastSolveSummary is None
@@ -165,7 +165,7 @@ def test_linsolver_names_a_block_or_a_type_with_its_defaults(tmp_path):
     )
     named = createLinearSolver("Dumping", definitions)
     assert named.verbosity == "silent" and named.dumps.trigger == "every"
-    assert isinstance(named.root, DirectSolver) and named.root.backend == "superlu"
+    assert isinstance(named.root, DirectSolver) and named.root.package == "superlu"
     byType = createLinearSolver("superlu", definitions)
     assert byType.dumps is None and byType.verbosity == "warning"
     assert createLinearSolver("superlu", definitions) is not byType  # a new solver per step
@@ -188,10 +188,18 @@ def test_a_custom_block_needs_its_script(tmp_path):
 
 
 def test_an_unknown_linsolver_names_the_blocks_and_the_types(tmp_path):
-    definitions = _definitions(tmp_path, "*linearSolver, name=fast, type=blockamg\nrigidBodyCoarseLevel=false\n")
-    assert definitions["fast"].configuration.rigidBodyCoarseLevel is False
+    definitions = _definitions(tmp_path, "*linearSolver, name=fast, type=blockamg\nrigidBodyModesPerAggregate=false\n")
+    assert definitions["fast"].configuration.rigidBodyModesPerAggregate is False
     with pytest.raises(ValueError, match="fast.*blockamg"):
         createLinearSolver("fats", definitions)
+
+
+def test_reuse_preconditioner_is_a_data_line_of_blockamg(tmp_path):
+    """Off by default (a new preconditioner for every solve); ``reusePreconditioner=true`` is
+    ``blockAMG(rebuild=RebuildPolicy(reusePreconditioner=True))``."""
+    definitions = _definitions(tmp_path, "*linearSolver, name=reusing, type=blockamg\nreusePreconditioner=true\n")
+    assert createLinearSolver("reusing", definitions).root.rebuild.reusePreconditioner is True
+    assert createLinearSolver("blockamg", definitions).root.rebuild.reusePreconditioner is False
 
 
 def test_several_right_hand_sides_are_solved_column_by_column():

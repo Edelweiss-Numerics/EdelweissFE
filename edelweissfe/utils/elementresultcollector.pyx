@@ -32,6 +32,8 @@ import numpy as np
 
 from libc.stdlib cimport free, malloc
 
+from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
+
 
 cdef class ElementResultCollector:
 
@@ -68,11 +70,8 @@ cdef class ElementResultCollector:
             The name of the requested result.
         """
 
-        # hotfix for cython compile error associated with 'range' typing of argument quadraturePoints
-        # this is due to a bug in in cython 0.29.xx and should be fixed in cython 3.x.x
-        # https://github.com/cython/cython/issues/4002
-        #
-        # Update November 11th 2025: This is no longer needed, since we explicitly cast quadraturePoints to list
+        # quadraturePoints is cast to list below instead of typed as range (cython 0.29 bug,
+        # https://github.com/cython/cython/issues/4002)
         #
         # quadraturePoints:range
 
@@ -80,9 +79,15 @@ cdef class ElementResultCollector:
         self.quadraturePoints = list(quadraturePoints)
         self.nGauss = len(self.quadraturePoints)
 
-        # assemble a 2d list of all permanent result arrays (=continously updated np arrays)
-        resultsPointerList = [[el.getResultArray(result, qp, getPersistentView=True) for qp in
-                              self.quadraturePoints] for el in elements]
+        # assemble a 2d list of all permanent result arrays (=continously updated np arrays); the elements are
+        # independent, so in chunks on the thread pool, which come back in the order of the elements
+        quadraturePoints_ = self.quadraturePoints
+
+        def gatherResultArrays(chunk):
+            return [[el.getResultArray(result, qp, getPersistentView=True) for qp in quadraturePoints_]
+                    for el in chunk]
+
+        resultsPointerList = [row for chunk in mapChunksInParallel(elements, gatherResultArrays) for row in chunk]
         self.nSize = resultsPointerList[0][0].shape[0]
 
         # allocate an equivalent 2D C-array for the pointers to each elements results

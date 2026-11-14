@@ -294,7 +294,7 @@ class StepAction(DirichletBase):
         Public, because it is part of this step action's contract with the solver: anything reading
         the prescribed values alongside the DOF indices derived from ``nSet`` must be able to demand
         that the two agree first. ``getPrescribedIncrement`` calls it, but a caller that needs the values *without*
-        a time step (e.g. reconciling Dirichlet/constraint conflicts while the equation system is
+        a time step (e.g. reconciling Dirichlet/constraint conflicts while the discrete system is
         rebuilt) has no other way to ask. Preserve the active/inactive flag: updateStepAction
         unconditionally activates, but a BC deactivated at a prior step end must stay inactive --
         otherwise a refinement in a later step would silently revive it. The node set itself needs

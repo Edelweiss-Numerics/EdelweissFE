@@ -41,18 +41,19 @@ remaining, dofs). Ordered this way, the system reads
 
 The block :math:`A_{bb}` is factorized exactly (a direct solver). Eliminating :math:`x_b` leaves the remaining dofs
 with the Schur complement :math:`S = A_{kk} - A_{kb} A_{bb}^{-1} A_{bk}` -- for bars, the concrete stiffened by the
-bars as seen through their bond -- on which the child of :class:`SchurComplement` is built (e.g. a field-split AMG). Gaussian elimination by
-blocks is the block LU factorization of :math:`A`, and its inverse is a preconditioner of the outer Krylov solve:
+bars as seen through their bond -- on which the child of :class:`SchurComplement` is built (e.g. a field-split AMG).
+Gaussian elimination by blocks is the block LU factorization of :math:`A`, and its inverse is a preconditioner of the
+outer Krylov solve:
 
 .. math::
 
     y_b = A_{bb}^{-1} r_b, \\quad z_k = M_{\\tilde S}^{-1} (r_k - A_{kb} y_b), \\quad
     z_b = A_{bb}^{-1} (r_b - A_{bk} z_k),
 
-with :math:`M_{\\tilde S}^{-1}` the child (``preconditionS``) on an approximation :math:`\\tilde S` of
+with :math:`M_{\\tilde S}^{-1}` the child (``schurComplementSolve``) on an approximation :math:`\\tilde S` of
 :math:`S`. With :math:`\\tilde S = S` and an exact sweep it is :math:`A^{-1}`.
 
-It solves with :math:`A_{bb}` twice. The default (``blockFactors = "U"``) inverts only the block upper triangular
+It solves with :math:`A_{bb}` twice. The default (``blockFactors = "upper"``) inverts only the block upper triangular
 factor :math:`U = \\begin{bmatrix} A_{bb} & A_{bk} \\\\ 0 & S \\end{bmatrix}` of
 :math:`A = \\begin{bmatrix} I & 0 \\\\ A_{kb} A_{bb}^{-1} & I \\end{bmatrix} U`, with one solve:
 
@@ -149,17 +150,19 @@ class SchurComplementCondensation:
     :math:`\\tilde S` of all other dofs :math:`k`, and the preconditioner; see the module documentation.
 
     :class:`SchurComplement` uses it in three steps: :meth:`update` on every solve (select :math:`b`, split :math:`A`;
-    the Schur complement then factorizes :math:`A_{bb}` with its ``solveA_bb``), :meth:`approximateSchurComplement`
-    whenever it rebuilds its child (built on :math:`\\tilde S` instead of :math:`A`), and :func:`blockLU` in every outer
-    iteration.
+    the Schur complement then factorizes :math:`A_{bb}` with its ``condensedBlockSolve``),
+    :meth:`approximateSchurComplement` whenever it rebuilds its child (built on :math:`\\tilde S` instead of :math:`A`),
+    and :func:`blockLU` in every outer iteration.
 
     Parameters
     ----------
-    markers
-        The markers whose marked elements' interior nodes are condensed.
-    zoneSolver
-        The :class:`~edelweissfe.linsolve.composition.direct.DirectSolver` of the zones corrected exactly (see
-        :meth:`_exactCorrection`): set up on their block, and applied to batches of right-hand sides. Default: SuperLU.
+    condensedDofMarkers
+        The markers whose marked elements' interior nodes are condensed: they select :attr:`condensedDofs`.
+    condensedBlockSolve
+        The exact solve with (a part of) :math:`A_{bb}`, a
+        :class:`~edelweissfe.linsolve.composition.direct.DirectSolver`: here the one of the zones corrected exactly
+        (see :meth:`_exactCorrection`), set up on their block of :math:`A_{bb}` and applied to batches of right-hand
+        sides. Default: SuperLU.
     approximation
         ``"local"``: :math:`\\tilde S` as described in the module documentation; ``"none"``:
         :math:`\\tilde S = A_{kk}` (the coupling through :math:`b` is ignored).
@@ -171,8 +174,8 @@ class SchurComplementCondensation:
 
     def __init__(
         self,
-        markers: list,
-        zoneSolver: DirectSolver = None,
+        condensedDofMarkers: list,
+        condensedBlockSolve: DirectSolver = None,
         approximation: str = "local",
         dropTolerance: float = 1e-4,
         windowNodes: int = 50,
@@ -180,8 +183,8 @@ class SchurComplementCondensation:
     ):
         if approximation not in ("local", "none"):
             raise ValueError("SchurComplement: approximation must be 'local' or 'none', got {!r}".format(approximation))
-        self._markers = markers
-        self._zoneSolver = zoneSolver if zoneSolver is not None else DirectSolver("superlu")
+        self._markers = condensedDofMarkers
+        self._condensedBlockSolve = condensedBlockSolve if condensedBlockSolve is not None else DirectSolver("superlu")
         self._approximation = approximation
         self._dropTolerance = dropTolerance
         self._windowNodes = windowNodes
@@ -217,17 +220,17 @@ class SchurComplementCondensation:
         the next matrix stays: the selection of the condensed dofs, and where the entries of the blocks are in a matrix
         of the same pattern."""
         self.A_bb = self.A_bk = self.A_kb = None
-        self._zoneSolver.forget()
+        self._condensedBlockSolve.forget()
 
     # ----- the condensed dofs -----
 
-    def setModel(self, model, dofManager) -> None:
+    def setModel(self, model, numbering) -> None:
         """Take the model and its dofs: check that what the markers read exists, and find the dofs of each node."""
         for marker in self._markers:
             marker.checkReferences(model)
         self._model = model
         self._candidateElements = RefineableElements(list(model.elements.values()))
-        indices = dofManager.idcsOfFieldVariablesInDofVector
+        indices = numbering.idcsOfFieldVariablesInDofVector
         self._dofsOfNode = {}
         for element in model.elements.values():
             for node in element.nodes:
@@ -486,7 +489,9 @@ class SchurComplementCondensation:
         if zoneDofs.size == 0:
             return []
         A_zz = self.A_bb[zoneDofs][:, zoneDofs].tocsr()
-        self._zoneSolver.setUp(SystemMatrix(A_zz), SetUpContext(fields=(FieldBlock("zones", 0, zoneDofs.size, 1),)))
+        self._condensedBlockSolve.setUp(
+            SystemMatrix(A_zz), SetUpContext(fields=(FieldBlock("zones", 0, zoneDofs.size, 1),))
+        )
         A_bk_zones = self.A_bk[zoneDofs].tocsc()
         coupledColumns = np.flatnonzero(np.diff(A_bk_zones.indptr))
         A_kb_zones = self.A_kb[:, zoneDofs].tocsr()
@@ -497,7 +502,7 @@ class SchurComplementCondensation:
         for start in range(0, len(coupledColumns), batch):
             columns = coupledColumns[start : start + batch]
             rightHandSides = A_bk_zones[:, columns].toarray()
-            X = np.asarray(self._zoneSolver(rightHandSides)).reshape(rightHandSides.shape)
+            X = np.asarray(self._condensedBlockSolve(rightHandSides)).reshape(rightHandSides.shape)
             correction = A_kb_zones @ X
             parts.append(
                 _significantEntries(correction, coupledRows, columns, sqrtAbsDiagonalOfA_kk, thinningTolerance)
@@ -685,7 +690,7 @@ def _solveTransposed(A: sp.coo_matrix, B: np.ndarray) -> np.ndarray:
     return solve_banded((upper, lower), banded, B, check_finite=False)
 
 
-def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb, blockFactors: str) -> np.ndarray:
+def blockLU(r: np.ndarray, condensation, schurComplementSolve, condensedBlockSolve, blockFactors: str) -> np.ndarray:
     """One application of the block LU preconditioner, see the module documentation:
 
     .. math::
@@ -693,8 +698,8 @@ def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb, blockFactors:
         y_b = A_{bb}^{-1} r_b, \\qquad z_k = M_{\\tilde S}^{-1} (r_k - A_{kb} y_b), \\qquad
         z_b = A_{bb}^{-1} (r_b - A_{bk} z_k)
 
-    or, with ``blockFactors="U"``, :math:`z_k = M_{\\tilde S}^{-1} r_k` (the remaining dofs first, then the condensed
-    ones follow them: the bars follow the concrete). The application of :class:`SchurComplement`.
+    or, with ``blockFactors="upper"``, :math:`z_k = M_{\\tilde S}^{-1} r_k` (the remaining dofs first, then the
+    condensed ones follow them: the bars follow the concrete). The application of :class:`SchurComplement`.
 
     Parameters
     ----------
@@ -702,22 +707,22 @@ def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb, blockFactors:
         The vector to precondition (all dofs).
     condensation
         The :class:`SchurComplementCondensation`: the dofs :math:`b, k` and the blocks :math:`A_{bk}, A_{kb}`.
-    preconditionS
+    schurComplementSolve
         :math:`M_{\\tilde S}^{-1}`, applied to a vector of the remaining dofs :math:`k`.
-    solveA_bb
+    condensedBlockSolve
         :math:`A_{bb}^{-1}`, applied to a vector of the condensed dofs :math:`b`.
     blockFactors
-        ``"U"`` or ``"LU"``, see the module documentation.
+        ``"upper"`` or ``"both"``, see the module documentation.
     """
     A_bk, A_kb = condensation.A_bk, condensation.A_kb
     b, k = condensation.condensedDofs, condensation.remainingDofs
     r_b, r_k = r[b], r[k]
-    if blockFactors == "LU":
-        y_b = solveA_bb(r_b)
-        z_k = preconditionS(r_k - A_kb @ y_b)
+    if blockFactors == "both":
+        y_b = condensedBlockSolve(r_b)
+        z_k = schurComplementSolve(r_k - A_kb @ y_b)
     else:
-        z_k = preconditionS(r_k)
-    z_b = solveA_bb(r_b - A_bk @ z_k)
+        z_k = schurComplementSolve(r_k)
+    z_b = condensedBlockSolve(r_b - A_bk @ z_k)
     z = np.empty_like(r)
     z[b], z[k] = z_b, z_k
     return z
@@ -734,59 +739,63 @@ def _compactCount(count: int) -> str:
 class SchurComplement(Preconditioner):
     """The block LU preconditioner around the Schur complement of the condensed dofs; see the module documentation.
 
-    Every solve selects the condensed dofs again and sets up ``solveA_bb`` on :math:`A_{bb}` (factorizes it);
+    Every solve selects the condensed dofs again and sets up ``condensedBlockSolve`` on :math:`A_{bb}` (factorizes it);
     :math:`\\tilde S` and the child are rebuilt when a rebuild is asked for, and when the condensed dofs change. If
     :math:`A_{bb}` cannot be factorized (a bond that lost all stiffness), that solve does without the condensation: the
     child is built on the whole :math:`A`.
 
     Parameters
     ----------
-    condense
-        The markers whose marked elements' interior nodes are condensed (e.g. an element set marker).
-    preconditionS
+    condensedDofMarkers
+        The markers whose marked elements' interior nodes are condensed (e.g. an element set marker); the dofs they
+        select are :meth:`condensedDofs`.
+    schurComplementSolve
         :math:`M_{\\tilde S}^{-1}`, built on :math:`\\tilde S`.
-    solveA_bb
+    condensedBlockSolve
         The exact solve with :math:`A_{bb}`, a :class:`~edelweissfe.linsolve.composition.direct.DirectSolver`
         (default: SuperLU). The zones corrected exactly in :math:`\\tilde S` are factorized by a second one of the same
-        backend and options.
+        package and options.
     approximation, dropTolerance, windowNodes, haloNodes
         How :math:`\\tilde S` is formed, see :class:`SchurComplementCondensation`.
     blockFactors
-        ``"U"`` or ``"LU"``.
+        ``"upper"`` (the default): only the block upper triangular factor :math:`U`, one solve with :math:`A_{bb}`;
+        ``"both"``: both factors of the block LU factorization, two solves with :math:`A_{bb}`.
     """
 
     def __init__(
         self,
-        condense: list = (),
-        preconditionS: Preconditioner = None,
-        solveA_bb: DirectSolver = None,
+        condensedDofMarkers: list = (),
+        schurComplementSolve: Preconditioner = None,
+        condensedBlockSolve: DirectSolver = None,
         approximation: str = "local",
         dropTolerance: float = 1e-4,
         windowNodes: int = 50,
         haloNodes: int = None,
-        blockFactors: str = "U",
+        blockFactors: str = "upper",
     ):
-        if preconditionS is None:
-            raise ValueError("SchurComplement: preconditionS, the preconditioner of the Schur complement, is needed")
-        requirePreconditioner("SchurComplement", "preconditionS", preconditionS)
-        if solveA_bb is not None and not isinstance(solveA_bb, DirectSolver):
-            raise TypeError(
-                "SchurComplement: solveA_bb must be a DirectSolver, the exact solve with A_bb, got {!r}".format(
-                    solveA_bb
-                )
-            )
-        if blockFactors not in ("U", "LU"):
-            raise ValueError("SchurComplement: blockFactors must be 'U' or 'LU', got {!r}".format(blockFactors))
-        if not list(condense):
+        if schurComplementSolve is None:
             raise ValueError(
-                "SchurComplement: nothing to condense -- give the markers of the condensed elements (condense=[...])"
+                "SchurComplement: schurComplementSolve, the preconditioner of the Schur complement, is needed"
             )
-        self.preconditionS = preconditionS
-        self.solveA_bb = solveA_bb if solveA_bb is not None else DirectSolver("superlu")
+        requirePreconditioner("SchurComplement", "schurComplementSolve", schurComplementSolve)
+        if condensedBlockSolve is not None and not isinstance(condensedBlockSolve, DirectSolver):
+            raise TypeError(
+                "SchurComplement: condensedBlockSolve must be a DirectSolver, the exact solve with A_bb, "
+                "got {!r}".format(condensedBlockSolve)
+            )
+        if blockFactors not in ("upper", "both"):
+            raise ValueError("SchurComplement: blockFactors must be 'upper' or 'both', got {!r}".format(blockFactors))
+        if not list(condensedDofMarkers):
+            raise ValueError(
+                "SchurComplement: nothing to condense -- give the markers of the condensed elements "
+                "(condensedDofMarkers=[...])"
+            )
+        self.schurComplementSolve = schurComplementSolve
+        self.condensedBlockSolve = condensedBlockSolve if condensedBlockSolve is not None else DirectSolver("superlu")
         self.blockFactors = blockFactors
         self.condensation = SchurComplementCondensation(
-            list(condense),
-            DirectSolver(self.solveA_bb.backend, **self.solveA_bb.options),
+            list(condensedDofMarkers),
+            DirectSolver(self.condensedBlockSolve.package, **self.condensedBlockSolve.options),
             approximation=approximation,
             dropTolerance=dropTolerance,
             windowNodes=windowNodes,
@@ -806,11 +815,11 @@ class SchurComplement(Preconditioner):
         # the condensed dofs the child was built for (None: built on the whole matrix, or not built)
         self._builtForDofs = None
 
-    def setModel(self, model, dofManager) -> None:
-        self.condensation.setModel(model, dofManager)
+    def setModel(self, model, numbering) -> None:
+        self.condensation.setModel(model, numbering)
         self._builtForDofs = None
         self._messagesShown = set()
-        super().setModel(model, dofManager)
+        super().setModel(model, numbering)
 
     def _setUp(self, A, context: SetUpContext) -> None:
         self._condense(A, context, rebuild=True, change=None)
@@ -828,7 +837,7 @@ class SchurComplement(Preconditioner):
             if condensing:
                 A_bb = condensation.A_bb
                 with performancetiming.timeit("schur factorization"):
-                    self.solveA_bb.setUp(
+                    self.condensedBlockSolve.setUp(
                         SystemMatrix(A_bb), SetUpContext(fields=(FieldBlock("condensed", 0, A_bb.shape[0], 1),))
                     )
         except np.linalg.LinAlgError as error:
@@ -849,7 +858,7 @@ class SchurComplement(Preconditioner):
         if rebuild or dofsChanged:
             # the child is built anew, on a new S~ or on A: the old S~ and the child's old state go first
             self.S_tilde = None
-            self.preconditionS.forget()
+            self.schurComplementSolve.forget()
         if condensing and (rebuild or dofsChanged):
             try:
                 with performancetiming.timeit("schur complement"):
@@ -881,17 +890,17 @@ class SchurComplement(Preconditioner):
             remainingNodes = {block.name: condensation.remainingNodes(block) for block in context.fields}
             childContext = context.restrictedTo(remainingFields, condensation.remainingDofs, nodesOf=remainingNodes.get)
         if change is None:
-            self.preconditionS.setUp(childMatrix, childContext)
+            self.schurComplementSolve.setUp(childMatrix, childContext)
         else:
             childChange = change.withContext(childContext)
             if dofsChanged:
                 childChange = childChange.withRebuild("condensed dofs")
-            self.preconditionS.update(childMatrix, childChange)
+            self.schurComplementSolve.update(childMatrix, childChange)
         self._builtForDofs = dofs
 
     def _condensedDofsOf(self, condensing: bool) -> tuple:
-        """The condensed dofs of this solve (``None`` without condensation), and whether they differ from those the child
-        was built for."""
+        """The condensed dofs of this solve (``None`` without condensation), and whether they differ from those the
+        child was built for."""
         dofs = self.condensation.condensedDofs if condensing else None
         changed = (dofs is None) != (self._builtForDofs is None) or (
             dofs is not None and not np.array_equal(dofs, self._builtForDofs)
@@ -931,28 +940,28 @@ class SchurComplement(Preconditioner):
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
         if not self.condensing:
-            return self.preconditionS(r)
-        return blockLU(r, self.condensation, self.preconditionS, self.solveA_bb, self.blockFactors)
+            return self.schurComplementSolve(r)
+        return blockLU(r, self.condensation, self.schurComplementSolve, self.condensedBlockSolve, self.blockFactors)
 
     def children(self) -> tuple:
-        return (("solveA_bb", self.solveA_bb), ("preconditionS", self.preconditionS))
+        return (("condensedBlockSolve", self.condensedBlockSolve), ("schurComplementSolve", self.schurComplementSolve))
 
     def describe(self) -> Description:
-        if self.blockFactors == "LU":
+        if self.blockFactors == "both":
             steps = (
-                Step("y_b = A_bb⁻¹ r_b", "solveA_bb"),
-                Step("z_k = M_S̃⁻¹ (r_k − A_kb y_b)", "preconditionS"),
-                Step("z_b = A_bb⁻¹ (r_b − A_bk z_k)", "solveA_bb"),
+                Step("y_b = A_bb⁻¹ r_b", "condensedBlockSolve"),
+                Step("z_k = M_S̃⁻¹ (r_k − A_kb y_b)", "schurComplementSolve"),
+                Step("z_b = A_bb⁻¹ (r_b − A_bk z_k)", "condensedBlockSolve"),
             )
         else:
             steps = (
-                Step("z_k = M_S̃⁻¹ r_k", "preconditionS"),
-                Step("z_b = A_bb⁻¹ (r_b − A_bk z_k)", "solveA_bb"),
+                Step("z_k = M_S̃⁻¹ r_k", "schurComplementSolve"),
+                Step("z_b = A_bb⁻¹ (r_b − A_bk z_k)", "condensedBlockSolve"),
             )
         return Description(
             name="SchurComplement",
-            formula="BlockLU[{solveA_bb}, {preconditionS}]",
-            latex="\\mathrm{BlockLU}\\left[{solveA_bb},\\, {preconditionS}\\right]",
+            formula="BlockLU[{condensedBlockSolve}, {schurComplementSolve}]",
+            latex="\\mathrm{BlockLU}\\left[{condensedBlockSolve},\\, {schurComplementSolve}\\right]",
             parameters={
                 "blockFactors": self.blockFactors,
                 "S̃": "A_kk" if self.condensation.approximation == "none" else "A_kk − A_kb A_bb⁻¹ A_bk, local",

@@ -120,7 +120,7 @@ class Constraint(ConstraintBase):
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
+    def fields(self) -> list:
         return [[] for _ in self._nodes]
 
     @property
@@ -128,7 +128,7 @@ class Constraint(ConstraintBase):
         return 0
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        """Called once per increment, before the equation system is (re)built -- exactly the tick
+        """Called once per increment, before the discrete system is (re)built -- exactly the tick
         at which a freshly refined mesh's ``model.topology.version`` has already advanced. Raises if the
         cached node set has not grown accordingly, i.e. if it is still the pre-refinement object
         (a stale reference) rather than the same, in-place-mutated one."""
@@ -142,12 +142,12 @@ class Constraint(ConstraintBase):
                 )
         return False
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
-        V: np.ndarray,
+        P: np.ndarray,
+        K: np.ndarray,
         timeStep: TimeStep,
     ):
         pass

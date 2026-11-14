@@ -40,7 +40,11 @@ from dataclasses import dataclass
 
 from edelweissfe.linsolve.composition.base import Preconditioner
 from edelweissfe.linsolve.composition.direct import DirectSolver
-from edelweissfe.linsolve.composition.krylov import FixedTolerance, GapCompensation
+from edelweissfe.linsolve.composition.krylov import (
+    FixedTolerance,
+    RebuildPolicy,
+    ResidualGapCompensation,
+)
 from edelweissfe.linsolve.composition.presets import blockAMG
 from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.solver import ComposedLinearSolver
@@ -64,7 +68,7 @@ class LinearSolverSchema:
         dtype=str,
         default="warning",
     )
-    warnOuterIterations: int = schemaField(
+    warningOuterIterations: int = schemaField(
         description="A solve with more outer Krylov iterations than this is warned about, and is a slow solve.",
         dtype=int,
         default=100,
@@ -76,7 +80,7 @@ class LinearSolverSchema:
     )
     dumps: str = schemaField(
         description=(
-            "Which solves are written to disk for an offline replay: none, slow (above warnOuterIterations, or "
+            "Which solves are written to disk for an offline replay: none, slow (above warningOuterIterations, or "
             "stopped at the iteration cap), every, or the numbers of the solves separated by spaces, e.g. '12 13 14'."
         ),
         dtype=str,
@@ -138,33 +142,33 @@ class LinearSolverType(OptionSchemaProvider):
         return {
             "residualGrowthFactor": configuration.residualGrowthFactor,
             "verbosity": configuration.verbosity,
-            "warnOuterIterations": configuration.warnOuterIterations,
+            "warningOuterIterations": configuration.warningOuterIterations,
             "dumps": solveDumpsOf(configuration),
         }
 
 
 class DirectSolverType(LinearSolverType):
     """A direct solver: the tree of one :class:`~edelweissfe.linsolve.composition.direct.DirectSolver` leaf on the
-    backend :attr:`backend`, factorized anew on every solve."""
+    package :attr:`package`, factorized anew on every solve."""
 
-    #: The registered name of the backend (registry category ``directsolver``).
-    backend: str = None
+    #: The registered name of the direct solver package (registry category ``directsolver``).
+    package: str = None
 
     @classmethod
     def tree(cls, configuration) -> Preconditioner:
-        return DirectSolver(cls.backend)
+        return DirectSolver(cls.package)
 
 
 class SuperLU(DirectSolverType):
     """``superlu``: SciPy's own sparse LU, always available."""
 
-    backend = "superlu"
+    package = "superlu"
 
 
 class UMFPACK(DirectSolverType):
     """``umfpack``: UMFPACK through SciPy (SuperLU if ``scikit-umfpack`` is missing)."""
 
-    backend = "umfpack"
+    package = "umfpack"
 
 
 @dataclass(frozen=True)
@@ -185,35 +189,35 @@ class Pardiso(DirectSolverType):
     """``pardiso``: Intel MKL PARDISO (the default linear solver, if built)."""
 
     schema = PardisoSchema
-    backend = "pardiso"
+    package = "pardiso"
 
     @classmethod
     def tree(cls, configuration: PardisoSchema) -> Preconditioner:
-        return DirectSolver(cls.backend, reuseSymbolicFactorization=configuration.reuseSymbolicFactorization)
+        return DirectSolver(cls.package, reuseSymbolicFactorization=configuration.reuseSymbolicFactorization)
 
 
 class PanuaPardiso(DirectSolverType):
     """``panuapardiso``: Panua PARDISO, if built."""
 
-    backend = "panuapardiso"
+    package = "panuapardiso"
 
 
 class KLU(DirectSolverType):
     """``klu``: SuiteSparse's KLU, if built."""
 
-    backend = "klu"
+    package = "klu"
 
 
 class PetscLU(DirectSolverType):
     """``petsclu``: PETSc's LU, if ``petsc4py`` is installed."""
 
-    backend = "petsclu"
+    package = "petsclu"
 
 
 class Mumps(DirectSolverType):
     """``mumps``: MUMPS, if its Python bindings are installed."""
 
-    backend = "mumps"
+    package = "mumps"
 
 
 @dataclass(frozen=True)
@@ -254,10 +258,18 @@ class BlockAMGSchema(LinearSolverSchema):
     """The data lines of ``blockamg``: the arguments of the preset
     :func:`~edelweissfe.linsolve.composition.presets.blockAMG`."""
 
-    rigidBodyCoarseLevel: bool = schemaField(
+    rigidBodyModesPerAggregate: bool = schemaField(
         description=(
-            "A 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG hierarchy, on the "
-            "translations)."
+            "A (linear) 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG "
+            "hierarchy, on the translations)."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    cornerNodeInterpolation: bool = schemaField(
+        description=(
+            "A quadratic 3D displacement field gets the two-level cycle on its corner nodes (else the case of a linear "
+            "one)."
         ),
         dtype=bool,
         default=True,
@@ -268,19 +280,27 @@ class BlockAMGSchema(LinearSolverSchema):
         default=None,
     )
     maxIterations: int = schemaField(description="The outer iteration cap.", dtype=int, default=100)
+    reusePreconditioner: bool = schemaField(
+        description=(
+            "Keep the preconditioner across solves until a new increment or a stale preconditioner asks for a rebuild "
+            "(false: a new preconditioner for every solve)."
+        ),
+        dtype=bool,
+        default=False,
+    )
     sweeps: int = schemaField(description="The block Gauss-Seidel sweeps over the fields.", dtype=int, default=1)
     symmetric: bool = schemaField(
         description="A symmetric block Gauss-Seidel sweep (forward, then backward).", dtype=bool, default=False
     )
     krylovOnScaledSystem: bool = schemaField(
-        description="Run LGMRES on the diagonally scaled matrix, with true-residual continuations.",
+        description="Run LGMRES on the diagonally scaled matrix, with true-residual restarts.",
         dtype=bool,
         default=False,
     )
-    continuations: int = schemaField(
-        description="The true-residual continuations (only with krylovOnScaledSystem).", dtype=int, default=2
+    trueResidualRestarts: int = schemaField(
+        description="The true-residual restarts (only with krylovOnScaledSystem).", dtype=int, default=2
     )
-    gapCompensation: bool = schemaField(
+    residualGapCompensation: bool = schemaField(
         description=(
             "Tighten the first pass by the learnt gap between the scaled and the true residual (only with "
             "krylovOnScaledSystem)."
@@ -307,14 +327,16 @@ class BlockAMG(LinearSolverType):
     @classmethod
     def tree(cls, configuration: BlockAMGSchema) -> Preconditioner:
         return blockAMG(
-            rigidBodyCoarseLevel=configuration.rigidBodyCoarseLevel,
+            rigidBodyModesPerAggregate=configuration.rigidBodyModesPerAggregate,
+            cornerNodeInterpolation=configuration.cornerNodeInterpolation,
             tolerance=None if configuration.tolerance is None else FixedTolerance(configuration.tolerance),
             maxIterations=configuration.maxIterations,
+            rebuild=RebuildPolicy(reusePreconditioner=configuration.reusePreconditioner),
             sweeps=configuration.sweeps,
             symmetric=configuration.symmetric,
             krylovOnScaledSystem=configuration.krylovOnScaledSystem,
-            continuations=configuration.continuations,
-            gapCompensation=GapCompensation() if configuration.gapCompensation else None,
+            trueResidualRestarts=configuration.trueResidualRestarts,
+            residualGapCompensation=ResidualGapCompensation() if configuration.residualGapCompensation else None,
             dropTolerance=configuration.dropTolerance,
             lumpDroppedEntries=configuration.lumpDroppedEntries,
         )

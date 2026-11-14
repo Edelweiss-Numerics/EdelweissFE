@@ -162,11 +162,13 @@ class AdaptiveTimeStepper(TimeStepperBase):
         self.nPassedGoodIncrements += 1
 
     def rejectTimeStep(self, cutbackFactor: float):
-        if self.incrementCounter == 0:
+        # The zero increment has no size to cut back; a first increment of nonzero size is cut back like any other.
+        if self.makeZeroIncrementFirst and self.incrementCounter == 0:
             self.journal.errorMessage("Failed zero increment", self.identification)
             raise ReachedMinIncrementSize()
 
-        if self.increment == self.minIncrement:
+        # The last increment of a step, the remainder, may be below the minimum size already.
+        if self.increment <= self.minIncrement:
             self.journal.errorMessage("Cannot reduce increment size", self.identification)
             raise ReachedMinIncrementSize()
 

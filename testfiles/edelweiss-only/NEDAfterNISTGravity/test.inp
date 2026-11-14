@@ -1,0 +1,45 @@
+** A quasi-static step, then an explicit one: a column standing on its base is loaded by its own weight with NIST, and
+** NED continues under the same weight and the same support.
+**
+** The explicit step must start where the quasi-static one ended, at rest in equilibrium, and stay there: nothing in
+** the model changes at the switch. The net force that drives NED's first velocity update is its own state and starts
+** at zero, which is the net force of a state in equilibrium. Read back from the model instead, it would be NIST's
+** internal force, which balances the weight: the column would get a second weight for half an increment and swing
+** about the static deflection by about a tenth of it.
+**
+** The published force P means the same in both steps: the internal force where the base holds the column, the
+** internal plus the inertial force elsewhere, which is the weight there. tests/test_ned_after_nist.py checks both.
+
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+**E       nu     density
+1.0e4,    0.0,   1.0
+
+*section, name=section1, material=linearelastic, type=plane, thickness=1
+all
+
+*job, name=nedafternistjob, domain=2d
+
+*solver, solver=NIST, name=preload
+
+*solver, solver=NED, name=explicit
+output-frequency=1
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=1
+h=4
+nX=1
+nY=4
+elType=CPE4
+elProvider=edelweiss
+
+*fieldOutput
+>>perNode, nSet=gen_all, field=displacement, result=U, name=U, saveHistory=True
+>>perNode, nSet=gen_all, field=displacement, result=P, name=P, saveHistory=True
+
+*step, solver=preload
+startInc=1, maxInc=1, minInc=1e-6, maxNumInc=10, maxIter=25, stepLength=1
+>>dirichlet, name=base, nSet=gen_bottom, field=displacement, 1=0.0, 2=0.0
+>>bodyforce, name=weight, elSet=all, forceVector='0.0, -1.0', f(t)='1'
+
+*step, type=adaptiveForExplicitSimulations, solver=explicit
+maxInc=1, minInc=1e-12, maxNumInc=1000, maxIter=25, stepLength=0.2

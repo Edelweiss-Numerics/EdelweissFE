@@ -6,10 +6,7 @@ from edelweissfe.utils.misc import convertLinesToStringDictionary
 
 class Section:
     def __init__(self, name, options, materialName, t, model):
-        # gstools is imported lazily: its Cython extension does not declare
-        # free-threading support, so importing it re-enables the GIL process-wide
-        # and would disable thread-parallel computations for ALL simulations,
-        # even those not using random fields.
+        # Lazy import: importing gstools re-enables the GIL process-wide (no free-threading support).
         try:
             import gstools
         except ModuleNotFoundError as e:

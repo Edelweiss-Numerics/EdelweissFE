@@ -94,9 +94,7 @@ def getMaterialClass(materialName: str, provider: str = None) -> type:
         return None
 
     if strCaseCmp(provider, "marmotmaterialpoint"):
-        # A Marmot material evaluated point-wise, without an element in between.
-        # Which class applies follows from the base class the material is registered for
-        # in Marmot, not from its name, so the caller states the base class.
+        # A Marmot material evaluated point-wise, without an element; the caller states its Marmot base class.
         if strCaseCmp(materialName, "hypoelastic"):
             from edelweissfe.materials.marmot.marmothypoelastic import (
                 MarmotHypoElasticMaterial,
@@ -117,16 +115,13 @@ def getMaterialClass(materialName: str, provider: str = None) -> type:
         )
 
     if strCaseCmp(provider, "marmothypoelastic"):
-        # Unlike marmotmaterialpoint, materialName here is the real Marmot material name, so
-        # the base class doesn't need stating -- an ordinary element only ever drives the
-        # hypoelastic one. Bind it now so the caller can construct with materialProperties
-        # alone, exactly as it would any other provider's class.
+        # materialName is the real Marmot material name; bind it so the caller constructs with
+        # materialProperties alone, as for any other provider.
         from edelweissfe.materials.marmot.marmothypoelastic import (
             MarmotHypoElasticMaterial,
         )
 
-        # Marmot's own factory registers names in upper case; matching the case-insensitivity
-        # MarmotMaterialWrappingElement.setMaterial already affords the QP element's path.
+        # Marmot's factory registers names in upper case.
         return partial(MarmotHypoElasticMaterial, materialName.upper())
 
     if strCaseCmp(provider, "edelweiss"):

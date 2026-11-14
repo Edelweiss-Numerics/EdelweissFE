@@ -9,7 +9,7 @@ inputs:
     default: MAteRialMOdelingToolbox/Marmot
   ref:
     description: >
-      The Marmot branch to build. Empty (the default): the branch under test, the PR's base branch or next_v26.11,
+      The Marmot branch to build. Empty (the default): the branch under test, the PR's base branch or master,
       whichever exists first in the repository.
     default: ""
 

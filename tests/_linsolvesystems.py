@@ -139,12 +139,15 @@ GMRES_CAP = 300
 
 
 def gmresIterations(A, preconditioner) -> int:
-    """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-8, or
-    ``GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``GMRES_CAP``."""
+    """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-10, or
+    ``GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``GMRES_CAP``. The preconditioned
+    residual of left preconditioning can lie far below the true one where the preconditioner amplifies some error (the
+    bending of a slender beam: a preconditioned 1e-8 left the true residual above 1e-5), so it is driven well below the
+    true target."""
     b = np.random.default_rng(7).standard_normal(A.shape[0])
     M = LinearOperator(A.shape, matvec=preconditioner.applyPreconditioner)
     history = []
-    x, _ = gmres(A, b, M=M, rtol=1e-8, restart=GMRES_CAP, maxiter=1, callback=history.append, callback_type="pr_norm")
+    x, _ = gmres(A, b, M=M, rtol=1e-10, restart=GMRES_CAP, maxiter=1, callback=history.append, callback_type="pr_norm")
     converged = np.linalg.norm(b - A @ x) <= 1e-5 * np.linalg.norm(b)
     return len(history) if converged and len(history) <= GMRES_CAP else GMRES_CAP + 1
 
@@ -196,12 +199,12 @@ class FixedCondensation(SchurComplementCondensation):
         return self.dofs, self.dofs
 
 
-def solveA_bbOf(condensation) -> DirectSolver:
+def condensedBlockSolveOf(condensation) -> DirectSolver:
     """:math:`A_{bb}^{-1}` of a condensation's last update: a SuperLU leaf set up on its :math:`A_{bb}`."""
-    solveA_bb = DirectSolver()
+    condensedBlockSolve = DirectSolver()
     n = condensation.A_bb.shape[0]
-    solveA_bb.setUp(SystemMatrix(condensation.A_bb), SetUpContext(fields=(FieldBlock("condensed", 0, n, 1),)))
-    return solveA_bb
+    condensedBlockSolve.setUp(SystemMatrix(condensation.A_bb), SetUpContext(fields=(FieldBlock("condensed", 0, n, 1),)))
+    return condensedBlockSolve
 
 
 def condensingGivenDofs(schur, dofs, **options):

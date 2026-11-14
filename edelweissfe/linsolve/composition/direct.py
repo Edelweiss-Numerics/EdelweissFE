@@ -44,7 +44,7 @@ from edelweissfe.linsolve.composition.base import (
 
 
 class DirectSolver(Preconditioner):
-    """:math:`z = A^{-1} r`, exactly: one of the registered direct solver backends (``superlu``, ``umfpack``,
+    """:math:`z = A^{-1} r`, exactly: one of the registered direct solver packages (``superlu``, ``umfpack``,
     ``pardiso``, ``klu``, ...; see :class:`~edelweissfe.linsolve.base.DirectSolverBackend`), factorized once per
     set-up -- a singular matrix raises :class:`numpy.linalg.LinAlgError` there -- and applied by back substitution.
 
@@ -56,20 +56,24 @@ class DirectSolver(Preconditioner):
 
     Parameters
     ----------
-    backend
-        The registered name of the backend (registry category ``directsolver``).
+    package
+        The registered name of the direct solver package (registry category ``directsolver``).
     **options
-        The options of the backend, e.g. ``reuseSymbolicFactorization=True`` for ``pardiso``.
+        The options of the package, e.g. ``reuseSymbolicFactorization=True`` for ``pardiso``.
     """
 
-    def __init__(self, backend: str = "superlu", **options):
-        self.backend = backend
+    def __init__(self, package: str = "superlu", **options):
+        self.package = package
         self.options = options
-        backendClass, _ = registry.lookup("directsolver", backend)
+        backendClass, _ = registry.lookup("directsolver", package)
         #: The factorizing backend of this component.
         self.solver = backendClass(**options)
         # after the backend: what this component builds is the backend's factorization (see _forget)
         super().__init__()
+
+    @property
+    def containsDirectSolver(self) -> bool:
+        return True
 
     def _forget(self) -> None:
         self.solver.releaseFactorization()
@@ -83,5 +87,5 @@ class DirectSolver(Preconditioner):
 
     def describe(self) -> Description:
         return Description(
-            name="DirectSolver", formula="A⁻¹", latex="A^{-1}", parameters={"backend": self.backend, **self.options}
+            name="DirectSolver", formula="A⁻¹", latex="A^{-1}", parameters={"package": self.package, **self.options}
         )

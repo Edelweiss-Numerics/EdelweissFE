@@ -1,6 +1,7 @@
 #pragma once
 
 #include "amgcl-block-translations.hpp"
+#include "amgcl-chebyshev.hpp"
 #include "amgcl-rigid-body-coarse-level.hpp"
 #include <algorithm>
 #include <amgcl/adapter/block_matrix.hpp>
@@ -8,7 +9,7 @@
 #include <amgcl/amg.hpp>
 #include <amgcl/backend/builtin.hpp>
 #include <amgcl/make_solver.hpp>
-#include <amgcl/preconditioner/runtime.hpp>
+#include <amgcl/relaxation/as_preconditioner.hpp>
 #include <amgcl/relaxation/runtime.hpp>
 #include <amgcl/solver/fgmres.hpp>
 #include <amgcl/solver/lgmres.hpp>
@@ -21,7 +22,6 @@
 #include <limits>
 #include <memory>
 #include <numeric>
-#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -69,6 +69,24 @@ inline boost::property_tree::ptree parseJsonParameters( const char* jsonParamete
 }
 
 /// @brief A copy of the subtree of tree at path, empty if there is none.
+inline boost::property_tree::ptree childOrEmpty( const boost::property_tree::ptree& tree, const std::string& path );
+
+/// @brief The parameters of an AMG hierarchy (amgcl::amg_hierarchy) from a "precond" tree: its class must be amg,
+/// which is then dropped. AMGCL's other classes are not offered: a relaxation alone as the preconditioner
+/// (precond.class relaxation) only on the scalar backend, where LinearSolverT takes it before this; dummy and nested
+/// not at all (the composed solver composes preconditioners itself).
+/// @throws std::runtime_error for another class
+inline boost::property_tree::ptree amgHierarchyParameters( boost::property_tree::ptree precond )
+{
+  const std::string precondClass = precond.get< std::string >( "class", "amg" );
+  if ( precondClass != "amg" )
+    throw std::runtime_error( "precond.class must be amg, got '" + precondClass +
+                              "' (a relaxation alone, precond.class relaxation, is taken on the scalar backend only, "
+                              "backendBlockSize 1)" );
+  precond.erase( "class" );
+  return precond;
+}
+
 inline boost::property_tree::ptree childOrEmpty( const boost::property_tree::ptree& tree, const std::string& path )
 {
   boost::optional< const boost::property_tree::ptree& > child = tree.get_child_optional( path );
@@ -110,14 +128,19 @@ template < typename ValueType, typename BackendType = amgcl::backend::builtin< V
 class LinearSolverT : public AMGCLSolverInterface {
 public:
   typedef BackendType Backend;
-  /// @brief AMGCL's runtime-configured hierarchy (precond.class, precond.coarsening.type, precond.relax.type).
-  typedef amgcl::runtime::preconditioner< Backend > Hierarchy;
+  /// @brief The AMG hierarchy, its coarsening (precond.coarsening.type) and relaxation (precond.relax.type) chosen by
+  /// the parameter tree (amgcl-chebyshev.hpp).
+  typedef amgcl::amg_hierarchy< Backend > Hierarchy;
+  /// @brief A relaxation applied once as the preconditioner (precond.class relaxation), chosen by precond.type.
+  typedef amgcl::relaxation::as_preconditioner< Backend, amgcl::relaxation::runtime_with_chebyshev > Relaxation;
 
   /// @brief The parameter tree; the hierarchy reads its "precond" subtree.
   boost::property_tree::ptree prm;
 
-  /// @brief The hierarchy of the last build().
+  /// @brief The hierarchy of the last build() (precond.class amg, the default), else null.
   std::unique_ptr< Hierarchy > hierarchy_;
+  /// @brief The relaxation of the last build() (precond.class relaxation), else null.
+  std::unique_ptr< Relaxation > relaxation_;
 
   // Near null-space vectors, kept alive here because the property tree only stores a raw pointer to
   // them (AMGCL copies from it when the hierarchy is built). Must outlive every solver construction.
@@ -154,14 +177,23 @@ public:
   /// property tree (including any near null-space set via set_nullspace()). A float backend rounds the values first.
   void build( int n, const int* ptr, const int* col, const double* val ) override
   {
-    int                      nnz = ptr[n];
-    std::vector< ValueType > rounded;
-    const ValueType*         values = valuesAs( val, nnz, rounded );
-    auto                     A      = std::make_tuple( n,
+    int                         nnz = ptr[n];
+    std::vector< ValueType >    rounded;
+    const ValueType*            values  = valuesAs( val, nnz, rounded );
+    auto                        A       = std::make_tuple( n,
                               amgcl::make_iterator_range( ptr, ptr + n + 1 ),
                               amgcl::make_iterator_range( col, col + nnz ),
                               amgcl::make_iterator_range( values, values + nnz ) );
-    hierarchy_.reset( new Hierarchy( A, childOrEmpty( prm, "precond" ) ) );
+    boost::property_tree::ptree precond = childOrEmpty( prm, "precond" );
+    if ( precond.get< std::string >( "class", "amg" ) == "relaxation" ) {
+      precond.erase( "class" );
+      hierarchy_.reset();
+      relaxation_.reset( new Relaxation( A, precond ) );
+    }
+    else {
+      relaxation_.reset();
+      hierarchy_.reset( new Hierarchy( A, amgHierarchyParameters( precond ) ) );
+    }
   }
 
   /// @brief x <- M^-1 rhs: one cycle of the hierarchy of build(). rhs/x are double regardless of ValueType -- for
@@ -172,12 +204,18 @@ public:
     std::vector< ValueType > x_v( n, ValueType( 0 ) );
     auto                     rhs_rng = amgcl::make_iterator_range( rhs_v.data(), rhs_v.data() + n );
     auto                     x_rng   = amgcl::make_iterator_range( x_v.data(), x_v.data() + n );
-    hierarchy_->apply( rhs_rng, x_rng );
+    if ( relaxation_ )
+      relaxation_->apply( rhs_rng, x_rng );
+    else
+      hierarchy_->apply( rhs_rng, x_rng );
     std::copy( x_v.begin(), x_v.end(), x );
   }
 
   /// @brief AMGCL's report of the hierarchy of the last build() (levels, operator complexity, coarse size).
-  std::string report() const override { return hierarchyReport( hierarchy_ ); }
+  std::string report() const override
+  {
+    return relaxation_ ? std::string( "relaxation as the preconditioner\n" ) : hierarchyReport( hierarchy_ );
+  }
 };
 
 // --- float-stored blocks, double hierarchy setup ------------------------------------------------
@@ -326,13 +364,13 @@ template < typename BlockType, typename BackendType = amgcl::backend::builtin< B
 class LinearSolverBlockT : public AMGCLSolverInterface {
 public:
   typedef BackendType Backend;
-  /// @brief AMGCL's runtime-configured hierarchy: precond.class, precond.coarsening.type and
-  /// precond.relax.type are chosen by the parameter tree; the near null-space is the identity block.
-  typedef amgcl::runtime::preconditioner< Backend > Hierarchy;
+  /// @brief The AMG hierarchy, precond.coarsening.type and precond.relax.type chosen by the parameter tree
+  /// (amgcl-chebyshev.hpp); the near null-space is the identity block.
+  typedef amgcl::amg_hierarchy< Backend > Hierarchy;
   /// @brief Smoothed aggregation whose tentative prolongation is built from the translations given to
   /// set_nullspace(); only precond.relax.type stays a runtime choice.
   typedef amgcl::
-    amg< Backend, amgcl::coarsening::smoothed_aggregation_with_translations, amgcl::runtime::relaxation::wrapper >
+    amg< Backend, amgcl::coarsening::smoothed_aggregation_with_translations, amgcl::relaxation::runtime_with_chebyshev >
       TranslationHierarchy;
 
   static const int BlockSize = amgcl::math::static_rows< BlockType >::value;
@@ -419,7 +457,7 @@ public:
   void buildHierarchy( const BlockMatrix& A, int n )
   {
     if ( translations_.empty() ) {
-      hierarchy_.reset( new Hierarchy( A, childOrEmpty( prm, "precond" ) ) );
+      hierarchy_.reset( new Hierarchy( A, amgHierarchyParameters( childOrEmpty( prm, "precond" ) ) ) );
       translationHierarchy_.reset();
     }
     else {
@@ -933,7 +971,7 @@ inline void forceOuterKrylovParameters( boost::property_tree::ptree&,
 /// the component's augmentationVectors) is unaffected.
 ///
 /// tol/maxiter are set on every call on the solver's own public prm member -- the forcing tolerance and the
-/// tolerances of the continuations change per call -- and every call iterates on the EquilibratedSystemT it is
+/// tolerances of the true-residual restarts change per call -- and every call iterates on the EquilibratedSystemT it is
 /// given.
 template < class SolverType >
 class OuterKrylovSolverT : public OuterKrylovSolver {
@@ -956,7 +994,7 @@ public:
   }
 
   /// @brief x <- A^-1 rhs, right-preconditioned by the callback (applyFn/ctx). x holds the initial
-  /// guess on input (a continuation of the Krylov component pre-fills it) and the solution on
+  /// guess on input (a true-residual restart of the Krylov component pre-fills it) and the solution on
   /// output; iters/error return lgmres's iteration count and its own relative residual -- of the
   /// equilibrated system As, or, onUnscaledOperator, of A itself (the right preconditioner then has
   /// to map an A-residual to an A-correction).
@@ -1006,16 +1044,17 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
   throw std::runtime_error( "makeOuterKrylovSolver(): unknown method '" + method + "' (lgmres, fgmres)" );
 }
 
-// --- two-level preconditioners: the p-two-grid (P1) and the rigid-body coarse level -------------------------------
+// --- two-level cycles: on the corner nodes and on the rigid-body modes per aggregate ---------------------------------
 //
-// Two preconditioners of one vector field's diagonal block share the two-level cycle of TwoLevelPreconditioner, in
-// C++ throughout: the p-multigrid two-level cycle of edelweissfe/linsolve/composition/ptwogrid.py
-// (PTwoGridPreconditionerT, its coarse level the P1 corner nodes) and the rigid-body coarse level of
-// edelweissfe/linsolve/composition/rigidbodycoarselevel.py (RigidBodyCoarseLevelPreconditionerT, its coarse level a
+// Two preconditioners of one vector field's diagonal block share the two-level cycle TwoLevelCycle, in
+// C++ throughout: the p-multigrid two-level cycle of edelweissfe/linsolve/composition/cornernodetwolevelcycle.py
+// (CornerNodeTwoLevelCycleT, its coarse level the P1 corner nodes) and the rigid-body coarse level of
+// edelweissfe/linsolve/composition/rigidbodymodestwolevelcycle.py (RigidBodyModesTwoLevelCycleT, its coarse level a
 // smoothed aggregation spanned by the rigid-body modes of the aggregates). The cycle: nu fine Chebyshev sweeps, the
-// fine residual, restriction through P^T, one AMGCL V-cycle on the Galerkin coarse operator A_c = P^T A P,
-// prolongation through P, nu more fine Chebyshev sweeps. Every stage of build() and apply() is OpenMP-threaded;
-// apply() runs without any Python in between.
+// fine residual, restriction through P^T, the coarse solve on the Galerkin coarse operator A_c = P^T A P, prolongation
+// through P, nu more fine Chebyshev sweeps. Every stage of build() and apply() is OpenMP-threaded. The coarse solve of
+// the rigid-body coarse level is one V-cycle of an AMGCL hierarchy, in C++ too; that of the corner-node two-level cycle
+// is a component of the composed solver, called back once per cycle (CallbackCoarseSolve).
 //
 // Dirichlet handling: the field's diagonal block arrives *with* its Dirichlet identity rows (a row
 // whose only nonzero is its diagonal; stored zeros, which the Dirichlet elimination keeps, do not
@@ -1029,29 +1068,25 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
 //     carries nothing but its diagonal, so every residual r_D = 0 - a_DD * 0 = 0, hence every
 //     Chebyshev update leaves x_D = 0. On the free rows, A x = A_FF x_F + A_FD x_D = A_FF x_F,
 //     whether or not the upstream Dirichlet elimination also cleared the columns A_FD;
-//   * the power iteration starts from a vector that is zero on Dirichlet DOFs, which stays zero by
-//     the same argument, so it estimates the spectral radius of A_FF, not of A;
-//   * P has nothing in the rows of Dirichlet fine DOFs (the p-two-grid no entries, the rigid-body coarse level zero
-//     ones) and nothing in the columns of Dirichlet coarse DOFs (the p-two-grid has none of them), so
-//     P^T A P = P_F^T A_FF P_F exactly.
+//   * the spectral radius estimate starts from a vector that is zero on Dirichlet DOFs, and its Krylov space stays
+//     zero there by the same argument, so it estimates the spectral radius of A_FF, not of A;
+//   * P has nothing in the rows of Dirichlet fine DOFs (the corner-node two-level cycle no entries, the rigid-body
+//     coarse level zero ones) and nothing in the columns of Dirichlet coarse DOFs, so P^T A P = P_F^T A_FF P_F exactly,
+//     but for the rows and columns of the Dirichlet coarse DOFs: the corner-node two-level cycle makes them identity
+//     rows of A_c, the Dirichlet rows of its coarse field.
 //
 // This is what makes a node-wise block storage of the fine operator possible at all: a node may
 // be partially constrained, which a free submatrix cannot represent in node-wise blocks, but the
 // full layout always can. For the scalar storage it simply saves the free-submatrix extraction. The
 // result is the free-submatrix cycle up to floating-point summation order (verified in
-// tests/test_ptwogrid.py).
+// tests/test_corner_node_two_level_cycle.py).
 //
-// The fine Chebyshev smoother reimplements amgcl::relaxation::chebyshev's polynomial (same degree,
-// lower/higher conventions, same recurrence; no Jacobi scaling) rather than wrapping it,
-// because AMGCL estimates the spectral radius inside its constructor and offers no way to supply
-// one. Here the estimate is either computed by power iteration -- from a deterministic, thread-count
-// independent start vector -- or handed in, e.g. the value of a previous build on the same field,
-// skipping the 300 sparse matrix-vector products of the estimate altogether (fineSpectralRadius()).
-// The start vector is drawn like the one of AMGCL's own power iteration on a single thread (mt19937
-// seeded 0, uniform on [-1, 1]), but only for the free DOFs, in order -- AMGCL draws one per row, so the
-// two coincide only without Dirichlet DOFs. Unlike AMGCL's (per-thread seeds), the estimate is independent
-// of the thread count and reproducible run to run. (AMGCL's Chebyshev default, power_iters = 0, does no power
-// iteration at all: it bounds the radius by Gershgorin's theorem.)
+// The fine Chebyshev smoother applies the polynomial of every Chebyshev smoother of EdelweissFE
+// (EdelweissFE::linsolve::ChebyshevPolynomial, amgcl-chebyshev.hpp; no Jacobi scaling) in a loop of its own rather than
+// through amgcl::relaxation::chebyshev_with_estimate, because it works on the fine level's own storage (node-wise
+// blocks, float). Its spectral radius is the estimate every Chebyshev smoother of EdelweissFE uses
+// (amgcl-spectral-radius.hpp: Arnoldi steps from a start vector seeded per row, independent of the thread count), on
+// the free rows: the start vector is zero on the Dirichlet rows, which the cycle keeps zero.
 
 /// The fine smoother as the two-level cycle sees it, independent of the operator's storage format
 /// (scalar entries or node-wise B x B blocks) and value type (double or float). Vectors are always plain
@@ -1092,7 +1127,7 @@ inline void twoLevelFineResidual( const amgcl::backend::crs< MatrixValueType, in
 /// double B x B block); MatrixValueType is how the operator is stored for the smoother and the residual:
 /// ValueType itself, or its float counterpart -- half the bytes per entry, the dominant traffic of
 /// the cycle. The spectral-radius estimate only ever runs on a double operator: a float level is made
-/// from a double one (makeFloatCopy()), which has estimated or re-checked the radius before.
+/// from a double one (makeFloatCopy()), which has estimated the radius before.
 template < typename ValueType, typename MatrixValueType = ValueType >
 class TwoLevelFineLevelT : public TwoLevelFineSmoother {
 public:
@@ -1109,10 +1144,8 @@ public:
   std::shared_ptr< Matrix > A_;
   /// @brief Work vectors of the Chebyshev iteration (residual r and search direction p), one entry per scalar row.
   std::vector< double > r_, p_;
-  /// @brief Chebyshev polynomial degree, i.e. matrix products per smoothing sweep.
-  unsigned degree_ = 0;
-  /// @brief Centre d and half-width c of the Chebyshev interval [d - c, d + c] (setPolynomial()).
-  double d_ = 0.0, c_ = 0.0;
+  /// @brief The coefficients alpha_k and beta_k of the Chebyshev steps, one step per matrix product (setPolynomial()).
+  std::vector< double > alpha_, beta_;
 
   /// @brief Take over the operator A (already in this storage format).
   void setOperator( std::shared_ptr< Matrix > A )
@@ -1129,97 +1162,32 @@ public:
   {
     std::unique_ptr< TwoLevelFineLevelT< ValueType, FloatValueType > > level(
       new TwoLevelFineLevelT< ValueType, FloatValueType >() );
-    level->A_      = convertedCopy< FloatValueType >( *A_ );
-    level->degree_ = degree_;
-    level->d_      = d_;
-    level->c_      = c_;
+    level->A_     = convertedCopy< FloatValueType >( *A_ );
+    level->alpha_ = alpha_;
+    level->beta_  = beta_;
     level->r_.assign( r_.size(), 0.0 );
     level->p_.assign( p_.size(), 0.0 );
     return level;
   }
 
-  /// @brief Set up the Chebyshev polynomial for the given spectral radius.
-  /// @param lower, higher amgcl::relaxation::chebyshev's own `float` parameters, kept as `float` so
-  /// the ellipse bounds round exactly as AMGCL's do.
-  void setPolynomial( unsigned degree, float lower, float higher, double spectralRadius )
+  /// @brief Set up the Chebyshev polynomial's coefficients for the given spectral radius.
+  void setPolynomial( const EdelweissFE::linsolve::ChebyshevPolynomial& polynomial, double spectralRadius )
   {
-    degree_   = degree;
-    double hi = spectralRadius;
-    double lo = hi * lower;
-    hi *= higher;
-    d_ = 0.5 * ( hi + lo );
-    c_ = 0.5 * ( hi - lo );
+    polynomial.coefficients( spectralRadius, alpha_, beta_ );
   }
 
-  /// @brief Power iteration for the spectral radius of A: the loop of
-  /// amgcl::backend::spectral_radius (estimate sum_i |(A b)_i b_i| per scalar component, b normalized),
-  /// with two differences that make the estimate a deterministic function of the matrix alone: the
-  /// start vector is the caller's instead of per-thread random numbers, and the reductions run over a
-  /// fixed partition of the rows, summed in order, instead of whichever order the threads finish in.
-  /// Accumulating per scalar component also makes a block operator's estimate the scalar one's, up to
-  /// summation order. The last normalized iterate -- the estimate of the dominant eigenvector -- is
-  /// returned in dominantVector, as the start of a later, short re-check of the estimate.
-  double estimateSpectralRadius( int                          powerIters,
-                                 const std::vector< double >& startVector,
-                                 std::vector< double >&       dominantVector ) const
+  /// @brief The spectral radius estimate of A (amgcl-spectral-radius.hpp): estimate.steps Arnoldi steps from the start
+  /// vector seeded per row, zero on the rows with isDirichlet set -- which the cycle keeps zero, so that the estimate
+  /// is that of the free rows.
+  /// @throws std::runtime_error for an estimate that is not positive and finite
+  double estimateSpectralRadius( const EdelweissFE::linsolve::SpectralRadiusEstimate& estimate,
+                                 const char*                                          isDirichlet ) const
   {
-    const Matrix&   A       = *A_;
-    const ptrdiff_t n       = static_cast< ptrdiff_t >( A.nrows );
-    const ptrdiff_t nChunks = std::min< ptrdiff_t >( n, 4096 );
-    const ptrdiff_t chunk   = ( n + nChunks - 1 ) / nChunks;
-
-    std::vector< double > b0Scalar( startVector );
-    double                startNormSquared = 0.0;
-    for ( size_t i = 0; i < b0Scalar.size(); ++i )
-      startNormSquared += b0Scalar[i] * b0Scalar[i];
-    const double startScale = 1.0 / std::sqrt( startNormSquared );
-    for ( size_t i = 0; i < b0Scalar.size(); ++i )
-      b0Scalar[i] = startScale * b0Scalar[i];
-
-    std::vector< double > b1Scalar( b0Scalar.size(), 0.0 );
-    RhsType*              b0 = reinterpret_cast< RhsType* >( b0Scalar.data() );
-    RhsType*              b1 = reinterpret_cast< RhsType* >( b1Scalar.data() );
-    std::vector< double > chunkNorm( nChunks ), chunkRadius( nChunks );
-
-    double radius = 0.0;
-    for ( int iter = 0; iter < powerIters; ) {
-#pragma omp parallel for schedule( static )
-      for ( ptrdiff_t k = 0; k < nChunks; ++k ) {
-        double localNorm = 0.0, localRadius = 0.0;
-        for ( ptrdiff_t i = k * chunk, e = std::min( n, ( k + 1 ) * chunk ); i < e; ++i ) {
-          RhsType s = amgcl::math::zero< RhsType >();
-          for ( int j = A.ptr[i], end = A.ptr[i + 1]; j < end; ++j )
-            s += A.val[j] * b0[A.col[j]];
-          const double* sScalar  = reinterpret_cast< const double* >( &s );
-          const double* b0Scalar = reinterpret_cast< const double* >( &b0[i] );
-          for ( int component = 0; component < BlockSize; ++component ) {
-            localNorm += sScalar[component] * sScalar[component];
-            localRadius += std::abs( sScalar[component] * b0Scalar[component] );
-          }
-          b1[i] = s;
-        }
-        chunkNorm[k]   = localNorm;
-        chunkRadius[k] = localRadius;
-      }
-      double b1NormSquared = 0.0;
-      radius               = 0.0;
-      for ( ptrdiff_t k = 0; k < nChunks; ++k ) {
-        b1NormSquared += chunkNorm[k];
-        radius += chunkRadius[k];
-      }
-      const double b1Scale = 1.0 / std::sqrt( b1NormSquared );
-#pragma omp parallel for
-      for ( ptrdiff_t i = 0; i < n; ++i )
-        b0[i] = b1Scale * b1[i];
-      ++iter;
-    }
-    dominantVector.swap( b0Scalar );
-    return radius < 0 ? 2.0 : radius;
+    return EdelweissFE::linsolve::estimatedSpectralRadius( *A_, estimate, /*inverseDiagonal=*/nullptr, isDirichlet );
   }
 
-  /// @brief `degree_` Chebyshev steps on A x = b, continuing from the given x -- the recurrence of
-  /// amgcl::relaxation::chebyshev::solve(), step for step, with two economies that leave the result
-  /// bitwise unchanged:
+  /// @brief The Chebyshev steps on A x = b, continuing from the given x -- as amgcl::relaxation::chebyshev::solve()
+  /// applies them, step for step, with two economies that leave the result bitwise unchanged:
   ///   * from x = 0 (xIsZero, the pre-smoothing), the first residual is b itself -- b - A 0 is b
   ///     exactly for a finite A -- so its sparse product is skipped, and x = 0 + p is written as p
   ///     (identical, up to the sign of a zero entry);
@@ -1227,26 +1195,14 @@ public:
   ///     the same arithmetic per entry.
   void smooth( const double* b, double* x, bool xIsZero ) override
   {
-    const ptrdiff_t n     = static_cast< ptrdiff_t >( r_.size() );
-    double          alpha = 0.0, beta = 0.0;
-    for ( unsigned k = 0; k < degree_; ++k ) {
+    const ptrdiff_t n = static_cast< ptrdiff_t >( r_.size() );
+    for ( size_t k = 0; k < alpha_.size(); ++k ) {
       const bool    fromZero = xIsZero && k == 0;
       const double* residual = fromZero ? b : r_.data();
       if ( !fromZero )
         twoLevelFineResidual( *A_, b, x, r_.data() );
-      if ( k == 0 ) {
-        alpha = 1.0 / d_;
-        beta  = 0.0;
-      }
-      else if ( k == 1 ) {
-        alpha = 2 * d_ * ( 1.0 / ( 2 * d_ * d_ - c_ * c_ ) );
-        beta  = alpha * d_ - 1.0;
-      }
-      else {
-        alpha = 1.0 / ( d_ - 0.25 * alpha * c_ * c_ );
-        beta  = alpha * d_ - 1.0;
-      }
-      double* p = p_.data();
+      const double alpha = alpha_[k], beta = beta_[k];
+      double*      p = p_.data();
       if ( fromZero ) {
 #pragma omp parallel for
         for ( ptrdiff_t i = 0; i < n; ++i ) {
@@ -1349,7 +1305,7 @@ public:
   virtual ScalarCsr prolongationCsr() const = 0;
 };
 
-/// @brief P and P^T of scalar entries in double, applied with AMGCL's spmv: the p-two-grid's.
+/// @brief P and P^T of scalar entries in double, applied with AMGCL's spmv: the corner-node two-level cycle's.
 class ScalarTransferOperators : public TransferOperators {
 public:
   /// @brief The storage of P and P^T.
@@ -1377,6 +1333,99 @@ public:
 
 private:
   std::shared_ptr< Matrix > P_, R_;
+};
+
+/// @brief The Galerkin coarse operator P^T (A P), in the order AMGCL's own coarsening forms it
+/// (amgcl/coarsening/detail/galerkin.hpp), columns sorted per row. Both products are AMGCL's threaded Saad SpGEMM at
+/// every thread count: amgcl::backend::product switches to its row-merge SpGEMM above 16 threads, which is slower than
+/// the Saad one on the operators of the two-level cycles.
+/// @param A the fine operator
+/// @param P the prolongation
+/// @param PT its transpose
+/// @return P^T A P
+inline std::shared_ptr< amgcl::backend::crs< double, int, int > > galerkinProduct(
+  const amgcl::backend::crs< double, int, int >& A,
+  const amgcl::backend::crs< double, int, int >& P,
+  const amgcl::backend::crs< double, int, int >& PT )
+{
+  typedef amgcl::backend::crs< double, int, int > Matrix;
+  Matrix                                          AP;
+  amgcl::backend::spgemm_saad( A, P, AP, false );
+  auto PTAP = std::make_shared< Matrix >();
+  amgcl::backend::spgemm_saad( PT, AP, *PTAP, true );
+  return PTAP;
+}
+
+/// @brief The products with a prolongation P that Python gives (CoarseCorrection in composition/combinators.py): P and
+/// P^T stored once, the restriction P^T r and the prolongation P z with AMGCL's threaded spmv (ScalarTransferOperators,
+/// as in the two-level cycles), and the Galerkin coarse operator P^T A P with its threaded SpGEMM (galerkinProduct).
+/// The same products SciPy computes, on every thread instead of one: equal up to the order of the sums.
+class Prolongation {
+public:
+  typedef amgcl::backend::crs< double, int, int > ScalarMatrix;
+
+  /// @brief Store P, nFine x nCoarse in scalar CSR arrays, and its transpose, each copied with an OpenMP-parallel first
+  /// touch (see TwoLevelCycle::copiedFineOperator for why).
+  void build( int nFine, int nCoarse, const int* ptr, const int* col, const double* val )
+  {
+    const int nnz = ptr[nFine];
+    P_            = std::make_shared< ScalarMatrix >( nFine,
+                                           nCoarse,
+                                           amgcl::make_iterator_range( ptr, ptr + nFine + 1 ),
+                                           amgcl::make_iterator_range( col, col + nnz ),
+                                           amgcl::make_iterator_range( val, val + nnz ) );
+    PT_           = amgcl::backend::transpose( *P_ );
+    transfer_.reset( new ScalarTransferOperators( P_, PT_ ) );
+  }
+
+  /// @brief The number of fine rows of P.
+  int nFine() const { return P_ ? static_cast< int >( P_->nrows ) : 0; }
+  /// @brief The number of coarse columns of P.
+  int nCoarse() const { return P_ ? static_cast< int >( P_->ncols ) : 0; }
+
+  /// @brief coarse <- P^T fine.
+  void restrict( const double* fine, double* coarse ) const
+  {
+    checkBuilt();
+    transfer_->restrict( fine, coarse );
+  }
+
+  /// @brief fine <- P coarse.
+  void prolongate( const double* coarse, double* fine ) const
+  {
+    checkBuilt();
+    transfer_->prolongate( coarse, fine, /*addToFine=*/false );
+  }
+
+  /// @brief The Galerkin coarse operator P^T A P of A (nFine() rows), nCoarse() x nCoarse() in scalar CSR arrays.
+  ScalarCsr galerkinOperator( int n, const int* ptr, const int* col, const double* val ) const
+  {
+    checkBuilt();
+    if ( n != nFine() ) {
+      throw std::runtime_error( "Prolongation::galerkinOperator(): the matrix has " + std::to_string( n ) +
+                                " rows, P " + std::to_string( nFine() ) );
+    }
+    const int    nnz = ptr[n];
+    ScalarMatrix A( n,
+                    n,
+                    amgcl::make_iterator_range( ptr, ptr + n + 1 ),
+                    amgcl::make_iterator_range( col, col + nnz ),
+                    amgcl::make_iterator_range( val, val + nnz ) );
+    return scalarCsr( *galerkinProduct( A, *P_, *PT_ ) );
+  }
+
+private:
+  /// @brief Throw unless build() has been called.
+  void checkBuilt() const
+  {
+    if ( !P_ )
+      throw std::runtime_error( "Prolongation: no P given -- call build() first" );
+  }
+
+  /// @brief P and P^T.
+  std::shared_ptr< ScalarMatrix > P_, PT_;
+  /// @brief Their products with vectors.
+  std::unique_ptr< ScalarTransferOperators > transfer_;
 };
 
 /// @brief P and P^T of non-square blocks -- N x K blocks of P, K x N of P^T -- stored in the blocks' value type
@@ -1425,21 +1474,63 @@ std::unique_ptr< TransferOperators > blockTransferOperators( const PMatrix&     
     new BlockTransferOperatorsT< amgcl::static_matrix< double, N, K >, amgcl::static_matrix< double, K, N > >( P, R ) );
 }
 
-/// @brief The AMGCL hierarchy below the coarse level of a two-level cycle, in one value type: the cycle hands it double
-/// vectors whatever its storage, as it does to TransferOperators.
-class CoarseHierarchy {
+/// @brief The coarse solve of a two-level cycle, x <- A_c^-1 rhs approximately: the cycle hands it double vectors
+/// whatever its storage, as it does to TransferOperators.
+class CoarseSolve {
 public:
-  virtual ~CoarseHierarchy() {}
+  virtual ~CoarseSolve() {}
 
-  /// @brief x <- one V-cycle of the hierarchy on the right-hand side rhs (as many entries as the coarse level has
-  /// DOFs; AMGCL's cycle overwrites x itself).
+  /// @brief x <- A_c^-1 rhs, approximately (as many entries as the coarse level has DOFs; x is overwritten).
   virtual void apply( const double* rhs, double* x ) = 0;
 
-  /// @brief AMGCL's report of the hierarchy.
+  /// @brief What the coarse solve is, for the report of the cycle.
   virtual std::string report() const = 0;
+};
 
+/// @brief The coarse solve as one V-cycle of an AMGCL hierarchy on the coarse operator, in one value type.
+class CoarseHierarchy : public CoarseSolve {
+public:
   /// @brief The scalar CSR arrays of the operator the hierarchy is built on, as it holds it, for inspection.
   virtual ScalarCsr operatorCsr() const = 0;
+};
+
+/// @brief The coarse solve as a callback into Python: a component of the composed solver, e.g.
+/// DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())) on the coarse operator of the corner-node
+/// two-level cycle. The callback has the signature of the preconditioner of the outer Krylov solve (PyPrecondApplyFn):
+/// x <- M^-1 rhs. It reads the callback from the cycle at every apply(), so that a coarse solve set (again) after the
+/// build is the one called, and a replaced one never is.
+class CallbackCoarseSolve : public CoarseSolve {
+public:
+  /// @param applyFn, ctx the cycle's callback and its opaque context, read at every apply()
+  /// @param n the number of coarse DOFs
+  CallbackCoarseSolve( const PyPrecondApplyFn& applyFn, void* const& ctx, int n )
+    : applyFn_( applyFn ), ctx_( ctx ), n_( n )
+  {
+  }
+
+  /// @throw std::runtime_error if no coarse solve is set, or if the callback failed (a Python exception, which the
+  /// caller keeps and re-raises)
+  void apply( const double* rhs, double* x ) override
+  {
+    if ( applyFn_ == nullptr )
+      throw std::runtime_error( "two-level cycle: no coarse solve -- call setCoarseSolve() before the first apply" );
+    if ( applyFn_( ctx_, n_, rhs, x ) != 0 )
+      throw std::runtime_error( "two-level cycle: the coarse solve (a callback) failed" );
+  }
+
+  std::string report() const override
+  {
+    return "coarse solve: a component of the composed solver on the " + std::to_string( n_ ) +
+           " coarse DOFs (see its own statistics)\n";
+  }
+
+private:
+  /// @brief The cycle's callback.
+  const PyPrecondApplyFn& applyFn_;
+  /// @brief The callback's opaque context.
+  void* const& ctx_;
+  /// @brief The number of coarse DOFs.
+  int n_;
 };
 
 /// @brief The hierarchy in Real: double, or float -- AMGCL's own single-precision backend, whose setup (the power
@@ -1451,7 +1542,7 @@ public:
   /// @param prm the hierarchy's AMGCL preconditioner tree
   template < class Matrix >
   CoarseHierarchyT( const Matrix& A, const boost::property_tree::ptree& prm )
-    : solver_( A, prm ), rhs_( amgcl::backend::rows( A ) ), x_( amgcl::backend::rows( A ) )
+    : solver_( A, amgHierarchyParameters( prm ) ), rhs_( amgcl::backend::rows( A ) ), x_( amgcl::backend::rows( A ) )
   {
   }
 
@@ -1479,59 +1570,29 @@ public:
   ScalarCsr operatorCsr() const override { return scalarCsr( solver_.system_matrix() ); }
 
 private:
-  amgcl::runtime::preconditioner< amgcl::backend::builtin< Real > > solver_;
+  amgcl::amg_hierarchy< amgcl::backend::builtin< Real > > solver_;
   /// @brief The right-hand side and the correction in Real.
   std::vector< Real > rhs_, x_;
 };
 
-/// @brief How the fine spectral radius of a two-level cycle was arrived at, see
-/// TwoLevelPreconditioner::chooseFineSpectralRadius().
-enum class FineSpectralRadiusSource {
-  /// @brief Estimated in full by power iteration.
-  Estimated,
-  /// @brief Supplied, and kept by the re-check.
-  Supplied,
-  /// @brief Supplied, but raised to the re-check's estimate.
-  Raised,
-  /// @brief Supplied, but the re-check found the operator stiffened beyond the smoother's margin: estimated in full.
-  ReEstimated
-};
-
-/// @brief The name of a FineSpectralRadiusSource, as Python reports it.
-inline std::string fineSpectralRadiusSourceName( FineSpectralRadiusSource source )
-{
-  switch ( source ) {
-  case FineSpectralRadiusSource::Estimated: return "estimated";
-  case FineSpectralRadiusSource::Supplied: return "supplied";
-  case FineSpectralRadiusSource::Raised: return "raised";
-  case FineSpectralRadiusSource::ReEstimated: return "re-estimated";
-  }
-  return "unknown";
-}
-
-/// @brief The parameters of the two-level cycle (TwoLevelPreconditioner), read from the parameter tree of both
+/// @brief The parameters of the two-level cycle (TwoLevelCycle), read from the parameter tree of both
 /// two-level preconditioners in one spelling, AMGCL's (fromTree()): the fine smoother is the Chebyshev relaxation of
 /// the field's AMGCL tree, with AMGCL's own defaults for what the tree leaves out, so the defaults of EdelweissFE live
 /// in one place, the default trees in Python (composition/amg.py's defaultFieldTree).
 struct TwoLevelCycleParameters {
   /// @brief The fine Chebyshev sweeps before and after the coarse correction: npre and npost.
   int nuPre, nuPost;
-  /// @brief The fine Chebyshev degree: relax.degree.
-  int fineDegree;
-  /// @brief The fine Chebyshev interval relative to the spectral radius: relax.lower and relax.higher.
-  float fineLower, fineHigher;
-  /// @brief The power iterations of the full estimate of the fine spectral radius (relax.power_iters) and of the
-  /// re-check of a supplied one (fineRecheckIters).
-  int finePowerIters, fineRecheckIters;
-  /// @brief The relative rise of the fine spectral radius the re-check tolerates (fineRecheckTolerance).
-  double fineRecheckTolerance;
+  /// @brief The fine Chebyshev polynomial: relax.degree, relax.lower and relax.higher.
+  EdelweissFE::linsolve::ChebyshevPolynomial finePolynomial;
+  /// @brief How the fine spectral radius is estimated: relax.spectralRadiusSteps.
+  EdelweissFE::linsolve::SpectralRadiusEstimate fineSpectralRadius;
   /// @brief The value types of the fine level (and of P and P^T), backendPrecision, and of the coarse hierarchy,
   /// coarseHierarchyPrecision: "double" or "float".
   std::string fineValueType, coarseValueType;
 
-  /// @brief The parameters of a two-level preconditioner's tree: backendPrecision, coarseHierarchyPrecision,
-  /// fineRecheckIters and fineRecheckTolerance at its top, and the field's AMGCL tree under "amgcl", whose relax (a
-  /// Chebyshev polynomial without Jacobi scaling), npre and npost are the fine smoother.
+  /// @brief The parameters of a two-level preconditioner's tree: backendPrecision and coarseHierarchyPrecision at its
+  /// top, and the field's AMGCL tree under "amgcl", whose relax (a Chebyshev polynomial without Jacobi scaling, in the
+  /// spelling of amgcl::relaxation::chebyshev_with_estimate), npre and npost are the fine smoother.
   /// @param name the preconditioner's name in the messages
   /// @throws std::runtime_error for a smoother that is not an unscaled Chebyshev polynomial, or parameters that cannot
   /// be used (check())
@@ -1545,23 +1606,25 @@ struct TwoLevelCycleParameters {
                                 ( relaxType ? *relaxType : std::string( "spai0 (AMGCL's default)" ) ) );
     }
     relax.erase( "type" );
-    const amgcl::relaxation::chebyshev< amgcl::backend::builtin< double > >::params chebyshev( relax );
+    amgcl::relaxation::chebyshev_with_estimate< amgcl::backend::builtin< double > >::params chebyshev;
+    try {
+      chebyshev = amgcl::relaxation::chebyshev_with_estimate< amgcl::backend::builtin< double > >::params( relax );
+    }
+    catch ( const std::invalid_argument& error ) {
+      throw std::runtime_error( name + ": " + error.what() );
+    }
     if ( chebyshev.scale ) {
       throw std::runtime_error( name +
                                 ": the fine Chebyshev smoother has no Jacobi scaling, relax.scale must be false" );
     }
     TwoLevelCycleParameters cycle;
     // AMGCL's defaults of amg::params for the sweeps
-    cycle.nuPre                = tree.get( "npre", 1 );
-    cycle.nuPost               = tree.get( "npost", 1 );
-    cycle.fineDegree           = static_cast< int >( chebyshev.degree );
-    cycle.fineLower            = chebyshev.lower;
-    cycle.fineHigher           = chebyshev.higher;
-    cycle.finePowerIters       = chebyshev.power_iters;
-    cycle.fineRecheckIters     = prm.get( "fineRecheckIters", 15 );
-    cycle.fineRecheckTolerance = prm.get( "fineRecheckTolerance", 0.01 );
-    cycle.fineValueType        = prm.get( "backendPrecision", std::string( "double" ) );
-    cycle.coarseValueType      = prm.get( "coarseHierarchyPrecision", std::string( "double" ) );
+    cycle.nuPre              = tree.get( "npre", 1 );
+    cycle.nuPost             = tree.get( "npost", 1 );
+    cycle.finePolynomial     = chebyshev.polynomial;
+    cycle.fineSpectralRadius = chebyshev.spectralRadius;
+    cycle.fineValueType      = prm.get( "backendPrecision", std::string( "double" ) );
+    cycle.coarseValueType    = prm.get( "coarseHierarchyPrecision", std::string( "double" ) );
     cycle.check( name );
     return cycle;
   }
@@ -1575,50 +1638,32 @@ struct TwoLevelCycleParameters {
       throw std::runtime_error( name + ": npre and npost must not be negative, got " + std::to_string( nuPre ) +
                                 " and " + std::to_string( nuPost ) );
     }
-    if ( fineDegree < 1 ) {
-      throw std::runtime_error( name + ": relax.degree must be at least 1, got " + std::to_string( fineDegree ) );
-    }
     if ( fineValueType != "double" && fineValueType != "float" ) {
       throw std::runtime_error( name + ": backendPrecision must be double or float, got " + fineValueType );
     }
     if ( coarseValueType != "double" && coarseValueType != "float" ) {
       throw std::runtime_error( name + ": coarseHierarchyPrecision must be double or float, got " + coarseValueType );
     }
-    // the Chebyshev interval is [lower, higher] times the spectral radius: it must start above zero and reach at least
-    // the radius itself, or the smoother amplifies the highest modes
-    if ( !( fineLower > 0.0f && fineLower < 1.0f ) || !( fineHigher >= 1.0f ) ) {
-      throw std::runtime_error( name + ": needs 0 < relax.lower < 1 <= relax.higher, got " +
-                                std::to_string( fineLower ) + " and " + std::to_string( fineHigher ) );
-    }
-    if ( finePowerIters < 1 ) {
-      throw std::runtime_error(
-        name +
-        ": relax.power_iters must be at least 1 (the fine smoother estimates the spectral radius "
-        "by power iteration), got " +
-        std::to_string( finePowerIters ) );
-    }
-    if ( fineRecheckIters < 0 || !( fineRecheckTolerance >= 0.0 ) ) {
-      throw std::runtime_error( name + ": needs fineRecheckIters >= 0 and fineRecheckTolerance >= 0" );
-    }
   }
 };
 
-/// The two-level cycle of one vector field's equilibrated diagonal block A, shared by the p-two-grid
-/// (PTwoGridPreconditionerT) and the rigid-body coarse level (RigidBodyCoarseLevelPreconditionerT), see the comment
+/// The two-level cycle of one vector field's equilibrated diagonal block A, shared by the corner-node two-level cycle
+/// (CornerNodeTwoLevelCycleT) and the rigid-body coarse level (RigidBodyModesTwoLevelCycleT), see the comment
 /// block above: Chebyshev smoothing on A and the coarse correction
 ///
 ///   x <- x + P A_c^-1 P^T (r - A x),   A_c = P^T A P, the Galerkin coarse operator,
 ///
-/// with A_c^-1 one V-cycle of an AMGCL hierarchy, nuPre smoothing sweeps before it and nuPost after. A derived class
-/// builds the prolongation P, A_c and the near null-space of A_c, and hands over P and P^T (TransferOperators); this
-/// class does everything else: the Dirichlet rows, the fine level and its spectral radius, the coarse hierarchy and the
-/// cycle (apply()).
-class TwoLevelPreconditioner {
+/// with A_c^-1 a CoarseSolve, nuPre smoothing sweeps before it and nuPost after. A derived class builds the
+/// prolongation P, A_c and the coarse solve -- one V-cycle of an AMGCL hierarchy (buildCoarseHierarchy(), the
+/// rigid-body coarse level), or a callback into a component of the composed solver (the corner-node two-level cycle) --
+/// and hands over P and P^T (TransferOperators); this class does everything else: the Dirichlet rows, the fine level
+/// and its spectral radius, and the cycle (apply()).
+class TwoLevelCycle {
 public:
   typedef amgcl::backend::crs< double, int, int > ScalarMatrix;
   typedef std::chrono::steady_clock               Clock;
 
-  virtual ~TwoLevelPreconditioner() {}
+  virtual ~TwoLevelCycle() {}
 
   /// @brief The parameter tree given to the constructor, where the derived class reads its parameters from.
   boost::property_tree::ptree prm;
@@ -1628,8 +1673,8 @@ public:
   std::unique_ptr< TwoLevelFineSmoother > fine_;
   /// @brief P and P^T, in the value type of the fine level; none without a coarse level.
   std::unique_ptr< TransferOperators > transfer_;
-  /// @brief The coarse AMGCL hierarchy, in cycle_.coarseValueType; none without a coarse level.
-  std::unique_ptr< CoarseHierarchy > coarse_;
+  /// @brief The coarse solve; none without a coarse level.
+  std::unique_ptr< CoarseSolve > coarse_;
   /// @brief Per DOF, whether its row is a Dirichlet row (dirichletRowMask()).
   std::vector< char > isDirichlet_;
   /// @brief The Dirichlet rows.
@@ -1657,11 +1702,6 @@ public:
 
   /// @brief The fine spectral radius the Chebyshev smoother was built with (0 for a trivial field).
   double fineSpectralRadius_ = 0.0;
-  /// @brief The last iterate of the power iteration: the estimate of the dominant eigenvector, the start of a later
-  /// re-check (empty if the radius was used as supplied).
-  std::vector< double > fineDominantVector_;
-  /// @brief How the last build arrived at its fine spectral radius.
-  FineSpectralRadiusSource fineSpectralRadiusSource_ = FineSpectralRadiusSource::Estimated;
   /// @brief Work vectors of the cycle.
   std::vector< double > rhs_, res_, coarseRhs_, coarseX_;
 
@@ -1764,10 +1804,6 @@ public:
 
   /// @brief The fine spectral radius the Chebyshev smoother was built with (0 for a trivial field).
   double fineSpectralRadius() const { return fineSpectralRadius_; }
-  /// @brief How the last build arrived at it, by name (fineSpectralRadiusSourceName()).
-  std::string fineSpectralRadiusSource() const { return fineSpectralRadiusSourceName( fineSpectralRadiusSource_ ); }
-  /// @brief The estimate of the fine operator's dominant eigenvector (empty if the radius was used as supplied).
-  const std::vector< double >& fineDominantVector() const { return fineDominantVector_; }
   /// @brief The number of coarse DOFs, the size of the Galerkin operator.
   int nCoarse() const { return nCoarse_; }
 
@@ -1783,15 +1819,23 @@ public:
     return none;
   }
 
-  /// @brief The scalar CSR arrays of the Galerkin coarse operator as the coarse hierarchy holds it, for inspection.
+  /// @brief The scalar CSR arrays of the Galerkin coarse operator as the coarse AMGCL hierarchy holds it, for
+  /// inspection; empty without a coarse level.
+  /// @throw std::runtime_error if the coarse solve is no AMGCL hierarchy of this cycle (the corner-node cycle's is a
+  /// component of the composed solver, which holds its operator)
   ScalarCsr coarseOperatorCsr() const
   {
     checkBuilt();
-    if ( coarse_ )
-      return coarse_->operatorCsr();
-    ScalarCsr none;
-    none.ptr.assign( 1, 0 );
-    return none;
+    if ( !coarse_ ) {
+      ScalarCsr none;
+      none.ptr.assign( 1, 0 );
+      return none;
+    }
+    const auto* hierarchy = dynamic_cast< const CoarseHierarchy* >( coarse_.get() );
+    if ( !hierarchy )
+      throw std::runtime_error( "the coarse solve of this two-level cycle is a component of the composed solver, which "
+                                "holds the coarse operator; this cycle holds none" );
+    return hierarchy->operatorCsr();
   }
 
   /// @brief The coarse level's AMGCL hierarchy report.
@@ -1800,11 +1844,11 @@ public:
     checkBuilt();
     if ( trivial_ )
       return name_ + ": no free DOF, the preconditioner is the identity\n";
-    return coarseHierarchyReport();
+    return coarseSolveReport();
   }
 
 protected:
-  /// @brief The preconditioner's name in messages, e.g. "ptwogrid".
+  /// @brief The preconditioner's name in messages, e.g. "cornerNodeTwoLevelCycle".
   std::string name_;
   /// @brief The parameters of the cycle, checked as the preconditioner is created.
   const TwoLevelCycleParameters cycle_;
@@ -1812,17 +1856,28 @@ protected:
   /// @param parameters the parameter tree, kept as prm for the derived class; the parameters of the cycle are read from
   /// it (TwoLevelCycleParameters::fromTree())
   /// @param name the preconditioner's name in messages
-  /// @throws std::runtime_error for cycle parameters that cannot be used
-  TwoLevelPreconditioner( const boost::property_tree::ptree& parameters, const std::string& name )
+  /// @param keys the top-level keys of the tree the preconditioner reads: any other key is rejected
+  /// @throws std::runtime_error for an unknown key, or cycle parameters that cannot be used
+  TwoLevelCycle( const boost::property_tree::ptree& parameters,
+                 const std::string&                 name,
+                 const std::vector< std::string >&  keys )
     : prm( parameters ), name_( name ), cycle_( TwoLevelCycleParameters::fromTree( parameters, name ) )
   {
+    for ( const auto& entry : parameters ) {
+      if ( std::find( keys.begin(), keys.end(), entry.first ) == keys.end() ) {
+        std::string valid;
+        for ( const std::string& key : keys )
+          valid += ( valid.empty() ? "" : ", " ) + key;
+        throw std::runtime_error( name + ": unknown parameter \"" + entry.first + "\"; valid: " + valid );
+      }
+    }
   }
 
   /// @brief Adds the wall time of its scope to the build stage `name` (setupSeconds_, appended if it is new): a stage
   /// of a build is a scope, `{ SetupStage stage( *this, "aggregates" ); ... }`, or a function that opens with one.
   class SetupStage {
   public:
-    SetupStage( TwoLevelPreconditioner& preconditioner, const std::string& name )
+    SetupStage( TwoLevelCycle& preconditioner, const std::string& name )
       : preconditioner_( preconditioner ), name_( name ), start_( Clock::now() )
     {
     }
@@ -1831,7 +1886,7 @@ protected:
     SetupStage& operator=( const SetupStage& ) = delete;
 
   private:
-    TwoLevelPreconditioner& preconditioner_;
+    TwoLevelCycle&          preconditioner_;
     const std::string       name_;
     const Clock::time_point start_;
   };
@@ -1865,10 +1920,8 @@ protected:
     coarseNullspace_.clear();
     coarseNullspaceColumns_ = 0;
     fine_.reset();
-    fineSpectralRadius_       = 0.0;
-    fineSpectralRadiusSource_ = FineSpectralRadiusSource::Estimated;
-    fineDominantVector_.clear();
-    nCoarse_ = 0;
+    fineSpectralRadius_ = 0.0;
+    nCoarse_            = 0;
     if ( trivial_ )
       built_ = true;
     return trivial_;
@@ -1921,34 +1974,26 @@ protected:
       coarsePrm.put( "coarsening.nullspace.rows", nullspaceRows );
       coarsePrm.put( "coarsening.nullspace.B", coarseNullspace_.data() );
     }
+    std::unique_ptr< CoarseHierarchy > hierarchy;
     if ( cycle_.coarseValueType == "float" )
-      coarse_.reset( new CoarseHierarchyT< float >( Ac, coarsePrm ) );
+      hierarchy.reset( new CoarseHierarchyT< float >( Ac, coarsePrm ) );
     else
-      coarse_.reset( new CoarseHierarchyT< double >( Ac, coarsePrm ) );
+      hierarchy.reset( new CoarseHierarchyT< double >( Ac, coarsePrm ) );
+    coarse_ = std::move( hierarchy );
   }
 
-  /// @brief Set up the fine level on the operator A, of ValueType entries (double, or a double B x B block), with the
-  /// spectral radius of build()'s `spectralRadius` (see chooseFineSpectralRadius()), stored in cycle_.fineValueType.
+  /// @brief Set up the fine level on the operator A, of ValueType entries (double, or a double B x B block), with its
+  /// estimated spectral radius (TwoLevelFineLevelT::estimateSpectralRadius(), on the free rows), stored in
+  /// cycle_.fineValueType.
   template < typename ValueType >
-  void buildFineLevel( std::shared_ptr< typename TwoLevelFineLevelT< ValueType >::Matrix > A,
-                       double                                                              suppliedRadius,
-                       const double*                                                       dominantVector,
-                       int                                                                 dominantVectorSize )
+  void buildFineLevel( std::shared_ptr< typename TwoLevelFineLevelT< ValueType >::Matrix > A )
   {
     SetupStage                                         stage( *this, "fine spectral radius" );
     std::unique_ptr< TwoLevelFineLevelT< ValueType > > level( new TwoLevelFineLevelT< ValueType >() );
     level->setOperator( A );
-    fineSpectralRadius_ = chooseFineSpectralRadius( *level, suppliedRadius, dominantVector, dominantVectorSize );
-    if ( !( fineSpectralRadius_ > 0.0 ) || !std::isfinite( fineSpectralRadius_ ) ) {
-      // the Chebyshev bounds are relative to it: a zero (or non-finite) radius -- a zero block, which
-      // a DiagonalScaling already refuses -- would divide by zero in the polynomial
-      throw std::runtime_error( name_ + ": the fine operator has no positive, finite spectral radius (got " +
-                                std::to_string( fineSpectralRadius_ ) + ") -- is the field's block zero?" );
-    }
-    level->setPolynomial( static_cast< unsigned >( cycle_.fineDegree ),
-                          cycle_.fineLower,
-                          cycle_.fineHigher,
-                          fineSpectralRadius_ );
+    // positive and finite, or the estimate throws
+    fineSpectralRadius_ = level->estimateSpectralRadius( cycle_.fineSpectralRadius, isDirichlet_.data() );
+    level->setPolynomial( cycle_.finePolynomial, fineSpectralRadius_ );
     if ( cycle_.fineValueType == "float" )
       fine_ = floatStoredCopy( *level );
     else
@@ -1965,8 +2010,8 @@ protected:
     built_ = true;
   }
 
-  /// @brief The report of the coarse AMGCL hierarchy.
-  std::string coarseHierarchyReport() const { return coarse_ ? coarse_->report() : std::string(); }
+  /// @brief The report of the coarse solve.
+  std::string coarseSolveReport() const { return coarse_ ? coarse_->report() : std::string(); }
 
 private:
   /// @brief Add seconds to the build stage name (appended if it is new), see SetupStage.
@@ -1987,174 +2032,132 @@ private:
     for ( int sweep = 0; sweep < sweeps; ++sweep )
       fine_->smooth( rhs_.data(), x, xIsZero && sweep == 0 );
   }
-
-  /// @brief The full estimate of the spectral radius of the fine level, from the deterministic start vector: mt19937
-  /// seeded 0, uniform on [-1, 1], one draw per free DOF in order (AMGCL's single-thread draw, restricted to the free
-  /// DOFs); the final iterate goes to fineDominantVector_.
-  template < class Level >
-  double estimateFineSpectralRadiusInFull( const Level& level )
-  {
-    std::vector< double >                    startVector( n_, 0.0 );
-    std::mt19937                             rng( 0 );
-    std::uniform_real_distribution< double > rnd( -1, 1 );
-    for ( int i = 0; i < n_; ++i )
-      if ( !isDirichlet_[i] )
-        startVector[i] = rnd( rng );
-    return level.estimateSpectralRadius( cycle_.finePowerIters, startVector, fineDominantVector_ );
-  }
-
-  /// @brief The fine spectral radius for this build: estimated in full if suppliedRadius is not positive; else the
-  /// supplied one, re-checked first, with a dominantVector (n entries, the previous build's fineDominantVector()), by
-  /// fineRecheckIters power iterations from that vector, which cost a few sparse products instead of the full
-  /// estimate's finePowerIters: a re-check estimate up to fineRecheckTolerance (1%) above the supplied radius keeps
-  /// it, one above that but within the smoother's `fineHigher` margin replaces it, and one beyond that margin -- the
-  /// operator stiffened more than the margin covers -- triggers the full estimate. Without a dominantVector the radius
-  /// is used as supplied.
-  template < class Level >
-  double chooseFineSpectralRadius( const Level&  level,
-                                   double        suppliedRadius,
-                                   const double* dominantVector,
-                                   int           dominantVectorSize )
-  {
-    if ( suppliedRadius <= 0.0 ) {
-      fineSpectralRadiusSource_ = FineSpectralRadiusSource::Estimated;
-      return estimateFineSpectralRadiusInFull( level );
-    }
-    if ( dominantVector == nullptr || cycle_.fineRecheckIters <= 0 ) {
-      fineDominantVector_.clear();
-      fineSpectralRadiusSource_ = FineSpectralRadiusSource::Supplied;
-      return suppliedRadius;
-    }
-    // a dominant vector of a different layout, or one living entirely on DOFs that are Dirichlet
-    // now, cannot be continued from -- estimate in full
-    std::vector< double > startVector( n_, 0.0 );
-    double                startNormSquared = 0.0;
-    if ( dominantVectorSize == n_ ) {
-      for ( int i = 0; i < n_; ++i ) {
-        startVector[i] = isDirichlet_[i] ? 0.0 : dominantVector[i];
-        startNormSquared += startVector[i] * startVector[i];
-      }
-    }
-    if ( startNormSquared == 0.0 ) {
-      fineSpectralRadiusSource_ = FineSpectralRadiusSource::ReEstimated;
-      return estimateFineSpectralRadiusInFull( level );
-    }
-    const double recheck = level.estimateSpectralRadius( cycle_.fineRecheckIters, startVector, fineDominantVector_ );
-    // The full estimate itself is converged only to some 1e-5 relative after its 300 iterations, so
-    // continuing it on an unchanged operator still creeps up a little; a rise below
-    // fineRecheckTolerance (1%, well inside the 10% margin of `higher`) keeps the supplied radius, so
-    // that an unchanged operator gives the same smoother as before.
-    if ( recheck <= suppliedRadius * ( 1.0 + cycle_.fineRecheckTolerance ) ) {
-      fineSpectralRadiusSource_ = FineSpectralRadiusSource::Supplied;
-      return suppliedRadius;
-    }
-    if ( recheck <= suppliedRadius * cycle_.fineHigher ) {
-      fineSpectralRadiusSource_ = FineSpectralRadiusSource::Raised;
-      return recheck;
-    }
-    fineSpectralRadiusSource_ = FineSpectralRadiusSource::ReEstimated;
-    return estimateFineSpectralRadiusInFull( level );
-  }
 };
 
-/// @brief The p-two-grid preconditioner for one vector field's diagonal block: the two-level cycle of
-/// TwoLevelPreconditioner with the P1 corner nodes as its coarse level -- P the identity on the corners and the
-/// average of the two edge-endpoint corners on every midside node. build() once per hierarchy refresh, apply() once
-/// per outer Krylov iteration.
-class PTwoGridPreconditionerT : public TwoLevelPreconditioner {
+/// @brief The corner-node two-level cycle for one vector field's diagonal block: the two-level cycle of
+/// TwoLevelCycle with the corner nodes as its coarse level, and a callback into a component of the composed
+/// solver as its coarse solve. build() once per hierarchy refresh -- it returns the coarse operator A_c, on which the
+/// caller sets up that component -- and apply() once per outer Krylov iteration.
+///
+/// The prolongation interpolates the scaled variables: the block is \hat A = D A D, and a displacement u of the
+/// physical problem is \hat u = D^-1 u in its variables. P1 interpolation acts on u, P_geo: the identity on the
+/// corners, the mean of the two edge-endpoint corners on a midside node. In the scaled variables it is
+///
+///   P = D^-1 P_geo D_c:   corner rows 1, a midside m on the edge (a, b) gets 1/2 s_a / s_m and 1/2 s_b / s_m,
+///
+/// s the diagonal of D, per DOF, and D_c its restriction to the corners. This P reproduces the scaled translations D^-1
+/// t exactly, and A_c = P^T \hat A P = D_c P_geo^T A P_geo D_c is the P1 operator of the physical problem in the
+/// corners' scaled variables: the coarse field's operator, scaled by D_c.
+class CornerNodeTwoLevelCycleT : public TwoLevelCycle {
 public:
   /// @brief The storage of the fine operator, backendBlockSize: 1 scalar entries, 2 or 3 node-wise blocks of the
   /// field's components.
   int fineBlockSize_ = 1;
 
   /// @brief Parse the parameter tree: the cycle's parameters as TwoLevelCycleParameters::fromTree() reads them (the
-  /// field's AMGCL tree under "amgcl", backendPrecision, coarseHierarchyPrecision), backendBlockSize (the storage of
-  /// the fine operator), and the coarse level's AMGCL preconditioner tree under "coarse". The parameters are validated
-  /// here, so that a bad value fails before build() has spent anything on the prolongation, the Galerkin product or
-  /// the coarse hierarchy.
-  PTwoGridPreconditionerT( const char* json_params ) : PTwoGridPreconditionerT( parseJsonParameters( json_params ) ) {}
+  /// field's AMGCL tree under "amgcl", backendPrecision) and backendBlockSize (the storage of the fine operator), and
+  /// no other key. The parameters are validated here, so that a bad value fails before build() has spent anything on
+  /// the prolongation or the Galerkin product.
+  CornerNodeTwoLevelCycleT( const char* json_params ) : CornerNodeTwoLevelCycleT( parseJsonParameters( json_params ) )
+  {
+  }
 
-  /// @brief Build everything apply() needs.
-  /// @param n, ptr, col, val the field's equilibrated diagonal block (scalar CSR, sorted columns,
-  /// Dirichlet identity rows included). Copied; the caller's arrays are not referenced after build().
-  /// @param nNodes, isCorner, edgeEndpoints the P1 topology map (edgeEndpoints: nNodes x 2,
-  /// row-major; read for midside nodes only).
-  /// @param nullspace, nullspaceCols the coarse near null-space, rows = free coarse DOFs in coarse
-  /// order (corner order, then DOF), row-major; nullspaceCols == 0 for none.
-  /// @param spectralRadius > 0: start from this fine spectral radius (typically a previous build's)
-  /// instead of estimating it from scratch, re-checked with a dominantVector (n entries, the previous build's
-  /// fineDominantVector()), see TwoLevelPreconditioner::chooseFineSpectralRadius().
-  void build( int                n,
-              const int*         ptr,
-              const int*         col,
-              const double*      val,
-              int                nNodes,
-              const signed char* isCorner,
-              const int*         edgeEndpoints,
-              const double*      nullspace,
-              int                nullspaceRows,
-              int                nullspaceCols,
-              double             spectralRadius,
-              const double*      dominantVector,
-              int                dominantVectorSize )
+  /// @brief The coarse solve, x <- A_c^-1 rhs: a callback and its opaque context, called once per apply(). It may be
+  /// set before or after build(), and replaced: apply() calls the one set last.
+  void setCoarseSolve( PyPrecondApplyFn applyFn, void* ctx )
+  {
+    coarseSolveFn_      = applyFn;
+    coarseSolveContext_ = ctx;
+  }
+
+  /// @brief Per node of the field, whether the last build() made it a coarse node: the corner nodes, and
+  /// every midside node with a free DOF between two Dirichlet DOFs of its edge's corners (see prolongation()). Empty
+  /// for a field without a free DOF.
+  const std::vector< signed char >& coarseNodes() const { return coarseNodes_; }
+
+  /// @brief Build everything apply() needs but the coarse solve, and return the coarse operator for it.
+  /// @param n, ptr, col, val the field's scaled diagonal block \hat A = D A D (scalar CSR, sorted columns, Dirichlet
+  /// identity rows included). Copied; the caller's arrays are not referenced after build().
+  /// @param scaling the diagonal of D, n entries: the weights of P (see the class comment)
+  /// @param nNodes, isCorner, edgeEndpoints the midside corners (edgeEndpoints: nNodes x 2, row-major; read for
+  /// midside nodes only).
+  /// @return A_c = P^T \hat A P on all DOFs of the coarse nodes (coarseNodes(), in node order, then DOF), an identity
+  /// row for each Dirichlet coarse DOF; empty for a field without a free DOF
+  ScalarCsr build( int                n,
+                   const int*         ptr,
+                   const int*         col,
+                   const double*      val,
+                   const double*      scaling,
+                   int                nNodes,
+                   const signed char* isCorner,
+                   const int*         edgeEndpoints )
   {
     if ( n < 0 || nNodes < 0 || ( nNodes == 0 ) != ( n == 0 ) || ( nNodes > 0 && n % nNodes != 0 ) ) {
-      throw std::runtime_error( "ptwogrid: block size " + std::to_string( n ) +
+      throw std::runtime_error( "cornerNodeTwoLevelCycle: block size " + std::to_string( n ) +
                                 " is not a multiple of the topology map's node count " + std::to_string( nNodes ) +
                                 " -- the map does not match this field." );
     }
     const int nDim = nNodes > 0 ? n / nNodes : 0;
     if ( fineBlockSize_ > 1 && n > 0 && nDim != fineBlockSize_ ) {
-      throw std::runtime_error( "ptwogrid: backendBlockSize " + std::to_string( fineBlockSize_ ) +
+      throw std::runtime_error( "cornerNodeTwoLevelCycle: backendBlockSize " + std::to_string( fineBlockSize_ ) +
                                 " needs a field of as many components per node, got " + std::to_string( nDim ) +
                                 " DOFs per node." );
     }
+    ScalarCsr                       coarseOperator;
     std::shared_ptr< ScalarMatrix > P, PT;
     {
       SetupStage stage( *this, "dirichlet + P" );
-      if ( beginBuild( n, ptr, col, val ) )
-        return;
+      coarseNodes_.clear();
+      if ( beginBuild( n, ptr, col, val ) ) {
+        coarseOperator.ptr.assign( 1, 0 );
+        return coarseOperator;
+      }
       checkFreeRowsHaveDiagonal( n, ptr, col, val );
-      P  = prolongation( nNodes, nDim, isCorner, edgeEndpoints );
+      P  = prolongation( nNodes, nDim, isCorner, edgeEndpoints, scaling );
       PT = amgcl::backend::transpose( *P );
     }
     std::shared_ptr< ScalarMatrix > A = copiedFineOperator( n, ptr, col, val );
-    buildCoarseLevel( *A, P, PT, nullspace, nullspaceRows, nullspaceCols );
+    coarseOperator                    = galerkinOperator( *A, *P, *PT );
+    transfer_.reset( new ScalarTransferOperators( P, PT ) );
+    coarse_.reset( new CallbackCoarseSolve( coarseSolveFn_, coarseSolveContext_, nCoarse_ ) );
     if ( fineBlockSize_ == 3 )
-      buildFineLevel< amgcl::static_matrix< double, 3, 3 > >( blockedFineOperator< 3 >( A ),
-                                                              spectralRadius,
-                                                              dominantVector,
-                                                              dominantVectorSize );
+      buildFineLevel< amgcl::static_matrix< double, 3, 3 > >( blockedFineOperator< 3 >( A ) );
     else if ( fineBlockSize_ == 2 )
-      buildFineLevel< amgcl::static_matrix< double, 2, 2 > >( blockedFineOperator< 2 >( A ),
-                                                              spectralRadius,
-                                                              dominantVector,
-                                                              dominantVectorSize );
+      buildFineLevel< amgcl::static_matrix< double, 2, 2 > >( blockedFineOperator< 2 >( A ) );
     else
-      buildFineLevel< double >( A, spectralRadius, dominantVector, dominantVectorSize );
+      buildFineLevel< double >( A );
     finishBuild();
+    return coarseOperator;
   }
 
 private:
-  /// @brief See PTwoGridPreconditionerT(const char*).
-  PTwoGridPreconditionerT( const boost::property_tree::ptree& parameters )
-    : TwoLevelPreconditioner( parameters, "ptwogrid" )
+  /// @brief The coarse solve (setCoarseSolve()).
+  PyPrecondApplyFn coarseSolveFn_      = nullptr;
+  void*            coarseSolveContext_ = nullptr;
+  /// @brief Per node, whether it is a coarse node: set by prolongation().
+  std::vector< signed char > coarseNodes_;
+  /// @brief Per coarse DOF, whether it is a Dirichlet DOF (its coarse node's fine DOF is): set by prolongation().
+  std::vector< char > coarseIsDirichlet_;
+
+  /// @brief See CornerNodeTwoLevelCycleT(const char*).
+  CornerNodeTwoLevelCycleT( const boost::property_tree::ptree& parameters )
+    : TwoLevelCycle( parameters, "cornerNodeTwoLevelCycle", { "amgcl", "backendBlockSize", "backendPrecision" } )
   {
     fineBlockSize_ = prm.get( "backendBlockSize", 1 );
     if ( fineBlockSize_ < 1 || fineBlockSize_ > 3 ) {
-      throw std::runtime_error( "ptwogrid: backendBlockSize must be 1, 2 or 3, got " +
+      throw std::runtime_error( "cornerNodeTwoLevelCycle: backendBlockSize must be 1, 2 or 3, got " +
                                 std::to_string( fineBlockSize_ ) );
     }
     if ( cycle_.fineValueType == "float" && !storableInFloat( fineBlockSize_ ) ) {
-      throw std::runtime_error( "ptwogrid: 2x2 blocks are stored in double only, got backendPrecision float" );
+      throw std::runtime_error(
+        "cornerNodeTwoLevelCycle: 2x2 blocks are stored in double only, got backendPrecision float" );
     }
   }
 
   /// @brief The fine operator, copied once with an OpenMP-parallel first touch (crs's own range constructor). The input
   /// arrays come from a single-threaded SciPy allocation, i.e. from one NUMA node, and every sparse product on them --
-  /// the power iteration, the Galerkin product, every smoothing step -- would otherwise be bound by that one node's
-  /// memory bandwidth: used in place, a multi-solve replay sequence was measured noticeably slower on a two-socket
-  /// machine.
+  /// the spectral radius estimate, the Galerkin product, every smoothing step -- would otherwise be bound by that one
+  /// node's memory bandwidth on a machine of several NUMA nodes.
   std::shared_ptr< ScalarMatrix > copiedFineOperator( int n, const int* ptr, const int* col, const double* val )
   {
     SetupStage stage( *this, "fine operator" );
@@ -2179,96 +2182,112 @@ private:
     return blocked;
   }
 
-  /// @brief The coarse level: the Galerkin coarse operator P^T (A P), with AMGCL's own threaded SpGEMM and in the order
-  /// AMGCL's own coarsening forms it (amgcl/coarsening/detail/galerkin.hpp), its AMGCL hierarchy, and P and P^T for the
-  /// cycle.
-  void buildCoarseLevel( const ScalarMatrix&             A,
-                         std::shared_ptr< ScalarMatrix > P,
-                         std::shared_ptr< ScalarMatrix > PT,
-                         const double*                   nullspace,
-                         int                             nullspaceRows,
-                         int                             nullspaceCols )
+  /// @brief The Galerkin coarse operator P^T (A P) (galerkinProduct), and an identity row (and column) for each
+  /// Dirichlet coarse DOF, whose column of P is zero: the coarse field keeps its Dirichlet rows as the fine one does.
+  ScalarCsr galerkinOperator( const ScalarMatrix& A, const ScalarMatrix& P, const ScalarMatrix& PT )
   {
-    std::shared_ptr< ScalarMatrix > Ac;
-    {
-      SetupStage stage( *this, "galerkin P^T A P" );
-      Ac = amgcl::backend::product( *PT, *amgcl::backend::product( A, *P ), true );
+    SetupStage                      stage( *this, "galerkin P^T A P" );
+    std::shared_ptr< ScalarMatrix > Ac = galerkinProduct( A, P, PT );
+    ScalarCsr                       coarseOperator;
+    // a Dirichlet coarse DOF's row is the identity row alone, whatever the product stores there: its column of P is
+    // zero, so its row of P^T A P is too
+    coarseOperator.ptr.assign( nCoarse_ + 1, 0 );
+    for ( ptrdiff_t i = 0; i < nCoarse_; ++i )
+      coarseOperator.ptr[i + 1] = coarseOperator.ptr[i] +
+                                  ( coarseIsDirichlet_[i] ? 1 : static_cast< int >( Ac->ptr[i + 1] - Ac->ptr[i] ) );
+    coarseOperator.col.resize( coarseOperator.ptr[nCoarse_] );
+    coarseOperator.val.resize( coarseOperator.ptr[nCoarse_] );
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < nCoarse_; ++i ) {
+      int head = coarseOperator.ptr[i];
+      if ( coarseIsDirichlet_[i] ) {
+        coarseOperator.col[head] = static_cast< int >( i );
+        coarseOperator.val[head] = 1.0;
+        continue;
+      }
+      for ( ptrdiff_t j = Ac->ptr[i]; j < Ac->ptr[i + 1]; ++j, ++head ) {
+        coarseOperator.col[head] = static_cast< int >( Ac->col[j] );
+        coarseOperator.val[head] = Ac->val[j];
+      }
     }
-    {
-      SetupStage                                      stage( *this, "coarse hierarchy" );
-      boost::property_tree::ptree                     coarsePrm;
-      boost::optional< boost::property_tree::ptree& > coarseChild = prm.get_child_optional( "coarse" );
-      if ( coarseChild )
-        coarsePrm = *coarseChild;
-      buildCoarseHierarchy( *Ac, coarsePrm, nullspace, nullspaceRows, nullspaceCols );
-    }
-    transfer_.reset( new ScalarTransferOperators( P, PT ) );
+    return coarseOperator;
   }
 
-  /// @brief P on the free DOFs: identity on corners, 1/2, 1/2 on each midside from its two
-  /// edge-endpoint corners, per DOF; no rows for Dirichlet fine DOFs, no columns for Dirichlet coarse
-  /// DOFs, and the weight of a dropped column is *not* redistributed (a constrained corner contributes
-  /// exactly zero to a homogeneous Newton correction). A free midside DOF whose both endpoint DOFs are
-  /// constrained is an orphan and raises. Sets nCoarse_.
+  /// @brief P = D^-1 P_geo D_c on the free DOFs (see the class comment): 1 on coarse nodes, 1/2 s_a / s_m and
+  /// 1/2 s_b / s_m on a midside m from its two edge-endpoint corners a and b, per DOF. The coarse DOFs are all DOFs of
+  /// the coarse nodes (coarseNodes()), in node order and then DOF; P has no rows for Dirichlet fine DOFs and zero
+  /// columns for Dirichlet coarse DOFs, and the weight of a dropped column is *not* redistributed (a constrained corner
+  /// contributes exactly zero to a homogeneous Newton correction). Sets coarseNodes_, nCoarse_ and coarseIsDirichlet_.
   std::shared_ptr< ScalarMatrix > prolongation( int                nNodes,
                                                 int                nDim,
                                                 const signed char* isCorner,
-                                                const int*         edgeEndpoints )
+                                                const int*         edgeEndpoints,
+                                                const double*      scaling )
   {
-    // coarse numbering: corners in node order, nDim DOFs each; free coarse DOFs renumbered densely
-    std::vector< int > cornerIndex( nNodes, -1 );
-    int                nCorners = 0;
-    for ( int node = 0; node < nNodes; ++node )
-      if ( isCorner[node] )
-        cornerIndex[node] = nCorners++;
-    std::vector< int > coarseFreeIndex( static_cast< size_t >( nCorners ) * nDim, -1 );
-    nCoarse_ = 0;
-    for ( int node = 0; node < nNodes; ++node )
-      if ( isCorner[node] )
-        for ( int d = 0; d < nDim; ++d )
-          if ( !isDirichlet_[static_cast< size_t >( node ) * nDim + d] )
-            coarseFreeIndex[static_cast< size_t >( cornerIndex[node] ) * nDim + d] = nCoarse_++;
-
     for ( int node = 0; node < nNodes; ++node ) {
       if ( isCorner[node] )
         continue;
       for ( int k = 0; k < 2; ++k ) {
         const int endpoint = edgeEndpoints[2 * node + k];
         if ( endpoint < 0 || endpoint >= nNodes || !isCorner[endpoint] ) {
-          throw std::runtime_error( "ptwogrid: midside node " + std::to_string( node ) +
+          throw std::runtime_error( "cornerNodeTwoLevelCycle: midside node " + std::to_string( node ) +
                                     " has an edge endpoint that is not a corner node." );
         }
       }
     }
+    // The coarse nodes: the corners, and every midside node with a free DOF whose two edge-endpoint DOFs are both
+    // Dirichlet DOFs (issue #223: a symmetry plane and a tie constrain both corners of an edge in one component, its
+    // midside stays free). Interpolated from its corners, that DOF would get an empty row of P -- no coarse correction
+    // at all -- so the node is a coarse node of its own, as buildMidsideCorners makes a node a corner on an AMR edge
+    // conflict.
+    coarseNodes_.assign( isCorner, isCorner + nNodes );
+    for ( int node = 0; node < nNodes; ++node ) {
+      if ( isCorner[node] )
+        continue;
+      for ( int d = 0; d < nDim; ++d ) {
+        const size_t dof = static_cast< size_t >( node ) * nDim + d;
+        const size_t a   = static_cast< size_t >( edgeEndpoints[2 * node] ) * nDim + d;
+        const size_t b   = static_cast< size_t >( edgeEndpoints[2 * node + 1] ) * nDim + d;
+        if ( !isDirichlet_[dof] && isDirichlet_[a] && isDirichlet_[b] )
+          coarseNodes_[node] = 1;
+      }
+    }
+    const signed char* isCoarseNode = coarseNodes_.data();
+    std::vector< int > coarseIndex( nNodes, -1 );
+    int                nCoarseNodes = 0;
+    for ( int node = 0; node < nNodes; ++node )
+      if ( isCoarseNode[node] )
+        coarseIndex[node] = nCoarseNodes++;
+    nCoarse_ = nCoarseNodes * nDim;
+    coarseIsDirichlet_.assign( nCoarse_, 0 );
+    for ( int node = 0; node < nNodes; ++node )
+      if ( isCoarseNode[node] )
+        for ( int d = 0; d < nDim; ++d )
+          coarseIsDirichlet_[static_cast< size_t >( coarseIndex[node] ) * nDim +
+                             d] = isDirichlet_[static_cast< size_t >( node ) * nDim + d];
+
+    // the coarse DOF of component d of an edge endpoint's corner, or -1 if it is a Dirichlet DOF
+    auto freeCoarseDof = [&]( int endpoint, int d ) {
+      const int c = coarseIndex[endpoint] * nDim + d;
+      return coarseIsDirichlet_[c] ? -1 : c;
+    };
 
     const ptrdiff_t n = static_cast< ptrdiff_t >( nNodes ) * nDim;
     auto            P = std::make_shared< ScalarMatrix >();
     P->set_size( n, nCoarse_, true );
-    int orphanRow = -1;
 #pragma omp parallel for
     for ( ptrdiff_t i = 0; i < n; ++i ) {
       int width = 0;
       if ( !isDirichlet_[i] ) {
         const int node = static_cast< int >( i / nDim ), d = static_cast< int >( i % nDim );
-        if ( isCorner[node] )
+        if ( isCoarseNode[node] )
           width = 1;
-        else {
+        else
           for ( int k = 0; k < 2; ++k )
-            if ( coarseFreeIndex[static_cast< size_t >( cornerIndex[edgeEndpoints[2 * node + k]] ) * nDim + d] >= 0 )
+            if ( freeCoarseDof( edgeEndpoints[2 * node + k], d ) >= 0 )
               ++width;
-          if ( width == 0 ) {
-#pragma omp critical
-            orphanRow = static_cast< int >( i );
-          }
-        }
       }
       P->ptr[i + 1] = width;
-    }
-    if ( orphanRow >= 0 ) {
-      throw std::runtime_error( "ptwogrid: a free midside row of the restricted P is entirely zero -- both "
-                                "edge-endpoint corners are Dirichlet-constrained, an orphan the topology map "
-                                "disagrees with the Dirichlet data on. First bad row (one of): " +
-                                std::to_string( orphanRow ) + "." );
     }
     P->scan_row_sizes();
     P->set_nonzeros();
@@ -2278,72 +2297,75 @@ private:
       if ( P->ptr[i + 1] == head )
         continue;
       const int node = static_cast< int >( i / nDim ), d = static_cast< int >( i % nDim );
-      if ( isCorner[node] ) {
-        P->col[head] = coarseFreeIndex[static_cast< size_t >( cornerIndex[node] ) * nDim + d];
+      if ( isCoarseNode[node] ) {
+        P->col[head] = coarseIndex[node] * nDim + d;
         P->val[head] = 1.0;
         continue;
       }
-      int cols[2], width = 0;
+      int    cols[2], width = 0;
+      double weights[2];
       for ( int k = 0; k < 2; ++k ) {
-        const int c = coarseFreeIndex[static_cast< size_t >( cornerIndex[edgeEndpoints[2 * node + k]] ) * nDim + d];
-        if ( c >= 0 )
-          cols[width++] = c;
+        const int endpoint = edgeEndpoints[2 * node + k];
+        const int c        = freeCoarseDof( endpoint, d );
+        if ( c >= 0 ) {
+          cols[width]    = c;
+          weights[width] = 0.5 * scaling[static_cast< size_t >( endpoint ) * nDim + d] / scaling[i];
+          ++width;
+        }
       }
-      if ( width == 2 && cols[0] > cols[1] )
+      if ( width == 2 && cols[0] > cols[1] ) {
         std::swap( cols[0], cols[1] );
+        std::swap( weights[0], weights[1] );
+      }
       for ( int k = 0; k < width; ++k ) {
         P->col[head + k] = cols[k];
-        P->val[head + k] = 0.5;
+        P->val[head + k] = weights[k];
       }
     }
     return P;
   }
 };
 
-/// The rigid-body coarse level preconditioner of one vector field's equilibrated diagonal block
-/// (TwoLevel(coarseSpace=RigidBodyModes()), edelweissfe/linsolve/composition/rigidbodycoarselevel.py): the two-level
-/// cycle of TwoLevelPreconditioner whose coarse level is a smoothed aggregation spanned, on every aggregate, by a near
-/// null-space of M vectors per node (amgcl-rigid-body-coarse-level.hpp), below which an AMGCL hierarchy continues the
-/// field's own. The interface Cython drives, whatever the number of components per node
-/// (RigidBodyCoarseLevelPreconditionerT).
+/// The two-level cycle on the rigid-body modes per aggregate of one vector field's equilibrated diagonal block
+/// (TwoLevel(coarseSpace=RigidBodyModesPerAggregate()),
+/// edelweissfe/linsolve/composition/rigidbodymodestwolevelcycle.py): the two-level cycle TwoLevelCycle whose coarse
+/// level is a smoothed aggregation spanned, on every aggregate, by a near null-space of M vectors per node
+/// (amgcl-rigid-body-coarse-level.hpp), below which an AMGCL hierarchy continues the field's own. The interface Cython
+/// drives, whatever the number of components per node (RigidBodyModesTwoLevelCycleT).
 ///
 /// It takes the near null-space from Python, n x M and already divided by the equilibration, and is agnostic to what
-/// the vectors are: the rigid-body modes, M = B (B + 1) / 2 (rigidbodycoarselevel.py builds them with nullspace.py's
-/// rigidBodyNullspace()), or the translations, M = B -- AMGCL's own coarse space on the block backend, the control of
-/// tests and measurements, which differs from the rigid-body coarse level in the rotations alone (a test checks that it
-/// reproduces AMGCL's first coarse level to rounding).
+/// the vectors are: the rigid-body modes, M = B (B + 1) / 2 (rigidbodymodestwolevelcycle.py builds them with
+/// nullspace.py's rigidBodyNullspace()), or the translations, M = B -- AMGCL's own coarse space on the block backend,
+/// the control of tests and measurements, which differs from the rigid-body coarse level in the rotations alone (a test
+/// checks that it reproduces AMGCL's first coarse level to rounding).
 ///
-/// The parameters are those of the cycle (TwoLevelCycleParameters::fromTree(), the spelling of the p-two-grid too):
-/// backendBlockSize (2 or 3, the components per node), backendPrecision (the storage of the fine level and of P and
-/// P^T: double, or float with 3x3 blocks), coarseHierarchyPrecision (double or float) and the field's AMGCL tree
-/// under "amgcl"; and prolongation ("smoothed" or "tentative"). The tree means what it means to AMGCL's own hierarchy
-/// (with AMGCL's defaults for what it leaves out):
-///   * relax, npre, npost: the fine smoother, a Chebyshev polynomial (relax.type chebyshev, relax.scale false, at least
-///     one power iteration) with npre sweeps before and npost after the coarse correction;
+/// The parameters are those of the cycle (TwoLevelCycleParameters::fromTree(), the spelling of the corner-node
+/// two-level cycle too): backendBlockSize (2 or 3, the components per node), backendPrecision (the storage of the fine
+/// level and of P and P^T: double, or float with 3x3 blocks), coarseHierarchyPrecision (double or float) and the
+/// field's AMGCL tree under "amgcl"; and prolongation ("smoothed" or "tentative"). The tree means what it means to
+/// AMGCL's own hierarchy (with AMGCL's defaults for what it leaves out):
+///   * relax, npre, npost: the fine smoother, a Chebyshev polynomial (relax.type chebyshev, relax.scale false, its
+///     spectral radius estimated by relax.spectralRadiusSteps Arnoldi steps, amgcl-spectral-radius.hpp) with npre
+///     sweeps before and npost after the coarse correction;
 ///   * coarsening: smoothed aggregation, its aggr.eps_strong the strength threshold of the aggregates and its relax,
-///     estimate_spectral_radius and power_iters the damping weight of the prolongation smoothing;
+///     estimate_spectral_radius and the spectral radius estimate the damping weight of the prolongation smoothing;
 ///   * the whole tree, too, for the AMGCL hierarchy below, with eps_strong halved as AMGCL halves it from one level to
 ///     the next and the M coarse DOFs of an aggregate together as one point (aggr.block_size), with the coarse near
 ///     null-space.
-class RigidBodyCoarseLevelPreconditioner : public TwoLevelPreconditioner {
+class RigidBodyModesTwoLevelCycle : public TwoLevelCycle {
 public:
   /// @brief Build everything apply() needs.
   /// @param n, ptr, col, val the field's equilibrated diagonal block \hat A = D A D (scalar CSR, sorted columns,
   /// node-major with B DOFs per node, Dirichlet identity rows included). Copied; not referenced after build().
   /// @param nullspace, nullspaceRows, nullspaceCols the near null-space of \hat A, n x M, row-major: the vectors that
   /// span the coarse space of every aggregate, with M = B or B (B + 1) / 2
-  /// @param spectralRadius, dominantVector, dominantVectorSize a supplied fine spectral radius (> 0) and the dominant
-  /// vector to re-check it from, see TwoLevelPreconditioner::chooseFineSpectralRadius()
   virtual void build( int           n,
                       const int*    ptr,
                       const int*    col,
                       const double* val,
                       const double* nullspace,
                       int           nullspaceRows,
-                      int           nullspaceCols,
-                      double        spectralRadius,
-                      const double* dominantVector,
-                      int           dominantVectorSize ) = 0;
+                      int           nullspaceCols ) = 0;
 
   /// @brief The components per node, B.
   int blockSize() const { return blockSize_; }
@@ -2388,7 +2410,7 @@ public:
       report << ", omega " << prolongationSmoothingWeight_;
     report << ", " << prolongationBlocks_ << " blocks\n";
     if ( nCoarse_ > 0 )
-      report << "AMGCL hierarchy below:\n" << coarseHierarchyReport();
+      report << "AMGCL hierarchy below:\n" << coarseSolveReport();
     else
       report << "  no aggregate (no strong connection anywhere): the cycle is the smoother alone\n";
     return report.str();
@@ -2404,7 +2426,8 @@ protected:
   /// @brief The damping weight of the prolongation smoothing, see amgcl::coarsening::prolongation_smoothing_weight().
   float prolongationRelax_      = 1.0f;
   bool  estimateSpectralRadius_ = false;
-  int   prolongationPowerIters_ = 0;
+  /// @brief How rho(D^-1 A) is estimated for the damping weight.
+  EdelweissFE::linsolve::SpectralRadiusEstimate prolongationSpectralRadius_;
   /// @brief The AMGCL tree of the hierarchy below (its aggr.block_size set by each build to M).
   boost::property_tree::ptree hierarchyBelow_;
 
@@ -2419,8 +2442,10 @@ protected:
 
   /// @brief Parse and check the parameters (see the class comment), so that a bad value fails before build() has
   /// spent anything.
-  RigidBodyCoarseLevelPreconditioner( const boost::property_tree::ptree& parameters )
-    : TwoLevelPreconditioner( parameters, "rigidBodyCoarseLevel" )
+  RigidBodyModesTwoLevelCycle( const boost::property_tree::ptree& parameters )
+    : TwoLevelCycle( parameters,
+                     "rigidBodyModesTwoLevelCycle",
+                     { "amgcl", "backendBlockSize", "backendPrecision", "coarseHierarchyPrecision", "prolongation" } )
   {
     blockSize_ = prm.get( "backendBlockSize", 3 );
     if ( blockSize_ != 2 && blockSize_ != 3 ) {
@@ -2448,7 +2473,7 @@ protected:
                                 coarseningType );
     }
     coarsening.erase( "type" );
-    const amgcl::coarsening::smoothed_aggregation< amgcl::backend::builtin< double > >::params aggregation(
+    const amgcl::coarsening::smoothed_aggregation_estimate_params< amgcl::backend::builtin< double > > aggregation(
       coarsening );
     if ( aggregation.aggr.block_size != 1 ) {
       throw std::runtime_error( name_ +
@@ -2456,10 +2481,10 @@ protected:
                                 "no meaning there, got " +
                                 std::to_string( aggregation.aggr.block_size ) );
     }
-    epsStrong_              = aggregation.aggr.eps_strong;
-    prolongationRelax_      = aggregation.relax;
-    estimateSpectralRadius_ = aggregation.estimate_spectral_radius;
-    prolongationPowerIters_ = aggregation.power_iters;
+    epsStrong_                  = aggregation.aggr.eps_strong;
+    prolongationRelax_          = aggregation.relax;
+    estimateSpectralRadius_     = aggregation.estimate_spectral_radius;
+    prolongationSpectralRadius_ = aggregation.spectralRadius;
 
     // the AMGCL hierarchy below: the field's tree one level further down, with the strength threshold halved
     hierarchyBelow_ = tree;
@@ -2493,19 +2518,19 @@ private:
   {
     boost::property_tree::ptree tree = childOrEmpty( prm, "amgcl" );
     if ( tree.get( "class", std::string( "amg" ) ) != "amg" ) {
-      throw std::runtime_error( "rigidBodyCoarseLevel: needs an AMG hierarchy, class amg, got class " +
+      throw std::runtime_error( "rigidBodyModesTwoLevelCycle: needs an AMG hierarchy, class amg, got class " +
                                 tree.get< std::string >( "class" ) );
     }
     return tree;
   }
 };
 
-/// @brief The rigid-body coarse level preconditioner of a field of B components per node (B = 2 or 3), see
-/// RigidBodyCoarseLevelPreconditioner. Its build() runs the steps of amgcl-rigid-body-coarse-level.hpp, one private
+/// @brief The two-level cycle on the rigid-body modes per aggregate of a field of B components per node (B = 2 or 3),
+/// see RigidBodyModesTwoLevelCycle. Its build() runs the steps of amgcl-rigid-body-coarse-level.hpp, one private
 /// function each, and the coarse level on M modes per aggregate is a template on M: B (the translations) or
 /// B (B + 1) / 2 (all rigid-body modes), as the near null-space has columns.
 template < int B >
-class RigidBodyCoarseLevelPreconditionerT : public RigidBodyCoarseLevelPreconditioner {
+class RigidBodyModesTwoLevelCycleT : public RigidBodyModesTwoLevelCycle {
 public:
   /// @brief The number of rigid-body modes: B translations and B (B - 1) / 2 rotations.
   enum { RigidBodyModes = B * ( B + 1 ) / 2 };
@@ -2514,9 +2539,9 @@ public:
   /// @brief The fine operator, as the fine level stores it in double.
   typedef typename TwoLevelFineLevelT< FineBlock >::Matrix FineMatrix;
 
-  /// @brief See RigidBodyCoarseLevelPreconditioner.
-  RigidBodyCoarseLevelPreconditionerT( const char* json_params )
-    : RigidBodyCoarseLevelPreconditioner( parseJsonParameters( json_params ) )
+  /// @brief See RigidBodyModesTwoLevelCycle.
+  RigidBodyModesTwoLevelCycleT( const char* json_params )
+    : RigidBodyModesTwoLevelCycle( parseJsonParameters( json_params ) )
   {
   }
 
@@ -2526,10 +2551,7 @@ public:
               const double* val,
               const double* nullspace,
               int           nullspaceRows,
-              int           nullspaceCols,
-              double        spectralRadius,
-              const double* dominantVector,
-              int           dominantVectorSize ) override
+              int           nullspaceCols ) override
   {
     if ( n < 0 || n % B != 0 ) {
       throw std::runtime_error( name_ + ": the field has " + std::to_string( n ) + " DOFs, not nodes of " +
@@ -2559,14 +2581,14 @@ public:
       buildCoarseLevel< B >( *A, *aggregates, nNodes, nullspace );
     else if ( nAggregates_ > 0 )
       buildCoarseLevel< RigidBodyModes >( *A, *aggregates, nNodes, nullspace );
-    buildFineLevel< FineBlock >( A, spectralRadius, dominantVector, dominantVectorSize );
+    buildFineLevel< FineBlock >( A );
     finishBuild();
   }
 
 private:
   /// @brief The fine operator in node-wise B x B blocks, double: the aggregates, the prolongation, the Galerkin product
   /// and the fine spectral radius are computed on it, then the fine level keeps it (or its float copy). The copy is an
-  /// OpenMP-parallel first touch, which spreads it over the NUMA nodes (see PTwoGridPreconditionerT).
+  /// OpenMP-parallel first touch, which spreads it over the NUMA nodes (see CornerNodeTwoLevelCycleT).
   std::shared_ptr< FineMatrix > blockedFineOperator( int n, const int* ptr, const int* col, const double* val )
   {
     SetupStage stage( *this, "fine operator" );
@@ -2682,7 +2704,7 @@ private:
       prolongationSmoothingWeight_ = amgcl::coarsening::prolongation_smoothing_weight( A,
                                                                                        prolongationRelax_,
                                                                                        estimateSpectralRadius_,
-                                                                                       prolongationPowerIters_ );
+                                                                                       prolongationSpectralRadius_ );
       P                            = amgcl::coarsening::smoothed_prolongation( A,
                                                     aggregates.strong_connection,
                                                     *tentative,
@@ -2693,15 +2715,15 @@ private:
   }
 };
 
-/// @brief The rigid-body coarse level preconditioner for the parameters (see RigidBodyCoarseLevelPreconditioner), of
-/// the field's backendBlockSize, owned by the caller. It only dispatches: the constructor checks the parameters,
-/// backendBlockSize among them.
+/// @brief The two-level cycle on the rigid-body modes per aggregate for the parameters (see
+/// RigidBodyModesTwoLevelCycle), of the field's backendBlockSize, owned by the caller. It only dispatches: the
+/// constructor checks the parameters, backendBlockSize among them.
 /// @throws std::runtime_error for parameters that cannot be used
-inline RigidBodyCoarseLevelPreconditioner* makeRigidBodyCoarseLevelPreconditioner( const char* json_params )
+inline RigidBodyModesTwoLevelCycle* makeRigidBodyModesTwoLevelCycle( const char* json_params )
 {
   if ( parseJsonParameters( json_params ).get( "backendBlockSize", 3 ) == 2 )
-    return new RigidBodyCoarseLevelPreconditionerT< 2 >( json_params );
-  return new RigidBodyCoarseLevelPreconditionerT< 3 >( json_params );
+    return new RigidBodyModesTwoLevelCycleT< 2 >( json_params );
+  return new RigidBodyModesTwoLevelCycleT< 3 >( json_params );
 }
 
 // The default double-precision wrapper (plain amgcl::backend::builtin<double>, unchanged from before
@@ -2746,8 +2768,8 @@ typedef EquilibratedSystemT EquilibratedSystem;
 
 // AMGCL's own native outer Krylov solves (lgmres, fgmres) are created by makeOuterKrylovSolver(), see above.
 
-// The p-two-grid (P1) preconditioner, see PTwoGridPreconditionerT above.
-typedef PTwoGridPreconditionerT PTwoGridPreconditioner;
+// The corner-node two-level cycle, see CornerNodeTwoLevelCycleT above.
+typedef CornerNodeTwoLevelCycleT CornerNodeTwoLevelCycle;
 
-// The rigid-body coarse level preconditioner is RigidBodyCoarseLevelPreconditioner itself (created by
-// makeRigidBodyCoarseLevelPreconditioner()), see there.
+// The two-level cycle on the rigid-body modes per aggregate is RigidBodyModesTwoLevelCycle itself (created by
+// makeRigidBodyModesTwoLevelCycle()), see there.

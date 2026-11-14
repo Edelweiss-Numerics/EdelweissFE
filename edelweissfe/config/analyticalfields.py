@@ -32,7 +32,4 @@
 Analytical fields define values for spatial coordinates, e.g., for spatially varying material properties.
 """
 
-# This module holds no code. Analytical fields are resolved through the ``analyticalfield``
-# category of :mod:`edelweissfe.config.registry`. The docstring above is rendered by Sphinx via
-# ``.. automodule:: edelweissfe.config.analyticalfields`` in
-# ``doc/source/documentation/analyticalfields.rst``; do not delete this file.
+# No code here (see :mod:`edelweissfe.config.registry`); the docstring is rendered by Sphinx, do not delete.

@@ -186,15 +186,13 @@ class StepAction(StepActionBase):
 
         self.updateStepAction()
 
-    def applyAtStepEnd(self, model, stepMagnitude=None):
+    def applyAtStepEnd(self, model):
         """Deactivate this step action; the value is set once per step it is declared in.
 
         Parameters
         ----------
         model
             The current state of the model.
-        stepMagnitude
-            Unused; present for signature compatibility with the other step actions.
         """
 
         self.active = False

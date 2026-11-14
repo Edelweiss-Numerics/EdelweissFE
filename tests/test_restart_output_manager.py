@@ -30,13 +30,18 @@ at index 0 -- otherwise a walltime-limited job chained across several resumes wo
 earlier checkpoints, including, with an unchanged ``baseName``, the very one it resumed from.
 
 Which checkpoint is oldest is read from the serial number every checkpoint carries, not from file
-times: copying files changes those, and some file systems resolve them coarsely."""
+times: copying files changes those, and some file systems resolve them coarsely.
+
+The buffer's record of the checkpoints a step may fall back to is checkpointed with it: a run
+resumed from a checkpoint may fall back to it and to the ones before it, as long as their files
+still hold them."""
 
 import os
 
 import h5py
 
 from edelweissfe.outputmanagers.restart import _RestartFileRingBuffer
+from edelweissfe.utils.checkpointedstate import packState, unpackState
 
 
 def _writeCheckpointWithSerial(fileName, serial):
@@ -100,3 +105,56 @@ def test_crash_resume_chain_never_overwrites_a_checkpoint_before_its_slot_is_due
     newProcessGeneration(2)
     assert all(os.path.exists(f) for f in liveFiles)
     assert {_readSerial(f) for f in liveFiles} == {2, 3, 4}, "the rotation did not replace the oldest first"
+
+
+def _writeNextCheckpoint(buffer) -> str:
+    fileName, serial = buffer.nextCheckpoint()
+    _writeCheckpointWithSerial(fileName, serial)
+    return fileName
+
+
+def _offeredCheckpoints(buffer) -> list:
+    """Every checkpoint the buffer offers, newest first, each dropped once offered, as falling back uses them."""
+    offered = []
+    while (fileName := buffer.latestCheckpoint()) is not None:
+        offered.append(fileName)
+        buffer.dropLatestCheckpoint()
+    return offered
+
+
+def test_checkpoints_are_offered_newest_first_and_each_once(tmp_path):
+    """A step falling back uses the latest checkpoint; falling back again uses the one before it."""
+
+    buffer = _RestartFileRingBuffer(str(tmp_path / "restart"), maxsize=3)
+    written = [_writeNextCheckpoint(buffer) for _ in range(2)]
+
+    assert _offeredCheckpoints(buffer) == [written[1], written[0]]
+
+
+def test_an_overwritten_checkpoint_is_not_offered(tmp_path):
+    """Once the ring wraps, a slot's former checkpoint is gone: only the newest three are offered."""
+
+    buffer = _RestartFileRingBuffer(str(tmp_path / "restart"), maxsize=3)
+    written = [_writeNextCheckpoint(buffer) for _ in range(4)]
+
+    assert _offeredCheckpoints(buffer) == [written[3], written[2], written[1]]
+
+
+def test_a_restored_record_offers_the_checkpoints_its_files_still_hold(tmp_path):
+    """A checkpoint holds the record as it was when it was written, itself included. A buffer that takes the record
+    over, e.g. in a run resumed from that checkpoint, offers it and the ones before it -- except those whose files a
+    later checkpoint has overwritten since."""
+
+    baseName = str(tmp_path / "restart")
+    buffer = _RestartFileRingBuffer(baseName, maxsize=3)
+    written = [_writeNextCheckpoint(buffer) for _ in range(3)]
+    recordOfTheThird = packState(buffer)
+    # the run goes on: the fourth checkpoint overwrites the first one's file
+    _writeNextCheckpoint(buffer)
+
+    resumed = _RestartFileRingBuffer(baseName, maxsize=3)
+    unpackState(resumed, recordOfTheThird)
+
+    assert _offeredCheckpoints(resumed) == [written[2], written[1]]
+    # and it continues the sequence of the checkpoint it took the record from: the next one replaces the fourth
+    assert resumed.nextCheckpoint() == ("{:}_0.h5".format(baseName), 3)

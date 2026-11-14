@@ -54,8 +54,8 @@ A component builds only through :meth:`~Preconditioner.setUp`, also when an upda
 ``self.setUp``). :meth:`~Preconditioner.setUp` first forgets what was built before (:meth:`~Preconditioner.forget`:
 the :meth:`~Preconditioner._forget` of the component and of its children), so that the old and the new hierarchies,
 factorizations and matrices, gigabytes for a large model, are never held at once. An update that does not rebuild
-keeps what was built, and what is reused on purpose is never forgotten: a fine spectral radius carried to the next
-build, the selection of a Schur complement's condensed dofs, a symbolic factorization, the statistics. A component
+keeps what was built, and what is reused on purpose is never forgotten: the selection of a Schur complement's
+condensed dofs, a symbolic factorization, the statistics. A component
 with nothing built builds at its next update, whatever the update says.
 """
 
@@ -65,7 +65,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from edelweissfe.linsolve.base import FieldBlock
-from edelweissfe.numerics.p1topology import restrictP1Map
+from edelweissfe.numerics.p1topology import restrictMidsideCorners
 
 
 @dataclass
@@ -169,7 +169,7 @@ class SetUpContext:
     coordinatesOf
         ``fieldName -> (nNodes, dimension)`` node coordinates of the field, in its dof order, or ``None`` if
         unknown (an offline replay without a model).
-    p1MapOf
+    midsideCornersOf
         ``fieldName -> (isCorner, edgeEndpoints)``, the corner/midside topology of a quadratic field, or ``None``.
     model
         The model, if there is one (markers read it), else ``None``.
@@ -183,7 +183,7 @@ class SetUpContext:
     fields: tuple
     scaling: "np.ndarray | None" = None
     coordinatesOf: object = None
-    p1MapOf: object = None
+    midsideCornersOf: object = None
     model: object = None
     journal: object = None
     log: object = None
@@ -215,9 +215,10 @@ class SetUpContext:
         """The node coordinates of a field, or ``None``."""
         return None if self.coordinatesOf is None else self.coordinatesOf(fieldName)
 
-    def p1Map(self, fieldName: str):
-        """The P1 corner/midside map of a field, or ``None``."""
-        return None if self.p1MapOf is None else self.p1MapOf(fieldName)
+    def midsideCorners(self, fieldName: str):
+        """The midside corners of a field (which nodes are corners, and the corners of each midside node), or
+        ``None``."""
+        return None if self.midsideCornersOf is None else self.midsideCornersOf(fieldName)
 
     def scalingOf(self, dofs: "slice | np.ndarray") -> np.ndarray:
         """The scaling of some dofs (ones without a scaling)."""
@@ -240,24 +241,55 @@ class SetUpContext:
     def restrictedTo(self, fields: tuple, dofs: np.ndarray, nodesOf=None) -> "SetUpContext":
         """The context of a subset ``dofs`` of this problem's dofs, whose fields are ``fields`` (as the Schur
         complement leaves them). ``nodesOf``: ``fieldName -> boolean mask`` of the nodes of the field that remain,
-        to restrict the coordinates and P1 maps."""
+        to restrict the coordinates and midside corners."""
 
         def coordinatesOf(fieldName):
             coordinates = self.coordinates(fieldName)
             mask = None if nodesOf is None else nodesOf(fieldName)
             return coordinates if coordinates is None or mask is None else coordinates[mask]
 
-        def p1MapOf(fieldName):
-            p1Map = self.p1Map(fieldName)
+        def midsideCornersOf(fieldName):
+            midsideCorners = self.midsideCorners(fieldName)
             mask = None if nodesOf is None else nodesOf(fieldName)
-            return p1Map if p1Map is None or mask is None else restrictP1Map(*p1Map, mask)
+            return (
+                midsideCorners
+                if midsideCorners is None or mask is None
+                else restrictMidsideCorners(*midsideCorners, mask)
+            )
 
         return replace(
             self,
             fields=tuple(fields),
             scaling=None if self.scaling is None else self.scaling[dofs],
             coordinatesOf=coordinatesOf,
-            p1MapOf=p1MapOf,
+            midsideCornersOf=midsideCornersOf,
+        )
+
+    def ofCoarseDofs(self, nCoarse: int) -> "SetUpContext":
+        """The context of a coarse problem whose dofs are no nodes (the coefficients of the modes of aggregates, say):
+        one field ``"coarse"`` of ``nCoarse`` scalar dofs, without coordinates, midside corners or scaling. The journal
+        and the log stay."""
+        return SetUpContext(fields=(FieldBlock("coarse", 0, nCoarse, 1),), journal=self.journal, log=self.log)
+
+    def ofCoarseNodes(self, field: FieldBlock, isCoarseNode: np.ndarray) -> "SetUpContext":
+        """The context of the coarse problem of a corner-node interpolation of this problem's one field ``field``: the
+        same field on its coarse nodes alone (``isCoarseNode``, per node of the field: the corner nodes, and the midside
+        nodes the interpolation keeps as nodes of their own), its dofs numbered node by node. The coarse nodes keep
+        their coordinates and their scaling :math:`D_c`; the coarse field is linear, so it has no midside corners, and
+        it is no field of the model."""
+        isCoarseNode = np.asarray(isCoarseNode, dtype=bool)
+        coarseNodes = np.nonzero(isCoarseNode)[0]
+        coarseDofs = (coarseNodes[:, None] * field.dimension + np.arange(field.dimension)).ravel()
+        # restricted once, here: the coarse context keeps no reference to this (fine) one
+        coordinates = self.coordinates(field.name)
+        coarseCoordinates = None if coordinates is None else coordinates[isCoarseNode]
+        return replace(
+            self,
+            fields=(FieldBlock(field.name, 0, len(coarseDofs), field.dimension),),
+            scaling=None if self.scaling is None else self.scaling[field.start + coarseDofs],
+            coordinatesOf=lambda fieldName: coarseCoordinates if fieldName == field.name else None,
+            midsideCornersOf=None,
+            model=None,
         )
 
 
@@ -423,16 +455,31 @@ class Preconditioner:
 
     @property
     def containsKrylovSolver(self) -> bool:
-        """Whether this component is, or has among its children, a Krylov solver. A Krylov solver reuses its
-        preconditioner across solves (so the nonlinear solver keeps the sparsity pattern of the matrix stable) and
-        records each solve (the "linear solve" column); a direct solve does neither."""
+        """Whether this component is, or has among its children, a Krylov solver. A Krylov solver records each solve
+        (the "linear solve" column of the nonlinear solver); a direct solve does not."""
         return any(child.containsKrylovSolver for _, child in self.children())
 
-    def setModel(self, model, dofManager) -> None:
+    @property
+    def containsDirectSolver(self) -> bool:
+        """Whether this component is, or has among its children, a direct solver (a sparse LU factorization). Such a
+        factorization wants the explicitly stored zeros pruned out of the system matrix
+        (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`)."""
+        return any(child.containsDirectSolver for _, child in self.children())
+
+    @property
+    def reusesPreconditioner(self) -> bool:
+        """Whether this component is, or has among its children, a Krylov solver that keeps its preconditioner across
+        solves (:class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy` with ``reuse``). A new sparsity
+        pattern forces a rebuild that such a solver would have saved, so the nonlinear solver then does not prune the
+        system matrix (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which changes its
+        pattern on almost every iteration."""
+        return any(child.reusesPreconditioner for _, child in self.children())
+
+    def setModel(self, model, numbering) -> None:
         """Take a new model (the first, or one after a change of the mesh), and hand it to the children. A component
         that derives something from the model (e.g. which dofs a marker selects) overrides this."""
         for _, child in self.children():
-            child.setModel(model, dofManager)
+            child.setModel(model, numbering)
 
     def finishSolve(self) -> None:
         """The solve is done: release what only this solve needed (e.g. the field blocks of its matrix, which the next
@@ -485,6 +532,26 @@ class Preconditioner:
         from edelweissfe.linsolve.composition.views import html
 
         return html(self, standalone=False)
+
+
+def requireEachComponentOnce(root: Preconditioner) -> None:
+    """Raise if one component (one instance) sits in two places of the tree: it is set up for one matrix, so the
+    second place would overwrite what the first one built, e.g. ``AMG()`` bound to a name and put under two
+    :class:`~edelweissfe.linsolve.composition.combinators.OnField`. A combination that applies one correction several
+    times (a symmetric sweep) lists it once among its children, so that is no second place."""
+    seen = {}
+
+    def visit(component, path):
+        if id(component) in seen:
+            raise ValueError(
+                "the component {:} sits in two places of the solver tree, {:} and {:}; it is set up for one matrix, so "
+                "make a new one for each place".format(type(component).__name__, seen[id(component)], path)
+            )
+        seen[id(component)] = path
+        for role, child in component.children():
+            visit(child, path + "/" + role)
+
+    visit(root, type(root).__name__)
 
 
 def requirePreconditioner(owner: str, role: str, child) -> None:

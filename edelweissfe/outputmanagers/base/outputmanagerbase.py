@@ -67,9 +67,8 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
 
     identification = "OutputManagerBase"
 
-    #: The name of this output manager, from its ``*output, name=...`` line (or the driver's default).
-    #: Unique within a job: the model keeps its output managers by it, and the step's performance
-    #: table has one row per manager under it. Set by every concrete output manager's constructor.
+    #: The name of this output manager, from its ``*output, name=...`` line; unique within a job.
+    #: Set by every concrete output manager's constructor.
     name: str
 
     #: Whether this output manager writes restart checkpoints. A solver that changes the model at
@@ -194,6 +193,25 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
         P
             The final reaction vector.
         """
+
+    def latestCheckpoint(self) -> str | None:
+        """The latest restart checkpoint this output manager wrote that is still on disk and that no
+        fallback has used yet, for a step to fall back to (see
+        :meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`). Only an output
+        manager that :attr:`writesRestartCheckpoints` has any.
+
+        Returns
+        -------
+        str | None
+            The file name of the checkpoint, or None if there is none.
+        """
+
+        return None
+
+    def dropLatestCheckpoint(self):
+        """Offer the latest checkpoint (see :meth:`latestCheckpoint`) no more: a step has fallen back
+        to it, or found that it holds the state its failed increment started from. Every checkpoint
+        serves one fallback at most."""
 
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this output manager carries from one increment to the next; by default the

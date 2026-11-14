@@ -158,12 +158,8 @@ class SchemaFieldMeta:
     optionsOverrideOnly: bool = False
     structuralOnly: bool = False
     updateOnly: bool = False
-    # Stored via a `default_factory`, not a plain `= MISSING` field default: assigning
-    # `dataclasses.MISSING` (an alias of which `MISSING` is) as a field's *default value* is
-    # indistinguishable, to the dataclasses machinery itself, from that field having no default at
-    # all -- which would raise "non-default argument follows default argument" the moment a later
-    # field of this dataclass does have a plain default. A factory returning the sentinel sidesteps
-    # that special-casing entirely.
+    # A default_factory, not `= MISSING`: dataclasses treats a MISSING default as "no default", which would
+    # break the field order ("non-default argument follows default argument").
     documentedDefault: Any = dataclasses.field(default_factory=lambda: MISSING)
 
 
@@ -700,8 +696,7 @@ def resolveCaseInsensitiveOptions(schemaCls: type, options: Mapping[str, Any]) -
         exactName = fieldNamesByFold.get(key.casefold())
         if exactName is None:
             availableNames = sorted(scalarNames)
-            # A sub-keyword name misused as a scalar option is a distinct mistake with a distinct
-            # remedy, so say so instead of offering it as a "did you mean" spelling suggestion.
+            # A sub-keyword misused as a scalar option gets its own remedy, not a "did you mean".
             subKeywordName = subKeywordNamesByFold.get(key.casefold())
             if subKeywordName is not None:
                 raise ValueError(
@@ -785,10 +780,8 @@ def buildSchemaFromOptions(
 
     kwargs.update(_buildSubKeywords(schemaCls, subKeywordOptions or {}))
 
-    # Reported by input-file option name, not field name, so a user reading the error sees the
-    # spelling they are expected to type (they cannot know that `f(x)` is a field called `f_x`).
-    # A required sub-keyword field lands in `kwargs` only when at least one block was supplied,
-    # so the same check covers "at least one >>block of this kind is mandatory".
+    # Reported by input-file option name, the spelling the user types (e.g. `f(x)`, not `f_x`). A required
+    # sub-keyword is in `kwargs` only if at least one block was supplied, so this also enforces that.
     missingRequired = [
         optionName
         for optionName, field in optionNames(schemaCls).items()

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Unit tests for edelweissfe.numerics (DofVector, ScatterDofVector, VIJSystemMatrix, VIJEntityBase, DofManager).
+Unit tests for edelweissfe.numerics (DofVector, ScatterDofVector, VIJSystemMatrix, SystemMatrixContributorBase,
+DofNumbering, DofLocations).
 """
 
 import unittest
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -17,11 +19,11 @@ from edelweissfe.numerics.scatterdofvector import (
     ScatterDofVector,
     ScatterDofVectorTemplate,
 )
-from edelweissfe.numerics.vijentitybase import VIJEntityBase
+from edelweissfe.numerics.systemmatrixcontributor import SystemMatrixContributorBase
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 
 
-class DummyEntity(VIJEntityBase):
+class DummyEntity(SystemMatrixContributorBase):
     """Mock entity for testing."""
 
     def __init__(self, nDof: int, entity_id: int):
@@ -39,13 +41,16 @@ class TestNumerics(unittest.TestCase):
     def setUp(self):
         self.ent1 = DummyEntity(nDof=2, entity_id=1)
         self.ent2 = DummyEntity(nDof=3, entity_id=2)
-        self.entity_map = {
-            self.ent1: np.array([0, 1], dtype=int),
-            self.ent2: np.array([1, 2, 3], dtype=int),
-        }
+        #: The locations of the entities: all a DofVector asks of them is the mapping.
+        self.locations = SimpleNamespace(
+            ofEntity={
+                self.ent1: np.array([0, 1], dtype=int),
+                self.ent2: np.array([1, 2, 3], dtype=int),
+            }
+        )
 
     def test_dof_vector_creation_and_indexing(self):
-        dof_vec = DofVector(nDof=4, entitiesInDofVector=self.entity_map)
+        dof_vec = DofVector(nDof=4, locations=self.locations)
         self.assertEqual(dof_vec.size, 4)
         self.assertTrue(np.allclose(dof_vec, 0.0))
 
@@ -70,7 +75,7 @@ class TestNumerics(unittest.TestCase):
         dof_copy = dof_vec.copy()
         self.assertIsInstance(dof_copy, DofVector)
         self.assertTrue(np.allclose(dof_copy, dof_vec))
-        self.assertIn(self.ent1, dof_copy.entitiesInDofVector)
+        self.assertIs(dof_copy.locations, self.locations)
 
         # Create Scatter Vector
         scatter_vec = dof_vec.createScatterVector()
@@ -78,7 +83,7 @@ class TestNumerics(unittest.TestCase):
         self.assertEqual(scatter_vec.size, 5)  # 2 + 3 entries
 
     def test_scatter_dof_vector(self):
-        template = ScatterDofVectorTemplate(self.entity_map, nDof=4)
+        template = ScatterDofVectorTemplate(self.locations, nDof=4)
         scatter_vec = ScatterDofVector(template)
         self.assertEqual(scatter_vec.size, 5)
 
@@ -89,7 +94,7 @@ class TestNumerics(unittest.TestCase):
         self.assertTrue(np.allclose(scatter_vec[self.ent2], [7.0, 8.0, 9.0]))
 
         # Assemble into global DofVector
-        target = DofVector(4, self.entity_map)
+        target = DofVector(4, self.locations)
         scatter_vec.assembleInto(target)
         # index 0: 5.0 (from ent1)
         # index 1: 6.0 (from ent1) + 7.0 (from ent2) = 13.0
@@ -115,12 +120,18 @@ class TestNumerics(unittest.TestCase):
         # 2 elements: ent1 (2x2=4 entries), ent2 (3x3=9 entries) -> size = 13
         I_arr = np.zeros(13, dtype=np.intc)
         J_arr = np.zeros(13, dtype=np.intc)
-        entities_in_vij = {self.ent1: 0, self.ent2: 4}
+        vijSliceOfEntity = {self.ent1: slice(0, 4), self.ent2: slice(4, 13)}
 
-        self.ent1.initializeVIJContribution(self.entity_map[self.ent1], I_arr, J_arr, 0)
-        self.ent2.initializeVIJContribution(self.entity_map[self.ent2], I_arr, J_arr, 4)
+        for entity, vijSlice in vijSliceOfEntity.items():
+            localRows, localColumns = entity.localEntriesOfBlock()
+            I_arr[vijSlice] = self.entity_map[entity][localRows]
+            J_arr[vijSlice] = self.entity_map[entity][localColumns]
 
-        vij_mat = VIJSystemMatrix(nDof=4, I=I_arr, J=J_arr, entitiesInVIJ=entities_in_vij)
+        # the dense block is column-major: the row varies fastest
+        np.testing.assert_array_equal(I_arr[:4], [0, 1, 0, 1])
+        np.testing.assert_array_equal(J_arr[:4], [0, 0, 1, 1])
+
+        vij_mat = VIJSystemMatrix(13, vijSliceOfEntity)
         self.assertEqual(vij_mat.size, 13)
 
         # Entity read/write

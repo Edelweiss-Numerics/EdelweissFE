@@ -72,13 +72,8 @@ def checkFacetsCarryParentFaces(facets: list, side: str, setName: str, constrain
             "surface element generator, which stamps them."
         )
 
-    # A per-node weighting has no meaning in this formulation and, unlike the node-based
-    # constraint, there is no code path that could apply one: the pressure is distributed with
-    # the parent face's own shape functions, evaluated at the quadrature points. Accepting a
-    # surface stamped with a weight transform would silently give a different answer from the
-    # sibling constraint on the same input, which is the one outcome worth refusing outright --
-    # the whole point of the parent-face basis is that it fixes the corner mismatch the
-    # weighting only minimises.
+    # Per-node weights cannot be applied here (the pressure is distributed with the parent face's
+    # shape functions); accepting them would silently differ from the node-based constraint.
     weighted = [facet.elNumber for facet in facets if facet.weightTransform is not None]
     if weighted:
         raise ValueError(
