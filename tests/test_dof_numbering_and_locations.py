@@ -197,6 +197,60 @@ def test_moved_further_entities_are_located_anew_and_the_others_keep_their_locat
     assert relocated.elements == [moving, resting]
 
 
+def test_the_discrete_system_of_the_model_leaves_out_an_element_without_kernels_and_the_nodes_only_it_touches(
+    monkeypatch,
+):
+    """A contact facet carries geometry only: it has no rows, so it has no location, and no solver evaluates it. A node
+    that only such an entity touches would be numbered, but have no row in the system matrix: the model does not build
+    a discrete system with it, and names the node."""
+    model, n = _buildTwoElementModel()
+    e2 = model.elements[2]
+    monkeypatch.setattr(type(e2), "hasKernels", property(lambda self: self is not e2))
+
+    with pytest.raises(ValueError, match=r"field 'displacement' of node 3 is numbered.*no row in the system matrix"):
+        model.buildDiscreteSystem()
+
+
+def test_every_numbered_degree_of_freedom_must_be_located():
+    model, n = _buildTwoElementModel()
+    numbering = _numbering(model)
+    e1, e2 = model.elements[1], model.elements[2]
+
+    DofLocations(numbering, [e1, e2]).checkEveryDofIsLocated()
+
+    with pytest.raises(ValueError, match=r"field 'displacement' of node 3 is numbered"):
+        DofLocations(numbering, [e1]).checkEveryDofIsLocated()
+
+
+def test_a_degree_of_freedom_that_only_a_multi_point_constraint_relates_is_located():
+    """The reference point of a rigid body, say, is in no entity: its rows come through the condensation."""
+    model, n = _buildTwoElementModel()
+    locations = DofLocations(_numbering(model), [model.elements[1]])
+
+    # the displacement of the nodes 3 and 4, which only the second element couples, as slave and as masters
+    locations.checkEveryDofIsLocated(np.array([4, 5, 6, 7]))
+
+    with pytest.raises(ValueError, match=r"field 'displacement' of node 4 is numbered"):
+        locations.checkEveryDofIsLocated(np.array([4, 5]))
+
+
+def test_the_accumulated_flux_count_is_that_of_the_elements_with_kernels(monkeypatch):
+    """The relative residual test of the implicit solvers divides by the number of accumulated nodal fluxes
+    (``nAccumulatedNodalFluxesFieldwise``): a facet adds none, as it has no location, so the count is that of the
+    elements that carry kernels, here one CPE4 with four nodes of two displacement degrees of freedom each."""
+    model, n = _buildTwoElementModel()
+    e1, e2 = model.elements[1], model.elements[2]
+    monkeypatch.setattr(type(e2), "hasKernels", property(lambda self: self is not e2))
+
+    locations = DofLocations(_numbering(model), model.elementsWithKernels())
+
+    assert locations.nAccumulatedNodalFluxesFieldwise == {"displacement": 4 * 2}
+    assert (
+        locations.nAccumulatedNodalFluxesFieldwise
+        == DofLocations(_numbering(model), [e1]).nAccumulatedNodalFluxesFieldwise
+    )
+
+
 def test_the_flux_counts_of_the_elements_are_counted_once_for_all_locations_made_from_them(monkeypatch):
     model, n = _buildTwoElementModel()
     locations = _locations(model, [_FakeConstraint([n[0], n[5]], ["displacement"])])

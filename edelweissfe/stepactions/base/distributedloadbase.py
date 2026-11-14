@@ -87,6 +87,7 @@ class DistributedLoadBase(LoadBase):
     ):
         """Let every element of the surface add the residual contribution of the load on its face, the negative of
         the external load, and its tangent; see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
+        Only the elements that are located act, as for a body load.
 
         Parameters
         ----------
@@ -110,6 +111,9 @@ class DistributedLoadBase(LoadBase):
         load = self.getCurrentLoad(timeStep)
         for faceID, elementSet in self.surface.items():
             for el in elementSet:
+                if el not in locations:
+                    continue
+
                 Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
                 Pe = np.zeros(el.nDof)
 

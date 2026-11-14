@@ -130,7 +130,7 @@ _chunksPerThread = 16
 _gatherPlanCache = None
 
 
-def _chunkedGatherPlan(elements: dict, locations: DofLocations, scatterOffsetMap: dict, chunkSize: int) -> list:
+def _chunkedGatherPlan(elements: list, locations: DofLocations, scatterOffsetMap: dict, chunkSize: int) -> list:
     """Build, or reuse, the flat gather index plan for one chunking of the elements.
 
     Each chunk gets the concatenation of its elements' DOF indices, the offsets at which each
@@ -181,7 +181,7 @@ def _chunkedGatherPlan(elements: dict, locations: DofLocations, scatterOffsetMap
         return cached[3]
 
     plan = []
-    for chunk in chunked_iterable(elements.values(), chunkSize):
+    for chunk in chunked_iterable(elements, chunkSize):
         indicesPerElement = [locations[element] for element in chunk]
         offsets = np.zeros(len(chunk) + 1, dtype=np.intp)
         np.cumsum([len(indices) for indices in indicesPerElement], out=offsets[1:])
@@ -197,7 +197,7 @@ def _chunkedGatherPlan(elements: dict, locations: DofLocations, scatterOffsetMap
 
 
 def computeElementsInParallelForExplicit(
-    elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, timeStep: TimeStep
+    elements: list, Un1: DofVector, dU: DofVector, P: DofVector, timeStep: TimeStep
 ) -> tuple[DofVector, float]:
     """Evaluate the explicit element kernels across the available threads.
 

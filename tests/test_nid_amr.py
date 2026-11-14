@@ -61,7 +61,7 @@ pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 
 #: The unpatched methods, captured once at import -- a test that runs the solver more than once must
 #: wrap THESE rather than whatever is currently on the class, or the wrappers chain. Same reason as
-#: in test_explicit_operator_reuse.py.
+#: in test_ned_discrete_system_path.py.
 _TRUE_ENSURE = NonlinearImplicitDynamic._updateNewmarkSystem
 _TRUE_REPORT = NonlinearImplicitDynamic.reportTopologyChangeConservation
 _TRUE_INITIAL_ACCELERATION = NonlinearImplicitDynamic._computeInitialAcceleration

@@ -332,7 +332,7 @@ def test_the_explicit_dynamic_solver_evaluates_the_constraints_of_its_system(tmp
     """A constraint that leaves reach is located out of the system (the solver makes new locations of the discrete
     system, without the constraint): from then on the system holds no constraint, and the solver evaluates none."""
 
-    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, model, U: 2.0e-3)
+    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, U: 2.0e-3)
 
     model = _runDeck(tmp_path, REACH_PROBE_DECK)
 

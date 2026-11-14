@@ -139,9 +139,12 @@ ordinary displacement DOFs of a deformable body's boundary nodes, used as the ma
 :doc:`surfaceElementGenerator <generators>` generator.
 
 Because a facet has neither a material nor a state, its kernels, its internal energy and its state
-acceptance are all no-ops, and it reports ``hasKernels = False``. Solvers that would otherwise call
-into every entry of the element container on every increment -- the explicit dynamic solver does --
-use that to leave the facets out of the element loop rather than calling into them for nothing.
+acceptance are all no-ops, and it reports ``hasKernels = False``. The model leaves such an entity out of its
+discrete system (:ref:`discrete system <model-discrete-system>`): the facet has no block in the system matrix and no
+location, and no solver calls into it on any increment. Its nodes have rows only through the elements that carry
+kernels: a node that only a facet touches is numbered but has no row, and the discrete system refuses it, naming the
+node. A load on an element set that holds facets, e.g. a body force on ``all``, acts on the elements of the set that
+are located.
 An element of your own needs to do nothing here: :class:`~edelweissfe.elements.base.baseelement.BaseElement`
 reports ``True``, which is right for any element that carries a material.
 

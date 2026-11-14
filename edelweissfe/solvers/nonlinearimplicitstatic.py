@@ -538,7 +538,6 @@ class NIST(NonlinearSolverBase):
         next one is built, never both at once."""
 
         super().forgetDiscreteSystem()
-        self.mpcTransformation = None
         self._U = self._dU = self._P = self._K = None
 
     def onNewNumbering(self):
@@ -553,8 +552,6 @@ class NIST(NonlinearSolverBase):
 
         system = self.system
         numbering = system.numbering
-
-        self.journal.message("discrete system rebuilt: {:} dof".format(numbering.nDof), self.identification, 2)
 
         # Fields are laid out in contiguous slices: report the block structure per field.
         for fieldName, fieldIndices in numbering.idcsOfFieldsInDofVector.items():
@@ -584,10 +581,7 @@ class NIST(NonlinearSolverBase):
 
         self.readStateFromModel(self._U)
 
-        with performancetiming.timeit("mpc transformation build"):
-            self.mpcTransformation = self.buildMPCTransformation(system.model, self._stepActions)
-        with performancetiming.timeit("mpc dirichlet conflict check"):
-            self.checkMPCDirichletConflicts(self.mpcTransformation, self._stepActions)
+        self.buildAndCheckMPCTransformation()
 
     def onNewLocations(self):
         """Build what is derived from the locations of the new discrete system: the vectors are wrapped with them, the
@@ -601,14 +595,6 @@ class NIST(NonlinearSolverBase):
         """
 
         locations = self.system.locations
-
-        self.journal.message(
-            "locations of {:} entities in the numbering of {:} dof".format(
-                len(locations.ofEntity), self.system.numbering.nDof
-            ),
-            self.identification,
-            2,
-        )
 
         self._U = self._U.onLocations(locations)
         self._dU = self._dU.onLocations(locations)

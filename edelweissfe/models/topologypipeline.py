@@ -637,7 +637,7 @@ class TopologyPipeline:
         Returns
         -------
         bool
-            True if any consumer reported that its DOF footprint changed.
+            True if any consumer found the change of the mesh relevant and patched its cached state.
         """
 
         # materialise the list: any() would short-circuit and leave later consumers unrefreshed

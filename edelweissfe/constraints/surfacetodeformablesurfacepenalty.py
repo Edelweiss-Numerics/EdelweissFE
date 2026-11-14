@@ -386,7 +386,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def updateConnectivity(self, model: FEModel) -> bool:
         """Freeze each contact point's closest-point projection onto the master surface, and
-        redeclare the constraint's DOF footprint accordingly.
+        redeclare the nodes the constraint couples accordingly.
 
         Called once per increment by the solver, before the discrete system is (re)built. The
         candidate search runs on the *flat* master facets, which keeps it robust and lets it reuse

@@ -515,25 +515,75 @@ class FEModel:
             The Newmark parameter :math:`\\gamma`; 0 for no inertia.
         """
 
+    def elementsWithKernels(self) -> list:
+        """The elements of the model that take part in a discrete system: those that carry kernels (see
+        :attr:`~edelweissfe.elements.base.baseelement.BaseElement.hasKernels`). An entity of the element container that
+        carries geometry only, e.g. a contact facet, has no block in the system matrix and takes no part; its nodes
+        have rows only if an element that carries kernels couples them, see :meth:`buildDiscreteSystem`.
+
+        Returns
+        -------
+        list
+            The elements, in the order of the element container.
+        """
+
+        return [element for element in self.elements.values() if element.hasKernels]
+
+    def indicesRelatedByMultiPointConstraints(self, numbering: DofNumbering) -> np.ndarray:
+        """The indices of the degrees of freedom that the multi-point constraints of the model relate, as slaves and as
+        masters, in the given numbering.
+
+        Parameters
+        ----------
+        numbering
+            The numbering of the degrees of freedom.
+
+        Returns
+        -------
+        np.ndarray
+            The indices, in no particular order, with repetitions.
+        """
+
+        return np.fromiter(
+            (
+                index
+                for constraint in self.multiPointConstraints.values()
+                for slave, masters in constraint.getMultiPointConstraints(numbering)
+                for index in (slave, *(master for master, _ in masters))
+            ),
+            dtype=int,
+        )
+
     def buildDiscreteSystem(self) -> DiscreteSystem:
         """Build the discrete system of the model as it is now: number its degrees of freedom, and say which elements
         and which constraints contribute to it, see :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. Called
         by a solver whenever it (re)builds its discrete system: at the start of a step, and after the topology update
         reported a change that needs one (:class:`~edelweissfe.models.change.Change`).
 
-        The discrete system of a finite element model holds the node fields, the elements, and the active constraints
-        with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see
+        The discrete system of a finite element model holds the node fields, the elements that carry kernels, and the
+        active constraints with their scalar variables (e.g. Lagrange multipliers); the elements are those of
+        :meth:`elementsWithKernels`. A constraint that is not active (see
         :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
         scalar variables, which would otherwise be unknowns without an equation.
+
+        Every degree of freedom that is numbered must be in the location of an entity, or related by a multi-point
+        constraint, or it would have no row in the system matrix: a node that only an entity without kernels touches
+        (e.g. a contact facet) has none, and the discrete system is not built.
 
         Returns
         -------
         DiscreteSystem
             The discrete system.
+
+        Raises
+        ------
+        ValueError
+            If a numbered degree of freedom is in no location; the error names the node and the field.
         """
 
         numbering = DofNumbering(self.nodeFields.values(), self.activeScalarVariables(), self.nodeSets.values())
-        locations = DofLocations(numbering, self.elements.values(), self.activeConstraints())
+        locations = DofLocations(numbering, self.elementsWithKernels(), self.activeConstraints())
+        locations.checkEveryDofIsLocated(self.indicesRelatedByMultiPointConstraints(numbering))
 
         return DiscreteSystem(self, locations)
 
