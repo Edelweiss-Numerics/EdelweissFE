@@ -180,20 +180,23 @@ def test_the_threaded_path_reproduces_the_serial_one_bitwise(tmp_path, monkeypat
     workerThreads(4)
     serialModel, _ = _run(tmp_path, "serial", deck)
 
-    # Slices of 8 entries, and mass row blocks of 8 rows to match them.
+    # Slices of 64 entries, and mass row blocks of 64 rows to match them: short enough that even the shortest operation,
+    # over the rows of the mass of the unrefined mesh, is split into several slices, the last one shorter than the rest;
+    # long enough that the operations as long as the system matrix are not split into tens of thousands of calls.
+    sliceLength = 64
     slicedLengths = []
 
-    def inSlicesOfEight(work, length, sliceLength=None):
+    def inShortSlices(work, length, requestedSliceLength=None):
         slicedLengths.append(length)
-        return forEachSliceInParallel(work, length, 8)
+        return forEachSliceInParallel(work, length, sliceLength)
 
     for module in (systemmatrixassembly, nonlinearimplicitdynamic):
-        monkeypatch.setattr(module, "forEachSliceInParallel", inSlicesOfEight)
-    monkeypatch.setattr(nonlinearimplicitdynamic, "_MASS_ROWS_PER_BLOCK", 8)
+        monkeypatch.setattr(module, "forEachSliceInParallel", inShortSlices)
+    monkeypatch.setattr(nonlinearimplicitdynamic, "_MASS_ROWS_PER_BLOCK", sliceLength)
     threadedModel, _ = _run(tmp_path, "threaded", deck)
 
     assert _hangingSlaveNodes(threadedModel) > 0, "no hanging node; the MPC path was not exercised"
-    assert slicedLengths and min(slicedLengths) > 8, "an operation was not split into several slices"
+    assert slicedLengths and min(slicedLengths) > sliceLength, "an operation was not split into several slices"
     assert threadedModel.time == serialModel.time
     for serial, threaded, name in zip(_finalState(serialModel), _finalState(threadedModel), "UVA"):
         assert threaded.tobytes() == serial.tobytes(), name
