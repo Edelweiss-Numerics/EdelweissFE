@@ -29,6 +29,8 @@ Created on Thu May 21 14:23:14 2015
 
 @author: c8441141
 """
+
+import concurrent.futures
 import os
 import pathlib
 import shutil
@@ -313,15 +315,26 @@ print("Now compile!")
 
 class optional_build_ext(build_ext):
     def build_extensions(self):
-        self.successful_extensions = []
-
-        for ext in self.extensions:
+        # The extensions are independent of each other: they are compiled side by side (the compilers run as
+        # subprocesses; ``-j N`` limits how many at once, all cores by default), and each may fail on its own.
+        def build(ext):
             try:
                 self.build_extension(ext)
+            except Exception as e:
+                return e
+            return None
+
+        workers = self.parallel if type(self.parallel) is int and self.parallel > 0 else os.process_cpu_count()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            errors = list(executor.map(build, self.extensions))
+
+        self.successful_extensions = []
+        for ext, error in zip(self.extensions, errors):
+            if error is None:
                 self.successful_extensions.append(ext.name)
                 print(f"[OK] Built extension: {ext.name}")
-            except Exception as e:
-                print(f"[FAIL] Could not build {ext.name}: {e}")
+            else:
+                print(f"[FAIL] Could not build {ext.name}: {error}")
 
         self.write_package_file("built_extensions.log", "\n".join(self.successful_extensions) + "\n")
         # The Marmot installation the extensions were built against. On Windows, edelweissfe/__init__.py adds its
