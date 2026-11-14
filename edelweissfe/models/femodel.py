@@ -693,9 +693,17 @@ class FEModel:
 
         writeRestartDataOf(f.create_group("modelModifiers"), self.modelModifiers)
 
+        # The quadrature-point history of all elements in one array, not a dataset per element, which would make the
+        # checkpoint of a large mesh slow to write and to read: the state of element numbers[i] is
+        # stateVars[offsets[i] : offsets[i + 1]].
+        elementNumbers = list(self.elements)
+        elementStateVars = [
+            np.asarray(self.elements[elNumber].getStateVars(), dtype=float) for elNumber in elementNumbers
+        ]
         elementsGroup = f.create_group("elements")
-        for elNumber, element in self.elements.items():
-            elementsGroup.create_dataset(str(elNumber), data=element.getStateVars())
+        elementsGroup.create_dataset("numbers", data=np.array(elementNumbers, dtype=np.int64))
+        elementsGroup.create_dataset("offsets", data=np.cumsum([0] + [len(s) for s in elementStateVars]))
+        elementsGroup.create_dataset("stateVars", data=np.concatenate(elementStateVars + [np.empty(0)]))
 
         writeRestartDataOf(f.create_group("constraints"), self.constraints)
 
@@ -802,15 +810,17 @@ class FEModel:
 
         # Sound only because the replay reproduces the original numbering exactly (verified by fingerprint):
         # a missing element means a mismatched model and must be reported.
-        for elementKey, stateVars in f["elements"].items():
-            elNumber = int(elementKey)
+        elementsGroup = f["elements"]
+        offsets = elementsGroup["offsets"][:]
+        stateVars = elementsGroup["stateVars"][:]
+        for index, elNumber in enumerate(elementsGroup["numbers"][:].tolist()):
             element = self.elements.get(elNumber)
             if element is None:
                 raise RestartError(
                     "the checkpoint holds state for element {:}, which does not exist after the "
                     "topology replay -- the replayed model does not match the one checkpointed".format(elNumber)
                 )
-            element.setStateVars(stateVars[:])
+            element.setStateVars(stateVars[offsets[index] : offsets[index + 1]])
 
         # A rigid body moves its surface nodes into the current configuration, a pure function of
         # its reference point's restored DOFs: put them where the uninterrupted run had them.
