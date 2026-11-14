@@ -37,14 +37,16 @@ import order:
    lazily and idempotently by ``_ensureOptionsKeyword``) must not fail silently if imported before
    the step types it depends on exist.
 
-Each check runs in a **fresh subprocess** per module, which is the only way to test an import-order
-property, and the reason this file is slower than the rest of the suite. The subprocesses run
-concurrently, and a failure reports *every* offending module rather than only the first, because
-these bugs come in families with one shared cause -- seeing all of them together is what points at
-the cause instead of at a symptom.
+Both checks run in one **fresh subprocess** per module, which is the only way to test an import-order
+property, and the reason this file is slower than the rest of the suite: it imports the module, then
+the parser, and its exit status tells which of the two failed. The subprocesses run concurrently,
+and a failure reports *every* offending module rather than only the first, because these bugs come in
+families with one shared cause -- seeing all of them together is what points at the cause instead of
+at a symptom.
 """
 
 import concurrent.futures
+import functools
 import json
 import subprocess
 import sys
@@ -113,31 +115,47 @@ def _runInFreshInterpreter(code: str) -> tuple[int, str]:
     return result.returncode, lastLine
 
 
-def _failuresAcrossModules(codeForModule) -> list[tuple[str, str]]:
-    """Run one fresh interpreter per documented module and collect every failure.
+#: The exit status of a probe whose module failed to import on its own (an uncaught exception exits with 1).
+_STANDALONE_IMPORT_FAILED = 3
 
-    Parameters
-    ----------
-    codeForModule
-        Callable mapping a module name to the source to execute for it.
+#: The probe of a module: import it alone, then the parser.
+_PROBE = """
+import sys
+import traceback
+
+try:
+    import {module}
+except BaseException:
+    traceback.print_exc()
+    sys.exit({standaloneImportFailed})
+import edelweissfe.utils.inputfileparser
+"""
+
+
+@functools.cache
+def _probeEveryModule() -> dict[str, tuple[int, str]]:
+    """Probe every documented module in a fresh interpreter of its own (see :data:`_PROBE`).
 
     Returns
     -------
-    list[tuple[str, str]]
-        ``(moduleName, errorMessage)`` for each module whose interpreter exited non-zero, sorted.
+    dict[str, tuple[int, str]]
+        By module name, the exit status of its probe and the last line of its stderr.
     """
 
     names = _documentedModuleNames()
     assert names, "no documented modules were discovered at all -- the discovery must be broken"
 
     def probe(name):
-        returnCode, message = _runInFreshInterpreter(codeForModule(name))
-        return name, returnCode, message
+        return _runInFreshInterpreter(_PROBE.format(module=name, standaloneImportFailed=_STANDALONE_IMPORT_FAILED))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-        results = list(executor.map(probe, names))
+        return dict(zip(names, executor.map(probe, names)))
 
-    return sorted((name, message) for name, returnCode, message in results if returnCode != 0)
+
+def _failures(failed) -> list[tuple[str, str]]:
+    """``(moduleName, errorMessage)`` for each module whose probe exited with a status ``failed`` accepts, sorted."""
+
+    return sorted((name, message) for name, (returnCode, message) in _probeEveryModule().items() if failed(returnCode))
 
 
 def _formatFailures(failures: list[tuple[str, str]]) -> str:
@@ -148,7 +166,7 @@ def _formatFailures(failures: list[tuple[str, str]]) -> str:
 def test_every_documented_module_imports_standalone():
     """Each documented module must import in an otherwise-untouched interpreter."""
 
-    failures = _failuresAcrossModules(lambda name: f"import {name}\n")
+    failures = _failures(lambda returnCode: returnCode == _STANDALONE_IMPORT_FAILED)
 
     assert not failures, (
         "these documented modules cannot be imported on their own, so nothing but the input file "
@@ -167,7 +185,7 @@ def test_no_documented_module_poisons_the_parser_when_imported_first():
     of the shared ``options`` keyword landed.
     """
 
-    failures = _failuresAcrossModules(lambda name: f"import {name}\nimport edelweissfe.utils.inputfileparser\n")
+    failures = _failures(lambda returnCode: returnCode != 0)
 
     assert (
         not failures
