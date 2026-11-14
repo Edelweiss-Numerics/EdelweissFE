@@ -324,12 +324,16 @@ class optional_build_ext(build_ext):
                 return e
             return None
 
+        # AMGCL's extension takes longer than all others together: it starts first, and the others share the
+        # remaining workers, instead of the build waiting for it at the end.
+        slowestFirst = sorted(self.extensions, key=lambda ext: ext.name != "edelweissfe.linsolve.amgcl.amgcl")
         workers = self.parallel if type(self.parallel) is int and self.parallel > 0 else os.process_cpu_count()
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            errors = list(executor.map(build, self.extensions))
+            errors = dict(zip((ext.name for ext in slowestFirst), executor.map(build, slowestFirst)))
 
         self.successful_extensions = []
-        for ext, error in zip(self.extensions, errors):
+        for ext in self.extensions:
+            error = errors[ext.name]
             if error is None:
                 self.successful_extensions.append(ext.name)
                 print(f"[OK] Built extension: {ext.name}")
