@@ -139,22 +139,31 @@ def _run(path: Path, text: str):
 #: The refinement happens at the first topology check (increment 100), after the support has started
 #: to slide; the checkpoint falls between two later checks.
 N_INCREMENTS_FULL = 400
-N_INCREMENTS_TRUNCATED = 340
+N_INCREMENTS_RESUMED_FROM = 340
+
+
+def _checkpointAfter(directory: Path, nIncrements: int) -> Path:
+    """The checkpoint a run wrote into ``directory`` after ``nIncrements`` increments."""
+    for checkpoint in directory.glob("ckpt_*.h5"):
+        with h5py.File(checkpoint, "r") as f:
+            if f.attrs["numberOfIncrementsDone"] == nIncrements:
+                assert f.attrs["time"] > 0.0
+                return checkpoint
+    raise AssertionError("no checkpoint after {:} increments".format(nIncrements))
 
 
 def test_resume_across_refinement_next_to_a_moving_rigid_body(tmp_path):
     stl = tmp_path / "plate.stl"
     _writePlateStl(stl)
 
-    reference = _run(tmp_path / "full.inp", _deck(stl, N_INCREMENTS_FULL))
-
+    # The uninterrupted run writes a checkpoint at every output and keeps them all. The resumed run writes none: if
+    # writing one changed the run, the two would end apart.
     writer = (
-        f"*output, type=restart, name=restart\nwriteInterval=1, baseName={tmp_path / 'ckpt'}, numberOfFilesToKeep=1\n"
+        "*output, type=restart, name=restart\n"
+        f"writeInterval=1, baseName={tmp_path / 'ckpt'}, numberOfFilesToKeep={N_INCREMENTS_FULL}\n"
     )
-    _run(tmp_path / "truncated.inp", _deck(stl, N_INCREMENTS_TRUNCATED, writer))
-    (checkpoint,) = tmp_path.glob("ckpt_*.h5")
-    with h5py.File(checkpoint, "r") as f:
-        assert f.attrs["time"] > 0.0
+    reference = _run(tmp_path / "uninterrupted.inp", _deck(stl, N_INCREMENTS_FULL, writer))
+    checkpoint = _checkpointAfter(tmp_path, N_INCREMENTS_RESUMED_FROM)
 
     resumed = _run(tmp_path / "resumed.inp", _deck(stl, N_INCREMENTS_FULL, f"*restart, readFrom={checkpoint}"))
 
