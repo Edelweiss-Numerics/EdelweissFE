@@ -1026,7 +1026,8 @@ rows in the system matrix, and every row of a constraint is filled.</p>
 carry kernels (<a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.hasKernels" title="edelweissfe.elements.base.baseelement.BaseElement.hasKernels"><code class="xref py py-attr docutils literal notranslate"><span class="pre">hasKernels</span></code></a>), and in a meshfree model
 its cells and particles as well. The entities the locations hold: a solver computes exactly what has rows in
 the system matrix, for every solver, the explicit ones included. A list, which a parallel solver hands out in
-slices to its threads.</p>
+slices to its threads. What a solver assembles element by element at the nodes, its inertia and damping, is in
+<a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The elements, in the order in which the solver computes them.</p>

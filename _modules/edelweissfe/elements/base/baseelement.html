@@ -140,6 +140,38 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">hasMaterial</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Flag to check if a material was assigned to this element."""</span>
 
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ensightType</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The shape of the element in Ensight Gold notation.</span>
+<span class="sd">        Valid types are:</span>
+<span class="sd">        point</span>
+<span class="sd">        bar2</span>
+<span class="sd">        bar3</span>
+<span class="sd">        tria3</span>
+<span class="sd">        tria6</span>
+<span class="sd">        quad4</span>
+<span class="sd">        quad8</span>
+<span class="sd">        tetra4</span>
+<span class="sd">        tetra10</span>
+<span class="sd">        pyramid5</span>
+<span class="sd">        pyramid13</span>
+<span class="sd">        penta6</span>
+<span class="sd">        penta15</span>
+<span class="sd">        hexa8</span>
+<span class="sd">        hexa20</span>
+<span class="sd">        nsided</span>
+<span class="sd">        nfaced</span>
+<span class="sd">        """</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">visualizationNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Node</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The nodes for visualization. Commonly, these are the same as the nodes of the element.</span>
+<span class="sd">        However, in some cases, the visualization nodes are different from the nodes of the element, e.g., in case of</span>
+<span class="sd">        mixed formulations.</span>
+<span class="sd">        """</span>
+
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">elementType</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">elNumber</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Finite elements in EdelweissFE should be derived from this</span>

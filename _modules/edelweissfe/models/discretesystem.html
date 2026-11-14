@@ -184,7 +184,8 @@
 <span class="sd">        carry kernels (:attr:`~edelweissfe.elements.base.baseelement.BaseElement.hasKernels`), and in a meshfree model</span>
 <span class="sd">        its cells and particles as well. The entities the locations hold: a solver computes exactly what has rows in</span>
 <span class="sd">        the system matrix, for every solver, the explicit ones included. A list, which a parallel solver hands out in</span>
-<span class="sd">        slices to its threads.</span>
+<span class="sd">        slices to its threads. What a solver assembles element by element at the nodes, its inertia and damping, is in</span>
+<span class="sd">        :attr:`elementsWithNodalInertia`.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>

@@ -383,6 +383,8 @@
 </li>
       <li><a href="documentation/materials.html#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial">BaseHypoElasticMaterial (class in edelweissfe.materials.base.basehypoelasticmaterial)</a>
 </li>
+      <li><a href="documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity">BaseNodeCouplingEntity (class in edelweissfe.nodecouplingentity.base.nodecouplingentity)</a>
+</li>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.beginAssembly">beginAssembly() (edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler method)</a>
 
       <ul>
@@ -795,7 +797,7 @@
 </li>
       <li><a href="documentation/plotter.html#edelweissfe.utils.plotter.Plotter.configurePlotter">configurePlotter() (edelweissfe.utils.plotter.Plotter method)</a>
 </li>
-      <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.connectivityChangesWithMotion">connectivityChangesWithMotion (edelweissfe.constraints.base.constraintbase.ConstraintBase attribute)</a>
+      <li><a href="documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion">connectivityChangesWithMotion (edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity attribute)</a>
 </li>
       <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">ConstraintBase (class in edelweissfe.constraints.base.constraintbase)</a>
 </li>
@@ -803,6 +805,8 @@
 
       <ul>
         <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.constraints">(edelweissfe.models.femodel.FEModel attribute)</a>
+</li>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations.constraints">(edelweissfe.numerics.doflocations.DofLocations attribute)</a>
 </li>
       </ul></li>
       <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.constraintSets">constraintSets (edelweissfe.models.femodel.FEModel attribute)</a>
@@ -1011,10 +1015,10 @@
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.diagonalscaling.diagonalScalingOf">diagonalScalingOf() (in module edelweissfe.linsolve.composition.diagonalscaling)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.digest">digest (edelweissfe.numerics.dofnumbering.DofNumbering property)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler">DirectCSRAssembler (class in edelweissfe.numerics.csrgeneratorv2)</a>
 </li>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly">DirectCSRSystemMatrixAssembly (class in edelweissfe.numerics.systemmatrixassembly)</a>
@@ -1047,10 +1051,14 @@
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambdaOfLastIncrement">dLambdaOfLastIncrement (edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength attribute)</a>
 </li>
-      <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.dofIndicesPermutation">dofIndicesPermutation (edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+      <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.dofIndicesPermutation">dofIndicesPermutation (edelweissfe.constraints.base.constraintbase.ConstraintBase property)</a>
 
       <ul>
+        <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.dofIndicesPermutation">(edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+</li>
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement property)</a>
+</li>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.dofIndicesPermutation">(edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity property)</a>
 </li>
       </ul></li>
       <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations">DofLocations (class in edelweissfe.numerics.doflocations)</a>
@@ -1619,6 +1627,13 @@
 </li>
       </ul></li>
       <li>
+    edelweissfe.nodecouplingentity.base.nodecouplingentity
+
+      <ul>
+        <li><a href="documentation/dofnumbering.html#module-edelweissfe.nodecouplingentity.base.nodecouplingentity">module</a>
+</li>
+      </ul></li>
+      <li>
     edelweissfe.numerics.doflocations
 
       <ul>
@@ -2112,6 +2127,8 @@
       <ul>
         <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.elements">(edelweissfe.models.femodel.FEModel attribute)</a>
 </li>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations.elements">(edelweissfe.numerics.doflocations.DofLocations attribute)</a>
+</li>
       </ul></li>
       <li><a href="documentation/sets.html#edelweissfe.sets.elementset.ElementSet">ElementSet (class in edelweissfe.sets.elementset)</a>
 </li>
@@ -2161,9 +2178,11 @@
         <li><a href="documentation/utils.html#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.enforceTimeIncrement">(edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper method)</a>
 </li>
       </ul></li>
-      <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.ensightType">ensightType (edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+      <li><a href="documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.ensightType">ensightType (edelweissfe.elements.base.baseelement.BaseElement property)</a>
 
       <ul>
+        <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.ensightType">(edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+</li>
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.ensightType">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement property)</a>
 </li>
       </ul></li>
@@ -2241,20 +2260,20 @@
 </li>
       <li><a href="documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.FieldOutputMarker">FieldOutputMarker (class in edelweissfe.adaptivity.marking)</a>
 </li>
-      <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.fields">fields (edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+      <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.fields">fields (edelweissfe.constraints.base.constraintbase.ConstraintBase property)</a>
 
       <ul>
+        <li><a href="documentation/constraints.html#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.fields">(edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase property)</a>
+</li>
+        <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.fields">(edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+</li>
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.fields">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement property)</a>
 </li>
         <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.fields">(edelweissfe.linsolve.composition.base.SetUpContext attribute)</a>
 </li>
-        <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.fields">(edelweissfe.numerics.dofnumbering.DofNumbering attribute)</a>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.fields">(edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity property)</a>
 </li>
-      </ul></li>
-      <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes">fieldsOnNodes (edelweissfe.constraints.base.constraintbase.ConstraintBase property)</a>
-
-      <ul>
-        <li><a href="documentation/constraints.html#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.fieldsOnNodes">(edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase property)</a>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.fields">(edelweissfe.numerics.dofnumbering.DofNumbering attribute)</a>
 </li>
       </ul></li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.FieldBlockMatrix.fieldSplit">fieldSplit() (edelweissfe.linsolve.composition.systemmatrix.FieldBlockMatrix method)</a>
@@ -2301,6 +2320,8 @@
       </ul></li>
       <li><a href="documentation/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.finishIncrement">finishIncrement() (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.finishSolve">finishSolve() (edelweissfe.linsolve.composition.base.Preconditioner method)</a>
 
       <ul>
@@ -2311,8 +2332,6 @@
         <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement.finishSolve">(edelweissfe.linsolve.composition.schurcomplement.SchurComplement method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/constraints.html#edelweissfe.utils.residualtangentcheck.finiteDifferenceTangent">finiteDifferenceTangent() (in module edelweissfe.utils.residualtangentcheck)</a>
 </li>
       <li><a href="documentation/jobs.html#edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation">finiteElementSimulation() (in module edelweissfe.drivers.inputfiledrivensimulation)</a>
@@ -3157,6 +3176,8 @@
 </li>
         <li><a href="documentation/models.html#module-edelweissfe.models.topologypipeline">edelweissfe.models.topologypipeline</a>
 </li>
+        <li><a href="documentation/dofnumbering.html#module-edelweissfe.nodecouplingentity.base.nodecouplingentity">edelweissfe.nodecouplingentity.base.nodecouplingentity</a>
+</li>
         <li><a href="documentation/dofnumbering.html#module-edelweissfe.numerics.doflocations">edelweissfe.numerics.doflocations</a>
 </li>
         <li><a href="documentation/dofnumbering.html#module-edelweissfe.numerics.dofnumbering">edelweissfe.numerics.dofnumbering</a>
@@ -3343,6 +3364,8 @@
 </li>
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.nDof">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement property)</a>
 </li>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.nDof">(edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity property)</a>
+</li>
         <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.nDof">(edelweissfe.numerics.dofnumbering.DofNumbering attribute)</a>
 </li>
       </ul></li>
@@ -3394,10 +3417,14 @@
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema">NISTSchema (class in edelweissfe.solvers.nonlinearimplicitstatic)</a>
 </li>
-      <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.nNodes">nNodes (edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+      <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.nNodes">nNodes (edelweissfe.constraints.base.constraintbase.ConstraintBase property)</a>
 
       <ul>
+        <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.nNodes">(edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+</li>
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.nNodes">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement property)</a>
+</li>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.nNodes">(edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity property)</a>
 </li>
       </ul></li>
   </ul></td>
@@ -3434,6 +3461,8 @@
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.nodes">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement property)</a>
 </li>
         <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.nodes">(edelweissfe.models.femodel.FEModel attribute)</a>
+</li>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.nodes">(edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity property)</a>
 </li>
       </ul></li>
       <li><a href="documentation/sets.html#edelweissfe.sets.nodeset.NodeSet">NodeSet (class in edelweissfe.sets.nodeset)</a>
@@ -3503,6 +3532,8 @@
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes">ofCoarseNodes() (edelweissfe.linsolve.composition.base.SetUpContext method)</a>
 </li>
       <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities">ofEntities() (edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities class method)</a>
+</li>
+      <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations.ofEntity">ofEntity (edelweissfe.numerics.doflocations.DofLocations attribute)</a>
 </li>
       <li><a href="documentation/dofnumbering.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.offsetMap">offsetMap (edelweissfe.numerics.scatterdofvector.ScatterDofVector property)</a>
 </li>
@@ -3885,7 +3916,11 @@
       <li><a href="documentation/variables.html#edelweissfe.variables.scalarvariable.ScalarVariable">ScalarVariable (class in edelweissfe.variables.scalarvariable)</a>
 </li>
       <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.scalarVariables">scalarVariables (edelweissfe.models.femodel.FEModel attribute)</a>
+
+      <ul>
+        <li><a href="documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.scalarVariables">(edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity attribute)</a>
 </li>
+      </ul></li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.scaled">scaled() (edelweissfe.linsolve.composition.systemmatrix.SystemMatrix method)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.scaledBy">scaledBy() (edelweissfe.linsolve.composition.base.SetUpContext method)</a>
@@ -4396,9 +4431,11 @@
 </li>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly">VIJSystemMatrixAssembly (class in edelweissfe.numerics.systemmatrixassembly)</a>
 </li>
-      <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.visualizationNodes">visualizationNodes (edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+      <li><a href="documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.visualizationNodes">visualizationNodes (edelweissfe.elements.base.baseelement.BaseElement property)</a>
 
       <ul>
+        <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.visualizationNodes">(edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
+</li>
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.visualizationNodes">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement property)</a>
 </li>
       </ul></li>

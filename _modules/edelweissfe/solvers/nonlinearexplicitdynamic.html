@@ -1990,7 +1990,8 @@
 <div class="viewcode-block" id="NED.getCriticalTimeStepForExplicitDynamics">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.getCriticalTimeStepForExplicitDynamics">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Compute the critical time step for explicit dynamics, over the finite elements of the discrete system.</span>
+<span class="w">        </span><span class="sd">"""Compute the critical time step for explicit dynamics, over the entities the discrete system names for it</span>
+<span class="sd">        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>

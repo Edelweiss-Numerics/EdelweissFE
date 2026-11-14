@@ -1,0 +1,218 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.nodecouplingentity.base.nodecouplingentity &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.nodecouplingentity.base.nodecouplingentity</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.nodecouplingentity.base.nodecouplingentity</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.points.node</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.variables.scalarvariable</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScalarVariable</span>
+
+
+<div class="viewcode-block" id="BaseNodeCouplingEntity">
+<a class="viewcode-back" href="../../../../documentation/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseNodeCouplingEntity</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    This class represents the most basic entity which couples nodes (and their fields) in a numerical model.</span>
+<span class="sd">    It is the protocol of the location of everything that has one in a discrete system</span>
+<span class="sd">    (:class:`~edelweissfe.numerics.doflocations.DofLocations`): finite elements, constraints, and, in EdelweissMeshfree,</span>
+<span class="sd">    cells, cell elements and particles. The Python entities derive from this class; the compiled wrappers of Marmot's</span>
+<span class="sd">    elements, cells and particles (Cython extension types) cannot derive from a Python class, and implement the same</span>
+<span class="sd">    protocol without deriving: they declare every public member of this class themselves, as a test of each</span>
+<span class="sd">    repository checks.</span>
+
+<span class="sd">    The entity information is used for locating the entity in the discrete system.</span>
+<span class="sd">    Each entity is defined by a list of nodes it couples, and a list of fields per node, on which it actually operates;</span>
+<span class="sd">    an entity may additionally own scalar variables (e.g. the Lagrange multipliers of a constraint), which follow its</span>
+<span class="sd">    nodal degrees of freedom.</span>
+
+<span class="sd">    The reason for a common base class is that not only finite elements couple nodes, but also constraints, cells (MPM)</span>
+<span class="sd">    or particles (SPH, RKPM). Having a common base class allows for a unified treatment of these entities in the</span>
+<span class="sd">    discrete system: the one protocol of the location of an entity (``nodes``, ``fields``, ``dofIndicesPermutation``,</span>
+<span class="sd">    ``scalarVariables``). What an entity computes is the business of its kind. The inertia and the damping, for</span>
+<span class="sd">    example, are reported by finite elements (:class:`~edelweissfe.elements.base.baseelement.BaseElement`), and which</span>
+<span class="sd">    entities a solver asks for them, at the nodes, is a fact of the discrete system</span>
+<span class="sd">    (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: Whether the connectivity of this entity has to be found anew again and again as the bodies move, because its</span>
+    <span class="c1">#: ``updateConnectivity`` searches, whether or not its nodes change with the search. A contact constraint searches</span>
+    <span class="c1">#: for the surface it touches and couples what it finds, the rigid-body surface contact finds its closest triangles</span>
+    <span class="c1">#: anew but keeps the nodes it couples, the nodes of a meshfree constraint follow its particles, and the kernel</span>
+    <span class="c1">#: functions of a particle reach other nodes as it moves. A solver that never updates the connectivity cannot</span>
+    <span class="c1">#: evaluate such a constraint (``NEST`` refuses it), and an explicit solver updates it only every</span>
+    <span class="c1">#: ``contact-update-frequency`` increments. The locations of an entity whose nodes change with the motion are made</span>
+    <span class="c1">#: anew with every change of the connectivity, and what is counted over the entities is counted anew for it, while</span>
+    <span class="c1">#: the entities with fixed nodes are counted once for a numbering. Declared True by every entity that searches in</span>
+    <span class="c1">#: this way; an entity with fixed nodes and nothing to search, or one that is only refreshed after a change of the</span>
+    <span class="c1">#: mesh (:class:`~edelweissfe.models.meshdependent.MeshDependent`), leaves it False.</span>
+    <span class="n">connectivityChangesWithMotion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1">#: The scalar variables this entity owns, whose degrees of freedom follow those of its nodes in the layout of its</span>
+    <span class="c1">#: residual and tangent. Empty for most entities; a constraint that needs Lagrange multipliers gets them assigned</span>
+    <span class="c1">#: (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables`).</span>
+    <span class="n">scalarVariables</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ScalarVariable</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of nodes this entity couples."""</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Node</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The list of nodes this entity currently holds."""</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nDof</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The total number of degrees of freedom this entity has.</span>
+<span class="sd">        Note that this information is redundant, as it results from the list of fields on nodes,</span>
+<span class="sd">        but we keep this redundant information for the sake of performance."""</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""The list of fields per node which this entity couples."""</span>
+
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dofIndicesPermutation</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""If the entity computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise,</span>
+<span class="sd">        this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</span>
+
+<span class="sd">        For performance reasons, this is computed once and stored for later use."""</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

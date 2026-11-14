@@ -103,12 +103,15 @@
 <span class="c1">#  the top level directory of EdelweissFE.</span>
 <span class="c1">#  ---------------------------------------------------------------------</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">abstractmethod</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.nodecouplingentity.base.nodecouplingentity</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseNodeCouplingEntity</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixcontributor</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">SystemMatrixContributorBase</span><span class="p">,</span>
     <span class="n">countEntriesOfBlock</span><span class="p">,</span>
@@ -121,7 +124,7 @@
 
 <div class="viewcode-block" id="ConstraintBase">
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">SystemMatrixContributorBase</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">BaseNodeCouplingEntity</span><span class="p">,</span> <span class="n">SystemMatrixContributorBase</span><span class="p">):</span>
     <span class="c1">#: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block</span>
     <span class="c1">#: the constraint has in the discrete system it is evaluated in; None until its first evaluation there (see</span>
     <span class="c1">#: :meth:`prepareExplicitEvaluation`).</span>
@@ -138,16 +141,6 @@
     <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). A constraint that does not check stays within</span>
     <span class="c1">#: reach.</span>
     <span class="n">withinReach</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
-
-    <span class="c1">#: Whether :meth:`updateConnectivity` must be called again and again as the bodies move, because it searches</span>
-    <span class="c1">#: whether or not its nodes change: a contact constraint searches for the surface it touches and couples what it</span>
-    <span class="c1">#: finds, the rigid-body surface contact finds the closest triangles anew but keeps the nodes it couples, and the</span>
-    <span class="c1">#: nodes of a meshfree constraint follow its particles. A solver that never updates the connectivity cannot evaluate</span>
-    <span class="c1">#: such a constraint (``NEST`` refuses it), and an explicit solver updates it only every</span>
-    <span class="c1">#: ``contact-update-frequency`` increments. Declared True by every constraint whose :meth:`updateConnectivity`</span>
-    <span class="c1">#: searches; a constraint with fixed nodes and nothing to search, or one that is only refreshed after a change of the</span>
-    <span class="c1">#: mesh (:class:`~edelweissfe.models.meshdependent.MeshDependent`), leaves it False.</span>
-    <span class="n">connectivityChangesWithMotion</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="c1">#: Whether this constraint is switched on from outside; see :attr:`switchedOn`.</span>
     <span class="n">_switchedOn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
@@ -271,9 +264,21 @@
 <span class="w">        </span><span class="sd">"""The nodes this constraint is acting on."""</span>
 
     <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of nodes this constraint is acting on."""</span>
+
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">fieldsOnNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fields</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The fields on the nodes this constraint is acting on."""</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dofIndicesPermutation</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""None: the layout of a constraint is nodewise, followed by its scalar variables."""</span>
+
+        <span class="k">return</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
     <span class="nd">@abstractmethod</span>
@@ -285,7 +290,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">updateConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Called once at the start of every increment, before the global discrete system is</span>
 <span class="sd">        (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based</span>
-<span class="sd">        contact pairs) and declare whether the nodes it couples (``nodes``/``fieldsOnNodes``/``nDof``) have</span>
+<span class="sd">        contact pairs) and declare whether the nodes it couples (``nodes``/``fields``/``nDof``) have</span>
 <span class="sd">        changed since the last call. A constraint that is not always within reach also sets</span>
 <span class="sd">        :attr:`withinReach` here; it does not report the change of :attr:`active` itself, the model compares it (see</span>
 <span class="sd">        :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`).</span>

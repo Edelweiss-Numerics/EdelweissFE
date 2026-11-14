@@ -126,9 +126,9 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_FluxCount</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The accumulated nodal fluxes of one kind of entity, counted at the first request. Locations made from others</span>
-<span class="sd">    that keep the entities of this kind as they are share it, so that the entities are counted once, not after every</span>
-<span class="sd">    change of the connectivity."""</span>
+<span class="w">    </span><span class="sd">"""The accumulated nodal fluxes of the entities whose connectivity is fixed, counted at the first request. All</span>
+<span class="sd">    locations of a numbering share it, so that these entities are counted once, not after every change of the</span>
+<span class="sd">    connectivity of others."""</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1">#: The count per field, or None until it is asked for.</span>
@@ -144,8 +144,11 @@
 
 <span class="sd">    Specifically, `DofLocations`:</span>
 <span class="sd">     * Locates every entity in a :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, from the nodes it couples</span>
-<span class="sd">       (its connectivity) and the fields it couples on them: the indices from which a system matrix assembly derives</span>
-<span class="sd">       where each block goes, and which scatter and gather operations use.</span>
+<span class="sd">       (its connectivity), the fields it couples on them, and the scalar variables it owns, all of them read from the</span>
+<span class="sd">       one protocol of an entity</span>
+<span class="sd">       (:class:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity`):</span>
+<span class="sd">       the indices from which a system matrix assembly derives where each block goes, and which scatter and gather</span>
+<span class="sd">       operations use.</span>
 <span class="sd">     * Calculates accumulated elemental/constraint fluxes fieldwise for convergence tests.</span>
 <span class="sd">     * Constructs the entity-aware :class:`DofVector` of its discrete system.</span>
 
@@ -154,21 +157,18 @@
 <span class="sd">    locations on the same numbering, see :meth:`withNewLocationsOf`.</span>
 
 <span class="sd">    Every entity is located, or the construction raises: an entity that couples a field its node does not have has no</span>
-<span class="sd">    location, which is an error of the model, see :meth:`_locateNodeCouplingEntities`.</span>
+<span class="sd">    location, which is an error of the model, see :meth:`_locate`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    numbering : DofNumbering</span>
 <span class="sd">        The numbering of the degrees of freedom the entities are located in.</span>
 <span class="sd">    elements : list of BaseNodeCouplingEntity, optional</span>
-<span class="sd">        The list of Elements to locate: those that take part in the discrete system, see</span>
-<span class="sd">        :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`.</span>
+<span class="sd">        Everything the solver computes like an element, in the order in which it computes it: the finite elements that</span>
+<span class="sd">        take part in the discrete system, see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`, and, in</span>
+<span class="sd">        a meshfree model, its cells and particles.</span>
 <span class="sd">    constraints : list of BaseNodeCouplingEntity, optional</span>
 <span class="sd">        The list of Constraints to locate. Their scalar variables must be numbered.</span>
-<span class="sd">    furtherEntities : list of BaseNodeCouplingEntity, optional</span>
-<span class="sd">        Entities of other kinds, which a subclass knows the meaning of (e.g. the cells and particles of a meshfree</span>
-<span class="sd">        model). They are located like elements, and computed like elements: they follow the elements in</span>
-<span class="sd">        :attr:`elements`, and the constraints in the entities this class is a mapping of.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -176,50 +176,34 @@
         <span class="n">numbering</span><span class="p">:</span> <span class="n">DofNumbering</span><span class="p">,</span>
         <span class="n">elements</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BaseNodeCouplingEntity</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">constraints</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BaseNodeCouplingEntity</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">furtherEntities</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BaseNodeCouplingEntity</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="k">if</span> <span class="n">elements</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">elements</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="n">constraints</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">constraints</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">if</span> <span class="n">furtherEntities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">furtherEntities</span> <span class="o">=</span> <span class="p">[]</span>
-
         <span class="c1">#: The numbering of the degrees of freedom the entities are located in.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span> <span class="o">=</span> <span class="n">numbering</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ofElements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateNodeCouplingEntities</span><span class="p">(</span><span class="n">elements</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ofConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateConstraints</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ofFurtherEntities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateNodeCouplingEntities</span><span class="p">(</span><span class="n">furtherEntities</span><span class="p">)</span>
-
-        <span class="c1">#: The accumulated nodal fluxes of the elements and of the further entities, counted when first asked for</span>
-        <span class="c1">#: (see :attr:`nAccumulatedNodalFluxesFieldwise`) and shared by the locations made from these, see</span>
-        <span class="c1">#: :meth:`withNewLocationsOf`.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfElements</span> <span class="o">=</span> <span class="n">_FluxCount</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfFurtherEntities</span> <span class="o">=</span> <span class="n">_FluxCount</span><span class="p">()</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_mergeEntities</span><span class="p">()</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_mergeEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Merge what is known per kind of entity: the lists of the elements and of the constraints the locations hold,</span>
-<span class="sd">        the merged mapping of every entity to its indices, and the accumulated nodal fluxes. The locations are</span>
-<span class="sd">        immutable: the merged mapping is made anew for every locations, never changed in place, so that whoever still</span>
-<span class="sd">        holds the old locations holds a mapping that stays valid."""</span>
-
-        <span class="c1">#: Everything the solver computes like an element, in the order in which it computes it, that is the elements,</span>
-        <span class="c1">#: followed by the further entities.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="o">=</span> <span class="p">[</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_ofElements</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_ofFurtherEntities</span><span class="p">]</span>
+        <span class="c1">#: Everything the solver computes like an element, in the order in which it computes it. Every one of them has a</span>
+        <span class="c1">#: location.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">elements</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">list</span><span class="p">(</span><span class="n">elements</span><span class="p">)</span>
         <span class="c1">#: The constraints that take part in the discrete system, with their scalar variables. The solver evaluates</span>
         <span class="c1">#: exactly these, so that every constraint it evaluates has its rows in the system matrix, and every row of a</span>
         <span class="c1">#: constraint is filled.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ofConstraints</span><span class="p">)</span>
-        <span class="c1">#: Dictionary mapping every entity (elements, constraints, ...) to its indices in the DofVector. It is the one</span>
-        <span class="c1">#: mapping the consumers that handle all entities at once (the system matrix assembly, the layout of the</span>
-        <span class="c1">#: scatter vectors) read; a single location is read by ``locations[entity]``.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">ofEntity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ofElements</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ofConstraints</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ofFurtherEntities</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">constraints</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">list</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span>
 
-        <span class="c1">#: The accumulated nodal fluxes of all entities, computed at the first request, see</span>
-        <span class="c1">#: :attr:`nAccumulatedNodalFluxesFieldwise`.</span>
+        <span class="c1">#: Dictionary mapping every entity (elements, then constraints) to its indices in the DofVector. It is the one</span>
+        <span class="c1">#: mapping the consumers that handle all entities at once (the system matrix assembly, the layout of the</span>
+        <span class="c1">#: scatter vectors) read; a single location is read by ``locations[entity]``. The locations are immutable, so</span>
+        <span class="c1">#: whoever still holds the old locations holds a mapping that stays valid.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ofEntity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locate</span><span class="p">([</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="p">])</span>
+
+        <span class="c1">#: The elements whose nodes stay as they are, and those whose nodes change with the motion</span>
+        <span class="c1">#: (:attr:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion`),</span>
+        <span class="c1">#: which are the only ones that can be moved, see :meth:`withNewLocationsOf`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_elementsWithFixedConnectivity</span> <span class="o">=</span> <span class="p">[</span><span class="n">e</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">e</span><span class="o">.</span><span class="n">connectivityChangesWithMotion</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_elementsWithMovingConnectivity</span> <span class="o">=</span> <span class="p">[</span><span class="n">e</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">connectivityChangesWithMotion</span><span class="p">]</span>
+        <span class="c1">#: The accumulated nodal fluxes of the elements with fixed connectivity, counted when first asked for (see</span>
+        <span class="c1">#: :attr:`nAccumulatedNodalFluxesFieldwise`) and shared by all locations of the numbering, see</span>
+        <span class="c1">#: :meth:`withNewLocationsOf`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfFixedElements</span> <span class="o">=</span> <span class="n">_FluxCount</span><span class="p">()</span>
+        <span class="c1">#: The accumulated nodal fluxes of all entities, computed at the first request.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwise</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
@@ -227,9 +211,10 @@
 <span class="w">        </span><span class="sd">"""For the Abaqus like convergence test, the number of degrees of freedom 'entity-wise' per field, that is</span>
 <span class="sd">        Σ_(elements+constraints) Σ_nodes ( nDof (field) ).</span>
 <span class="sd">        Computed from the entities of these locations at the first request, and kept: only the convergence criteria</span>
-<span class="sd">        ask, so a solver without them does not pay. The count of the elements, and of the further entities that did</span>
-<span class="sd">        not move, is shared with the locations these were made from: only the constraints, and the entities that</span>
-<span class="sd">        moved, are counted again.</span>
+<span class="sd">        ask, so a solver without them does not pay. The count of the elements whose connectivity is fixed is shared by</span>
+<span class="sd">        all locations of a numbering, and made once: only the constraints and the elements whose connectivity changes</span>
+<span class="sd">        with the motion (:attr:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion`)</span>
+<span class="sd">        are counted again for new locations.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -238,17 +223,16 @@
 <span class="sd">        """</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwise</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">fluxCount</span><span class="p">,</span> <span class="n">entities</span> <span class="ow">in</span> <span class="p">(</span>
-                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfElements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ofElements</span><span class="p">),</span>
-                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfFurtherEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ofFurtherEntities</span><span class="p">),</span>
-            <span class="p">):</span>
-                <span class="k">if</span> <span class="n">fluxCount</span><span class="o">.</span><span class="n">perField</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">fluxCount</span><span class="o">.</span><span class="n">perField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulateNodalFluxesFieldwise</span><span class="p">(</span><span class="n">entities</span><span class="p">)</span>
-            <span class="n">ofConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulateNodalFluxesFieldwise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ofConstraints</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfFixedElements</span><span class="o">.</span><span class="n">perField</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfFixedElements</span><span class="o">.</span><span class="n">perField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulateNodalFluxesFieldwise</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_elementsWithFixedConnectivity</span>
+                <span class="p">)</span>
+            <span class="n">ofMovingElements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulateNodalFluxesFieldwise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_elementsWithMovingConnectivity</span><span class="p">)</span>
+            <span class="n">ofConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulateNodalFluxesFieldwise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="p">)</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwise</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="n">field</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfElements</span><span class="o">.</span><span class="n">perField</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-                <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfFurtherEntities</span><span class="o">.</span><span class="n">perField</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="n">field</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfFixedElements</span><span class="o">.</span><span class="n">perField</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="o">+</span> <span class="n">ofMovingElements</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
                 <span class="o">+</span> <span class="n">ofConstraints</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">fields</span>
             <span class="p">}</span>
@@ -344,13 +328,13 @@
 <div class="viewcode-block" id="DofLocations.withNewLocationsOf">
 <a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">withNewLocationsOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">constraints</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">movedEntities</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"DofLocations"</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The locations of the same entities in the same numbering, with the constraints, and the further entities</span>
-<span class="sd">        that moved, located anew after their connectivity changed.</span>
+<span class="w">        </span><span class="sd">"""The locations of the same entities in the same numbering, with the constraints, and the elements that</span>
+<span class="sd">        moved, located anew after their connectivity changed.</span>
 
 <span class="sd">        A contact search re-assigns which nodes a constraint couples. That changes the constraints' locations and</span>
 <span class="sd">        nothing else: no node, field, scalar variable or element is touched, so the numbering and the locations of</span>
 <span class="sd">        every element stay valid, and only what is derived from the constraints is computed again -- by the same</span>
-<span class="sd">        methods, in the same order, as the constructor computed it. That is a small fraction of what making</span>
+<span class="sd">        method, in the same order, as the constructor computed it. That is a small fraction of what making</span>
 <span class="sd">        locations for the same model costs.</span>
 
 <span class="sd">        A change that moves the numbering -- a mesh refinement, a constraint gaining a scalar variable of its own -- is</span>
@@ -362,8 +346,10 @@
 <span class="sd">        constraints</span>
 <span class="sd">            The constraints, with their current connectivity.</span>
 <span class="sd">        movedEntities</span>
-<span class="sd">            The further entities whose connectivity changed (see the constructor); the others keep the locations they</span>
-<span class="sd">            were given. Only meaningful where the numbering stands, as for the constraints.</span>
+<span class="sd">            The elements whose connectivity changed: those that declare that it changes with the motion</span>
+<span class="sd">            (:attr:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion`,</span>
+<span class="sd">            e.g. the particles of a meshfree model whose kernel functions reach other nodes). The others keep the</span>
+<span class="sd">            locations they were given. Only meaningful where the numbering stands, as for the constraints.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -374,7 +360,8 @@
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
 <span class="sd">            If the scalar variables of the constraints are not exactly those the numbering numbers, in this order, or</span>
-<span class="sd">            a moved entity is not located in these locations.</span>
+<span class="sd">            a moved entity is not an element located in these locations, or does not declare that its connectivity</span>
+<span class="sd">            changes with the motion.</span>
 <span class="sd">        """</span>
 
         <span class="n">scalarVariables</span> <span class="o">=</span> <span class="p">[</span><span class="n">variable</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span> <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">constraint</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">]</span>
@@ -388,21 +375,31 @@
                 <span class="p">)</span>
             <span class="p">)</span>
 
-        <span class="n">notLocated</span> <span class="o">=</span> <span class="p">[</span><span class="n">entity</span> <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">movedEntities</span> <span class="ow">or</span> <span class="p">()</span> <span class="k">if</span> <span class="n">entity</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ofFurtherEntities</span><span class="p">]</span>
+        <span class="n">oldConstraints</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="p">)</span>
+        <span class="n">notLocated</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">entity</span>
+            <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">movedEntities</span> <span class="ow">or</span> <span class="p">()</span>
+            <span class="k">if</span> <span class="n">entity</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ofEntity</span> <span class="ow">or</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">oldConstraints</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">entity</span><span class="o">.</span><span class="n">connectivityChangesWithMotion</span>
+        <span class="p">]</span>
         <span class="k">if</span> <span class="n">notLocated</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> moved entit</span><span class="si">{:}</span><span class="s2"> not located in these locations, which only locate anew what they hold: a "</span>
-                <span class="s2">"change of the entities is a change of the numbering."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                    <span class="nb">len</span><span class="p">(</span><span class="n">notLocated</span><span class="p">),</span> <span class="s2">"y is"</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">notLocated</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="s2">"ies are"</span>
-                <span class="p">)</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> moved entit</span><span class="si">{:}</span><span class="s2"> not an element located in these locations whose connectivity changes with the "</span>
+                <span class="s2">"motion, which only locate anew what they hold: a change of the entities is a change of the "</span>
+                <span class="s2">"numbering."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">notLocated</span><span class="p">),</span> <span class="s2">"y is"</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">notLocated</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="s2">"ies are"</span><span class="p">)</span>
             <span class="p">)</span>
 
         <span class="n">relocated</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="n">relocated</span><span class="o">.</span><span class="n">_ofConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateConstraints</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">movedEntities</span><span class="p">:</span>
-            <span class="n">relocated</span><span class="o">.</span><span class="n">_ofFurtherEntities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ofFurtherEntities</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateNodeCouplingEntities</span><span class="p">(</span><span class="n">movedEntities</span><span class="p">)</span>
-            <span class="n">relocated</span><span class="o">.</span><span class="n">_fluxesOfFurtherEntities</span> <span class="o">=</span> <span class="n">_FluxCount</span><span class="p">()</span>
-        <span class="n">relocated</span><span class="o">.</span><span class="n">_mergeEntities</span><span class="p">()</span>
+        <span class="n">relocated</span><span class="o">.</span><span class="n">constraints</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span>
+
+        <span class="c1"># The elements stay in their places, the constraints, located anew, follow them.</span>
+        <span class="n">ofEntity</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ofEntity</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">ofEntity</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
+        <span class="n">ofEntity</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_locate</span><span class="p">(</span><span class="n">movedEntities</span> <span class="ow">or</span> <span class="p">[]))</span>
+        <span class="n">ofEntity</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_locate</span><span class="p">(</span><span class="n">relocated</span><span class="o">.</span><span class="n">constraints</span><span class="p">))</span>
+        <span class="n">relocated</span><span class="o">.</span><span class="n">ofEntity</span> <span class="o">=</span> <span class="n">ofEntity</span>
+
+        <span class="n">relocated</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwise</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">return</span> <span class="n">relocated</span></div>
 
@@ -440,18 +437,18 @@
 
         <span class="k">return</span> <span class="n">nAccumulatedFluxesFieldwise</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_locateNodeCouplingEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Creates a dictionary containing the location (indices) of each entity (elements, ...)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_locate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Creates a dictionary containing the location (indices) of each entity (elements, constraints, ...)</span>
 <span class="sd">        within the DofVector structure.</span>
 
 <span class="sd">        The location of an entity is the indices of the field variables of its nodes, node after node and, on each</span>
 <span class="sd">        node, field after field as the entity lists them (``fields``), reordered by its ``dofIndicesPermutation``</span>
-<span class="sd">        unless that is None.</span>
+<span class="sd">        unless that is None; the indices of its scalar variables (``scalarVariables``) follow, after the permutation.</span>
 
 <span class="sd">        An entity that cannot be located raises: one of its nodes does not have a field the entity couples there, or the</span>
-<span class="sd">        field variable is not part of the numbering (see :meth:`_noLocationError`); so does an entity that lacks</span>
-<span class="sd">        ``nodes``, ``fields`` or ``dofIndicesPermutation``, or lists fewer fields than it has nodes -- whether there are</span>
-<span class="sd">        few entities or many.</span>
+<span class="sd">        field variable is not part of the numbering, or a scalar variable is not (see :meth:`_noLocationError`); so does</span>
+<span class="sd">        an entity that lacks ``nodes``, ``fields``, ``dofIndicesPermutation`` or ``scalarVariables``, or lists fewer</span>
+<span class="sd">        fields than it has nodes -- whether there are few entities or many.</span>
 
 <span class="sd">        The entities are independent of each other, so they are located in chunks on the thread pool</span>
 <span class="sd">        (:func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`), unless there are so few of them</span>
@@ -478,27 +475,34 @@
 
         <span class="n">entities</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">entities</span><span class="p">)</span>
 
-        <span class="c1"># Looked up once: the worker below reads it for every field of every node.</span>
-        <span class="n">field_var_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span>
+        <span class="c1"># Looked up once: the worker below reads them for every field of every node.</span>
+        <span class="n">fieldVariableIndices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span>
+        <span class="n">scalarVariableIndices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">locateChunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">):</span>
             <span class="n">locatedInChunk</span> <span class="o">=</span> <span class="p">{}</span>
 
             <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">chunk</span><span class="p">:</span>
-                <span class="n">nodes</span><span class="p">,</span> <span class="n">fieldsOnNodes</span><span class="p">,</span> <span class="n">permutation</span> <span class="o">=</span> <span class="n">entity</span><span class="o">.</span><span class="n">nodes</span><span class="p">,</span> <span class="n">entity</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span> <span class="n">entity</span><span class="o">.</span><span class="n">dofIndicesPermutation</span>
+                <span class="n">nodes</span><span class="p">,</span> <span class="n">fields</span> <span class="o">=</span> <span class="n">entity</span><span class="o">.</span><span class="n">nodes</span><span class="p">,</span> <span class="n">entity</span><span class="o">.</span><span class="n">fields</span>
+                <span class="n">permutation</span><span class="p">,</span> <span class="n">scalarVariables</span> <span class="o">=</span> <span class="n">entity</span><span class="o">.</span><span class="n">dofIndicesPermutation</span><span class="p">,</span> <span class="n">entity</span><span class="o">.</span><span class="n">scalarVariables</span>
 
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">indices</span> <span class="o">=</span> <span class="p">[</span>
                         <span class="n">idx</span>
                         <span class="k">for</span> <span class="n">iNode</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">nodes</span><span class="p">)</span>
-                        <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="n">fieldsOnNodes</span><span class="p">[</span><span class="n">iNode</span><span class="p">]</span>
-                        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">field_var_map</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">nodeField</span><span class="p">]]</span>
+                        <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">[</span><span class="n">iNode</span><span class="p">]</span>
+                        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">fieldVariableIndices</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">nodeField</span><span class="p">]]</span>
                     <span class="p">]</span>
+                    <span class="n">scalarIndices</span> <span class="o">=</span> <span class="p">[</span><span class="n">scalarVariableIndices</span><span class="p">[</span><span class="n">variable</span><span class="p">]</span> <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">scalarVariables</span><span class="p">]</span>
                 <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noLocationError</span><span class="p">(</span><span class="n">entity</span><span class="p">,</span> <span class="n">fieldsOnNodes</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+                    <span class="k">raise</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noLocationError</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
 
                 <span class="n">destArr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
-                <span class="n">locatedInChunk</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span> <span class="o">=</span> <span class="n">destArr</span> <span class="k">if</span> <span class="n">permutation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">destArr</span><span class="p">[</span><span class="n">permutation</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">permutation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">destArr</span> <span class="o">=</span> <span class="n">destArr</span><span class="p">[</span><span class="n">permutation</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">scalarIndices</span><span class="p">:</span>
+                    <span class="n">destArr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">destArr</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">scalarIndices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">))</span>
+                <span class="n">locatedInChunk</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span> <span class="o">=</span> <span class="n">destArr</span>
 
             <span class="k">return</span> <span class="n">locatedInChunk</span>
 
@@ -512,66 +516,15 @@
 
         <span class="k">return</span> <span class="n">located</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_locateConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">constraints</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Creates a dictionary containing the location (indices) of each constraint within the DofVector structure:</span>
-<span class="sd">        the indices of the field variables of its nodes, node after node, followed by those of its scalar variables.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        constraints</span>
-<span class="sd">            The list of constraints to locate.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        dict</span>
-<span class="sd">            A dictionary containing the location mapping.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If a constraint cannot be located: see :meth:`_noLocationError`.</span>
-<span class="sd">        """</span>
-
-        <span class="n">ofConstraints</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">field_var_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span>
-        <span class="n">scalar_var_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span>
-
-        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="p">:</span>
-            <span class="n">node_fields_gen</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">field_var_map</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">nodeField</span><span class="p">]]</span>
-                <span class="k">for</span> <span class="n">iNode</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="n">constraint</span><span class="o">.</span><span class="n">fieldsOnNodes</span><span class="p">[</span><span class="n">iNode</span><span class="p">]</span>
-            <span class="p">)</span>
-            <span class="n">scalar_vars_gen</span> <span class="o">=</span> <span class="p">([</span><span class="n">scalar_var_map</span><span class="p">[</span><span class="n">v</span><span class="p">]]</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">constraint</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">)</span>
-
-            <span class="n">indices_gen</span> <span class="o">=</span> <span class="n">chain</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span><span class="n">node_fields_gen</span><span class="p">),</span> <span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span><span class="n">scalar_vars_gen</span><span class="p">))</span>
-
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">ofConstraints</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">(</span><span class="n">indices_gen</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noLocationError</span><span class="p">(</span>
-                    <span class="n">constraint</span><span class="p">,</span> <span class="n">constraint</span><span class="o">.</span><span class="n">fieldsOnNodes</span><span class="p">,</span> <span class="n">constraint</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">,</span> <span class="n">constraint</span><span class="o">.</span><span class="n">name</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
-
-        <span class="k">return</span> <span class="n">ofConstraints</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_noLocationError</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">fieldsOnNodes</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">scalarVariables</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">(),</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="ne">ValueError</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_noLocationError</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="ne">ValueError</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The error for an entity that cannot be located: what is missing in the numbering, and which entity it is.</span>
-<span class="sd">        The entity is named by its class (its module too, as many modules name their class alike), by its own name if it</span>
-<span class="sd">        has one, and by the labels of its first nodes.</span>
+<span class="sd">        The entity is named by its class, with its module, as many modules name their class alike, and by the labels of</span>
+<span class="sd">        its first nodes.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        entity</span>
 <span class="sd">            The entity that cannot be located.</span>
-<span class="sd">        fieldsOnNodes</span>
-<span class="sd">            The fields the entity couples on each of its nodes.</span>
-<span class="sd">        scalarVariables</span>
-<span class="sd">            The scalar variables of the entity.</span>
-<span class="sd">        name</span>
-<span class="sd">            The name of the entity, if it has one (a constraint has); None otherwise.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -583,9 +536,8 @@
 
         <span class="n">nodeLabels</span> <span class="o">=</span> <span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">label</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">entity</span><span class="o">.</span><span class="n">nodes</span><span class="p">]</span>
         <span class="n">nodesNamed</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">nodeLabels</span><span class="p">[:</span><span class="mi">6</span><span class="p">]</span><span class="si">}</span><span class="s2"> ... (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">nodeLabels</span><span class="p">)</span><span class="si">}</span><span class="s2"> nodes)"</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodeLabels</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">6</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">nodeLabels</span><span class="si">}</span><span class="s2">"</span>
-        <span class="n">entityNamed</span> <span class="o">=</span> <span class="s2">""</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">" </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span>
-        <span class="n">whose</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}{</span><span class="n">entityNamed</span><span class="si">}</span><span class="s2"> coupling the nodes </span><span class="si">{</span><span class="n">nodesNamed</span><span class="si">}</span><span class="s2">"</span>
-        <span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="n">fieldsOfNode</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">entity</span><span class="o">.</span><span class="n">nodes</span><span class="p">,</span> <span class="n">fieldsOnNodes</span><span class="p">):</span>
+        <span class="n">whose</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span><span class="o">.</span><span class="vm">__module__</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span><span class="o">.</span><span class="vm">__qualname__</span><span class="si">}</span><span class="s2"> coupling the nodes </span><span class="si">{</span><span class="n">nodesNamed</span><span class="si">}</span><span class="s2">"</span>
+        <span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="n">fieldsOfNode</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">entity</span><span class="o">.</span><span class="n">nodes</span><span class="p">,</span> <span class="n">entity</span><span class="o">.</span><span class="n">fields</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fieldsOfNode</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span>
                     <span class="k">return</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"The </span><span class="si">{</span><span class="n">whose</span><span class="si">}</span><span class="s2"> cannot be located: its node </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2"> has no field '</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">'."</span><span class="p">)</span>
@@ -593,7 +545,7 @@
                     <span class="k">return</span> <span class="ne">ValueError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">"The </span><span class="si">{</span><span class="n">whose</span><span class="si">}</span><span class="s2"> cannot be located: the field '</span><span class="si">{</span><span class="n">field</span><span class="si">}</span><span class="s2">' of its node </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2"> is not numbered."</span>
                     <span class="p">)</span>
-        <span class="k">for</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="n">scalarVariables</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="n">entity</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">scalarVariable</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">:</span>
                 <span class="k">return</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">"The </span><span class="si">{</span><span class="n">whose</span><span class="si">}</span><span class="s2"> cannot be located: its scalar variable '</span><span class="si">{</span><span class="n">scalarVariable</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' is not numbered."</span>

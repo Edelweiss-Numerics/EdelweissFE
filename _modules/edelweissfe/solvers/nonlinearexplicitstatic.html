@@ -340,8 +340,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">validateModelCapabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Refuse, on top of the base checks, a constraint that is switched on and whose connectivity changes with the</span>
 <span class="sd">        motion</span>
-<span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.connectivityChangesWithMotion`), e.g. a</span>
-<span class="sd">        contact, which searches for what it touches: this solver never updates the connectivity. A</span>
+<span class="sd">        (:attr:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion`),</span>
+<span class="sd">        e.g. a contact, which searches for what it touches: this solver never updates the connectivity. A</span>
 <span class="sd">        constraint switched off from outside</span>
 <span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it rests,</span>
 <span class="sd">        and takes no part in the step.</span>
