@@ -161,7 +161,8 @@
 <span class="sd">    numbering : DofNumbering</span>
 <span class="sd">        The numbering of the degrees of freedom the entities are located in.</span>
 <span class="sd">    elements : list of BaseNodeCouplingEntity, optional</span>
-<span class="sd">        The list of Elements to locate.</span>
+<span class="sd">        The list of Elements to locate: those that take part in the discrete system, see</span>
+<span class="sd">        :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`.</span>
 <span class="sd">    constraints : list of BaseNodeCouplingEntity, optional</span>
 <span class="sd">        The list of Constraints to locate. Their scalar variables must be numbered.</span>
 <span class="sd">    furtherEntities : list of BaseNodeCouplingEntity, optional</span>
@@ -291,6 +292,54 @@
 <span class="sd">        """</span>
 
         <span class="k">return</span> <span class="n">entity</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ofEntity</span>
+
+<div class="viewcode-block" id="DofLocations.checkEveryDofIsLocated">
+<a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations.checkEveryDofIsLocated">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkEveryDofIsLocated</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indicesRelatedByMultiPointConstraints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Refuse a degree of freedom that no located entity touches. Such a degree of freedom has a number, but no row</span>
+<span class="sd">        in the system matrix: a node that only an entity without kernels touches (e.g. a contact facet) is such a node.</span>
+<span class="sd">        A solver cannot pin it with a Dirichlet boundary condition, nor integrate it, so the discrete system is not</span>
+<span class="sd">        built.</span>
+
+<span class="sd">        A multi-point constraint is no entity and owns no degrees of freedom, but a degree of freedom it relates, as</span>
+<span class="sd">        slave or as master (e.g. of the reference point of a rigid body), has its row through the condensation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        indicesRelatedByMultiPointConstraints</span>
+<span class="sd">            The indices of the degrees of freedom that multi-point constraints relate; None for none.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a degree of freedom of the numbering is in no location; the error names the node and the field.</span>
+<span class="sd">        """</span>
+
+        <span class="n">touched</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">indices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ofEntity</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">touched</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">indicesRelatedByMultiPointConstraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">touched</span><span class="p">[</span><span class="n">indicesRelatedByMultiPointConstraints</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="n">untouched</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="o">~</span><span class="n">touched</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">untouched</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">untouched</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">fieldIndices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">start</span> <span class="o">&lt;=</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">stop</span><span class="p">:</span>
+                <span class="n">node</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">getNodeForIndexInDofVector</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"The field '</span><span class="si">{</span><span class="n">fieldName</span><span class="si">}</span><span class="s2">' of node </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2"> is numbered, but no element and no constraint "</span>
+                    <span class="sa">f</span><span class="s2">"that takes part in the discrete system couples it (</span><span class="si">{</span><span class="n">untouched</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> degrees of freedom in all "</span>
+                    <span class="s2">"are in no location): it would have no row in the system matrix. A node that only an entity "</span>
+                    <span class="s2">"without kernels touches, e.g. a contact facet, has none."</span>
+                <span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"The degree of freedom </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> of a scalar variable is numbered, but no constraint couples it "</span>
+            <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">untouched</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> degrees of freedom in all are in no location)."</span>
+        <span class="p">)</span></div>
+
 
 <div class="viewcode-block" id="DofLocations.withNewLocationsOf">
 <a class="viewcode-back" href="../../../documentation/dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf">[docs]</a>

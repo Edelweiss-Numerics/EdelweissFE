@@ -174,6 +174,12 @@ for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createNode" title="edelweissfe.models.femodel.FEModel.createNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createNode</span></code></a>(node)</p></td>
 <td><p>Add a freshly created node to the model.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.elementsWithKernels" title="edelweissfe.models.femodel.FEModel.elementsWithKernels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elementsWithKernels</span></code></a>()</p></td>
+<td><p>The elements of the model that take part in a discrete system: those that carry kernels (see <a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.hasKernels" title="edelweissfe.elements.base.baseelement.BaseElement.hasKernels"><code class="xref py py-attr docutils literal notranslate"><span class="pre">hasKernels</span></code></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.indicesRelatedByMultiPointConstraints" title="edelweissfe.models.femodel.FEModel.indicesRelatedByMultiPointConstraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">indicesRelatedByMultiPointConstraints</span></code></a>(numbering)</p></td>
+<td><p>The indices of the degrees of freedom that the multi-point constraints of the model relate, as slaves and as masters, in the given numbering.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareYourself</span></code></a>(journal)</p></td>
 <td><p>Prepare the model for a simulation.</p></td>
 </tr>
@@ -264,16 +270,23 @@ it is. The model does this itself, without a discrete system: a step resumed at 
 and which constraints contribute to it, see <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem" title="edelweissfe.models.discretesystem.DiscreteSystem"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiscreteSystem</span></code></a>. Called
 by a solver whenever it (re)builds its discrete system: at the start of a step, and after the topology update
 reported a change that needs one (<a class="reference internal" href="#edelweissfe.models.change.Change" title="edelweissfe.models.change.Change"><code class="xref py py-class docutils literal notranslate"><span class="pre">Change</span></code></a>).</p>
-<p>The discrete system of a finite element model holds the node fields, the elements, and the active constraints
-with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see
+<p>The discrete system of a finite element model holds the node fields, the elements that carry kernels, and the
+active constraints with their scalar variables (e.g. Lagrange multipliers); the elements are those of
+<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.elementsWithKernels" title="edelweissfe.models.femodel.FEModel.elementsWithKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">elementsWithKernels()</span></code></a>. A constraint that is not active (see
 <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>) is left out together with its
 scalar variables, which would otherwise be unknowns without an equation.</p>
+<p>Every degree of freedom that is numbered must be in the location of an entity, or related by a multi-point
+constraint, or it would have no row in the system matrix: a node that only an entity without kernels touches
+(e.g. a contact facet) has none, and the discrete system is not built.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The discrete system.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem" title="edelweissfe.models.discretesystem.DiscreteSystem">DiscreteSystem</a></p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If a numbered degree of freedom is in no location; the error names the node and the field.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -296,6 +309,41 @@ scalar variables, which would otherwise be unknowns without an equation.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>node</strong> – The node, already carrying a label obtained from <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reserveNodeNumbers()</span></code></a>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.elementsWithKernels">
+<span class="sig-name descname"><span class="pre">elementsWithKernels</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.elementsWithKernels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.elementsWithKernels" title="Link to this definition"></a></dt>
+<dd><p>The elements of the model that take part in a discrete system: those that carry kernels (see
+<a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.hasKernels" title="edelweissfe.elements.base.baseelement.BaseElement.hasKernels"><code class="xref py py-attr docutils literal notranslate"><span class="pre">hasKernels</span></code></a>). An entity of the element container that
+carries geometry only, e.g. a contact facet, has no block in the system matrix and takes no part; its nodes
+have rows only if an element that carries kernels couples them, see <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.buildDiscreteSystem" title="edelweissfe.models.femodel.FEModel.buildDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildDiscreteSystem()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The elements, in the order of the element container.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.indicesRelatedByMultiPointConstraints">
+<span class="sig-name descname"><span class="pre">indicesRelatedByMultiPointConstraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">numbering</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.indicesRelatedByMultiPointConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.indicesRelatedByMultiPointConstraints" title="Link to this definition"></a></dt>
+<dd><p>The indices of the degrees of freedom that the multi-point constraints of the model relate, as slaves and as
+masters, in the given numbering.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>numbering</strong> (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><em>DofNumbering</em></a>) – The numbering of the degrees of freedom.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The indices, in no particular order, with repetitions.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
 </dd>
 </dl>
 </dd></dl>
@@ -655,7 +703,9 @@ of the degrees of freedom they are built on.</p></li>
 <dd class="field-even"><dl class="simple">
 <dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.constraints" title="edelweissfe.models.discretesystem.DiscreteSystem.constraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constraints</span></code></a></dt><dd><p>The constraints that take part in the discrete system, i.e.</p>
 </dd>
-<dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.elements" title="edelweissfe.models.discretesystem.DiscreteSystem.elements"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elements</span></code></a></dt><dd><p>Everything the solver computes like an element in every evaluation of the model, see <a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>: the finite elements of the model that have a location, and in a meshfree model its cells and particles as well.</p>
+<dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.elements" title="edelweissfe.models.discretesystem.DiscreteSystem.elements"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elements</span></code></a></dt><dd><p>Everything the solver computes like an element in every evaluation of the model, see <a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>: the finite elements of the model that carry kernels (<a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.hasKernels" title="edelweissfe.elements.base.baseelement.BaseElement.hasKernels"><code class="xref py py-attr docutils literal notranslate"><span class="pre">hasKernels</span></code></a>), and in a meshfree model its cells and particles as well.</p>
+</dd>
+<dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a></dt><dd><p>The entities whose inertia, damping and stable time increment a solver assembles element by element, at the nodes (<code class="docutils literal notranslate"><span class="pre">NID</span></code>, <code class="docutils literal notranslate"><span class="pre">NED</span></code>).</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.numbering" title="edelweissfe.models.discretesystem.DiscreteSystem.numbering"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numbering</span></code></a></dt><dd><p>The numbering of the degrees of freedom of the discrete system, which says which node fields and scalar variables have degrees of freedom, and the global index of each; see <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>.</p>
 </dd>
@@ -973,12 +1023,30 @@ rows in the system matrix, and every row of a constraint is filled.</p>
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">elements</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.elements" title="Link to this definition"></a></dt>
 <dd><p>Everything the solver computes like an element in every evaluation of the model, see
 <a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>: the finite elements of the model that
-have a location, and in a meshfree model its cells and particles as well. The entities the locations hold: a
-solver computes exactly what has rows in the system matrix. A list, which a parallel solver hands out in slices
-to its threads.</p>
+carry kernels (<a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.hasKernels" title="edelweissfe.elements.base.baseelement.BaseElement.hasKernels"><code class="xref py py-attr docutils literal notranslate"><span class="pre">hasKernels</span></code></a>), and in a meshfree model
+its cells and particles as well. The entities the locations hold: a solver computes exactly what has rows in
+the system matrix, for every solver, the explicit ones included. A list, which a parallel solver hands out in
+slices to its threads.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The elements, in the order in which the solver computes them.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">elementsWithNodalInertia</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="Link to this definition"></a></dt>
+<dd><p>The entities whose inertia, damping and stable time increment a solver assembles element by element, at the
+nodes (<code class="docutils literal notranslate"><span class="pre">NID</span></code>, <code class="docutils literal notranslate"><span class="pre">NED</span></code>). In a finite element model, these are the <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.elements" title="edelweissfe.models.discretesystem.DiscreteSystem.elements"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elements</span></code></a>; a meshfree model names its
+finite elements only, since its cells and particles contribute nothing there, and the particles integrate
+their own inertia (see <a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLumpedMassOfEntitiesWithOwnInertia()</span></code></a>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The entities, in the order in which the solver computes them.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>list</p>
@@ -1349,7 +1417,7 @@ construction mid-pipeline, handing a consumer a state that no longer exists by t
 solve begins.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>True if any consumer reported that its DOF footprint changed.</p>
+<dd class="field-odd"><p>True if any consumer found the change of the mesh relevant and patched its cached state.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>bool</p>

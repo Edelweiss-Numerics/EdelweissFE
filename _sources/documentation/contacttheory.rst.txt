@@ -1017,8 +1017,8 @@ ordered like the generator's ``<prefix>_nodes`` node set, and are typically requ
 The integrated constraint (:ref:`integrated-contact-algorithm`) presents the same
 ``updateConnectivity`` / ``computeKernels`` pair, with three differences worth knowing at the
 solver boundary. It carries no history, so it has no ``acceptLastState`` to promote -- every
-quantity derives from the converged state and :math:`d\boldsymbol{U}`. Its DOF footprint is the set
-of *assigned* contact points and does not respond to gap activation, so the sparsity pattern
+quantity derives from the converged state and :math:`d\boldsymbol{U}`. The nodes it couples are those
+of the *assigned* contact points, and do not respond to gap activation, so the sparsity pattern
 changes only on a genuine reassignment, not when a point opens or closes mid-Newton. And its
 results are ordered **by contact point**, not by node: ``getGaps()`` and ``getNormalPressures()``
 run over slave facets and, within a facet, over quadrature points, so a ``fromExpression`` output
@@ -1056,9 +1056,9 @@ between two searches a slave node moves :math:`\|\boldsymbol{v}\| \, \Delta t \,
 magnitude below a facet dimension. This is reported rather than assumed -- on every search that
 changes the connectivity the solver prints the largest nodal motion accumulated since the previous
 one, so the configured frequency can be checked against a given model's facet size instead of
-trusted. A connectivity change rebuilds the discrete system, but reuses the critical time step:
-the mesh is unchanged, so the stability limit is unchanged, and recomputing it would cost a full
-element pass.
+trusted. A connectivity change gives new locations on the same numbering, and reuses the lumped
+operators and the critical time step: the mesh is unchanged, so they are unchanged, and
+recomputing them would cost a full element pass.
 
 A candidate-facet pre-filter (a centroid k-d tree with a triangle-inequality radius bound) reduces
 the search cost without changing which facet is selected; it is a superset of the exhaustive sweep

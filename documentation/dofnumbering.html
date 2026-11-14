@@ -546,7 +546,8 @@ location, which is an error of the model, see <code class="xref py py-meth docut
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>numbering</strong> (<a class="reference internal" href="#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><em>DofNumbering</em></a>) – The numbering of the degrees of freedom the entities are located in.</p></li>
-<li><p><strong>elements</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Elements to locate.</p></li>
+<li><p><strong>elements</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Elements to locate: those that take part in the discrete system, see
+<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.buildDiscreteSystem" title="edelweissfe.models.femodel.FEModel.buildDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildDiscreteSystem()</span></code></a>.</p></li>
 <li><p><strong>constraints</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Constraints to locate. Their scalar variables must be numbered.</p></li>
 <li><p><strong>furtherEntities</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – Entities of other kinds, which a subclass knows the meaning of (e.g. the cells and particles of a meshfree
 model). They are located like elements, and computed like elements: they follow the elements in
@@ -563,14 +564,36 @@ model). They are located like elements, and computed like elements: they follow 
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.constructDofVector" title="edelweissfe.numerics.doflocations.DofLocations.constructDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constructDofVector</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.checkEveryDofIsLocated" title="edelweissfe.numerics.doflocations.DofLocations.checkEveryDofIsLocated"><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkEveryDofIsLocated</span></code></a>([...])</p></td>
+<td><p>Refuse a degree of freedom that no located entity touches.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.constructDofVector" title="edelweissfe.numerics.doflocations.DofLocations.constructDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constructDofVector</span></code></a>()</p></td>
 <td><p>Construct a vector with size=nDof and which has knowledge about the location of each entity.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf" title="edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">withNewLocationsOf</span></code></a>(constraints[, movedEntities])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf" title="edelweissfe.numerics.doflocations.DofLocations.withNewLocationsOf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">withNewLocationsOf</span></code></a>(constraints[, movedEntities])</p></td>
 <td><p>The locations of the same entities in the same numbering, with the constraints, and the further entities that moved, located anew after their connectivity changed.</p></td>
 </tr>
 </tbody>
 </table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.doflocations.DofLocations.checkEveryDofIsLocated">
+<span class="sig-name descname"><span class="pre">checkEveryDofIsLocated</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indicesRelatedByMultiPointConstraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/doflocations.html#DofLocations.checkEveryDofIsLocated"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.doflocations.DofLocations.checkEveryDofIsLocated" title="Link to this definition"></a></dt>
+<dd><p>Refuse a degree of freedom that no located entity touches. Such a degree of freedom has a number, but no row
+in the system matrix: a node that only an entity without kernels touches (e.g. a contact facet) is such a node.
+A solver cannot pin it with a Dirichlet boundary condition, nor integrate it, so the discrete system is not
+built.</p>
+<p>A multi-point constraint is no entity and owns no degrees of freedom, but a degree of freedom it relates, as
+slave or as master (e.g. of the reference point of a rigid body), has its row through the condensation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>indicesRelatedByMultiPointConstraints</strong> (<em>ndarray</em><em> | </em><em>None</em>) – The indices of the degrees of freedom that multi-point constraints relate; None for none.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If a degree of freedom of the numbering is in no location; the error names the node and the field.</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.numerics.doflocations.DofLocations.constructDofVector">
 <span class="sig-name descname"><span class="pre">constructDofVector</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/doflocations.html#DofLocations.constructDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.doflocations.DofLocations.constructDofVector" title="Link to this definition"></a></dt>

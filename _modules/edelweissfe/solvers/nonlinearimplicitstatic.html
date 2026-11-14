@@ -634,7 +634,6 @@
 <span class="sd">        next one is built, never both at once."""</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
@@ -652,8 +651,6 @@
 
         <span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span>
         <span class="n">numbering</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"discrete system rebuilt: </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 
         <span class="c1"># Fields are laid out in contiguous slices: report the block structure per field.</span>
         <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">fieldIndices</span> <span class="ow">in</span> <span class="n">numbering</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -683,10 +680,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">)</span>
 
-        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transformation build"</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span><span class="p">)</span>
-        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc dirichlet conflict check"</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buildAndCheckMPCTransformation</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="NIST.onNewLocations">
@@ -703,14 +697,6 @@
 <span class="sd">        """</span>
 
         <span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-            <span class="s2">"locations of </span><span class="si">{:}</span><span class="s2"> entities in the numbering of </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                <span class="nb">len</span><span class="p">(</span><span class="n">locations</span><span class="o">.</span><span class="n">ofEntity</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span>
-            <span class="p">),</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-            <span class="mi">2</span><span class="p">,</span>
-        <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>

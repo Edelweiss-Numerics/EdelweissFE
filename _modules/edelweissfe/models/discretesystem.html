@@ -181,9 +181,10 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">elements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Everything the solver computes like an element in every evaluation of the model, see</span>
 <span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`: the finite elements of the model that</span>
-<span class="sd">        have a location, and in a meshfree model its cells and particles as well. The entities the locations hold: a</span>
-<span class="sd">        solver computes exactly what has rows in the system matrix. A list, which a parallel solver hands out in slices</span>
-<span class="sd">        to its threads.</span>
+<span class="sd">        carry kernels (:attr:`~edelweissfe.elements.base.baseelement.BaseElement.hasKernels`), and in a meshfree model</span>
+<span class="sd">        its cells and particles as well. The entities the locations hold: a solver computes exactly what has rows in</span>
+<span class="sd">        the system matrix, for every solver, the explicit ones included. A list, which a parallel solver hands out in</span>
+<span class="sd">        slices to its threads.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -192,6 +193,21 @@
 <span class="sd">        """</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">elements</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">elementsWithNodalInertia</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The entities whose inertia, damping and stable time increment a solver assembles element by element, at the</span>
+<span class="sd">        nodes (``NID``, ``NED``). In a finite element model, these are the :attr:`elements`; a meshfree model names its</span>
+<span class="sd">        finite elements only, since its cells and particles contribute nothing there, and the particles integrate</span>
+<span class="sd">        their own inertia (see :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The entities, in the order in which the solver computes them.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">constraints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>

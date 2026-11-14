@@ -1564,8 +1564,9 @@
 
 <span class="sd">        Entries coupling to a degree of freedom that is not integrated in time are zeroed in both</span>
 <span class="sd">        (:meth:`_discardInertiaOfQuasiStaticFields`): the mass an element reports on a non-mechanical block (a</span>
-<span class="sd">        micro-inertia) belongs to a field this solver keeps quasi-static. Elements without kernels -- contact facets --</span>
-<span class="sd">        carry geometry, not a material, and are skipped.</span>
+<span class="sd">        micro-inertia) belongs to a field this solver keeps quasi-static. The elements are those the discrete system</span>
+<span class="sd">        names for it (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`): the elements</span>
+<span class="sd">        that carry kernels; the cells and particles of a meshfree model are not among them.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1623,9 +1624,7 @@
             <span class="n">blocks</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">dampedDofs</span><span class="p">,</span> <span class="n">dampingValues</span>
 
-        <span class="n">chunks</span> <span class="o">=</span> <span class="n">mapChunksOnWorkers</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">el</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">el</span><span class="o">.</span><span class="n">hasKernels</span><span class="p">],</span> <span class="n">assembleChunk</span><span class="p">,</span> <span class="n">K</span><span class="o">.</span><span class="n">numberOfWorkers</span>
-        <span class="p">)</span>
+        <span class="n">chunks</span> <span class="o">=</span> <span class="n">mapChunksOnWorkers</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span><span class="p">,</span> <span class="n">assembleChunk</span><span class="p">,</span> <span class="n">K</span><span class="o">.</span><span class="n">numberOfWorkers</span><span class="p">)</span>
 
         <span class="c1"># Seeded with empty arrays, so that a model without any damping still sums to zeros. Of float type in any case:</span>
         <span class="c1"># np.bincount gives integers for an empty input, even with weights.</span>

@@ -1045,8 +1045,8 @@ ordered like the generator’s <code class="docutils literal notranslate"><span 
 <p>The integrated constraint (<a class="reference internal" href="#integrated-contact-algorithm"><span class="std std-ref">The integrated formulation, step by step</span></a>) presents the same
 <code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code> / <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> pair, with three differences worth knowing at the
 solver boundary. It carries no history, so it has no <code class="docutils literal notranslate"><span class="pre">acceptLastState</span></code> to promote – every
-quantity derives from the converged state and <span class="math notranslate nohighlight">\(d\boldsymbol{U}\)</span>. Its DOF footprint is the set
-of <em>assigned</em> contact points and does not respond to gap activation, so the sparsity pattern
+quantity derives from the converged state and <span class="math notranslate nohighlight">\(d\boldsymbol{U}\)</span>. The nodes it couples are those
+of the <em>assigned</em> contact points, and do not respond to gap activation, so the sparsity pattern
 changes only on a genuine reassignment, not when a point opens or closes mid-Newton. And its
 results are ordered <strong>by contact point</strong>, not by node: <code class="docutils literal notranslate"><span class="pre">getGaps()</span></code> and <code class="docutils literal notranslate"><span class="pre">getNormalPressures()</span></code>
 run over slave facets and, within a facet, over quadrature points, so a <code class="docutils literal notranslate"><span class="pre">fromExpression</span></code> output
@@ -1077,9 +1077,9 @@ between two searches a slave node moves <span class="math notranslate nohighligh
 magnitude below a facet dimension. This is reported rather than assumed – on every search that
 changes the connectivity the solver prints the largest nodal motion accumulated since the previous
 one, so the configured frequency can be checked against a given model’s facet size instead of
-trusted. A connectivity change rebuilds the discrete system, but reuses the critical time step:
-the mesh is unchanged, so the stability limit is unchanged, and recomputing it would cost a full
-element pass.</p>
+trusted. A connectivity change gives new locations on the same numbering, and reuses the lumped
+operators and the critical time step: the mesh is unchanged, so they are unchanged, and
+recomputing them would cost a full element pass.</p>
 <p>A candidate-facet pre-filter (a centroid k-d tree with a triangle-inequality radius bound) reduces
 the search cost without changing which facet is selected; it is a superset of the exhaustive sweep
 and iterated in ascending facet index, so it reproduces the exhaustive tie-break exactly.</p>

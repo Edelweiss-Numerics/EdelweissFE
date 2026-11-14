@@ -500,9 +500,10 @@
 
 <span class="sd">        Not every entity in the element container is a finite element. A contact facet is kept</span>
 <span class="sd">        there for its nodes and its geometry alone: it has no material and no state, and its</span>
-<span class="sd">        kernels, its internal energy and its state acceptance are all no-ops. A solver that</span>
-<span class="sd">        touches every element on every increment may leave those out instead of calling into</span>
-<span class="sd">        them for nothing.</span>
+<span class="sd">        kernels, its internal energy and its state acceptance are all no-ops. The discrete system leaves</span>
+<span class="sd">        such an entity out (:meth:`~edelweissfe.models.femodel.FEModel.elementsWithKernels`): it has no block in the</span>
+<span class="sd">        system matrix, and no location, and no solver calls into it; a node has rows only through the elements that</span>
+<span class="sd">        carry kernels (see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>

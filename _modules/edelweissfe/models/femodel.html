@@ -618,6 +618,51 @@
 <span class="sd">        """</span></div>
 
 
+<div class="viewcode-block" id="FEModel.elementsWithKernels">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.elementsWithKernels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">elementsWithKernels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The elements of the model that take part in a discrete system: those that carry kernels (see</span>
+<span class="sd">        :attr:`~edelweissfe.elements.base.baseelement.BaseElement.hasKernels`). An entity of the element container that</span>
+<span class="sd">        carries geometry only, e.g. a contact facet, has no block in the system matrix and takes no part; its nodes</span>
+<span class="sd">        have rows only if an element that carries kernels couples them, see :meth:`buildDiscreteSystem`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The elements, in the order of the element container.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">element</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">element</span><span class="o">.</span><span class="n">hasKernels</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="FEModel.indicesRelatedByMultiPointConstraints">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.indicesRelatedByMultiPointConstraints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">indicesRelatedByMultiPointConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">numbering</span><span class="p">:</span> <span class="n">DofNumbering</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The indices of the degrees of freedom that the multi-point constraints of the model relate, as slaves and as</span>
+<span class="sd">        masters, in the given numbering.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        numbering</span>
+<span class="sd">            The numbering of the degrees of freedom.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The indices, in no particular order, with repetitions.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="n">index</span>
+                <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">multiPointConstraints</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+                <span class="k">for</span> <span class="n">slave</span><span class="p">,</span> <span class="n">masters</span> <span class="ow">in</span> <span class="n">constraint</span><span class="o">.</span><span class="n">getMultiPointConstraints</span><span class="p">(</span><span class="n">numbering</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="p">(</span><span class="n">slave</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">master</span> <span class="k">for</span> <span class="n">master</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">masters</span><span class="p">))</span>
+            <span class="p">),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="FEModel.buildDiscreteSystem">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.buildDiscreteSystem">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">buildDiscreteSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DiscreteSystem</span><span class="p">:</span>
@@ -626,19 +671,30 @@
 <span class="sd">        by a solver whenever it (re)builds its discrete system: at the start of a step, and after the topology update</span>
 <span class="sd">        reported a change that needs one (:class:`~edelweissfe.models.change.Change`).</span>
 
-<span class="sd">        The discrete system of a finite element model holds the node fields, the elements, and the active constraints</span>
-<span class="sd">        with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see</span>
+<span class="sd">        The discrete system of a finite element model holds the node fields, the elements that carry kernels, and the</span>
+<span class="sd">        active constraints with their scalar variables (e.g. Lagrange multipliers); the elements are those of</span>
+<span class="sd">        :meth:`elementsWithKernels`. A constraint that is not active (see</span>
 <span class="sd">        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its</span>
 <span class="sd">        scalar variables, which would otherwise be unknowns without an equation.</span>
+
+<span class="sd">        Every degree of freedom that is numbered must be in the location of an entity, or related by a multi-point</span>
+<span class="sd">        constraint, or it would have no row in the system matrix: a node that only an entity without kernels touches</span>
+<span class="sd">        (e.g. a contact facet) has none, and the discrete system is not built.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        DiscreteSystem</span>
 <span class="sd">            The discrete system.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a numbered degree of freedom is in no location; the error names the node and the field.</span>
 <span class="sd">        """</span>
 
         <span class="n">numbering</span> <span class="o">=</span> <span class="n">DofNumbering</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeScalarVariables</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodeSets</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-        <span class="n">locations</span> <span class="o">=</span> <span class="n">DofLocations</span><span class="p">(</span><span class="n">numbering</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">())</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="n">DofLocations</span><span class="p">(</span><span class="n">numbering</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">elementsWithKernels</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">())</span>
+        <span class="n">locations</span><span class="o">.</span><span class="n">checkEveryDofIsLocated</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">indicesRelatedByMultiPointConstraints</span><span class="p">(</span><span class="n">numbering</span><span class="p">))</span>
 
         <span class="k">return</span> <span class="n">DiscreteSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">locations</span><span class="p">)</span></div>
 

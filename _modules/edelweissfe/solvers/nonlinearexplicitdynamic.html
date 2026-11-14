@@ -160,6 +160,21 @@
 <span class="sd">that can act *only* through its tangent contributes nothing to an explicit increment and is</span>
 <span class="sd">refused at validation rather than silently ignored.</span>
 
+<span class="sd">**The lumped mass is the mass of the start of the step.** The lumped operators are assembled once for the numbering,</span>
+<span class="sd">at the first increment of every step, from the elements as they are then, and kept until the next numbering. A change of</span>
+<span class="sd">a material property during the step (:doc:`/documentation/stepactions`, ``changeMaterialProperty``) takes effect on the</span>
+<span class="sd">mass at the next step, as it does on the stable time increment.</span>
+
+<span class="sd">**The discrete system.** It is built, like that of every solver, by</span>
+<span class="sd">:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem`, from the</span>
+<span class="sd">change the model reports (:class:`~edelweissfe.models.change.Change`). A new numbering -- the first one of a step, and</span>
+<span class="sd">a refinement of the mesh -- gives the lumped operators, the classification of the fields by time derivative, the</span>
+<span class="sd">multi-point-constraint condensation and the vectors of the increments, and the stable time increment of the mesh</span>
+<span class="sd">(:meth:`NED.onNewNumbering`). A contact search that couples other nodes gives new locations on the same numbering: the</span>
+<span class="sd">lumped operators are functions of the elements and of the numbering and are kept, the vectors keep their values, and</span>
+<span class="sd">only the locations they are wrapped with are new (:meth:`NED.onNewLocations`). The elements the increment evaluates are</span>
+<span class="sd">the ones of the discrete system, those that carry kernels.</span>
+
 <span class="sd">**Energy balance.** Every reporting increment prints the energy the model held at the start of the</span>
 <span class="sd">step, kinetic and internal (``E_0``), the external work accumulated at prescribed degrees of freedom</span>
 <span class="sd">since, the kinetic energy, the internal (strain) energy, and what remains unaccounted. Its purpose is</span>
@@ -232,8 +247,8 @@
 <span class="sd">:doc:`/documentation/nodefieldresults`).</span>
 
 <span class="sd">**The net force is solver state, and a step starts from the model's state.** The net force lives</span>
-<span class="sd">within one discrete system, and is never read back from the model. A rebuild after a change of a</span>
-<span class="sd">constraint's connectivity carries it over by numbering, and a resumed step takes it from its</span>
+<span class="sd">within one discrete system, and is never read back from the model. New locations after a change</span>
+<span class="sd">of a constraint's connectivity carry it over, and a resumed step takes it from its</span>
 <span class="sd">checkpoint. After a mesh change it starts at zero: re-evaluating it would run the constitutive law</span>
 <span class="sd">off-cycle and write into the material state, and zero is an O(dT) error for one increment. At the</span>
 <span class="sd">start of a step, it is the net force of the state the model holds, :math:`\\boldsymbol{f}_\\mathrm{net}</span>
@@ -266,7 +281,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.change</span><span class="w"> </span><span class="kn">import</span> <span class="n">Change</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.mpctransformation</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiPointConstraintTransformation</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.base.outputmanagerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputManagerBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.conservationchecks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CONSERVATION_TOLERANCE</span><span class="p">,</span>
@@ -395,84 +409,6 @@
 
 
 
-<div class="viewcode-block" id="ExplicitSystem">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.ExplicitSystem">[docs]</a>
-<span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">ExplicitSystem</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Everything an explicit increment operates on that is sized by the current discrete system.</span>
-
-<span class="sd">    None of these are independent state: each is indexed by the numbering and the locations in force when it</span>
-<span class="sd">    was created, so the moment that system changes -- an h-adaptivity event creating nodes and</span>
-<span class="sd">    elements, a contact constraint re-assigning its slave nodes to different master facets -- every</span>
-<span class="sd">    one of them has to be rebuilt together, and any that is not becomes either a length mismatch or,</span>
-<span class="sd">    worse, a silently mis-indexed vector. Bundling them makes "rebuild the system" one assignment at</span>
-<span class="sd">    the call site instead of nine, which is what keeps the build before the increment loop and a</span>
-<span class="sd">    rebuild inside it the same code path rather than two that drift apart.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    Minv</span>
-<span class="sd">        The inverse lumped mass. Zero on multi-point-constraint slave DOFs, which integrate no</span>
-<span class="sd">        equation of motion of their own. The lumped mass it was built from is not carried here:</span>
-<span class="sd">        the diagnostics need the *unfolded* mass, which is held as ``_rawLumpedMass``, and a</span>
-<span class="sd">        second mass on this dataclass that no caller reads would only invite reading the wrong</span>
-<span class="sd">        one.</span>
-<span class="sd">    U</span>
-<span class="sd">        The solution vector.</span>
-<span class="sd">    dU</span>
-<span class="sd">        The solution increment of the increment being computed.</span>
-<span class="sd">    V</span>
-<span class="sd">        The velocity vector, staggered half an increment behind ``U``.</span>
-<span class="sd">    A</span>
-<span class="sd">        The acceleration at the end of the last increment (see :meth:`NED.accelerationAtTheEndOfTheIncrement`),</span>
-<span class="sd">        which the model receives with the velocity. At the start of a step, the one the model holds, from which the</span>
-<span class="sd">        step's first net force is formed (see :meth:`NED.formNetForceOfTheModelsState`).</span>
-<span class="sd">    netForce</span>
-<span class="sd">        The net nodal force -- external minus internal, with the loads and the constraints -- which drives the</span>
-<span class="sd">        velocity update of the next increment.</span>
-<span class="sd">    internalForce</span>
-<span class="sd">        The elements' sum of the increment, :math:`\\boldsymbol{f}_\\mathrm{int}`, from which the published</span>
-<span class="sd">        force is formed at acceptance (see :meth:`NED.internalInertialAndDampingForce`).</span>
-<span class="sd">    criticalTimeStep</span>
-<span class="sd">        The stable time increment for the current mesh, already scaled by the courant number.</span>
-<span class="sd">    """</span>
-
-    <span class="n">Minv</span><span class="p">:</span> <span class="n">DofVector</span>
-    <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span>
-    <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span>
-    <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span>
-    <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span>
-    <span class="n">netForce</span><span class="p">:</span> <span class="n">DofVector</span>
-    <span class="n">internalForce</span><span class="p">:</span> <span class="n">DofVector</span>
-    <span class="n">criticalTimeStep</span><span class="p">:</span> <span class="nb">float</span></div>
-
-
-
-<span class="nd">@dataclass</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">_ReusableExplicitOperators</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The lumped operators of an explicit system, and the model they were assembled from.</span>
-
-<span class="sd">    A rebuild asked for by a constraint's connectivity re-assigns which nodes that constraint</span>
-<span class="sd">    couples, and touches nothing the lumped inertia, its inverse, the mass-proportional damping</span>
-<span class="sd">    rate or the multi-point-constraint transformation are a function of -- so those are exactly</span>
-<span class="sd">    what they were, and :meth:`NED.buildExplicitSystem` keeps them here instead of assembling</span>
-<span class="sd">    them again.</span>
-
-<span class="sd">    The recorded model description is what :meth:`NED._operatorsReusable` checks before it does,</span>
-<span class="sd">    and anything that does not match makes it assemble from scratch instead.</span>
-<span class="sd">    """</span>
-
-    <span class="n">elementKeys</span><span class="p">:</span> <span class="nb">frozenset</span>
-    <span class="n">multiPointConstraintKeys</span><span class="p">:</span> <span class="nb">frozenset</span>
-    <span class="n">nNodes</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">nScalarVariables</span><span class="p">:</span> <span class="nb">int</span>
-    <span class="n">lumpedMass</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">rawLumpedMass</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">inverseLumpedMass</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">dampingRate</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-    <span class="n">mpcTransformation</span><span class="p">:</span> <span class="n">MultiPointConstraintTransformation</span> <span class="o">|</span> <span class="kc">None</span>
-
-
 <div class="viewcode-block" id="NED">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">NED</span><span class="p">(</span><span class="n">NonlinearSolverBase</span><span class="p">):</span>
@@ -543,6 +479,15 @@
         <span class="c1">#: Second-order fields whose inertia is neither a mass nor a rotational inertia; reported</span>
         <span class="c1">#: separately and kept out of both balances; see phenomena.inertiaKind.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nonMechanicalSecondOrderFields</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1">#: The operators of the explicit update, arrays of the length of the numbering, assembled by</span>
+        <span class="c1">#: :meth:`_assembleLumpedOperators` for every new numbering; the elements and the numbering determine them,</span>
+        <span class="c1">#: not the locations. The inverse lumped mass, zero on multi-point-constraint slave DOFs, which integrate no</span>
+        <span class="c1">#: equation of motion of their own:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The lumped mass the increment divides by, with the multi-point-constraint fold, and the unfolded one. The</span>
+        <span class="c1">#: diagnostics need the true mass of every node, a tied slave included.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lumpedMass</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: Mass-proportional damping rate C/M per DOF; zero where elements report no damping, which</span>
         <span class="c1">#: reduces the update to the undamped central difference.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="kc">None</span>
@@ -570,20 +515,23 @@
         <span class="c1">#: state of the model (see :meth:`formNetForceOfTheModelsState`).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The inertia and the damping of every degree of freedom of the current discrete system, the</span>
-        <span class="c1">#: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see buildExplicitSystem.</span>
+        <span class="c1">#: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see</span>
+        <span class="c1">#: :meth:`_assembleLumpedOperators`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The elements the increment loop evaluates (those with kernels, i.e. without contact</span>
-        <span class="c1">#: facets); filled by :meth:`buildExplicitSystem`. None, not {}, so an unbuilt system fails.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: Lumped operators kept across a connectivity-only rebuild; see</span>
-        <span class="c1">#: :class:`_ReusableExplicitOperators`.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_reusableOperators</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: What the model's current discrete system is made of (see</span>
-        <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`): the numbering of its degrees of</span>
-        <span class="c1">#: freedom, its constraints, and how the state and the results pass between the model and the vectors of the</span>
-        <span class="c1">#: increments.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The stable time increment of the current mesh, already scaled by the courant number.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The vectors the increments work on, of the current discrete system, wrapped with its locations. They are the</span>
+        <span class="c1">#: solution, its increment, the velocity (staggered half an increment behind the solution) and the</span>
+        <span class="c1">#: acceleration at the end of the last increment, which the model receives with the velocity (see</span>
+        <span class="c1">#: :meth:`accelerationAtTheEndOfTheIncrement`); at the start of a step the one the model holds. The elements'</span>
+        <span class="c1">#: sum of the increment, :math:`\boldsymbol{f}_\mathrm{int}`, from which the published force is formed at</span>
+        <span class="c1">#: acceptance (see :meth:`internalInertialAndDampingForce`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="NED.beginStep">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.beginStep">[docs]</a>
@@ -620,7 +568,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_externalWork</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_energyAtStepStart</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_conservationCheck</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warnedAboutMissingInternalEnergy</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warnedAboutMissingExternalWork</span> <span class="o">=</span> <span class="kc">False</span>
@@ -640,7 +587,13 @@
         <span class="c1"># Step actions before the discrete system, matching NIST: nothing they do depends on it.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtStepStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="c1"># The multi-point constraints are reconciled with the step's Dirichlet boundary conditions whenever the</span>
+        <span class="c1"># discrete system gets a new numbering.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stepActions</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span>
+
+        <span class="c1"># The discrete system is built by the first prepareIncrement; a resumed step finds the net force of its</span>
+        <span class="c1"># checkpoint there, as set by setRestartData.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="NED.prepareIncrement">
@@ -671,10 +624,11 @@
             <span class="c1"># hAdaptivity's initialOnly markers) and the first contact search.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># The net force of the checkpoint on a resumed step, None on a cold one.</span>
             <span class="n">resumedNetForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildExplicitSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">updateDiscreteSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">resumedNetForce</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">resumedNetForce</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">):</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -687,7 +641,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_energyAtStepStart</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energyOfTheModelsState</span><span class="p">()</span>
             <span class="c1"># The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.</span>
             <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforceTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">)</span>
+                <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforceTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span><span class="p">)</span>
 
         <span class="c1"># --- h-adaptivity, mid-run ----------------------------------------------------------------</span>
         <span class="c1"># After every topology-check-frequency-th increment, i.e. after its output: the marker reads the</span>
@@ -701,50 +655,29 @@
         <span class="p">):</span>
             <span class="k">return</span>
 
-        <span class="n">theSystem</span><span class="p">,</span> <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span>
         <span class="n">lumpedTotalsBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_perFieldLumpedTotals</span><span class="p">()</span>
-        <span class="n">momentumBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">secondOrderMomentum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
-        <span class="n">kineticBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kineticEnergy</span><span class="p">(</span><span class="n">V</span><span class="p">)</span>
+        <span class="n">momentumBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">secondOrderMomentum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+        <span class="n">kineticBefore</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kineticEnergy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">)</span>
 
+        <span class="c1"># A change of the connectivity only moves the locations: the solution, the velocity and the net force carry</span>
+        <span class="c1"># over. A change of the mesh gives a new numbering, whose solution and velocity are read from the model, and</span>
+        <span class="c1"># whose net force starts at zero (see onNewNumbering).</span>
         <span class="n">change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
-        <span class="n">meshChanged</span> <span class="o">=</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">updateDiscreteSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
-            <span class="c1"># A connectivity-only change carries solution, velocity and net force over to the new system; a</span>
-            <span class="c1"># mesh change reads solution and velocity from the model, and starts the net force at zero (see</span>
-            <span class="c1"># buildExplicitSystem).</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildExplicitSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">meshChanged</span> <span class="k">else</span> <span class="n">theSystem</span><span class="p">))</span>
-            <span class="n">theSystem</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span>
-
-        <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span>
-
-        <span class="k">if</span> <span class="n">meshChanged</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">reportTopologyChangeConservation</span><span class="p">(</span><span class="n">lumpedTotalsBefore</span><span class="p">,</span> <span class="n">momentumBefore</span><span class="p">,</span> <span class="n">kineticBefore</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reportTopologyChangeConservation</span><span class="p">(</span><span class="n">lumpedTotalsBefore</span><span class="p">,</span> <span class="n">momentumBefore</span><span class="p">,</span> <span class="n">kineticBefore</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
 
             <span class="c1"># Lower only: refinement tightens the limit; a raised limit is not taken up mid-step.</span>
-            <span class="k">if</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">criticalTimeStep</span> <span class="o">&lt;</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">&lt;</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
                     <span class="s2">"Refinement lowered the stable time increment from </span><span class="si">{:e}</span><span class="s2"> to "</span>
-                    <span class="s2">"</span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">),</span>
+                    <span class="s2">"</span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span><span class="p">),</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
                     <span class="mi">1</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforceTimeIncrement</span><span class="p">(</span><span class="n">theSystem</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">)</span></div>
+                <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforceTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span><span class="p">)</span></div>
 
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theSystem</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Adopt a (re)built explicit system, and the vectors the increments work on.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        theSystem</span>
-<span class="sd">            The explicit system, see :meth:`buildExplicitSystem`.</span>
-<span class="sd">        """</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span> <span class="o">=</span> <span class="n">theSystem</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span> <span class="o">=</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">Minv</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">U</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">dU</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">A</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">netForce</span><span class="p">,</span> <span class="n">theSystem</span><span class="o">.</span><span class="n">internalForce</span>
 
 <div class="viewcode-block" id="NED.isOutputIncrement">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.isOutputIncrement">[docs]</a>
@@ -788,8 +721,6 @@
 
         <span class="n">contactUpdateFrequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"contact-update-frequency"</span><span class="p">]</span>
         <span class="n">topologyCheckFrequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"topology-check-frequency"</span><span class="p">]</span>
-        <span class="n">theSystem</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span>
-        <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">netForce</span><span class="p">,</span> <span class="n">internalForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span>
 
         <span class="k">if</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"output-frequency"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
@@ -835,17 +766,17 @@
             <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"constraint connectivity"</span><span class="p">):</span>
                 <span class="n">change</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">()</span>
 
-            <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Constraint connectivity changed"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildExplicitSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="n">theSystem</span><span class="p">))</span>
-                <span class="n">theSystem</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitSystem</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span>
-                <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">netForce</span><span class="p">,</span> <span class="n">internalForce</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span><span class="p">,</span>
+            <span class="c1"># Only the locations can change here: the search moves no node, and a constraint of this solver has no</span>
+            <span class="c1"># scalar variable.</span>
+            <span class="k">if</span> <span class="n">change</span> <span class="o">&gt;</span> <span class="n">Change</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="s2">"The connectivity search changed the numbering of the degrees of freedom (</span><span class="si">{:}</span><span class="s2">). Only a change of "</span>
+                    <span class="s2">"the locations is expected here, and that cannot add or remove degrees of freedom -- so the "</span>
+                    <span class="s2">"solution, the velocity and the net force cannot be carried across safely."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">change</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
                 <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">updateDiscreteSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
+
+        <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">netForce</span><span class="p">,</span> <span class="n">internalForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span>
 
         <span class="n">dU</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="k">try</span><span class="p">:</span>
@@ -855,7 +786,7 @@
                 <span class="n">V</span><span class="p">,</span>
                 <span class="n">netForce</span><span class="p">,</span>
                 <span class="n">internalForce</span><span class="p">,</span>
-                <span class="n">Minv</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span><span class="p">,</span>
                 <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">,</span>
                 <span class="n">model</span><span class="p">,</span>
                 <span class="n">timeStep</span><span class="p">,</span>
@@ -1019,7 +950,7 @@
 <span class="sd">            The kinetic and the internal energy.</span>
 <span class="sd">        """</span>
 
-        <span class="n">internalEnergy</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">element</span><span class="o">.</span><span class="n">computeInternalEnergy</span><span class="p">()</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="n">internalEnergy</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">element</span><span class="o">.</span><span class="n">computeInternalEnergy</span><span class="p">()</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elements</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kineticEnergy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">)</span> <span class="o">+</span> <span class="n">internalEnergy</span></div>
 
@@ -1093,7 +1024,7 @@
         <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">netForce</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">internalForce</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">Minv</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">Minv</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">stepActions</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
@@ -1115,7 +1046,7 @@
 <span class="sd">        internalForce</span>
 <span class="sd">            Overwritten with the elements' sum of this increment, the internal force.</span>
 <span class="sd">        Minv</span>
-<span class="sd">            The inverse lumped mass.</span>
+<span class="sd">            The inverse lumped mass, one value per degree of freedom.</span>
 <span class="sd">        stepActions</span>
 <span class="sd">            The list of active step actions.</span>
 <span class="sd">        model</span>
@@ -1134,8 +1065,7 @@
 <span class="sd">                - the net force of this increment</span>
 <span class="sd">        """</span>
 
-        <span class="c1"># only the entities that have kernels to evaluate; see buildExplicitSystem()</span>
-        <span class="n">elements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span>
+        <span class="n">elements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elements</span>
         <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
         <span class="n">loads</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">stepActions</span><span class="p">)</span>
 
@@ -1182,7 +1112,7 @@
             <span class="c1"># second-order DOFs. First-order DOFs: V = Minv f_net (forward Euler).</span>
             <span class="n">dtAverage</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span> <span class="o">+</span> <span class="n">prevTimeStep</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">)</span>
             <span class="n">halfRateStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_halfDampingRate</span> <span class="o">*</span> <span class="n">dtAverage</span>
-            <span class="n">forceOverMass</span> <span class="o">=</span> <span class="n">Minv</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()</span> <span class="o">*</span> <span class="n">netForce</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()</span>
+            <span class="n">forceOverMass</span> <span class="o">=</span> <span class="n">Minv</span> <span class="o">*</span> <span class="n">netForce</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()</span>
 
             <span class="n">velocity</span> <span class="o">=</span> <span class="n">V</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()</span>
             <span class="n">velocity</span> <span class="o">*=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">halfRateStep</span>
@@ -1346,7 +1276,7 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        elements</span>
-<span class="sd">            The finite elements, by number.</span>
+<span class="sd">            The finite elements.</span>
 <span class="sd">        U_np</span>
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        dU</span>
@@ -1366,7 +1296,7 @@
         <span class="n">time</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span>
         <span class="n">dT</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span>
         <span class="n">psi</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">:</span>
             <span class="n">Pe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
             <span class="n">el</span><span class="o">.</span><span class="n">computeKernelsExplicit</span><span class="p">(</span><span class="n">Pe</span><span class="p">,</span> <span class="n">U_np</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">time</span><span class="p">,</span> <span class="n">dT</span><span class="p">)</span>
             <span class="n">psi</span> <span class="o">+=</span> <span class="n">el</span><span class="o">.</span><span class="n">computeInternalEnergy</span><span class="p">()</span>
@@ -1514,136 +1444,118 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span></div>
 
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_operatorsReusable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Whether the kept lumped operators still describe this model, so that a rebuild may keep</span>
-<span class="sd">        them and re-locate the constraints alone.</span>
+<div class="viewcode-block" id="NED.forgetDiscreteSystem">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.forgetDiscreteSystem">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forgetDiscreteSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop the discrete system, and everything that belongs to it, before the next one is built: the vectors, the</span>
+<span class="sd">        lumped operators and what is derived from them (the classification of the fields by time derivative, the</span>
+<span class="sd">        stable time increment); see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forgetDiscreteSystem`. Everything</span>
+<span class="sd">        :meth:`onNewNumbering` builds is gone, so that no array of the previous numbering is left to be mistaken for</span>
+<span class="sd">        one of the next. The net force, which a resumed step finds from its checkpoint, is dropped as well: whoever</span>
+<span class="sd">        needs it takes it before the build (see :meth:`prepareIncrement`)."""</span>
 
-<span class="sd">        The operators are a function of the elements -- which carry the inertia and the damping --</span>
-<span class="sd">        of the multi-point constraints, and of the degree-of-freedom layout the two are indexed by.</span>
-<span class="sd">        A contact search changes none of those: it re-assigns which nodes a *constraint* couples,</span>
-<span class="sd">        which moves the constraints' own DOF footprints and nothing else. A topology change does</span>
-<span class="sd">        move them, and never reaches here: it passes no ``previous`` system and builds afresh.</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lumpedMass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_halfDampingRate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">firstOrderFields</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">secondOrderFields</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linearMomentumFields</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nonMechanicalSecondOrderFields</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ids_1st</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_mechanicalEnergy</span> <span class="o">=</span> <span class="kc">None</span></div>
 
-<span class="sd">        The multi-point constraints are safe to keep for a structural reason rather than a</span>
-<span class="sd">        coincidental one, which is worth being explicit about. They are a separate hierarchy</span>
-<span class="sd">        (:class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`)</span>
-<span class="sd">        with no connectivity-update protocol at all -- ``updateConnectivity`` belongs to</span>
-<span class="sd">        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`, and only those</span>
-<span class="sd">        constraints can ask for this rebuild -- and the dependency records they produce are a function of the node DOF</span>
-<span class="sd">        indices, which a change of the connectivity leaves untouched. Should a multi-point constraint ever gain a</span>
-<span class="sd">        connectivity of its own, that argument fails and the transformation would have to be</span>
-<span class="sd">        rebuilt here rather than kept.</span>
 
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
-<span class="sd">        stepActions</span>
-<span class="sd">            The step's actions.</span>
+<div class="viewcode-block" id="NED.onNewNumbering">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">onNewNumbering</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Build what is sized by the numbering of the new discrete system: the multi-point-constraint condensation,</span>
+<span class="sd">        the lumped operators the increment divides by and the classification of the fields by time derivative that</span>
+<span class="sd">        follows from them (see :meth:`_assembleLumpedOperators`), the vectors of the increments (the solution, the</span>
+<span class="sd">        velocity and the acceleration read from the model, which holds the state a mesh change interpolated onto its</span>
+<span class="sd">        new nodes; the net force and the internal force zero, see the module documentation, "The net force is solver</span>
+<span class="sd">        state, and a step starts from the model's state"), and the stable time increment of the new mesh.</span>
 
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        bool</span>
-<span class="sd">            Whether the kept operators may be reused.</span>
+<span class="sd">        The lumped operators are functions of the elements and of the numbering: new locations on the same numbering</span>
+<span class="sd">        keep them.</span>
+
+<span class="sd">        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering`.</span>
 <span class="sd">        """</span>
 
-        <span class="n">cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reusableOperators</span>
-        <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span>
+        <span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span>
 
-        <span class="c1"># Inertia and damping come from the materials, so a material property change invalidates them.</span>
-        <span class="k">if</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"changematerialproperty"</span><span class="p">]:</span>
-            <span class="k">return</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">buildAndCheckMPCTransformation</span><span class="p">()</span>
 
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">==</span> <span class="n">cache</span><span class="o">.</span><span class="n">elementKeys</span>
-            <span class="ow">and</span> <span class="n">model</span><span class="o">.</span><span class="n">multiPointConstraints</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">==</span> <span class="n">cache</span><span class="o">.</span><span class="n">multiPointConstraintKeys</span>
-            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span> <span class="o">==</span> <span class="n">cache</span><span class="o">.</span><span class="n">nNodes</span>
-            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">)</span> <span class="o">==</span> <span class="n">cache</span><span class="o">.</span><span class="n">nScalarVariables</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assembleLumpedOperators</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_restoreLumpedOperators</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Put the kept lumped operators back, into vectors on the new locations.</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">locations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
 
-<span class="sd">        The numbers are the ones :meth:`_assembleLumpedOperators` produced when it last ran. What</span>
-<span class="sd">        that method additionally left on the solver -- which fields are first and which second</span>
-<span class="sd">        order, and the DOF index sets of each -- is not restored because it was never invalidated:</span>
-<span class="sd">        a change of the connectivity leaves the fields and their indices exactly as they were, so those</span>
-<span class="sd">        attributes still describe this system.</span>
+        <span class="c1"># After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new</span>
+        <span class="c1"># nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).</span>
+        <span class="n">system</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span>
 
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector, DofVector]</span>
-<span class="sd">            The vector the increment divides by, and its inverse.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"courant-number"</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">getCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"Critical time step for explicit dynamics: </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">1</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NED.onNewLocations">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">onNewLocations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Wrap the vectors of the increments with the new locations, their values kept: the increments continue from</span>
+<span class="sd">        the solution, the velocity, the acceleration and the net force they have. The lumped operators and the stable</span>
+<span class="sd">        time increment are not touched: no element and no node moved.</span>
+
+<span class="sd">        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations`.</span>
 <span class="sd">        """</span>
 
-        <span class="n">cache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reusableOperators</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span>
 
-        <span class="c1"># The transformation is indexed by the numbering, which the change of the connectivity did not move.</span>
-        <span class="k">assert</span> <span class="n">cache</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">cache</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">nDof</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">mpcTransformation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="n">locations</span><span class="p">)</span></div>
 
-        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">M</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">lumpedMass</span>
-        <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">Minv</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">inverseLumpedMass</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">rawLumpedMass</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">dampingRate</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_lumpedMass</span> <span class="o">=</span> <span class="n">M</span>
 
-        <span class="k">return</span> <span class="n">M</span><span class="p">,</span> <span class="n">Minv</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_assembleLumpedOperators</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Assemble everything the explicit update divides by, and everything derived from it.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_assembleLumpedOperators</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Assemble everything the explicit update divides by, and everything derived from it, for the new numbering.</span>
 
 <span class="sd">        The lumped inertia and the lumped damping are summed from the elements, checked, and used</span>
 <span class="sd">        to decide which time derivative each field carries; the multi-point-constraint</span>
-<span class="sd">        transformation is built alongside them because it folds the slave degrees of freedom's</span>
-<span class="sd">        mass onto their masters. Beyond the two vectors returned, this leaves the derived</span>
-<span class="sd">        classification, the raw (unfolded) mass, the damping rate and the field index sets on the</span>
-<span class="sd">        solver.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
-<span class="sd">        step</span>
-<span class="sd">            The step, for the actions the multi-point-constraint transformation consults.</span>
-<span class="sd">        verbosity</span>
-<span class="sd">            The journal level to report at.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector, DofVector]</span>
-<span class="sd">            The vector the increment divides by, and its inverse.</span>
+<span class="sd">        transformation (:attr:`mpcTransformation`) folds the slave degrees of freedom's mass onto their masters.</span>
+<span class="sd">        This leaves on the solver, as arrays of the length of the numbering, the inverse lumped mass the increment</span>
+<span class="sd">        divides by, the lumped mass with and without the fold (the latter for the diagnostics), the damping rate, the</span>
+<span class="sd">        inertia and the damping of every degree of freedom, and the factors of the velocity update; and the derived</span>
+<span class="sd">        classification and the field index sets. The mass is that of the start of the step: nothing assembles it again</span>
+<span class="sd">        before the next numbering, which every step starts with.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span>
+        <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span>
 
-        <span class="c1"># Elements without kernels (contact facets) are left out of the per-increment loop. The loop's</span>
-        <span class="c1"># gather plan is keyed on this dict's identity.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span> <span class="o">=</span> <span class="p">{</span><span class="n">number</span><span class="p">:</span> <span class="n">element</span> <span class="k">for</span> <span class="n">number</span><span class="p">,</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">element</span><span class="o">.</span><span class="n">hasKernels</span><span class="p">}</span>
-
-        <span class="c1"># initialize mass and damping matrices</span>
-        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># initialize lumped mass matrix</span>
-        <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># initialize inverse lumped mass matrix</span>
-
-        <span class="n">M</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="c1"># The entities whose inertia is assembled element by element, as in every solver that does so (see</span>
+        <span class="c1"># DiscreteSystem.elementsWithNodalInertia). Their locations are the same in every locations made from this</span>
+        <span class="c1"># numbering, so the operators are the same too.</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">)</span>
+        <span class="n">damping</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span><span class="p">:</span>
             <span class="n">Me</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
             <span class="n">el</span><span class="o">.</span><span class="n">computeLumpedInertia</span><span class="p">(</span><span class="n">Me</span><span class="p">)</span>
-            <span class="n">M</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Me</span>
+            <span class="n">M</span><span class="p">[</span><span class="n">locations</span><span class="p">[</span><span class="n">el</span><span class="p">]]</span> <span class="o">+=</span> <span class="n">Me</span>
 
-        <span class="c1"># Each field's first-derivative coefficient: zero mechanically, the non-local viscosity always.</span>
-        <span class="n">damping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">damping</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="c1"># Each field's first-derivative coefficient: zero mechanically, the non-local viscosity always.</span>
             <span class="n">Ce</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
             <span class="n">el</span><span class="o">.</span><span class="n">computeLumpedDamping</span><span class="p">(</span><span class="n">Ce</span><span class="p">)</span>
-            <span class="n">damping</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Ce</span>
+            <span class="n">damping</span><span class="p">[</span><span class="n">locations</span><span class="p">[</span><span class="n">el</span><span class="p">]]</span> <span class="o">+=</span> <span class="n">Ce</span>
 
         <span class="c1"># Checked separately: at second-order DOFs the damping enters only as the rate C/M, which the</span>
         <span class="c1"># inertia check below never sees, and a negative rate amplifies instead of damping.</span>
@@ -1673,7 +1585,7 @@
                 <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">firstOrderFields</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">"(no field)"</span><span class="p">,</span>
             <span class="p">),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-            <span class="n">verbosity</span><span class="p">,</span>
+            <span class="mi">1</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_checkDerivedSchemeAgainstTheDeck</span><span class="p">()</span>
@@ -1724,166 +1636,32 @@
             <span class="c1"># Folded like the inertia, so the ratio below is the damping rate of the folded system.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">foldLumpedMass</span><span class="p">(</span><span class="n">damping</span><span class="p">)</span>
 
+        <span class="n">Minv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">)</span>
         <span class="n">Minv</span><span class="p">[</span><span class="n">M</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">M</span><span class="p">[</span><span class="n">M</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span> <span class="o">=</span> <span class="n">Minv</span>
 
         <span class="c1"># Damping rate alpha = C / M at second-order DOFs with nonzero (folded) inertia; zero elsewhere.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">)</span>
         <span class="n">integrating</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span><span class="p">[</span><span class="n">M</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">[</span><span class="n">integrating</span><span class="p">]</span> <span class="o">=</span> <span class="n">damping</span><span class="p">[</span><span class="n">integrating</span><span class="p">]</span> <span class="o">/</span> <span class="n">M</span><span class="p">[</span><span class="n">integrating</span><span class="p">]</span>
 
         <span class="c1"># kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_lumpedMass</span> <span class="o">=</span> <span class="n">M</span>
 
-        <span class="k">return</span> <span class="n">M</span><span class="p">,</span> <span class="n">Minv</span>
-
-<div class="viewcode-block" id="NED.buildExplicitSystem">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.buildExplicitSystem">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"build discrete system"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">buildExplicitSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="p">:</span> <span class="n">ExplicitSystem</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ExplicitSystem</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Build the explicit system, the operators and vectors sized by the discrete system, and the discrete system</span>
-<span class="sd">        itself (:attr:`system`).</span>
-
-<span class="sd">        Called once before the increment loop, and again from inside it whenever a constraint reports</span>
-<span class="sd">        that its DOF footprint changed -- one method for both, so the path every model takes and the</span>
-<span class="sd">        path only a contact model takes cannot drift apart. On that second path the discrete system gets</span>
-<span class="sd">        new locations (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`) rather than being</span>
-<span class="sd">        rebuilt, and the lumped operators are kept; see :meth:`_operatorsReusable`.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
-<span class="sd">        step</span>
-<span class="sd">            The step being solved; its actions are needed to check the multi-point constraints</span>
-<span class="sd">            against the prescribed Dirichlet conditions.</span>
-<span class="sd">        previous</span>
-<span class="sd">            The system being replaced, when this is a rebuild rather than the initial build. Its</span>
-<span class="sd">            solution, velocity and net force are carried over verbatim rather than re-read from the model:</span>
-<span class="sd">            they are the vectors the increment continues from. A rebuild triggered by a</span>
-<span class="sd">            constraint's connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is</span>
-<span class="sd">            checked rather than assumed: copying between two different layouts would mis-index every</span>
-<span class="sd">            vector silently.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        ExplicitSystem</span>
-<span class="sd">            The freshly built explicit system.</span>
-<span class="sd">        """</span>
-
-        <span class="n">isRebuild</span> <span class="o">=</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="n">verbosity</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">isRebuild</span> <span class="k">else</span> <span class="mi">0</span>
-
-        <span class="c1"># A connectivity-only rebuild makes new locations in the same numbering and keeps the lumped operators; see</span>
-        <span class="c1"># _operatorsReusable(). Anything else builds from scratch.</span>
-        <span class="n">reuseOperators</span> <span class="o">=</span> <span class="n">isRebuild</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_operatorsReusable</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">reuseOperators</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                <span class="s2">"Constraint connectivity changed: re-locating the constraints' degrees of freedom, "</span>
-                <span class="s2">"keeping the lumped operators"</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-                <span class="n">verbosity</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">withNewLocations</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Creating monolithic discrete system"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">)</span>
-            <span class="c1"># The numbering of the model's degrees of freedom, and how the state passes between the model and the</span>
-            <span class="c1"># vectors; this solver evaluates the model's elements itself, and assembles no system matrix.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildDiscreteSystem</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-            <span class="s2">"total size of discrete system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-            <span class="n">verbosity</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">isRebuild</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
-
-        <span class="k">if</span> <span class="n">reuseOperators</span><span class="p">:</span>
-            <span class="n">M</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_restoreLumpedOperators</span><span class="p">()</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">M</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_assembleLumpedOperators</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_reusableOperators</span> <span class="o">=</span> <span class="n">_ReusableExplicitOperators</span><span class="p">(</span>
-                <span class="n">elementKeys</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
-                <span class="n">multiPointConstraintKeys</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">multiPointConstraints</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
-                <span class="n">nNodes</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">nodes</span><span class="p">),</span>
-                <span class="n">nScalarVariables</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">),</span>
-                <span class="n">lumpedMass</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">M</span><span class="p">),</span>
-                <span class="n">rawLumpedMass</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rawLumpedMass</span><span class="p">),</span>
-                <span class="n">inverseLumpedMass</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">Minv</span><span class="p">),</span>
-                <span class="n">dampingRate</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">),</span>
-                <span class="n">mpcTransformation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span>
-            <span class="p">)</span>
-
         <span class="c1"># Per-DOF factors of the velocity update, so that it runs on whole vectors.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_halfDampingRate</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ids_2nd</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_halfDampingRate</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span>
 
         <span class="c1"># The coefficients of every degree of freedom's equation of motion, M a + C v = f_net: by central differences,</span>
         <span class="c1"># the inertia and the damping (rate times inertia); by forward Euler, no inertia, and the damping the increment</span>
         <span class="c1"># divides by. Zero on a multi-point-constraint slave, whose inertia and damping are folded onto its masters.</span>
-        <span class="n">lumpedMass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lumpedMass</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="n">lumpedMass</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="n">lumpedMass</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span><span class="p">))</span>
-
-        <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="c1"># Zero unless carried over below or formed at the start of a step: see the module documentation, "The net force</span>
-        <span class="c1"># is solver state, and a step starts from the model's state".</span>
-        <span class="n">netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">internalForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">isRebuild</span><span class="p">:</span>
-            <span class="c1"># After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new</span>
-            <span class="c1"># nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">previous</span><span class="o">.</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                    <span class="s2">"The discrete system was rebuilt with </span><span class="si">{:}</span><span class="s2"> degrees of freedom instead of </span><span class="si">{:}</span><span class="s2">. Only "</span>
-                    <span class="s2">"a constraint's connectivity is expected to trigger a rebuild here, and that "</span>
-                    <span class="s2">"cannot add or remove degrees of freedom -- so the solution and the velocity "</span>
-                    <span class="s2">"cannot be carried across safely."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">previous</span><span class="o">.</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-                <span class="p">)</span>
-
-            <span class="c1"># Carried straight over: the numbering is the same, and these are the vectors the increment</span>
-            <span class="c1"># continues from.</span>
-            <span class="n">U</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">U</span>
-            <span class="n">V</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">V</span>
-            <span class="n">A</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">A</span>
-            <span class="n">netForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">netForce</span>
-
-        <span class="k">if</span> <span class="n">isRebuild</span><span class="p">:</span>
-            <span class="c1"># The mesh is unchanged, so the stable time increment is kept (recomputing costs an element pass).</span>
-            <span class="n">criticalTimeStep</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">criticalTimeStep</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">criticalTimeStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"courant-number"</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">getCriticalTimeStepForExplicitDynamics</span><span class="p">(</span>
-                <span class="n">model</span><span class="p">,</span> <span class="n">U</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                <span class="s2">"Critical time step for explicit dynamics: </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">criticalTimeStep</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">1</span>
-            <span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">ExplicitSystem</span><span class="p">(</span>
-            <span class="n">Minv</span><span class="o">=</span><span class="n">Minv</span><span class="p">,</span>
-            <span class="n">U</span><span class="o">=</span><span class="n">U</span><span class="p">,</span>
-            <span class="n">dU</span><span class="o">=</span><span class="n">dU</span><span class="p">,</span>
-            <span class="n">V</span><span class="o">=</span><span class="n">V</span><span class="p">,</span>
-            <span class="n">A</span><span class="o">=</span><span class="n">A</span><span class="p">,</span>
-            <span class="n">netForce</span><span class="o">=</span><span class="n">netForce</span><span class="p">,</span>
-            <span class="n">internalForce</span><span class="o">=</span><span class="n">internalForce</span><span class="p">,</span>
-            <span class="n">criticalTimeStep</span><span class="o">=</span><span class="n">criticalTimeStep</span><span class="p">,</span>
-        <span class="p">)</span></div>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="n">M</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="n">M</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dampingRate</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_secondOrderMask</span><span class="p">))</span>
 
 <div class="viewcode-block" id="NED.secondOrderMomentum">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.secondOrderMomentum">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">secondOrderMomentum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mass</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">secondOrderMomentum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mass</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The linear momentum of the fields whose inertia is a mass, per spatial component; see</span>
 <span class="sd">        :func:`~edelweissfe.solvers.base.conservationchecks.linearMomentum`.</span>
 
@@ -2018,7 +1796,7 @@
                         <span class="p">)</span>
                     <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_classifyFieldsByScheme</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inertia</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">damping</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_classifyFieldsByScheme</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inertia</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">damping</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">"""Which fields are integrated second order in time and which first, read off the</span>
 <span class="sd">        assembled operators rather than declared.</span>
 
@@ -2138,7 +1916,7 @@
 <span class="sd">        kineticBefore</span>
 <span class="sd">            Kinetic energy before the change.</span>
 <span class="sd">        V</span>
-<span class="sd">            The velocity vector of the rebuilt system.</span>
+<span class="sd">            The velocity vector of the new discrete system.</span>
 <span class="sd">        model</span>
 <span class="sd">            The model tree.</span>
 
@@ -2208,13 +1986,13 @@
 
 <div class="viewcode-block" id="NED.getCriticalTimeStepForExplicitDynamics">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.getCriticalTimeStepForExplicitDynamics">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">getCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Compute the critical time step for explicit dynamics.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute the critical time step for explicit dynamics, over the finite elements of the discrete system.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
+<span class="sd">        U</span>
+<span class="sd">            The solution vector.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -2223,8 +2001,7 @@
 <span class="sd">        """</span>
         <span class="n">minTimeStep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
 
-        <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">elementTimeStep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span><span class="p">:</span>
             <span class="n">elementTimeStep</span> <span class="o">=</span> <span class="n">element</span><span class="o">.</span><span class="n">computeCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="n">U</span><span class="p">[</span><span class="n">element</span><span class="p">])</span>
             <span class="k">if</span> <span class="n">elementTimeStep</span> <span class="o">&lt;</span> <span class="n">minTimeStep</span><span class="p">:</span>
                 <span class="n">minTimeStep</span> <span class="o">=</span> <span class="n">elementTimeStep</span>

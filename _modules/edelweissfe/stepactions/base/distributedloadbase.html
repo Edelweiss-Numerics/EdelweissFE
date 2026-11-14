@@ -171,6 +171,7 @@
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Let every element of the surface add the residual contribution of the load on its face, the negative of</span>
 <span class="sd">        the external load, and its tangent; see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.</span>
+<span class="sd">        Only the elements that are located act, as for a body load.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -194,6 +195,9 @@
         <span class="n">load</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">getCurrentLoad</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">faceID</span><span class="p">,</span> <span class="n">elementSet</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">surface</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elementSet</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">el</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">locations</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
                 <span class="n">Ke</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="k">if</span> <span class="n">K</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span> <span class="o">*</span> <span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
                 <span class="n">Pe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
 

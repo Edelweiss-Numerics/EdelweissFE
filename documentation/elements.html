@@ -2396,9 +2396,12 @@ ordinary displacement DOFs of a deformable body’s boundary nodes, used as the 
 <a class="reference internal" href="constraints.html"><span class="doc">node-to-deformable-surface contact</span></a>. Not user-constructed directly – see the
 <a class="reference internal" href="generators.html"><span class="doc">surfaceElementGenerator</span></a> generator.</p>
 <p>Because a facet has neither a material nor a state, its kernels, its internal energy and its state
-acceptance are all no-ops, and it reports <code class="docutils literal notranslate"><span class="pre">hasKernels</span> <span class="pre">=</span> <span class="pre">False</span></code>. Solvers that would otherwise call
-into every entry of the element container on every increment – the explicit dynamic solver does –
-use that to leave the facets out of the element loop rather than calling into them for nothing.
+acceptance are all no-ops, and it reports <code class="docutils literal notranslate"><span class="pre">hasKernels</span> <span class="pre">=</span> <span class="pre">False</span></code>. The model leaves such an entity out of its
+discrete system (<a class="reference internal" href="solvers.html#model-discrete-system"><span class="std std-ref">discrete system</span></a>): the facet has no block in the system matrix and no
+location, and no solver calls into it on any increment. Its nodes have rows only through the elements that carry
+kernels: a node that only a facet touches is numbered but has no row, and the discrete system refuses it, naming the
+node. A load on an element set that holds facets, e.g. a body force on <code class="docutils literal notranslate"><span class="pre">all</span></code>, acts on the elements of the set that
+are located.
 An element of your own needs to do nothing here: <a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement" title="edelweissfe.elements.base.baseelement.BaseElement"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseElement</span></code></a>
 reports <code class="docutils literal notranslate"><span class="pre">True</span></code>, which is right for any element that carries a material.</p>
 <span class="target" id="module-edelweissfe.elements.contactsurfaceelement"></span><dl class="py class">
@@ -3325,9 +3328,10 @@ are kept.</p>
 <dd><p>Whether this entity contributes to the internal force and carries a state of its own.</p>
 <p>Not every entity in the element container is a finite element. A contact facet is kept
 there for its nodes and its geometry alone: it has no material and no state, and its
-kernels, its internal energy and its state acceptance are all no-ops. A solver that
-touches every element on every increment may leave those out instead of calling into
-them for nothing.</p>
+kernels, its internal energy and its state acceptance are all no-ops. The discrete system leaves
+such an entity out (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.elementsWithKernels" title="edelweissfe.models.femodel.FEModel.elementsWithKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">elementsWithKernels()</span></code></a>): it has no block in the
+system matrix, and no location, and no solver calls into it; a node has rows only through the elements that
+carry kernels (see <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.buildDiscreteSystem" title="edelweissfe.models.femodel.FEModel.buildDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildDiscreteSystem()</span></code></a>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>True for a finite element proper, False for an entity that carries geometry only.</p>
