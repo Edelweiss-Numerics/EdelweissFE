@@ -32,7 +32,6 @@ import numpy as np
 
 from edelweissfe.adaptivity.statetransfer.base import (
     StateTransferStrategy,
-    childrenQuadraturePointReferenceCoordinates,
     perQuadraturePointBlockSize,
     quadraturePointReferenceCoordinates,
 )
@@ -57,7 +56,7 @@ class PerStateVarStateTransfer(StateTransferStrategy):
         parentBlock = perQuadraturePointBlockSize(parent)
         parentValues = parent.getStateVars().reshape(parent.getNumberOfQuadraturePoints(), parentBlock)
         parentNodeCoords = np.array([n.coordinates for n in parent.nodes], dtype=float)
-        parentRefCoords = quadraturePointReferenceCoordinates(parent, parentNodeCoords, topology)
+        (parentRefCoords,) = quadraturePointReferenceCoordinates([parent], parentNodeCoords, topology)
 
         # resolve each overridden name to its column range within one QP block
         overridden = np.zeros(parentBlock, dtype=bool)
@@ -69,7 +68,7 @@ class PerStateVarStateTransfer(StateTransferStrategy):
             overridden[cols] = True
         defaultColumns = np.flatnonzero(~overridden)
 
-        childrenRefCoords = childrenQuadraturePointReferenceCoordinates(children, parentNodeCoords, topology)
+        childrenRefCoords = quadraturePointReferenceCoordinates(children, parentNodeCoords, topology)
         for child, childRefCoords in zip(children, childrenRefCoords):
             childBlock = perQuadraturePointBlockSize(child)
             if childBlock != parentBlock:

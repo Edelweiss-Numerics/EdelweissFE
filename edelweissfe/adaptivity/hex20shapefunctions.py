@@ -137,10 +137,9 @@ def quad8_shape(xi, eta):
 
 def _partition_local_coords():
     """Group node indices by shape-function family (corner / midside-x / midside-y / midside-z),
-    each entry pre-flattened to plain-Python scalars. Evaluated once at import time so
-    :func:`hex20_shape` -- called ~10^5-10^6 times per refinement event via the Newton-Raphson
-    inverse map (:meth:`~edelweissfe.adaptivity.hex20topology.Hex20Topology.inverse_map`) -- never
-    pays per-call numpy-array-indexing/branching overhead for a fixed, tiny (20-entry) topology."""
+    each entry ``(local index, reference coordinates)`` as plain-Python integers, so that one formula
+    (:func:`_hex20_shape`) evaluates in floating point and, at a rational point, exactly. Evaluated
+    once at import time."""
     # integers (the reference coordinates are exactly -1, 0, 1): identical in floating point, and they
     # keep an evaluation at a rational point exact (see hex20_shape_exact)
     coords = [tuple(int(v) for v in row) for row in LOCAL_COORDS.tolist()]
@@ -152,9 +151,9 @@ def _partition_local_coords():
 
 
 _CORNER_NODES, _MIDX_NODES, _MIDY_NODES, _MIDZ_NODES = _partition_local_coords()
-#: The same families as arrays, one per column of a node table (local index, then the node's reference
-#: coordinates): the operands of :func:`hex20_shape_grad`, which evaluates a family at once.
-_CORNERS, _MIDSIDES_X, _MIDSIDES_Y, _MIDSIDES_Z = (
+#: The same families as arrays, one per column (local index, then the reference coordinates): the
+#: operands of :func:`hex20_shape_grad`, which evaluates a whole family at many points at once.
+_CORNER_NODES_AS_ARRAYS, _MIDX_NODES_AS_ARRAYS, _MIDY_NODES_AS_ARRAYS, _MIDZ_NODES_AS_ARRAYS = (
     tuple(np.array(column) for column in zip(*family))
     for family in (_CORNER_NODES, _MIDX_NODES, _MIDY_NODES, _MIDZ_NODES)
 )
@@ -206,7 +205,7 @@ def hex20_shape_grad(xi, eta, zeta):
     N = np.empty(xi.shape[:-1] + (N_NODES,))
     dN = np.empty(xi.shape[:-1] + (N_NODES, 3))
 
-    i, xa, ya, za = _CORNERS
+    i, xa, ya, za = _CORNER_NODES_AS_ARRAYS
     A = 1 + xi * xa
     B = 1 + eta * ya
     C = 1 + zeta * za
@@ -216,7 +215,7 @@ def hex20_shape_grad(xi, eta, zeta):
     dN[..., i, 1] = 0.125 * ya * A * C * (S + B)
     dN[..., i, 2] = 0.125 * za * A * B * (S + C)
 
-    i, ya, za = _MIDSIDES_X
+    i, ya, za = _MIDX_NODES_AS_ARRAYS
     xi2 = 1 - xi**2
     B = 1 + eta * ya
     C = 1 + zeta * za
@@ -225,7 +224,7 @@ def hex20_shape_grad(xi, eta, zeta):
     dN[..., i, 1] = 0.25 * xi2 * ya * C
     dN[..., i, 2] = 0.25 * xi2 * B * za
 
-    i, xa, za = _MIDSIDES_Y
+    i, xa, za = _MIDY_NODES_AS_ARRAYS
     eta2 = 1 - eta**2
     A = 1 + xi * xa
     C = 1 + zeta * za
@@ -234,7 +233,7 @@ def hex20_shape_grad(xi, eta, zeta):
     dN[..., i, 1] = -0.5 * eta * A * C
     dN[..., i, 2] = 0.25 * eta2 * A * za
 
-    i, xa, ya = _MIDSIDES_Z
+    i, xa, ya = _MIDZ_NODES_AS_ARRAYS
     zeta2 = 1 - zeta**2
     A = 1 + xi * xa
     B = 1 + eta * ya
