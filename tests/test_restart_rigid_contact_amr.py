@@ -156,8 +156,8 @@ def test_resume_across_refinement_next_to_a_moving_rigid_body(tmp_path):
     stl = tmp_path / "plate.stl"
     _writePlateStl(stl)
 
-    # The uninterrupted run writes a checkpoint at every output and keeps them all. The resumed run writes none: if
-    # writing one changed the run, the two would end apart.
+    # The uninterrupted run writes a checkpoint at every output and keeps them all; the resumed run writes none. That a
+    # write changes nothing is tested in test_contact_restart_frozen_projection.py, with live refinement.
     writer = (
         "*output, type=restart, name=restart\n"
         f"writeInterval=1, baseName={tmp_path / 'ckpt'}, numberOfFilesToKeep={N_INCREMENTS_FULL}\n"

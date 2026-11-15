@@ -169,7 +169,8 @@ def _runWritingCheckpoints(directory: Path, constraintType: str, nIncrements: in
 
 def _resume(checkpoint: Path, constraintType: str, nIncrements: int, extra="", amr=False):
     """The run resumed from ``checkpoint`` to the end, in a directory of its own. It writes no checkpoints, unlike the
-    uninterrupted run: if writing one changed the run, the two would end apart."""
+    uninterrupted run, so that a write after the checkpoint which changed the run shows; that no write changes the run
+    at all is :func:`test_writing_checkpoints_changes_nothing`."""
 
     directory = checkpoint.parent / "resumed_from_{:}".format(checkpoint.stem)
     directory.mkdir()
@@ -262,3 +263,26 @@ def test_resume_after_live_refinement(liveRefinement, nResumedFrom):
     fields = _fields(resumed)
     for key, values in reference.items():
         assert np.array_equal(fields[key], values), key
+
+
+@pytest.mark.parametrize(
+    "constraintType, nIncrements, extra, amr",
+    [
+        ("nodeToDeformableSurfacePenalty", 60, "", False),
+        ("surfaceToDeformableSurfacePenalty", 60, "", False),
+        ("surfaceToDiscreteRigidBodyPenalty", 60, "", False),
+        ("surfaceToDeformableSurfacePenalty", 120, _LIVE_REFINEMENT, True),
+    ],
+    ids=["nodeToDeformableSurface", "surfaceToDeformableSurface", "surfaceToDiscreteRigidBody", "liveRefinement"],
+)
+def test_writing_checkpoints_changes_nothing(tmp_path, constraintType, nIncrements, extra, amr):
+    """A run writing a checkpoint at every output ends bitwise where the same run writing none does: a dozen writes
+    and more, between contact searches, and with live refinement before and after the refinement at increment 100.
+
+    The resume tests above cannot show a change made by a write before the checkpoint they resume from: their reference
+    and their checkpoints come from the same writing run."""
+
+    withCheckpoints, _ = _runWritingCheckpoints(tmp_path, constraintType, nIncrements, extra, amr)
+    withoutCheckpoints = _fields(_run(tmp_path, "withoutCheckpoints", constraintType, nIncrements, extra, amr))
+    for key, values in withoutCheckpoints.items():
+        assert np.array_equal(withCheckpoints[key], values), key
