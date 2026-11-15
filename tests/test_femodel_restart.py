@@ -44,6 +44,7 @@ from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.exceptions import RestartError
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
@@ -60,6 +61,21 @@ class _FakeRestartableConstraint:
 
     def setRestartData(self, data):
         self.history = np.asarray(data["history"])
+
+
+class _FakeElement:
+    """A stand-in with only what FEModel's checkpoint asks of an element: its state-variable buffer, of a given size
+    (zero for an element without state)."""
+
+    def __init__(self, elNumber: int, nStateVars: int):
+        self.elNumber = elNumber
+        self._stateVars = np.zeros(nStateVars)
+
+    def getStateVars(self):
+        return self._stateVars
+
+    def setStateVars(self, values):
+        self._stateVars[:] = values
 
 
 def _buildSingleElementModel():
@@ -142,6 +158,43 @@ def test_femodel_restart_roundtrip(tmp_path):
     np.testing.assert_allclose(element.getStateVars(), expectedStateVars)
     assert model.scalarVariables["dummy"].value == pytest.approx(1.23)
     np.testing.assert_allclose(fakeConstraint.history, [4.0, 5.0])
+
+
+def test_the_state_of_elements_of_different_sizes_round_trips(tmp_path):
+    """The checkpoint holds the state of all elements in one array: each element gets back exactly its own part,
+    whatever the sizes of the others, an element without state included."""
+    model, _ = _buildSingleElementModel()
+    for elNumber, nStateVars in ((7, 3), (8, 0), (9, 5), (10, 0)):
+        model.elements[elNumber] = _FakeElement(elNumber, nStateVars)
+    expected = {
+        elNumber: 10.0 * elNumber + np.arange(element.getStateVars().size, dtype=float)
+        for elNumber, element in model.elements.items()
+    }
+    for elNumber, element in model.elements.items():
+        element.setStateVars(expected[elNumber])
+
+    checkpointPath = tmp_path / "restart.h5"
+    with h5py.File(checkpointPath, "w") as f:
+        model.writeRestart(f)
+    for element in model.elements.values():
+        element.setStateVars(np.zeros(element.getStateVars().size))
+    with h5py.File(checkpointPath, "r") as f:
+        model.readRestart(f)
+
+    for elNumber, element in model.elements.items():
+        assert np.array_equal(element.getStateVars(), expected[elNumber]), elNumber
+
+
+def test_state_for_an_element_the_model_lacks_is_refused(tmp_path):
+    model, _ = _buildSingleElementModel()
+    model.elements[7] = _FakeElement(7, 2)
+    checkpointPath = tmp_path / "restart.h5"
+    with h5py.File(checkpointPath, "w") as f:
+        model.writeRestart(f)
+    del model.elements[7]
+
+    with h5py.File(checkpointPath, "r") as f, pytest.raises(RestartError, match="element 7"):
+        model.readRestart(f)
 
 
 def test_a_constraint_declares_the_state_it_carries():
