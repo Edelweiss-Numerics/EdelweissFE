@@ -27,7 +27,6 @@
 #  ---------------------------------------------------------------------
 
 import numpy as np
-import numpy.linalg as lin
 
 from edelweissfe.config import registry
 from edelweissfe.elements.base.baseelement import BaseElement
@@ -267,7 +266,7 @@ class DisplacementElementBase(BaseElement):
 
         N = computeNOperator(self._xi, self._eta, self._zeta, self._nInt, self.nNodes, self.nSpatialDimensions)
         for i in range(self._nInt):
-            P -= np.outer(N[i], load).flatten() * lin.det(self.J[i]) * self._t * self._weight[i]
+            P -= np.outer(N[i], load).flatten() * self.detJ[i] * self._t * self._weight[i]
 
     def computeConsistentMassMatrix(self, M: np.ndarray):
         """Compute the consistent mass matrix.
@@ -281,7 +280,7 @@ class DisplacementElementBase(BaseElement):
         nDoFPerNode = int(self._nDof / self.nNodes)
         for i in range(self._nInt):
             # compute element volume
-            detJ = lin.det(self.J[i])
+            detJ = self.detJ[i]
             # compute mass matrix for element j in point i
             N_ = np.zeros((self.nSpatialDimensions, self._nDof))
             for j in range(self.nNodes):
