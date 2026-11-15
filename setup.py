@@ -316,7 +316,8 @@ print("Now compile!")
 class optional_build_ext(build_ext):
     def build_extensions(self):
         # The extensions are independent of each other: they are compiled side by side (the compilers run as
-        # subprocesses; ``-j N`` limits how many at once, all cores by default), and each may fail on its own.
+        # subprocesses; as many at once as there are cores, or as EDELWEISSFE_BUILD_JOBS or ``-j N`` say), and each
+        # may fail on its own.
         def build(ext):
             try:
                 self.build_extension(ext)
@@ -327,7 +328,11 @@ class optional_build_ext(build_ext):
         # AMGCL's extension takes longer than all others together: it starts first, and the others share the
         # remaining workers, instead of the build waiting for it at the end.
         slowestFirst = sorted(self.extensions, key=lambda ext: ext.name != "edelweissfe.linsolve.amgcl.amgcl")
-        workers = self.parallel if type(self.parallel) is int and self.parallel > 0 else os.process_cpu_count()
+        workers = (
+            self.parallel
+            if type(self.parallel) is int and self.parallel > 0
+            else int(os.environ.get("EDELWEISSFE_BUILD_JOBS", 0)) or os.process_cpu_count()
+        )
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             errors = dict(zip((ext.name for ext in slowestFirst), executor.map(build, slowestFirst)))
 
