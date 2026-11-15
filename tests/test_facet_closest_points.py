@@ -53,7 +53,9 @@ import pyvista as pv
 from edelweissfe.utils.facetcontactgeometry import (
     closestFacetCandidates,
     closestFacets,
+    line2ClosestPoint,
     line2ClosestPoints,
+    tria3ClosestPoint,
     tria3ClosestPoints,
 )
 
@@ -305,12 +307,17 @@ def _closestFacetCandidatesScalar(queryPoints, facetCoords, searchDistance):
     return candidates
 
 
-def _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, closestPoints):
+#: Every this many pairs of a scan, the batched result is checked against the single-pair function.
+_SINGLE_PAIR_SAMPLING = 50
+
+
+def _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, closestPoints, closestPoint):
     """The pair-by-pair selection: the first strict minimum over each point's candidates, scanned in
     the order of the candidates.
 
-    The pairs are evaluated in one batch: a pair's result does not depend on the batch (see above),
-    so these are the bits the single-pair functions return."""
+    The pairs are evaluated in one batch (``closestPoints``), since a pair's result does not depend on
+    the batch (see above); a sample of them is evaluated by the single-pair function
+    (``closestPoint``) as well, and must give the same bits."""
 
     pointOfPair = np.repeat(np.arange(len(candidatesPerPoint)), [len(c) for c in candidatesPerPoint])
     facetOfPair = np.array([i for candidates in candidatesPerPoint for i in candidates], dtype=np.intp)
@@ -318,6 +325,9 @@ def _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, closestPoints)
     weights, distances = closestPoints(
         queryPoints[pointOfPair], *(facetsOfPairs[:, k] for k in range(facetsOfPairs.shape[1]))
     )
+    for pair in range(0, len(pointOfPair), _SINGLE_PAIR_SAMPLING):
+        singleWeights, singleDistance = closestPoint(queryPoints[pointOfPair[pair]], *facetsOfPairs[pair])
+        assert np.array_equal(singleWeights, weights[pair]) and singleDistance == distances[pair]
 
     selection = []
     pair = 0
@@ -357,7 +367,7 @@ def test_closest_facets_selects_the_first_strict_minimum(searchDistance):
     assert candidatesPerPoint == _closestFacetCandidatesScalar(queryPoints, facetCoords, searchDistance)
 
     closestFacet, closestWeights, closestDistance = closestFacets(queryPoints, facetCoords, candidatesPerPoint)
-    expected = _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, tria3ClosestPoints)
+    expected = _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, tria3ClosestPoints, tria3ClosestPoint)
     for p, (bestFacet, bestWeights, bestDistance) in enumerate(expected):
         if bestFacet is None:
             assert closestFacet[p] == -1 and closestDistance[p] == np.inf
@@ -375,7 +385,7 @@ def test_closest_facets_in_2d_and_without_candidates():
     candidatesPerPoint[0] = []
 
     closestFacet, closestWeights, closestDistance = closestFacets(queryPoints, facetCoords, candidatesPerPoint)
-    expected = _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, line2ClosestPoints)
+    expected = _scanForClosest(queryPoints, facetCoords, candidatesPerPoint, line2ClosestPoints, line2ClosestPoint)
     assert closestFacet[0] == -1 and closestDistance[0] == np.inf
     for p, (bestFacet, bestWeights, bestDistance) in enumerate(expected[1:], start=1):
         assert closestFacet[p] == bestFacet
