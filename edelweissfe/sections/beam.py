@@ -56,7 +56,7 @@ orientation vector is required, except for circles and tubes. In 2D, the z coord
 (use ``nZ=1`` for rectangles).
 
 ``multiplicity=k`` makes the beam stand for k identical parallel members (the fiber areas, A, I and J are scaled by
-k, the coordinates are not), e.g., k fibres stacked through the thickness of a 2D model, as the area of a truss.
+k, the coordinates are not), e.g., k fibers stacked through the thickness of a 2D model, as the area of a truss.
 
 One material per element: a composite section (e.g., steel and concrete) is modeled by several beam elements on
 the same nodes, one per material, each with its part of the section (the fiber integration is additive). The parts
@@ -220,7 +220,7 @@ class BeamSectionSchema:
     )
     multiplicity: float = schemaField(
         description="The number of identical parallel members this beam stands for (scales the point areas, and thus "
-        "A, I and J, but not the coordinates; e.g., k fibres stacked through the thickness of a 2D model).",
+        "A, I and J, but not the coordinates; e.g., k fibers stacked through the thickness of a 2D model).",
         dtype=float,
         default=1.0,
     )
