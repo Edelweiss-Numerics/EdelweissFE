@@ -64,6 +64,38 @@ bond-slip law and the bond element properties (perimeter, part of the bar elemen
 For perfect bond, use the ``embeddedRegion`` constraint (:mod:`edelweissfe.constraints.embeddedregion`) instead, or a
 stiff ``LINEARELASTICBONDSLIP`` law.
 
+**Large slip.** With ``largeSlip=True`` (and ``maxSlip``), Marmot ``EmbeddedLargeSlipBondElement`` elements are
+created instead, so that the bars may slide far, e.g., out of the concrete. The vocabulary is the one of the Marmot
+element:
+
+- *bar*: one unbranched polyline of bar elements (truss or beam, linear or quadratic, any orientation), found by
+  chaining the bar elements at their end nodes;
+- *channel*: the original path of a bar inside a host element, fixed in the host; it carries the bond history;
+- *window*: the consecutive bar elements within ``maxSlip`` of a channel, among which the channel points search their
+  *partner*, the bar point currently next to them;
+- *fade*: the bond of a channel point fades smoothly (:math:`f = 3x^2 - 2x^3` of the covered fraction :math:`x` of its
+  tributary part) as a bar end passes it, so the bonded length shrinks as the bar is pulled out.
+
+One bond element couples a host element to the window of its channel
+(``EBLS<nDim>D<nBarNodes><host>W<n>``). The window has about ``2 maxSlip / bar element length`` + 1 bar elements, at
+most the largest window Marmot registers (48): choose ``maxSlip`` a little above the largest slip expected, and bar
+elements not much shorter than ``maxSlip / 20``. A slip beyond the window makes Marmot throw; EdelweissFE then cuts the
+increment back and stops at the minimum increment. The bars must be straight or smoothly curved (kinks above
+``MAX_KINK_ANGLE`` and closed loops are rejected: at a kink the partner jumps, and a kinked bar cannot slide through a
+kinked channel).
+
+.. code-block:: edelweiss
+    :caption: Example (large slip):
+
+    *modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
+        embeddedElSet=rebars
+        hostElSet=concrete
+        material=bond
+        perimeter=50.27
+        largeSlip=True
+        ** the largest slip expected, here a complete pull-out of 30 mm; sets the window
+        maxSlip=35.0
+
 .. code-block:: edelweiss
     :caption: Example:
 
@@ -99,10 +131,16 @@ from edelweissfe.utils.embedding import (
     barPoint,
     findBarPartsInHosts,
 )
-from edelweissfe.utils.isoparametricshapes import INSIDE_TOLERANCE
+from edelweissfe.utils.isoparametricshapes import (
+    INSIDE_TOLERANCE,
+    shapeFunctionsAndDerivatives,
+)
 from edelweissfe.utils.schema import schemaField
 
 #: The abbreviation of a host element shape in the Marmot bond element names.
+#: Largest angle between consecutive bar elements of a bar with large slip (radians, 5 degrees).
+MAX_KINK_ANGLE = np.radians(5.0)
+
 HOST_SHAPE_CODES = {
     "tria3": "T3",
     "quad4": "Q4",
@@ -111,6 +149,12 @@ HOST_SHAPE_CODES = {
     "hexa8": "H8",
     "hexa20": "H20",
 }
+
+
+def largeSlipBondElementType(nDim: int, barShape: str, hostShape: str, window: int) -> str:
+    """The name of the Marmot large-slip bond element, ``EBLS<nDim>D<number of bar nodes><host shape>W<window>``, e.g.,
+    ``EBLS2D2Q4W3``."""
+    return "EBLS" + bondElementType(nDim, barShape, hostShape)[len("EB") :] + f"W{window}"
 
 
 def bondElementType(nDim: int, barShape: str, hostShape: str) -> str:
@@ -156,6 +200,18 @@ class EmbeddedBondSchema:
         description="Tolerance of the parametric coordinates on the boundary of a host element.",
         dtype=float,
         default=INSIDE_TOLERANCE,
+    )
+    largeSlip: bool = schemaField(
+        description="Large slip: the bars may slide out of (or into) their hosts, see the module documentation. "
+        "Requires maxSlip.",
+        dtype=bool,
+        default=False,
+    )
+    maxSlip: float | None = schemaField(
+        description="Large slip only: the largest slip expected, which sets the window of bar elements each bond "
+        "element couples to; a larger slip makes the analysis cut back and stop.",
+        dtype=float,
+        default=None,
     )
     splitBars: bool = schemaField(
         description="Replace the bar elements by bar elements with nodes at the crossings of the host element "
@@ -222,6 +278,11 @@ class Generator(GeneratorBase):
         if not isinstance(material, dict):
             raise ValueError(f"{name}: the bond-slip law '{configuration.material}' must be a Marmot material.")
 
+        if configuration.maxSlip is not None and not configuration.largeSlip:
+            raise ValueError(f"{name}: maxSlip is an option of largeSlip=True.")
+        if configuration.largeSlip and not (configuration.maxSlip is not None and configuration.maxSlip > 0):
+            raise ValueError(f"{name}: largeSlip requires a positive maxSlip.")
+
         barElements = list(model.elementSets[configuration.embeddedElSet])
         hostElements = list(model.elementSets[configuration.hostElSet])
         locator = HostElementLocator(hostElements, tolerance=configuration.tolerance)
@@ -253,19 +314,59 @@ class Generator(GeneratorBase):
                     "constraint for perfect bond of a conforming bar mesh)."
                 )
 
-        for bar in barElements:
-            barShape, barCoordinates = barGeometry(bar)
-            parts, unbonded = findBarPartsInHosts(bar, locator)
+        def findParts(barElement):
+            """the parts of a bar element in the hosts, with the bonded and unbonded lengths accounted for"""
+            nonlocal bondedLength, unbondedLength
+            barShape, barCoordinates = barGeometry(barElement)
+            parts, unbonded = findBarPartsInHosts(barElement, locator)
             bondedLength += sum(barLength(barShape, barCoordinates, p.etaStart, p.etaEnd) for p in parts)
             unbondedLength += unbonded
+            return parts
 
-            for part in parts:
-                checkIndependent(bar.nodes, part.hostElement)
+        def createLargeSlipBondElement(bar, k: int, reversed_: bool, part):
+            """the large-slip bond element of the channel of bar element k of the bar in part.hostElement"""
+            # the channel in the parameter of the bar, c = k + (eta + 1) / 2 with eta along the bar
+            etas = sorted((-part.etaEnd, -part.etaStart) if reversed_ else (part.etaStart, part.etaEnd))
+            cStart, cEnd = (k + 0.5 * (eta + 1) for eta in etas)
+            firstWindowElement, lastWindowElement = bar.window(cStart, cEnd, configuration.maxSlip)
+            window = lastWindowElement - firstWindowElement + 1
+            windowNodes = bar.nodes(firstWindowElement, lastWindowElement)
+            host = part.hostElement
+            checkIndependent(windowNodes, host)
+            elType = largeSlipBondElementType(nDim, bar.shape, host.ensightType, window)
+            try:
                 createBondElement(
-                    bondElementType(nDim, barShape, part.hostElement.ensightType),
-                    list(bar.nodes) + list(part.hostElement.nodes),
-                    [configuration.perimeter, part.etaStart, part.etaEnd],
+                    elType,
+                    list(host.nodes) + windowNodes,
+                    [
+                        configuration.perimeter,
+                        cStart - firstWindowElement,
+                        cEnd - firstWindowElement,
+                        float(firstWindowElement == 0),
+                        float(lastWindowElement == len(bar.elements) - 1),
+                    ],
                 )
+            except NotImplementedError:
+                # the windows Marmot registers are the one source of the cap (maxWindow in Marmot)
+                raise ValueError(
+                    f"{name}: maxSlip={configuration.maxSlip} needs a window of {window} bar elements, but Marmot has "
+                    f"no {elType}; reduce maxSlip or use longer bar elements."
+                )
+
+        if configuration.largeSlip:
+            for bar in _unbranchedBars(barElements):
+                for k, (barElement, reversed_) in enumerate(bar.elements):
+                    for part in findParts(barElement):
+                        createLargeSlipBondElement(bar, k, reversed_, part)
+        else:
+            for barElement in barElements:
+                for part in findParts(barElement):
+                    checkIndependent(barElement.nodes, part.hostElement)
+                    createBondElement(
+                        bondElementType(nDim, barElement.ensightType, part.hostElement.ensightType),
+                        list(barElement.nodes) + list(part.hostElement.nodes),
+                        [configuration.perimeter, part.etaStart, part.etaEnd],
+                    )
 
         elementSet = ElementSet(f"{name}_bond", bondElements)
         model.elementSets[elementSet.name] = elementSet
@@ -339,3 +440,105 @@ def remeshBarAtHostCrossings(bar, locator: HostElementLocator, model: FEModel) -
                     nodeSet.replaceMembers([n for n in nodeSet if n is not midNode])
 
     return newBars
+
+
+class _Bar:
+    """One unbranched bar: its bar elements ordered along it, with their orientation.
+
+    Parameters
+    ----------
+    elements
+        (bar element, reversed w.r.t. the bar direction), ordered along the bar.
+    """
+
+    def __init__(self, elements: list):
+        #: (bar element, reversed w.r.t. the bar direction)
+        self.elements = elements
+        self.shape = elements[0][0].ensightType
+        self.lengths = []
+        previousEndTangent = None
+        for bar, reversed_ in elements:
+            shape, coordinates = barGeometry(bar)
+            if shape != self.shape:
+                raise ValueError("A bar must not mix linear and quadratic bar elements.")
+            self.lengths.append(barLength(shape, coordinates))
+            # tangents at the start and the end of the element, along the bar
+            tangents = [shapeFunctionsAndDerivatives(shape, eta)[1][:, 0] @ coordinates for eta in (-1.0, 1.0)]
+            startTangent, endTangent = (-tangents[1], -tangents[0]) if reversed_ else tangents
+            if previousEndTangent is not None:
+                cosine = (
+                    previousEndTangent
+                    @ startTangent
+                    / np.linalg.norm(previousEndTangent)
+                    / np.linalg.norm(startTangent)
+                )
+                if np.arccos(np.clip(cosine, -1.0, 1.0)) > MAX_KINK_ANGLE:
+                    raise ValueError(
+                        f"Large slip needs straight or smoothly curved bars, but the bar has a kink of "
+                        f"{np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))):.3g} degrees at element {bar.elNumber}."
+                    )
+            previousEndTangent = endTangent
+        #: reference arc length at the start of each element, and at the end of the bar
+        self.S = np.concatenate([[0.0], np.cumsum(self.lengths)])
+
+    def window(self, cStart: float, cEnd: float, maxSlip: float) -> tuple[int, int]:
+        """The first and the last bar element of the window of a channel: all bar elements within maxSlip of the channel
+        [cStart, cEnd] (in the parameter c = k + (eta + 1) / 2 of the bar).
+
+        The arc lengths of the channel ends are taken linear in c within the bar element, which is approximate for
+        curved quadratic elements but only sizes the window."""
+        k = min(int(np.floor(cStart)), len(self.elements) - 1)
+        SStart = self.S[k] + (cStart - k) * self.lengths[k]
+        SEnd = self.S[k] + (cEnd - k) * self.lengths[k]
+        first, last = k, k
+        while first > 0 and self.S[first] > SStart - maxSlip:
+            first -= 1
+        while last < len(self.elements) - 1 and self.S[last + 1] < SEnd + maxSlip:
+            last += 1
+        return first, last
+
+    def nodes(self, first: int, last: int) -> list:
+        """The unique nodes of the bar elements first..last along the bar (bar2: e0 e1 ...; bar3: e0 m0 e1 m1 ...)."""
+        nodes = []
+        for bar, reversed_ in self.elements[first : last + 1]:
+            start, end = (bar.nodes[1], bar.nodes[0]) if reversed_ else (bar.nodes[0], bar.nodes[1])
+            if not nodes:
+                nodes.append(start)
+            if self.shape == "bar3":
+                nodes.append(bar.nodes[2])
+            nodes.append(end)
+        return nodes
+
+
+def _unbranchedBars(barElements: list) -> list:
+    """Order bar elements into unbranched bars connected by their end nodes.
+
+    Raises
+    ------
+    ValueError
+        For branches (a node joining more than two bar elements) and closed loops (no bar end to start from).
+    """
+    elementsAtNode = {}
+    for bar in barElements:
+        for node in bar.nodes[:2]:
+            elementsAtNode.setdefault(node, []).append(bar)
+    for node, elements in elementsAtNode.items():
+        if len(elements) > 2:
+            raise ValueError(f"Large slip needs unbranched bars, but node {node.label} joins {len(elements)} bars.")
+
+    remaining = {id(b): b for b in barElements}
+    bars = []
+    while remaining:
+        start = next((b for b in remaining.values() if any(len(elementsAtNode[n]) == 1 for n in b.nodes[:2])), None)
+        if start is None:
+            raise ValueError("Large slip needs bars with two ends, but the bar elements form a closed loop.")
+        node = start.nodes[0] if len(elementsAtNode[start.nodes[0]]) == 1 else start.nodes[1]
+        elements, bar = [], start
+        while bar is not None:
+            del remaining[id(bar)]
+            reversed_ = bar.nodes[0] is not node
+            elements.append((bar, reversed_))
+            node = bar.nodes[0] if reversed_ else bar.nodes[1]
+            bar = next((b for b in elementsAtNode[node] if b is not bar and id(b) in remaining), None)
+        bars.append(_Bar(elements))
+    return bars

@@ -112,6 +112,10 @@ Relevant module ``edelweissfe.generators.embeddedbond``
     :language: edelweiss
     :caption: Example (embedded beam): ``testfiles/marmot/EmbeddedBeamPile2D/test.inp``
 
+.. literalinclude:: ../../../testfiles/marmot/EmbeddedBondPullOutLargeSlipTilted2D/test.inp
+    :language: edelweiss
+    :caption: Example (large slip, bar at 45 degrees to the mesh): ``testfiles/marmot/EmbeddedBondPullOutLargeSlipTilted2D/test.inp``
+
 **Verification.** Two checks a deck can be compared with (both in ``tests/test_embedded_bond.py``):
 
 - A linear bond law (:math:`K_t`) and an elastic bar (:math:`EA`, perimeter :math:`p`, bonded length :math:`L`)
@@ -119,6 +123,9 @@ Relevant module ``edelweissfe.generators.embeddedbond``
   mesh converges to it with second order in the bar element length.
 - A plastic bond law at full debonding (the pull-out example above): the peak force is
   :math:`F_{\max} = \tau_{\max}\, p\, L_b`.
+- Large slip, a rigid bar pulled completely out of a rigid host with a linear bond law: the bonded length shrinks as
+  :math:`L_b - s`, so :math:`F = K_t\, s\, p\, (L_b - s)` with the peak :math:`K_t\, p\, L_b^2 / 4`, up to the fade
+  at the bar end, and the force vanishes once the bar has left the host.
 
 ``cuboidlatticegenerator`` - A cuboid lattice mesh generator
 ------------------------------------------------------------

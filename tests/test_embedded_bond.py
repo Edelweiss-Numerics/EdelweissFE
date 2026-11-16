@@ -1,5 +1,5 @@
-"""Bond-slip of embedded reinforcement (small slip): the embeddedBond generator with the Marmot bond elements
-(EB<nDim>D<nBarNodes><host>) and bond-slip laws, for truss (T*) and beam (B*) bars, verified against analytical
+"""Bond-slip of embedded reinforcement: the embeddedBond generator with the Marmot bond elements
+(EB<nDim>D<nBarNodes><host>, small slip; EBLS<nDim>D<nBarNodes><host>W<n>, large slip) and bond-slip laws, for truss (T*) and beam (B*) bars, verified against analytical
 pull-out solutions and against the perfect bond of the embeddedRegion constraint.
 
 Needs the Marmot modules TrussElement, BeamElement, EmbeddedBondElement, LinearElasticBondSlip and
@@ -37,6 +37,9 @@ pytestmark = pytest.mark.skipif(
 
 E_STEEL, NU_STEEL, A_STEEL, E_CONCRETE, NU_CONCRETE = 200000.0, 0.3, 0.01, 30000.0, 0.2
 PERIMETER = 0.3545  # circular bar of area 0.01
+#: the orientation test: the largest difference of the force-slip histories, relative to the peak force (from the
+#: fade over the tributary parts at the bar end; measured 0.10 % tilted, 0.26 % 3D)
+ORIENTATION_ATOL = 0.005
 
 
 def _run(tmp_path, deck: str, *results):
@@ -578,3 +581,308 @@ rebars
     _, (RFUnsplit, _) = _run(tmp_path, deck(False), "RF", "RFrebar")
     # 2.6 times stiffer here
     assert abs(RFUnsplit.getLastResult()) > 1.5 * abs(RFSplit.getLastResult())
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# large slip (largeSlip=True): Marmot EBLS<nDim>D<nBarNodes><host>W<n> elements
+# ---------------------------------------------------------------------------------------------------------------------
+
+largeSlip = pytest.mark.skipif(
+    not _marmotHas("EBLS2D2Q4W1"), reason="Marmot is built without the EmbeddedLargeSlipBondElement"
+)
+
+
+def _reverseOddElements(elementBlock: str) -> str:
+    """swap the end nodes of every second element of a *node + *element text: a bar with mixed orientation"""
+    lines = elementBlock.splitlines()
+    inElements = False
+    for i, line in enumerate(lines):
+        if line.startswith("*"):
+            inElements = line.lower().startswith("*element")
+            continue
+        parts = [p.strip() for p in line.split(",")]
+        if inElements and len(parts) >= 3 and int(parts[0]) % 2 == 0:
+            parts[1], parts[2] = parts[2], parts[1]
+            lines[i] = ", ".join(parts)
+    return "\n".join(lines) + "\n"
+
+
+def _largeSlipPullOutDeck(
+    bond: str,
+    generatorOptions: str,
+    pull: float,
+    maxInc: float = 0.05,
+    elType: str = "T2D2",
+    section: str = "area=100.0, type=truss",
+    reverse: bool = False,
+    nElements: int = 18,
+):
+    """a rigid bar along y = 0.37 from x = 0 to 9 (18 elements), bonded in the strip x = 0..4 (rigid host), pulled at
+    x = 9 along x"""
+    bar, first, last = _line(100001, (0.0, 0.37), (9.0, 0.37), nElements, elType)
+    if reverse:
+        bar = _reverseOddElements(bar)
+    # a node set takes one generate line: the mid nodes of quadratic bars (transverse zero-energy modes) get their own
+    midNodes = (
+        f"\n*nSet, nSet=barMidNodes, generate=True\n{first + 50000}, {last - 1 + 50000}, 1\n"
+        if elType.endswith("3")
+        else ""
+    )
+    midNodesFixed = (
+        ">>dirichlet, name=barMidY, nSet=barMidNodes, field=displacement, 2=0\n" if elType.endswith("3") else ""
+    )
+    return (
+        _strip(nX=5)
+        + f"""{bar}
+*elSet, elSet=rebars, generate=True
+{first}, {last - 1}, 1
+
+*nSet, nSet=barNodes, generate=True
+{first}, {last}, 1
+{midNodes}
+*nSet, nSet=loadedEnd
+{last}
+
+*section, name=rebarSection, {section}, material=steel
+rebars
+
+{bond}
+
+*modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
+embeddedElSet=rebars
+hostElSet=gen_all
+material=bond
+perimeter={PERIMETER}
+{generatorOptions}
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=F, nSet=loadedEnd, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
+>>perNode, name=s, nSet=loadedEnd, field=displacement, result=U, f(x)='sum(x[:,0])', saveHistory=True,
+
+*step, solver=theSolver
+maxInc={maxInc}, minInc=1e-8, maxNumInc=10000, maxIter=15, stepLength=1
+>>dirichlet, name=host, nSet=gen_all, field=displacement, 1=0, 2=0
+>>dirichlet, name=barY, nSet=barNodes, field=displacement, 2=0
+{midNodesFixed}>>dirichlet, name=pull, nSet=loadedEnd, field=displacement, 1={pull}
+"""
+    )
+
+
+_MC2010 = (
+    "*material, name=ModelCode2010BondSlip, id=bond, provider=marmot\n"
+    "** tauMax, s1, s2, s3, alpha, tauF, K0, Kn\n13.69, 1.0, 2.0, 10.0, 0.4, 5.48, 200.0, 1e4"
+)
+
+
+@largeSlip
+def test_large_slip_equals_small_slip_for_small_slip(tmp_path):
+    """for slips small compared to the bonded length, the large-slip bond gives the small-slip response (to first
+    order: up to the fade over the tributary part at the bar end)"""
+    _, (FSmall,) = _run(tmp_path, _largeSlipPullOutDeck(_MC2010, "", 0.02, 0.25), "F")
+    _, (FLarge,) = _run(tmp_path, _largeSlipPullOutDeck(_MC2010, "largeSlip=True\nmaxSlip=1.0", 0.02, 0.25), "F")
+    np.testing.assert_allclose(
+        np.asarray(FLarge.getResultHistory()), np.asarray(FSmall.getResultHistory()), rtol=2e-2, atol=1e-9
+    )
+
+
+def _completePullOut(tmp_path, **deckOptions):
+    Kt = 10.0
+    deck = _largeSlipPullOutDeck(
+        f"*material, name=LinearElasticBondSlip, id=bond, provider=marmot\n** Kt, Kn\n{Kt}, 1e4",
+        # no splitting: split quadratic bars get mid nodes without transverse support once they are pulled out
+        "largeSlip=True\nmaxSlip=6.0\nnIntegrationPoints=3\nsplitBars=False",
+        6.0,
+        **deckOptions,
+    )
+    model, (F, s) = _run(tmp_path, deck, "F", "s")
+    return Kt, model, np.asarray(s.getResultHistory()).ravel(), np.asarray(F.getResultHistory()).ravel()
+
+
+@largeSlip
+def test_large_slip_complete_pull_out(tmp_path):
+    """a rigid bar pulled completely out of a rigid host with a linear bond law: the bonded length shrinks as
+    L_b - s, so F = K_t s p (L_b - s), and the force vanishes once the bar has left the host"""
+    Lb = 4.0
+    Kt, model, slip, force = _completePullOut(tmp_path)
+    assert all(el.elType.startswith("EBLS2D2Q4W") for el in model.elementSets["rebarBond_bond"])
+    for target in (0.5, 1.0, 2.0, 3.0):
+        i = np.argmin(np.abs(slip - target))
+        expected = Kt * slip[i] * PERIMETER * (Lb - slip[i])
+        # the bond fades smoothly over the tributary parts at the bar end, not exactly at the bar end
+        np.testing.assert_allclose(force[i], expected, rtol=3e-2, err_msg=f"at s = {slip[i]}")
+    assert np.all(np.abs(force[slip > Lb + 0.1]) < 1e-6)  # Newton tolerance
+    assert force.max() == pytest.approx(Kt * PERIMETER * Lb**2 / 4, rel=3e-2)
+
+
+@largeSlip
+@pytest.mark.parametrize(
+    "elType, section, reverse",
+    [
+        ("T2D2", "area=100.0, type=truss", True),
+        ("T2D3", "area=100.0, type=truss", False),
+        ("T2D3", "area=100.0, type=truss", True),
+        ("B2D2", "type=beam, profile=generic, area=100.0, Iz=1.0", False),
+        ("B2D3", "type=beam, profile=generic, area=100.0, Iz=1.0", True),
+    ],
+)
+def test_large_slip_bars_of_quadratic_reversed_and_beam_elements(tmp_path, elType, section, reverse):
+    """the complete pull-out does not depend on the bar element type (quadratic, beam) or on the orientation of the
+    bar elements along the bar"""
+    _, _, slipRef, forceRef = _completePullOut(tmp_path)
+    _, model, slip, force = _completePullOut(tmp_path, elType=elType, section=section, reverse=reverse)
+    nBarNodes = 3 if elType.endswith("3") else 2
+    assert all(el.elType.startswith(f"EBLS2D{nBarNodes}Q4W") for el in model.elementSets["rebarBond_bond"])
+    np.testing.assert_allclose(np.interp(slipRef, slip, force), forceRef, rtol=1e-6, atol=1e-6 * forceRef.max())
+
+
+def _orientedPullOutDeck(tmp_path, direction, exitPoint, nDim):
+    """a rigid bar along ``direction`` (bonded length 120, 24 elements, free length 20 in one element) in a practically
+    rigid block of 200 (2D, CPE4 10 x 10) or 150 (3D, C3D8 15 x 5 x 5) bearing on its loaded face x = max, exiting
+    there at ``exitPoint``, pulled 30 along itself"""
+    t = np.asarray(direction, float) / np.linalg.norm(direction)
+    exitPoint = np.asarray(exitPoint, float)
+    points = [exitPoint - 120.0 * t + 5.0 * i * t for i in range(25)] + [exitPoint + 20.0 * t]
+    nodes = "\n".join(f"{100001 + i}, " + ", ".join(f"{c:.12g}" for c in x) for i, x in enumerate(points))
+    # co-rotational trusses: the tension stiffens the bar transversely (geometric stiffness), so that bar nodes no
+    # channel point holds any more (e.g., at short split pieces) are not a zero-energy mode
+    elType = "T2D2CR" if nDim == 2 else "T3D2CR"
+    elements = "\n".join(f"{100001 + i}, {100001 + i}, {100002 + i}" for i in range(25))
+    if nDim == 2:
+        host = """*modelGenerator, generator=planeRectQuad, name=gen
+l=200
+h=200
+nX=10
+nY=10
+elType=CPE4
+
+*section, name=concreteSection, thickness=1.0, material=concrete, type=plane
+gen_all
+"""
+        fixHost, pull = "1=0, 2=0", ", ".join(f"{d + 1}={30.0 * c:.12g}" for d, c in enumerate(t))
+    else:
+        host = """*modelGenerator, generator=boxGen, name=gen
+lX=150
+lY=150
+lZ=150
+nX=15
+nY=5
+nZ=5
+elType=C3D8
+
+*section, name=concreteSection, material=concrete, type=solid
+gen_all
+"""
+        fixHost, pull = "1=0, 2=0, 3=0", ", ".join(f"{d + 1}={30.0 * c:.12g}" for d, c in enumerate(t))
+    along = " + ".join(f"sum(x[:,{d}]) * {c:.12g}" for d, c in enumerate(t))
+    return f"""** a practically rigid block
+*material, name=linearelastic, id=concrete, provider=marmot
+1e9, {NU_CONCRETE}
+
+*material, name=linearelastic/hughes-winget, id=steel, provider=marmot
+{E_STEEL}, {NU_STEEL}
+
+*material, name=LinearElasticBondSlip, id=bond, provider=marmot
+** Kt, Kn
+10.0, 1e4
+
+{host}
+*node
+{nodes}
+
+*element, type={elType}
+{elements}
+
+*elSet, elSet=rebars, generate=True
+100001, 100025, 1
+
+*nSet, nSet=loadedEnd
+100026
+
+*section, name=rebarSection, area=1e4, material=steel, type=truss
+rebars
+
+*modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
+embeddedElSet=rebars
+hostElSet=gen_all
+material=bond
+perimeter=50.27
+largeSlip=True
+maxSlip=35.0
+
+*job, name=job, domain={nDim}d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=F, nSet=loadedEnd, field=displacement, result=P, f(x)='{along}', saveHistory=True,
+>>perNode, name=s, nSet=loadedEnd, field=displacement, result=U, f(x)='{along}', saveHistory=True,
+
+*step, solver=theSolver
+maxInc=0.02, minInc=1e-8, maxNumInc=1000, maxIter=15, stepLength=1
+>>dirichlet, name=plate, nSet=gen_right, field=displacement, {fixHost}
+>>dirichlet, name=pull, nSet=loadedEnd, field=displacement, {pull}
+"""
+
+
+@largeSlip
+def test_large_slip_pull_out_does_not_depend_on_the_orientation(tmp_path):
+    """the pull-out of a rigid bar from a rigid block gives the same force-slip history for a bar aligned with the mesh
+    (along element edges), tilted by 45 degrees (through the mesh nodes, along element diagonals) and inclined in 3D
+    -- up to the fade over the tributary parts at the bar end, which depend on where the hosts cut the bar"""
+    histories = []
+    for direction, exitPoint, nDim in (
+        ((1.0, 0.0), (200.0, 100.0), 2),
+        ((1.0, 1.0), (200.0, 160.0), 2),
+        ((0.85, 0.40, 0.34), (150.0, 100.0, 90.0), 3),
+    ):
+        _, (F, s) = _run(tmp_path, _orientedPullOutDeck(tmp_path, direction, exitPoint, nDim), "F", "s")
+        histories.append((np.asarray(s.getResultHistory()).ravel(), np.asarray(F.getResultHistory()).ravel()))
+    slipRef, forceRef = histories[0]
+    # F = K_t s p (L_b - s), at the end of the pull s = 30
+    assert forceRef[-1] == pytest.approx(10.0 * 30.0 * 50.27 * (120.0 - 30.0), rel=5e-3)  # measured 0.21 %
+    for slip, force in histories[1:]:
+        np.testing.assert_allclose(np.interp(slipRef, slip, force), forceRef, atol=ORIENTATION_ATOL * forceRef.max())
+
+
+@largeSlip
+@pytest.mark.parametrize(
+    "generatorOptions, nElements, change, match",
+    [
+        ("largeSlip=True", 18, None, "requires a positive maxSlip"),
+        ("largeSlip=True\nmaxSlip=-1.0", 18, None, "requires a positive maxSlip"),
+        ("maxSlip=1.0", 18, None, "maxSlip is an option of largeSlip"),
+        ("largeSlip=True\nmaxSlip=6.0", 180, None, "but Marmot has no EBLS2D2Q4W"),
+        ("largeSlip=True\nmaxSlip=1.0", 18, "branch", "unbranched"),
+        ("largeSlip=True\nmaxSlip=1.0", 18, "kink", "kink of"),
+        ("largeSlip=True\nmaxSlip=1.0", 18, "loop", "closed loop"),
+    ],
+)
+def test_large_slip_invalid_input(tmp_path, generatorOptions, nElements, change, match):
+    """large slip needs a positive maxSlip (and maxSlip needs large slip), a window Marmot registers, and straight or
+    smoothly curved bars with two ends"""
+    deck = _largeSlipPullOutDeck(_MC2010, generatorOptions, 0.01, nElements=nElements)
+    elementSet = "*elSet, elSet=rebars, generate=True\n100001, 100018, 1"
+    if change == "branch":
+        # a third bar element joins the bar at its node 100005
+        extra = "*node\n200001, 2.0, 0.9\n\n*element, type=T2D2\n100100, 100005, 200001\n\n"
+        deck = deck.replace(
+            elementSet,
+            extra + "*elSet, elSet=rebars\n" + ", ".join(str(label) for label in [*range(100001, 100019), 100100]),
+            1,
+        )
+    elif change == "kink":
+        # the last node moves off the line: a kink of about 22 degrees at node 100018
+        deck = deck.replace("100019, 9, 0.37", "100019, 9, 0.57", 1)
+    elif change == "loop":
+        # four bar elements around the square (1, 0.2) - (3, 0.8): a closed loop, alone in the set
+        extra = (
+            "*node\n300001, 1.0, 0.2\n300002, 3.0, 0.2\n300003, 3.0, 0.8\n300004, 1.0, 0.8\n\n*element, type=T2D2\n"
+            "300001, 300001, 300002\n300002, 300002, 300003\n300003, 300003, 300004\n300004, 300004, 300001\n\n"
+        )
+        deck = deck.replace(elementSet, extra + "*elSet, elSet=rebars, generate=True\n300001, 300004, 1", 1).replace(
+            ">>dirichlet, name=barY, nSet=barNodes", "** "
+        )
+    with pytest.raises(ValueError, match=match):
+        _run(tmp_path, deck, "F")
