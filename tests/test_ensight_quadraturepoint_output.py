@@ -38,12 +38,25 @@ whatever order an element numbers its quadrature points in.
 """
 
 import glob
+import itertools
 
 import numpy as np
 import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
-from edelweissfe.elements._hexa3dnodeordering import hexa8DNdXi
+from edelweissfe.elements._hexa3dnodeordering import (
+    hexa8DNdXi,
+    hexa8N,
+    hexa8NodeXi,
+    hexa20N,
+    hexa20NodeXi,
+)
+from edelweissfe.elements._quad2dnodeordering import (
+    quad4N,
+    quad4NodeXi,
+    quad8N,
+    quad8NodeXi,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.outputmanagers.ensight import (
     EnsightConfigurationSchema,
@@ -462,6 +475,115 @@ def test_quadratic_neighbor_lends_its_edge_midpoint():
     assert np.array_equal(
         mapping.toarray()[part.nodes.index(midpoint)], np.eye(len(baseNodes))[baseNodes.index(midpoint)]
     )
+
+
+# Ensight shape -> natural coordinates of the nodes, shape functions
+_SHAPES = {
+    "quad4": (quad4NodeXi, quad4N),
+    "quad8": (quad8NodeXi, quad8N),
+    "hexa8": (hexa8NodeXi, hexa8N),
+    "hexa20": (hexa20NodeXi, hexa20N),
+}
+
+
+def _rotations(dim: int) -> list[np.ndarray]:
+    """The rotations of the reference square or cube onto itself: 4 in 2D, 24 in 3D."""
+
+    rotations = []
+    for permutation in itertools.permutations(range(dim)):
+        for signs in itertools.product((-1, 1), repeat=dim):
+            R = np.zeros((dim, dim))
+            R[range(dim), permutation] = signs
+            if np.linalg.det(R) > 0:
+                rotations.append(R)
+    return rotations
+
+
+def _warp(x: np.ndarray) -> np.ndarray:
+    """A smooth map of the straight mesh, which curves the edges of the quadratic elements."""
+    return x + 0.1 * np.sin(1.7 * x[..., ::-1] + 0.3)
+
+
+def _neighbors(shapes: tuple[str, str], rotation: np.ndarray, n: int) -> tuple[list, list]:
+    """Two elements in [0, 1] and [1, 2] x [0, 1] (x [0, 1]), the second one with its nodes numbered in a rotated
+    orientation, both with the points of the Gauss rule with n points per direction in random order. Also returns the
+    natural coordinates of the quadrature points of each element. Two elements of the same shape are warped; a linear
+    element only matches a quadratic one on straight edges."""
+
+    dim = rotation.shape[0]
+    warp = _warp if shapes[0] == shapes[1] else (lambda x: x)
+    rng = np.random.default_rng(0)
+    gaussPoints = np.array(list(itertools.product(np.polynomial.legendre.leggauss(n)[0], repeat=dim)))
+    nodes, elements, quadraturePointXi = {}, [], []
+    for elNumber, (shape, R) in enumerate(zip(shapes, (np.eye(dim), rotation)), start=1):
+        nodeXi, N = _SHAPES[shape]
+        center = np.array([elNumber - 0.5] + (dim - 1) * [0.5])
+        elementNodes = []
+        for x in center + 0.5 * nodeXi @ R.T:
+            key = tuple(np.round(2 * x).astype(int))
+            if key not in nodes:
+                nodes[key] = Node(len(nodes) + 1, warp(x))
+            elementNodes.append(nodes[key])
+
+        xi = gaussPoints[rng.permutation(len(gaussPoints))]
+        X = np.array([node.coordinates for node in elementNodes])
+        element = _StubElement(elNumber, shape, np.asarray(N(*xi.T)).T @ X)
+        element.visualizationNodes = elementNodes
+        elements.append(element)
+        quadraturePointXi.append(xi)
+    return elements, quadraturePointXi
+
+
+def _assertSubElementOfEachQuadraturePoint(elements: list, quadraturePointXi: list, n: int):
+    """Sub-element g of each element is the cell of the lattice of the Gauss weights around its quadrature point g,
+    with its corners in the element's corner order; no node is held twice."""
+
+    dim = quadraturePointXi[0].shape[1]
+    basePart = createUnstructuredPartFromElementSet("set", elements, 1)
+    part, mapping = createQuadraturePointPartFromElementSet("set", elements, basePart, 2)
+    X = np.reshape(part.nodeCoordinateArray, (len(part.nodes), dim))
+
+    # the lattice points of both elements, those on the common face (edge) once
+    assert len(X) == len(np.unique(np.round(X, 9), axis=0)) == 2 * (n + 1) ** dim - (n + 1) ** (dim - 1)
+    # the added nodes are interpolated like the per-node results
+    assert np.allclose(mapping @ np.reshape(basePart.nodeCoordinateArray, (-1, dim)), X)
+
+    breakpoints = np.concatenate([[-1.0], -1.0 + np.cumsum(np.polynomial.legendre.leggauss(n)[1])])
+    ((subShape, subElements),) = part.elementTree.items()
+    subElements = np.reshape(list(subElements.values()), (len(elements), n**dim, 2**dim))
+    for element, xi, nodesOfSubElements in zip(elements, quadraturePointXi, subElements):
+        nodeXi, N = _SHAPES[element.ensightType]
+        elementX = np.array([node.coordinates for node in element.visualizationNodes])
+        cornerOffsets = (nodeXi[: 2**dim] + 1) // 2
+        for g, nodesOfSubElement in enumerate(nodesOfSubElements):
+            cell = np.searchsorted(breakpoints, xi[g]) - 1
+            cornerXi = breakpoints[cell + cornerOffsets]
+            assert np.allclose(X[nodesOfSubElement], np.asarray(N(*cornerXi.T)).T @ elementX)
+
+    # and none is inverted
+    cornersOfSubElements = X[subElements.reshape(-1, 2**dim)]
+    if dim == 2:
+        x, y = cornersOfSubElements[..., 0], cornersOfSubElements[..., 1]
+        assert np.all(np.sum(x * np.roll(y, -1, axis=1) - np.roll(x, -1, axis=1) * y, axis=1) > 0)
+    else:
+        assert np.all(np.linalg.det(np.einsum("in,enj->eij", hexa8DNdXi(0.0, 0.0, 0.0), cornersOfSubElements)) > 0)
+
+
+@pytest.mark.parametrize("rotation", range(24))
+@pytest.mark.parametrize("shapes, n", [(("hexa20", "hexa20"), 3), (("hexa20", "hexa20"), 2), (("hexa8", "hexa20"), 2)])
+def test_neighbor_in_any_orientation(shapes, n, rotation):
+    """The common face of two hexahedra holds each lattice point once, whatever the orientation of the second."""
+
+    _assertSubElementOfEachQuadraturePoint(*_neighbors(shapes, _rotations(3)[rotation], n), n)
+
+
+@pytest.mark.parametrize("rotation", range(4))
+@pytest.mark.parametrize("shapes, n", [(("quad8", "quad8"), 3), (("quad8", "quad8"), 2), (("quad4", "quad8"), 2)])
+def test_warped_quadrilateral_neighbor_in_any_orientation(shapes, n, rotation):
+    """The common edge of two curved quadrilaterals holds each lattice point once, whatever the orientation of the
+    second."""
+
+    _assertSubElementOfEachQuadraturePoint(*_neighbors(shapes, _rotations(2)[rotation], n), n)
 
 
 def test_single_quadrature_point():
