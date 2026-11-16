@@ -8,7 +8,7 @@ all
 *solver, solver=NIST, name=theSolver
 
 *modelGenerator, generator=planeRectQuad, name=gen
-x0=0, l=40, y0=0, h=10, elType=CPE8R, elProvider=edelweiss, nX=4, nY=2
+x0=0, l=40, y0=0, h=10, elType=CPE8R, elProvider=edelweiss, nX=2, nY=1
 
 *fieldOutput
 >>perNode, name=displacement, elSet=all, field=displacement, result=U

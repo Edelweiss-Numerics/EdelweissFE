@@ -8,7 +8,7 @@ all
 *solver, solver=NIST, name=theSolver
 
 *modelGenerator, generator=boxGen, name=gen
-x0=0, lX=40, y0=0, lY=10, z0=0, lZ=10, elType=C3D20, elProvider=edelweiss, nX=4, nY=2, nZ=2
+x0=0, lX=40, y0=0, lY=10, z0=0, lZ=10, elType=C3D20, elProvider=edelweiss, nX=2, nY=1, nZ=1
 
 *fieldOutput
 >>perNode, name=displacement, elSet=all, field=displacement, result=U
