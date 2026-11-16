@@ -214,7 +214,9 @@ def _pullOutDeck(
     its end x = L; ``bond`` is the *material block of the bond-slip law"""
     x0, y0 = origin
     bar, first, last = _line(100001, (x0, y0 + 0.37), (x0 + L, y0 + 0.37), nElements, elType)
-    return _strip(nX=5, origin=origin) + f"""{bar}
+    return (
+        _strip(nX=5, origin=origin)
+        + f"""{bar}
 *elSet, elSet=rebars, generate=True
 {first}, {last - 1}, 1
 
@@ -243,6 +245,7 @@ perimeter={PERIMETER}
 
 {_PULL.format(maxInc=maxInc, u=u)}
 """
+    )
 
 
 def _linearBond(Kt, Kn=1e6):
@@ -407,7 +410,9 @@ def test_bond_law_property_change_and_shared_nodes(tmp_path):
     np.testing.assert_allclose(F.getLastResult(), FRef.getLastResult(), rtol=1e-10)
 
     # a bar along the bottom edge of the strip, using the host nodes
-    shared = _strip(nX=2, nY=1) + f"""*element, type=T2D2
+    shared = (
+        _strip(nX=2, nY=1)
+        + f"""*element, type=T2D2
 100001, 1, 3
 
 *elSet, elSet=rebars
@@ -418,7 +423,10 @@ def test_bond_law_property_change_and_shared_nodes(tmp_path):
 
 *section, name=rebarSection, area={A_STEEL}, material=steel, type=truss
 rebars
-""" + _STIFF_LINEAR_BOND + _UNIAXIAL_STEP
+"""
+        + _STIFF_LINEAR_BOND
+        + _UNIAXIAL_STEP
+    )
     with pytest.raises(ValueError, match="are nodes of host element"):
         _run(tmp_path, shared, "RF")
 
@@ -492,7 +500,9 @@ def test_bond_slip_split_beams_match_perfect_bond(tmp_path):
             if perfectBond
             else ""
         )
-        return _strip() + f"""{line}
+        return (
+            _strip()
+            + f"""{line}
 *elSet, elSet=beams, generate=True
 {first}, {last - 1}, 1
 
@@ -523,6 +533,7 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
 >>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0
 >>dirichlet, name=right, nSet=gen_right, field=displacement, 2=0.01
 """
+        )
 
     model, (uPerfect, rPerfect, hostPerfect) = _run(tmp_path, deck(0.0, True), "uBeam", "rBeam", "uHost")
     model, (uBond, rBond, hostBond) = _run(tmp_path, deck(1e10, False), "uBeam", "rBeam", "uHost")
