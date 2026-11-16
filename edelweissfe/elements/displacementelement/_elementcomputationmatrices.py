@@ -113,6 +113,10 @@ def computeBOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarr
 def computeNOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int, nNodes: int, dim: int):
     """Get the N operator containing the shape functions.
 
+    These are the same shape functions (and node ordering) as in
+    :func:`edelweissfe.utils.isoparametricshapes.shapeFunctions`, written out explicitly per element type; use that
+    module for the general shape functions and the inverse isoparametric mapping.
+
     Parameters
     ----------
     xi

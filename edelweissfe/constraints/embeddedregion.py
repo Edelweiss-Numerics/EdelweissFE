@@ -267,6 +267,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         embeddedElements = list(model.elementSets[configuration.embeddedElSet])
         hostElements = list(model.elementSets[configuration.hostElSet])
         self._hostElementIds = {id(el) for el in hostElements}
+        self._embeddedElementIds = {id(el) for el in embeddedElements}
         hostNodes = {n for el in hostElements for n in el.nodes}
         locator = HostElementLocator(hostElements, tolerance=configuration.tolerance)
 
@@ -296,7 +297,10 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         if self.unembeddedNodes:
             labels = [n.label for n in self.unembeddedNodes]
-            message = f"{self._name}: {len(labels)} embedded node(s) lie outside of all host elements: {labels[:20]}"
+            message = (
+                f"{self._name}: {len(labels)} embedded node(s) lie outside of all host elements"
+                f" (or the inverse mapping did not converge): {labels[:20]}"
+            )
             if not configuration.allowUnembedded:
                 raise ValueError(message + " (use allowUnembedded=True to leave them free)")
             if self._journal:
@@ -376,7 +380,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             Whether the records were rebuilt.
         """
         hostIds = {id(el) for el in model.elementSets[self._configuration.hostElSet]}
-        if hostIds == self._hostElementIds:
+        embeddedIds = {id(el) for el in model.elementSets[self._configuration.embeddedElSet]}
+        if hostIds == self._hostElementIds and embeddedIds == self._embeddedElementIds:
             return False
         self._build(model)
         return True
