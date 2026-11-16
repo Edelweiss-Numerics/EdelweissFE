@@ -14,3 +14,7 @@ Relevant module: ``edelweissfe.config.sections``
 
 .. pprint:: section:truss
    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/marmot/TrussSnapThroughNeoHooke/test.inp
+    :language: edelweiss
+    :caption: Example (finite strain): ``testfiles/marmot/TrussSnapThroughNeoHooke/test.inp``

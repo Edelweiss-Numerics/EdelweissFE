@@ -26,15 +26,42 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-A section for truss (bar) elements, e.g., the Marmot truss elements ``T2D2``, ``T3D2``, ``T3D2CR``, ...,
-assigning the cross section area.
+A section for truss (bar) elements, the Marmot truss elements, assigning the cross section area (in the units of the
+model, e.g., mm² for N, mm, MPa). Element and material go in pairs:
+
+=================================================  ===============================================================
+element                                            materials
+=================================================  ===============================================================
+``T2D2``, ``T2D3``, ``T3D2``, ``T3D3``             hypoelastic (geometrically linear), e.g., ``LinearElastic``,
+                                                   ``VonMises``
+``T2D2CR``, ``T2D3CR``, ``T3D2CR``, ``T3D3CR``     finite strain (rigid rotations stress free), e.g.,
+                                                   ``CompressibleNeoHooke``, ``FiniteStrainJ2Plasticity``,
+                                                   ``VonMises/Hughes-Winget``
+=================================================  ===============================================================
+
+A material of the other kind is rejected by Marmot with a hint to the matching element. Use the ``CR`` elements
+whenever the bars rotate, as the geometrically linear ones strain under a finite rotation. A truss has no lateral
+stiffness: restrain nodes only connected to collinear bars, and the transverse modes of the mid node of quadratic
+bars, unless the bars are embedded (see Marmot's truss element page).
+
+Results of the quadrature points: ``normal force``, ``stress`` (axial Cauchy stress), ``strain``, ``elastic
+energy``, ``dissipation``, the material states, and for the ``CR`` elements ``lateral stretches``. A complete worked
+example with the hand check :math:`N = E A \\Delta / L` is ``tests/test_trusses.py::test_truss_small_strain_inclined``.
 
 .. code-block:: edelweiss
     :caption: Example:
 
     *material, name=VonMises, id=steel, provider=marmot
+    ** E [MPa], nu, fy, HLin, deltaYieldStress, delta, density
         200000, 0.3, 500, 1000, 0, 1, 7.85e-9
 
+    *element, type=T3D2
+        1, 1, 2
+
+    *elSet, elSet=rebars
+        1
+
+    ** a bar of diameter 12 mm
     *section, name=rebarSection, type=truss, area=113.1, material=steel
         rebars
 """
@@ -117,15 +144,13 @@ class Section(SectionBase):
     def assignSectionPropertiesToElement(self, element, **kwargs):
         material = kwargs.get("material", self.material)
 
-        if element.ensightType not in ("bar2", "bar3"):
-            raise Exception(f"Truss section is incompatible with '{element.ensightType}' elements.")
+        # a truss is a bar element with displacements only (a beam is a bar element with rotations as well)
+        if element.ensightType not in ("bar2", "bar3") or "rotation" in element.fields[0]:
+            raise Exception(
+                f"Truss section is incompatible with element {element.elNumber} ({element.elType}): "
+                "it requires a truss (bar) element without rotations."
+            )
 
         element.setProperties(np.array([self.area], dtype=float))
         element.initializeElement()
-        if not isinstance(material, dict):
-            element.setMaterial(material)
-        else:
-            try:  # for Marmot
-                element.setMaterial(material["name"], material["properties"])
-            except TypeError:
-                raise Exception("Material provider and element are not compatible!")
+        self.assignMaterialToElement(element, material)
