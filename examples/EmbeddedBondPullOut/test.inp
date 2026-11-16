@@ -1,4 +1,4 @@
-** regression test: realistic pull-out test (RILEM-like): the bar (28 T2D2 elements of 5 mm) is pulled out of a
+** realistic pull-out test (RILEM-like): the bar (28 T2D2 elements of 5 mm) is pulled out of a
 ** concrete block (CPE8R) bearing on the loaded face; bond-slip by the fib Model Code 2010 law; peak = tauMax p L_b
 ** realistic pull-out: concrete block 150 x 150 (plane strain section, thickness 150), Ø16 bar, bonded length
 ** 120 mm (x = 30..150), free length 20 mm; the block bears on the loaded face (x = 150); units N, mm
@@ -9,6 +9,8 @@
 200000., 0.3, 500, 1000., 0.0, 1.0, 7.85e-9
 
 *material, name=ModelCode2010BondSlip, id=bond, provider=marmot
+** tauMax, s1, s2, s3, alpha, tauF, K0, Kn: fck = 30 MPa, good bond, pull-out failure (fib MC2010 Tab. 6.1-1,
+** tauMax = 2.5 sqrt(fck), s3 = clear rib spacing); K0, Kn are penalty choices (N/mm3); units N, mm
 13.69, 1.0, 2.0, 10.0, 0.4, 5.48, 200.0, 1000.0
 
 *modelGenerator, generator=planeRectQuad, name=gen
@@ -96,7 +98,7 @@ gen_all
 rebars
 
 *modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
-rebarElSet=rebars
+embeddedElSet=rebars
 hostElSet=gen_all
 material=bond
 perimeter=50.27

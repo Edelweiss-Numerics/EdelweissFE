@@ -10,7 +10,7 @@
     210000., 0.3, 235, 1000., 0.0, 1.0,   7.85e-9
 
 *material, name=LinearElasticBondSlip, id=bond, provider=marmot
-**  Kt,  Kn
+** Kt, Kn: tangential and normal bond stiffness (N/mm3), a soft soil-pile interface
     1.0, 10.0
 
 *modelGenerator, generator=planeRectQuad, name=gen
@@ -62,7 +62,7 @@ gen_all
 pile
 
 *modelGenerator, generator=embeddedBond, name=pileBond, executeAfterManualGeneration=True
-rebarElSet=pile
+embeddedElSet=pile
 hostElSet=gen_all
 material=bond
 perimeter=800

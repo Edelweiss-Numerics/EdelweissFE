@@ -104,13 +104,21 @@ Relevant module ``edelweissfe.generators.embeddedbond``
 .. pprint:: generator:embeddedbond
    :caption: Options:
 
-.. literalinclude:: ../../../testfiles/marmot/EmbeddedBondPullOut2D/test.inp
+.. literalinclude:: ../../../examples/EmbeddedBondPullOut/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/marmot/EmbeddedBondPullOut2D/test.inp``
+    :caption: Example (realistic pull-out test): ``examples/EmbeddedBondPullOut/test.inp``
 
 .. literalinclude:: ../../../testfiles/marmot/EmbeddedBeamPile2D/test.inp
     :language: edelweiss
     :caption: Example (embedded beam): ``testfiles/marmot/EmbeddedBeamPile2D/test.inp``
+
+**Verification.** Two checks a deck can be compared with (both in ``tests/test_embedded_bond.py``):
+
+- A linear bond law (:math:`K_t`) and an elastic bar (:math:`EA`, perimeter :math:`p`, bonded length :math:`L`)
+  pulled out of a rigid host: :math:`F/u = EA\,\beta\tanh(\beta L)`, :math:`\beta = \sqrt{K_t\,p/EA}`. The bar
+  mesh converges to it with second order in the bar element length.
+- A plastic bond law at full debonding (the pull-out example above): the peak force is
+  :math:`F_{\max} = \tau_{\max}\, p\, L_b`.
 
 ``cuboidlatticegenerator`` - A cuboid lattice mesh generator
 ------------------------------------------------------------

@@ -252,7 +252,9 @@ def test_split_bar_far_from_the_origin():
     results = []
     for origin in (np.zeros(2), np.array([1e5, -4e5])):
         locator = HostElementLocator(_quadGrid(4, 3, 4.0, 3.0, origin))
-        parts, unbonded = findBarPartsInHosts(_element(1000, "bar2", [_node(100, origin + a), _node(101, origin + b)]), locator)
+        parts, unbonded = findBarPartsInHosts(
+            _element(1000, "bar2", [_node(100, origin + a), _node(101, origin + b)]), locator
+        )
         assert unbonded == 0.0
         results.append([(p.hostElement.elNumber, p.etaStart, p.etaEnd) for p in parts])
     assert [r[0] for r in results[0]] == [r[0] for r in results[1]]

@@ -7,6 +7,8 @@
 200000.0, 0.3
 
 *material, name=ModelCode2010BondSlip, id=bond, provider=marmot
+** tauMax, s1, s2, s3, alpha, tauF, K0, Kn: fck = 30 MPa, good bond, pull-out failure (fib MC2010 Tab. 6.1-1,
+** tauMax = 2.5 sqrt(fck), s3 = clear rib spacing); K0, Kn are penalty choices (N/mm3); units N, mm
 13.69, 1.0, 2.0, 10.0, 0.4, 5.48, 200.0, 1000.0
 
 *modelGenerator, generator=boxGen, name=gen
@@ -43,7 +45,7 @@ gen_all
 rebars
 
 *modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
-rebarElSet=rebars
+embeddedElSet=rebars
 hostElSet=gen_all
 material=bond
 perimeter=31.4
