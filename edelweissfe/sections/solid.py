@@ -106,6 +106,11 @@ class Section(SectionBase):
         nSpatialDimensions = element.nSpatialDimensions
         if nSpatialDimensions < 3 and nSpatialDimensions != 0:
             raise Exception(f"Solid section is incompatible with {nSpatialDimensions}-dimensional finite elements.")
+        if element.ensightType in ("bar2", "bar3"):
+            raise Exception(
+                f"Solid section is incompatible with the bar element {element.elNumber} ({element.elType}): "
+                "use the truss or the beam section."
+            )
 
         element.initializeElement()
         self.assignMaterialToElement(element, material)
