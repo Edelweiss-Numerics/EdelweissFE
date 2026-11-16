@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """Every node field holds the entries U, dU, P, V and A, from its construction on, and no others (see the
-documentation page "Node field results"). A DofManager serves exactly these entries of exactly the node fields it
+documentation page "Node field results"). A DofNumbering serves exactly these entries of exactly the node fields it
 numbers, and a checkpoint holds exactly these entries of every node field."""
 
 import h5py
@@ -35,7 +35,8 @@ import pytest
 from test_femodel_restart import _buildSingleElementModel
 
 from edelweissfe.fields.nodefield import NodeField
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.checkpoint import CHECKPOINT_FORMAT_VERSION, ResumeCheckpoint
@@ -66,64 +67,64 @@ def test_a_node_field_holds_every_entry_from_its_construction_on():
         assert nodeField[entry].shape == (4, 2)
 
 
-def test_a_dof_manager_refuses_an_entry_no_node_field_holds():
+def test_a_dof_numbering_refuses_an_entry_no_node_field_holds():
     nodeField = NodeField(_FIELD, 2, NodeSet("all", _nodes(2)))
-    dofManager = DofManager([nodeField])
-    vector = dofManager.constructDofVector()
+    numbering = DofNumbering([nodeField])
+    vector = DofLocations(numbering).constructDofVector()
 
     with pytest.raises(KeyError, match="'Q'"):
-        dofManager.writeDofVectorToNodeField(vector, nodeField, "Q")
+        numbering.writeDofVectorToNodeField(vector, nodeField, "Q")
     with pytest.raises(KeyError, match="'Q'"):
-        dofManager.writeNodeFieldToDofVector(vector, nodeField, "Q")
+        numbering.writeNodeFieldToDofVector(vector, nodeField, "Q")
 
 
-def test_a_dof_manager_reads_and_writes_as_a_whole_only_the_node_fields_it_numbers():
+def test_a_dof_numbering_reads_and_writes_as_a_whole_only_the_node_fields_it_numbers():
     nodes = _nodes(3)
     numbered = NodeField(_FIELD, 2, NodeSet("numbered", nodes[:2]))
     ofTheModel = NodeField(_FIELD, 2, NodeSet("all", nodes))
-    dofManager = DofManager([numbered])
-    vector = dofManager.constructDofVector()
+    numbering = DofNumbering([numbered])
+    vector = DofLocations(numbering).constructDofVector()
 
     # the node field of the model has the name of the numbered one, but other rows
     with pytest.raises(ValueError, match="another node field"):
-        dofManager.writeDofVectorToNodeField(vector, ofTheModel, "U")
+        numbering.writeDofVectorToNodeField(vector, ofTheModel, "U")
     with pytest.raises(ValueError, match="another node field"):
-        dofManager.writeNodeFieldToDofVector(vector, ofTheModel, "U")
+        numbering.writeNodeFieldToDofVector(vector, ofTheModel, "U")
 
     rotationNodes = _nodes(3, "rotation")
     otherField = NodeField("rotation", 2, NodeSet("all", rotationNodes))
     with pytest.raises(ValueError, match="does not number"):
-        dofManager.writeNodeFieldToDofVector(vector, otherField, "U", NodeSet("all", rotationNodes))
+        numbering.writeNodeFieldToDofVector(vector, otherField, "U", NodeSet("all", rotationNodes))
 
     # on a node set, the rows are found by node: the node field of the model is read where it is numbered
     ofTheModel["U"][:] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
-    dofManager.writeNodeFieldToDofVector(vector, ofTheModel, "U", NodeSet("all", nodes))
+    numbering.writeNodeFieldToDofVector(vector, ofTheModel, "U", NodeSet("all", nodes))
     np.testing.assert_array_equal(np.asarray(vector), [1.0, 2.0, 3.0, 4.0])
 
-    dofManager.writeDofVectorToNodeField(vector, numbered, "dU")
+    numbering.writeDofVectorToNodeField(vector, numbered, "dU")
     np.testing.assert_array_equal(numbered["dU"], [[1.0, 2.0], [3.0, 4.0]])
 
 
-def test_a_dof_manager_writes_a_node_field_of_the_model_on_a_node_set():
+def test_a_dof_numbering_writes_a_node_field_of_the_model_on_a_node_set():
     nodes = _nodes(3)
     numbered = NodeField(_FIELD, 2, NodeSet("numbered", nodes[1:]))
     ofTheModel = NodeField(_FIELD, 2, NodeSet("all", nodes))
-    dofManager = DofManager([numbered])
-    vector = dofManager.constructDofVector()
+    numbering = DofNumbering([numbered])
+    vector = DofLocations(numbering).constructDofVector()
     vector[:] = [1.0, 2.0, 3.0, 4.0]
 
     # the rows are found by node: written where the field is numbered, the other rows keep their values
     ofTheModel["P"][:] = -1.0
-    dofManager.writeDofVectorToNodeField(vector, ofTheModel, "P", NodeSet("all", nodes))
+    numbering.writeDofVectorToNodeField(vector, ofTheModel, "P", NodeSet("all", nodes))
     np.testing.assert_array_equal(ofTheModel["P"], [[-1.0, -1.0], [1.0, 2.0], [3.0, 4.0]])
 
     # the counterpart of the read on the node set
-    readBack = dofManager.constructDofVector()
-    dofManager.writeNodeFieldToDofVector(readBack, ofTheModel, "P", NodeSet("all", nodes))
+    readBack = DofLocations(numbering).constructDofVector()
+    numbering.writeNodeFieldToDofVector(readBack, ofTheModel, "P", NodeSet("all", nodes))
     np.testing.assert_array_equal(np.asarray(readBack), np.asarray(vector))
 
     with pytest.raises(KeyError, match="'Q'"):
-        dofManager.writeDofVectorToNodeField(vector, ofTheModel, "Q", NodeSet("all", nodes))
+        numbering.writeDofVectorToNodeField(vector, ofTheModel, "Q", NodeSet("all", nodes))
 
 
 def test_a_checkpoint_holds_every_entry_of_every_node_field(tmp_path):

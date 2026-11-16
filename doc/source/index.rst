@@ -32,13 +32,91 @@ EdelweissFE does not want to ...
 .. toctree::
    :maxdepth: 2
    :hidden:
+   :caption: Getting started
 
    features
    prerequisites
    installation
-   documentation/index
-   contributors
+   syntax
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Model
+
+   model/mesh
+   model/generators
+   model/sets
+   model/sections
+   model/elements
+   model/materials
+   model/analyticalfields
+   model/constraints
+   model/rigidbodies
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Analysis
+
+   analysis/steps
+   analysis/stepactions
+   analysis/solvers
+   analysis/linsolvers
+   analysis/modelmodifiers
+   analysis/parallelization
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Output
+
+   output/outputmanagers
+   output/fieldoutput
+   output/nodefieldresults
+   output/plotter
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Theory
+
+   theory/contact
+   theory/adaptivity
+   theory/blockamg
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Developer guide
+
+   developer/architecture
+   developer/solverbase
+   developer/residualandtangent
+   developer/inputsystem
+   developer/jobs
+   developer/models
+   developer/topologypipeline
+   developer/restart
+   developer/dofnumbering
+   developer/assembly
+   developer/fields
+   developer/variables
+   developer/points
+   developer/phenomena
+   developer/linsolveapi
+   developer/journal
+   developer/exceptions
+   developer/utils
+
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Reference
+
+   keywords
    publications
+   contributors
 
 Execute a simulation
 ********************

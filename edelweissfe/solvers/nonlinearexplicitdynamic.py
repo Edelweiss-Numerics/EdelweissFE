@@ -28,7 +28,7 @@
 #  ---------------------------------------------------------------------
 """The nonlinear explicit dynamic solver.
 
-An increment solves no equation system. Second-order fields are advanced by central differences
+An increment solves no linear system. Second-order fields are advanced by central differences
 (a leapfrog, with the velocity staggered half an increment behind the displacement), first-order
 fields -- a nonlocal damage field, for instance -- by forward Euler, and both divide by a **lumped**
 mass, so the cost of an increment is one element pass plus vector arithmetic. There is no linear
@@ -73,7 +73,7 @@ how often model modifiers may change the mesh mid-run, and must be a multiple of
 update only once, before the increment loop. ``contact-update-frequency`` is how often constraints
 whose connectivity is the outcome of a search re-run it; ``0`` disables that. The reasoning behind
 the latter two, and what they cost in accuracy, is documented under
-:doc:`/documentation/adaptivitytheory` and :doc:`/documentation/contacttheory` respectively.
+:doc:`/theory/adaptivity` and :doc:`/theory/contact` respectively.
 
 **Constraints.** Multi-point constraints are enforced by folding a slave's mass and force onto its
 masters (row-sum, mass-conserving) and slaving it kinematically, which leaves the critical time step
@@ -82,6 +82,21 @@ untouched. Other constraints -- contact above all -- are evaluated through
 asks for forces and no tangent, since a tangent assembled here would enter nothing. A constraint
 that can act *only* through its tangent contributes nothing to an explicit increment and is
 refused at validation rather than silently ignored.
+
+**The lumped mass is the mass of the start of the step.** The lumped operators are assembled once for the numbering,
+at the first increment of every step, from the elements as they are then, and kept until the next numbering. A change of
+a material property during the step (:doc:`/analysis/stepactions`, ``changeMaterialProperty``) takes effect on the
+mass at the next step, as it does on the stable time increment.
+
+**The discrete system.** It is built, like that of every solver, by
+:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem`, from the
+change the model reports (:class:`~edelweissfe.models.change.Change`). A new numbering -- the first one of a step, and
+a refinement of the mesh -- gives the lumped operators, the classification of the fields by time derivative, the
+multi-point-constraint condensation and the vectors of the increments, and the stable time increment of the mesh
+(:meth:`NED.onNewNumbering`). A contact search that couples other nodes gives new locations on the same numbering: the
+lumped operators are functions of the elements and of the numbering and are kept, the vectors keep their values, and
+only the locations they are wrapped with are new (:meth:`NED.onNewLocations`). The elements the increment evaluates are
+the ones of the discrete system, those that carry kernels.
 
 **Energy balance.** Every reporting increment prints the energy the model held at the start of the
 step, kinetic and internal (``E_0``), the external work accumulated at prescribed degrees of freedom
@@ -119,7 +134,7 @@ step.
 **The force it publishes.** The node field result ``P`` is, as in every solver, the internal force
 with the inertial and damping forces, :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M}
 \\boldsymbol{a} + \\boldsymbol{C} \\boldsymbol{v}`, without the loads and the constraints (see
-:doc:`/documentation/nodefieldresults`). The central difference makes the inertial and damping
+:doc:`/output/nodefieldresults`). The central difference makes the inertial and damping
 forces at the end of an increment exactly the net force :math:`\\boldsymbol{f}_\\mathrm{net}` the
 next velocity update divides by -- that update solves :math:`\\boldsymbol{M} (\\boldsymbol{v}_{n+3/2}
 - \\boldsymbol{v}_{n+1/2}) / \\Delta \\bar{t} + \\boldsymbol{C} (\\boldsymbol{v}_{n+3/2} +
@@ -152,11 +167,11 @@ increment's prescribed velocity sets it, and a multi-point-constraint slave take
 masters, as it takes its velocity. At the end of the step, the velocity is advanced by the half
 increment it lags behind (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`), so that the
 step leaves the velocity at its end time, as every solver does (see
-:doc:`/documentation/nodefieldresults`).
+:doc:`/output/nodefieldresults`).
 
 **The net force is solver state, and a step starts from the model's state.** The net force lives
-within one equation system, and is never read back from the model. A rebuild after a change of a
-constraint's connectivity carries it over by numbering, and a resumed step takes it from its
+within one discrete system, and is never read back from the model. New locations after a change
+of a constraint's connectivity carry it over, and a resumed step takes it from its
 checkpoint. After a mesh change it starts at zero: re-evaluating it would run the constitutive law
 off-cycle and write into the material state, and zero is an O(dT) error for one increment. At the
 start of a step, it is the net force of the state the model holds, :math:`\\boldsymbol{f}_\\mathrm{net}
@@ -186,10 +201,9 @@ import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
-from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector
-from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
     CONSERVATION_TOLERANCE,
@@ -315,81 +329,6 @@ class NEDSchema:
     )
 
 
-@dataclass
-class ExplicitSystem:
-    """Everything an explicit increment operates on that is sized by the current equation system.
-
-    None of these are independent state: each is indexed by the :class:`DofManager` in force when it
-    was created, so the moment that system changes -- an h-adaptivity event creating nodes and
-    elements, a contact constraint re-assigning its slave nodes to different master facets -- every
-    one of them has to be rebuilt together, and any that is not becomes either a length mismatch or,
-    worse, a silently mis-indexed vector. Bundling them makes "rebuild the system" one assignment at
-    the call site instead of nine, which is what keeps the build before the increment loop and a
-    rebuild inside it the same code path rather than two that drift apart.
-
-    Parameters
-    ----------
-    Minv
-        The inverse lumped mass. Zero on multi-point-constraint slave DOFs, which integrate no
-        equation of motion of their own. The lumped mass it was built from is not carried here:
-        the diagnostics need the *unfolded* mass, which is held as ``_rawLumpedMass``, and a
-        second mass on this dataclass that no caller reads would only invite reading the wrong
-        one.
-    U
-        The solution vector.
-    dU
-        The solution increment of the increment being computed.
-    V
-        The velocity vector, staggered half an increment behind ``U``.
-    A
-        The acceleration at the end of the last increment (see :meth:`NED.accelerationAtTheEndOfTheIncrement`),
-        which the model receives with the velocity. At the start of a step, the one the model holds, from which the
-        step's first net force is formed (see :meth:`NED.formNetForceOfTheModelsState`).
-    netForce
-        The net nodal force -- external minus internal, with the loads and the constraints -- which drives the
-        velocity update of the next increment.
-    internalForce
-        The elements' sum of the increment, :math:`\\boldsymbol{f}_\\mathrm{int}`, from which the published
-        force is formed at acceptance (see :meth:`NED.internalInertialAndDampingForce`).
-    criticalTimeStep
-        The stable time increment for the current mesh, already scaled by the courant number.
-    """
-
-    Minv: DofVector
-    U: DofVector
-    dU: DofVector
-    V: DofVector
-    A: DofVector
-    netForce: DofVector
-    internalForce: DofVector
-    criticalTimeStep: float
-
-
-@dataclass
-class _ReusableExplicitOperators:
-    """The lumped operators of an explicit system, and the model they were assembled from.
-
-    A rebuild asked for by a constraint's connectivity re-assigns which nodes that constraint
-    couples, and touches nothing the lumped inertia, its inverse, the mass-proportional damping
-    rate or the multi-point-constraint transformation are a function of -- so those are exactly
-    what they were, and :meth:`NED.buildEquationSystem` keeps them here instead of assembling
-    them again.
-
-    The recorded model description is what :meth:`NED._operatorsReusable` checks before it does,
-    and anything that does not match makes it assemble from scratch instead.
-    """
-
-    elementKeys: frozenset
-    multiPointConstraintKeys: frozenset
-    nNodes: int
-    nScalarVariables: int
-    lumpedMass: np.ndarray
-    rawLumpedMass: np.ndarray
-    inverseLumpedMass: np.ndarray
-    dampingRate: np.ndarray
-    mpcTransformation: MultiPointConstraintTransformation | None
-
-
 class NED(NonlinearSolverBase):
     """This is the Nonlinear Explicit Dynamic -- solver.
 
@@ -430,6 +369,7 @@ class NED(NonlinearSolverBase):
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "_netForce": np.ndarray,
+        "_numberingOfNetForce": str,
         "_externalWork": float,
         "_energyAtStepStart": float,
         # The energy-balance warnings are given once per step, not again after a resume.
@@ -458,6 +398,15 @@ class NED(NonlinearSolverBase):
         #: Second-order fields whose inertia is neither a mass nor a rotational inertia; reported
         #: separately and kept out of both balances; see phenomena.inertiaKind.
         self.nonMechanicalSecondOrderFields = []
+        #: The operators of the explicit update, arrays of the length of the numbering, assembled by
+        #: :meth:`_assembleLumpedOperators` for every new numbering; the elements and the numbering determine them,
+        #: not the locations. The inverse lumped mass, zero on multi-point-constraint slave DOFs, which integrate no
+        #: equation of motion of their own:
+        self._Minv = None
+        #: The lumped mass the increment divides by, with the multi-point-constraint fold, and the unfolded one. The
+        #: diagnostics need the true mass of every node, a tied slave included.
+        self._lumpedMass = None
+        self._rawLumpedMass = None
         #: Mass-proportional damping rate C/M per DOF; zero where elements report no damping, which
         #: reduces the update to the undamped central difference.
         self._dampingRate = None
@@ -480,24 +429,32 @@ class NED(NonlinearSolverBase):
         #: checkpointed one, since the checkpointed velocity already carries the half-step offset.
         self.prevTimeStep = None
         #: The net force of the last completed increment, which the next velocity update divides by; a
-        #: vector of the current equation system. None between steps, so that the first build of a step
+        #: vector of the current discrete system. None between steps, so that the first build of a step
         #: can tell a resumed step (whose checkpoint holds it) from a cold one, which forms it from the
         #: state of the model (see :meth:`formNetForceOfTheModelsState`).
         self._netForce = None
-        #: The inertia and the damping of every degree of freedom of the current equation system, the
-        #: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see buildEquationSystem.
+        #: The digest of the numbering the net force is a vector of
+        #: (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`), which the checkpoint holds with it: a
+        #: resumed step takes the net force over only if its numbering is the one rebuilt from the resumed model.
+        self._numberingOfNetForce = None
+        #: The inertia and the damping of every degree of freedom of the current discrete system, the
+        #: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see
+        #: :meth:`_assembleLumpedOperators`.
         self._inertia = None
         self._damping = None
-        #: The elements the increment loop evaluates (those with kernels, i.e. without contact
-        #: facets); filled by :meth:`buildEquationSystem`. None, not {}, so an unbuilt system fails.
-        self._kernelElements = None
-        #: Lumped operators kept across a connectivity-only rebuild; see
-        #: :class:`_ReusableExplicitOperators`.
-        self._reusableOperators = None
-        #: What the model's current equation system is made of (see
-        #: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`): the numbering of its degrees of
-        #: freedom, and how the state and the results pass between the model and the vectors of the increments.
-        self.equationSystemLayout = None
+        #: The stable time increment of the current mesh, already scaled by the courant number.
+        self._criticalTimeStep = None
+        #: The vectors the increments work on, of the current discrete system, wrapped with its locations. They are the
+        #: solution, its increment, the velocity (staggered half an increment behind the solution) and the
+        #: acceleration at the end of the last increment, which the model receives with the velocity (see
+        #: :meth:`accelerationAtTheEndOfTheIncrement`); at the start of a step the one the model holds. The elements'
+        #: sum of the increment, :math:`\boldsymbol{f}_\mathrm{int}`, from which the published force is formed at
+        #: acceptance (see :meth:`internalInertialAndDampingForce`).
+        self._U = None
+        self._dU = None
+        self._V = None
+        self._A = None
+        self._internalForce = None
 
     def beginStep(
         self,
@@ -507,7 +464,7 @@ class NED(NonlinearSolverBase):
         outputmanagers: dict[str, OutputManagerBase],
     ):
         """Start the step; see
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. The equation
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. The discrete
         system is built by the first :meth:`prepareIncrement`.
 
         Parameters
@@ -532,17 +489,14 @@ class NED(NonlinearSolverBase):
         self._externalWork = 0.0
         self._energyAtStepStart = 0.0
         self.prevTimeStep = None
-        self._netForce = None
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
 
-        # Constraints whose DOF footprint is the outcome of a search, i.e. contact.
-        self._dynamicConnectivityConstraints = [
-            constraint
-            for constraint in model.constraints.values()
-            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity
-        ]
+        # Whether a constraint couples other nodes as the bodies move, e.g. contact, which the periodic update is for.
+        self._modelConnectivityChangesWithMotion = any(
+            constraint.connectivityChangesWithMotion for constraint in model.constraints.values()
+        )
 
         # Modifiers that can still act once the analysis is running.
         self._liveTopologyModifiers = [
@@ -551,18 +505,24 @@ class NED(NonlinearSolverBase):
             if modifier.initiatesTopologyChanges and not modifier.actsOnlyAtSimulationStart
         ]
 
-        # Step actions before the equation system, matching NIST: nothing they do depends on it.
+        # Step actions before the discrete system, matching NIST: nothing they do depends on it.
         self.applyStepActionsAtStepStart(model, step)
 
-        self._system = None
+        # The multi-point constraints are reconciled with the step's Dirichlet boundary conditions whenever the
+        # discrete system gets a new numbering.
+        self._stepActions = step.actions
+
+        # The discrete system is built by the first prepareIncrement; a resumed step finds the net force of its
+        # checkpoint there, as set by setRestartData.
+        self.forgetDiscreteSystem()
 
     def prepareIncrement(self, step, model: FEModel, isRetry: bool):
-        """The topology update, when due, and the equation system; see
+        """The topology update, when due, and the discrete system; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement`.
 
         The topology update is due at the start of the step, and after every
         ``topology-check-frequency``-th increment. At the start of the step it runs before anything
-        sized by the equation system exists, so the mesh is final before the lumped mass, the
+        sized by the discrete system exists, so the mesh is final before the lumped mass, the
         multi-point-constraint condensation and the critical time step are derived from it. It runs
         here, before the next increment is proposed, because a refinement may lower the stable time
         increment that increment has to use.
@@ -582,23 +542,20 @@ class NED(NonlinearSolverBase):
             # hAdaptivity's initialOnly markers) and the first contact search.
             self.updateTopologyAndConnectivity(model, step)
 
-        if self._system is None:
+        if self.system is None:
             # The net force of the checkpoint on a resumed step, None on a cold one.
-            resumedNetForce = self._netForce
-            self._buildSystem(self.buildEquationSystem(model, step))
+            resumedNetForce, numberingOfResumedNetForce = self._netForce, self._numberingOfNetForce
+            self.updateDiscreteSystem(model, Change.NONE)
+            self.journal.printSeperationLine()
             if resumedNetForce is not None:
-                if len(resumedNetForce) != len(self._netForce):
-                    raise ValueError(
-                        "The checkpoint holds a net force of {:} entries, but the equation system rebuilt from "
-                        "the resumed model has {:}.".format(len(resumedNetForce), len(self._netForce))
-                    )
+                self.checkNumberingOfRestartedVectors(numberingOfResumedNetForce)
                 self._netForce[:] = resumedNetForce
             else:
                 self.formNetForceOfTheModelsState(step.actions["dirichlet"].values())
                 self._energyAtStepStart = self.energyOfTheModelsState()
             # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.
             if step.timeStepper.enforcedTimeIncrement is None:
-                step.timeStepper.enforceTimeIncrement(self._system.criticalTimeStep)
+                step.timeStepper.enforceTimeIncrement(self._criticalTimeStep)
 
         # --- h-adaptivity, mid-run ----------------------------------------------------------------
         # After every topology-check-frequency-th increment, i.e. after its output: the marker reads the
@@ -612,50 +569,28 @@ class NED(NonlinearSolverBase):
         ):
             return
 
-        theSystem, V = self._system, self._V
         lumpedTotalsBefore = self._perFieldLumpedTotals()
-        momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
-        kineticBefore = self.kineticEnergy(V)
+        momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, self._V, model)
+        kineticBefore = self.kineticEnergy(self._V)
 
-        topologyUpdate = self.updateTopologyAndConnectivity(model, step)
-        meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
-        connectivityChanged = topologyUpdate.connectivityChanged
+        # A change of the connectivity only moves the locations: the solution, the velocity and the net force carry
+        # over. A change of the mesh gives a new numbering, whose solution and velocity are read from the model, and
+        # whose net force starts at zero (see onNewNumbering).
+        change = self.updateTopologyAndConnectivity(model, step)
+        self.updateDiscreteSystem(model, change)
 
-        if meshChanged or connectivityChanged:
-            # A connectivity-only change carries solution, velocity and net force over to the new system; a
-            # mesh change reads solution and velocity from the model, and starts the net force at zero (see
-            # buildEquationSystem).
-            self._buildSystem(self.buildEquationSystem(model, step, previous=None if meshChanged else theSystem))
-            theSystem = self._system
-
-        V = self._V
-
-        if meshChanged:
-            self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, V, model)
+        if change == Change.MESH:
+            self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, self._V, model)
 
             # Lower only: refinement tightens the limit; a raised limit is not taken up mid-step.
-            if theSystem.criticalTimeStep < step.timeStepper.enforcedTimeIncrement:
+            if self._criticalTimeStep < step.timeStepper.enforcedTimeIncrement:
                 self.journal.message(
                     "Refinement lowered the stable time increment from {:e} to "
-                    "{:e}".format(step.timeStepper.enforcedTimeIncrement, theSystem.criticalTimeStep),
+                    "{:e}".format(step.timeStepper.enforcedTimeIncrement, self._criticalTimeStep),
                     self.identification,
                     1,
                 )
-                step.timeStepper.enforceTimeIncrement(theSystem.criticalTimeStep)
-
-    def _buildSystem(self, theSystem):
-        """Adopt a (re)built equation system, and the vectors the increments work on.
-
-        Parameters
-        ----------
-        theSystem
-            The equation system.
-        """
-
-        self._system = theSystem
-        self._Minv = theSystem.Minv
-        self._U, self._dU, self._V, self._A = theSystem.U, theSystem.dU, theSystem.V, theSystem.A
-        self._netForce, self._internalForce = theSystem.netForce, theSystem.internalForce
+                step.timeStepper.enforceTimeIncrement(self._criticalTimeStep)
 
     def isOutputIncrement(self, timeStep: TimeStep) -> bool:
         """Only every ``output-frequency``-th increment: an explicit run has millions.
@@ -694,8 +629,6 @@ class NED(NonlinearSolverBase):
 
         contactUpdateFrequency = self.options["contact-update-frequency"]
         topologyCheckFrequency = self.options["topology-check-frequency"]
-        theSystem, Minv = self._system, self._Minv
-        U, dU, V, netForce, internalForce = self._U, self._dU, self._V, self._netForce, self._internalForce
 
         if timeStep.number % self.options["output-frequency"] == 0:
             self.journal.printSeperationLine()
@@ -728,25 +661,30 @@ class NED(NonlinearSolverBase):
         )
 
         if (
-            self._dynamicConnectivityConstraints
+            self._modelConnectivityChangesWithMotion
             and contactUpdateFrequency
             and timeStep.number > 0
             and timeStep.number % contactUpdateFrequency == 0
             and not topologyCheckDueThisIncrement
         ):
-            connectivityChanged = self.updateConstraintConnectivity(model)
+            # Throttled: a node-to-surface search is O(slaves x facets) in Python, which is affordable once per
+            # increment of an implicit analysis -- amortised over a Newton loop and a linear solve -- and not tens
+            # of thousands of times. An explicit time step is tiny: between two searches a node moves
+            # ``V * dT * frequency``, orders of magnitude below a facet dimension.
+            with performancetiming.timeit("constraint connectivity"):
+                change = model.updateConnectivity()
 
-            if connectivityChanged:
-                self.journal.message("Constraint connectivity changed", self.identification, 2)
-                self._buildSystem(self.buildEquationSystem(model, step, previous=theSystem))
-                theSystem, Minv = self._system, self._Minv
-                U, dU, V, netForce, internalForce = (
-                    self._U,
-                    self._dU,
-                    self._V,
-                    self._netForce,
-                    self._internalForce,
+            # Only the locations can change here: the search moves no node, and a constraint of this solver has no
+            # scalar variable.
+            if change > Change.LOCATIONS:
+                raise RuntimeError(
+                    "The connectivity search changed the numbering of the degrees of freedom ({:}). Only a change of "
+                    "the locations is expected here, and that cannot add or remove degrees of freedom -- so the "
+                    "solution, the velocity and the net force cannot be carried across safely.".format(change.name)
                 )
+            self.updateDiscreteSystem(model, change)
+
+        U, dU, V, netForce, internalForce = self._U, self._dU, self._V, self._netForce, self._internalForce
 
         dU[:] = 0.0
         try:
@@ -756,7 +694,7 @@ class NED(NonlinearSolverBase):
                 V,
                 netForce,
                 internalForce,
-                Minv,
+                self._Minv,
                 step.actions,
                 model,
                 timeStep,
@@ -850,7 +788,7 @@ class NED(NonlinearSolverBase):
         Parameters
         ----------
         dirichlets
-            The Dirichlet boundary conditions of the step, located on the current equation system.
+            The Dirichlet boundary conditions of the step, located on the current discrete system.
         timeIncrement
             The time increment just completed.
 
@@ -876,7 +814,7 @@ class NED(NonlinearSolverBase):
     def formNetForceOfTheModelsState(self, dirichlets):
         """Form the net force a cold step starts from: that of the state the model holds,
         :math:`\\boldsymbol{f}_\\mathrm{net} = \\boldsymbol{M} \\boldsymbol{a}_0 + \\boldsymbol{C} \\boldsymbol{v}_0`,
-        from its velocity and acceleration, read with the solution when the equation system was built, and the lumped
+        from its velocity and acceleration, read with the solution when the discrete system was built, and the lumped
         operators; nothing is evaluated (see the module documentation, "The net force is solver state, and a step
         starts from the model's state"). Zero on a degree of freedom with a prescribed motion, which has no equation of
         motion, and on a multi-point-constraint slave, whose inertia and damping are folded onto its masters.
@@ -896,7 +834,7 @@ class NED(NonlinearSolverBase):
     def energyOfTheModelsState(self) -> float:
         """The energy the model holds at the start of a cold step, which its energy balance starts from (see the module
         documentation, "Energy balance"): the kinetic energy of the model's velocity, read with the solution when the
-        equation system was built, and the internal (strain) energy the materials publish for the state the elements
+        discrete system was built, and the internal (strain) energy the materials publish for the state the elements
         hold. Nothing is evaluated.
 
         Returns
@@ -905,7 +843,7 @@ class NED(NonlinearSolverBase):
             The kinetic and the internal energy.
         """
 
-        internalEnergy = sum(element.computeInternalEnergy() for element in self._kernelElements.values())
+        internalEnergy = sum(element.computeInternalEnergy() for element in self.system.elements)
 
         return self.kineticEnergy(self._V) + internalEnergy
 
@@ -946,7 +884,7 @@ class NED(NonlinearSolverBase):
         Parameters
         ----------
         dirichlets
-            The Dirichlet boundary conditions of the step, located on the current equation system.
+            The Dirichlet boundary conditions of the step, located on the current discrete system.
 
         Returns
         -------
@@ -955,7 +893,7 @@ class NED(NonlinearSolverBase):
         """
 
         internalForce = self._internalForce
-        force = self.theDofManager.constructDofVector()
+        force = self.system.locations.constructDofVector()
         np.add(internalForce, self._netForce, out=force)
         for dirichlet in dirichlets:
             force[dirichlet.constrainedDofIndices] = internalForce[dirichlet.constrainedDofIndices]
@@ -970,7 +908,7 @@ class NED(NonlinearSolverBase):
         V: DofVector,
         netForce: DofVector,
         internalForce: DofVector,
-        Minv: DofVector,
+        Minv: np.ndarray,
         stepActions: list,
         model: FEModel,
         timeStep: TimeStep,
@@ -992,7 +930,7 @@ class NED(NonlinearSolverBase):
         internalForce
             Overwritten with the elements' sum of this increment, the internal force.
         Minv
-            The inverse lumped mass.
+            The inverse lumped mass, one value per degree of freedom.
         stepActions
             The list of active step actions.
         model
@@ -1011,8 +949,7 @@ class NED(NonlinearSolverBase):
                 - the net force of this increment
         """
 
-        # only the entities that have kernels to evaluate; see buildEquationSystem()
-        elements = self._kernelElements
+        elements = self.system.elements
         dirichlets = stepActions["dirichlet"].values()
         loads = self.collectLoads(stepActions)
 
@@ -1059,7 +996,7 @@ class NED(NonlinearSolverBase):
             # second-order DOFs. First-order DOFs: V = Minv f_net (forward Euler).
             dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
             halfRateStep = self._halfDampingRate * dtAverage
-            forceOverMass = Minv.asPlainArray() * netForce.asPlainArray()
+            forceOverMass = Minv * netForce.asPlainArray()
 
             velocity = V.asPlainArray()
             velocity *= 1.0 - halfRateStep
@@ -1093,7 +1030,7 @@ class NED(NonlinearSolverBase):
         internalForce, psi = self.computeElements(elements, U_n, dU, internalForce, timeStep)
         netForce[:] = internalForce
         netForce, _ = self.assembleLoads(loads, U_n, dU, netForce, None, timeStep)
-        netForce = self.assembleConstraintForces(model.constraints, U_n, dU, netForce, timeStep)
+        netForce = self.assembleConstraintForces(self.system.constraints, U_n, dU, netForce, timeStep)
         netForce[:] = -netForce[:]
 
         # Fold slave forces onto their masters here, so the next increment's Dirichlet handling sees
@@ -1131,7 +1068,7 @@ class NED(NonlinearSolverBase):
             # One row per non-mechanical second-order field, kept out of the total: for a hyperbolic
             # non-local field the inertia is a time squared, so 0.5 * m * rate**2 is a volume.
             for fieldName in self.nonMechanicalSecondOrderFields:
-                indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+                indices = self.system.numbering.idcsOfFieldsInDofVector[fieldName]
                 energyRows.append(
                     [
                         fieldName,
@@ -1220,7 +1157,7 @@ class NED(NonlinearSolverBase):
         Parameters
         ----------
         elements
-            The finite elements, by number.
+            The finite elements.
         U_np
             The current solution vector.
         dU
@@ -1240,7 +1177,7 @@ class NED(NonlinearSolverBase):
         time = timeStep.totalTime
         dT = timeStep.timeIncrement
         psi = 0.0
-        for el in elements.values():
+        for el in elements:
             Pe = np.zeros(el.nDof)
             el.computeKernelsExplicit(Pe, U_np[el], dU[el], time, dT)
             psi += el.computeInternalEnergy()
@@ -1267,7 +1204,7 @@ class NED(NonlinearSolverBase):
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`.
         A constraint switched off from outside
         (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it takes no
-        part in the step, and its scalar variables leave the equation system with it. One that is switched on is
+        part in the step, and its scalar variables leave the discrete system with it. One that is switched on is
         refused even while it is out of reach: it may come within reach during the step.
 
         Parameters
@@ -1348,13 +1285,13 @@ class NED(NonlinearSolverBase):
 
     @performancetiming.timeit("write results to nodes")
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector | None, V: DofVector, A: DofVector | None):
-        """Write the results of an increment to the model, through the model's layout of the equation system: the
+        """Write the results of an increment to the model, through the discrete system: the
         solution, its increment and the internal, inertial and damping force to the node fields, and the solution to the
-        scalar variables (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`),
+        scalar variables (see :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`),
         then the velocity and the acceleration (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel`); the
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel`); the
         incremental degrees of freedom are set to zero first, from where the next increment starts them (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`).
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients`).
 
         Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity
         event can fall on any increment and its interpolation reads these entries, and a restart
@@ -1377,176 +1314,115 @@ class NED(NonlinearSolverBase):
             the model's as it is.
         """
 
-        self.equationSystemLayout.zeroIncrementalCoefficients(U)
-        self.equationSystemLayout.writeResultsToModel(U, dU, P)
-        self.equationSystemLayout.writeVelocityAndAccelerationToModel(V, A)
+        self.system.zeroIncrementalCoefficients(U)
+        self.system.writeResultsToModel(U, dU, P)
+        self.system.writeVelocityAndAccelerationToModel(V, A)
 
-    @performancetiming.timeit("constraint connectivity")
-    def updateConstraintConnectivity(self, model: FEModel) -> bool:
-        """Let the constraints whose connectivity is the outcome of a search re-run that search.
+    def forgetDiscreteSystem(self) -> None:
+        """Drop the discrete system, and everything that belongs to it, before the next one is built: the vectors, the
+        lumped operators and what is derived from them (the classification of the fields by time derivative, the
+        stable time increment); see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forgetDiscreteSystem`. Everything
+        :meth:`onNewNumbering` builds is gone, so that no array of the previous numbering is left to be mistaken for
+        one of the next. The net force, which a resumed step finds from its checkpoint, is dropped as well: whoever
+        needs it takes it before the build (see :meth:`prepareIncrement`)."""
 
-        Only the constraints in :attr:`_dynamicConnectivityConstraints` that are switched on are ticked
-        (see :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the caller ticks them only every
-        ``contact-update-frequency`` increments. Both matter: a node-to-surface
-        search is O(slaves x facets) in Python, which is affordable once per increment of an implicit
-        analysis -- where it is amortised over a Newton loop and a linear solve -- and not affordable
-        tens of thousands of times. What makes throttling defensible rather than merely cheap is that
-        an explicit time step is tiny: between two searches a node moves ``V * dT * frequency``,
-        orders of magnitude below a facet dimension. The caller reports the motion actually
-        accumulated so that this can be checked against a given model instead of assumed.
+        super().forgetDiscreteSystem()
+        self._U = self._dU = self._V = self._A = self._netForce = self._internalForce = None
+        self._Minv = self._lumpedMass = self._rawLumpedMass = None
+        self._dampingRate = self._halfDampingRate = self._secondOrderMask = None
+        self._inertia = self._damping = None
+        self._criticalTimeStep = None
+        self.firstOrderFields, self.secondOrderFields = [], []
+        self.linearMomentumFields, self.nonMechanicalSecondOrderFields = [], []
+        self.ids_1st = self.ids_2nd = self.ids_mechanicalEnergy = None
+        self._numberingOfNetForce = None
 
-        Parameters
-        ----------
-        model
-            The model tree.
+    def onNewNumbering(self):
+        """Build what is sized by the numbering of the new discrete system: the multi-point-constraint condensation,
+        the lumped operators the increment divides by and the classification of the fields by time derivative that
+        follows from them (see :meth:`_assembleLumpedOperators`), the vectors of the increments (the solution, the
+        velocity and the acceleration read from the model, which holds the state a mesh change interpolated onto its
+        new nodes; the net force and the internal force zero, see the module documentation, "The net force is solver
+        state, and a step starts from the model's state"), and the stable time increment of the new mesh.
 
-        Returns
-        -------
-        bool
-            Whether any constraint's DOF footprint changed, i.e. whether the equation system has to
-            be rebuilt.
+        The lumped operators are functions of the elements and of the numbering: new locations on the same numbering
+        keep them.
+
+        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering`.
         """
 
-        # as the model does: a constraint switched off from outside rests, and is not located anew
-        return any(
-            [
-                constraint.updateConnectivity(model)
-                for constraint in self._dynamicConnectivityConstraints
-                if constraint.switchedOn
-            ]
+        system = self.system
+
+        self.buildAndCheckMPCTransformation()
+
+        self._assembleLumpedOperators()
+
+        locations = system.locations
+        self._U = locations.constructDofVector()
+        self._dU = locations.constructDofVector()
+        self._V = locations.constructDofVector()
+        self._A = locations.constructDofVector()
+        self._netForce = locations.constructDofVector()
+        self._internalForce = locations.constructDofVector()
+        self._numberingOfNetForce = system.numbering.digest
+
+        # After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new
+        # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
+        system.readStateFromModel(self._U, self._V, self._A)
+
+        self._criticalTimeStep = self.options["courant-number"] * self.getCriticalTimeStepForExplicitDynamics(self._U)
+        self.journal.message(
+            "Critical time step for explicit dynamics: {:e}".format(self._criticalTimeStep), self.identification, 1
         )
 
-    def _operatorsReusable(self, model: FEModel, stepActions: dict) -> bool:
-        """Whether the kept lumped operators still describe this model, so that a rebuild may keep
-        them and re-locate the constraints alone.
+    def onNewLocations(self):
+        """Wrap the vectors of the increments with the new locations, their values kept: the increments continue from
+        the solution, the velocity, the acceleration and the net force they have. The lumped operators and the stable
+        time increment are not touched: no element and no node moved.
 
-        The operators are a function of the elements -- which carry the inertia and the damping --
-        of the multi-point constraints, and of the degree-of-freedom layout the two are indexed by.
-        A contact search changes none of those: it re-assigns which nodes a *constraint* couples,
-        which moves the constraints' own DOF footprints and nothing else. A topology change does
-        move them, and never reaches here: it passes no ``previous`` system and builds afresh.
-
-        The multi-point constraints are safe to keep for a structural reason rather than a
-        coincidental one, which is worth being explicit about. They are a separate hierarchy
-        (:class:`~edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase`)
-        with no connectivity-update protocol at all -- ``updateConnectivity`` belongs to
-        :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`, and only those
-        constraints are collected into ``_dynamicConnectivityConstraints`` and can ask for this
-        rebuild -- and the dependency records they produce are a function of the node DOF indices,
-        which a constraint refresh leaves untouched. Should a multi-point constraint ever gain a
-        connectivity of its own, that argument fails and the transformation would have to be
-        rebuilt here rather than kept.
-
-        Parameters
-        ----------
-        model
-            The model tree.
-        stepActions
-            The step's actions.
-
-        Returns
-        -------
-        bool
-            Whether the kept operators may be reused.
+        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations`.
         """
 
-        cache = self._reusableOperators
-        if cache is None:
-            return False
+        locations = self.system.locations
 
-        # Inertia and damping come from the materials, so a material property change invalidates them.
-        if stepActions["changematerialproperty"]:
-            return False
+        self._U = self._U.onLocations(locations)
+        self._dU = self._dU.onLocations(locations)
+        self._V = self._V.onLocations(locations)
+        self._A = self._A.onLocations(locations)
+        self._netForce = self._netForce.onLocations(locations)
+        self._internalForce = self._internalForce.onLocations(locations)
 
-        return (
-            model.elements.keys() == cache.elementKeys
-            and model.multiPointConstraints.keys() == cache.multiPointConstraintKeys
-            and len(model.nodes) == cache.nNodes
-            and len(model.scalarVariables) == cache.nScalarVariables
-        )
-
-    def _restoreLumpedOperators(self) -> tuple[DofVector, DofVector]:
-        """Put the kept lumped operators back, into vectors carrying the refreshed entity mapping.
-
-        The numbers are the ones :meth:`_assembleLumpedOperators` produced when it last ran. What
-        that method additionally left on the solver -- which fields are first and which second
-        order, and the DOF index sets of each -- is not restored because it was never invalidated:
-        a constraint refresh leaves the fields and their indices exactly as they were, so those
-        attributes still describe this system.
-
-        Returns
-        -------
-        tuple[DofVector, DofVector]
-            The vector the increment divides by, and its inverse.
-        """
-
-        cache = self._reusableOperators
-
-        # The transformation is indexed by the DOF layout, which the refresh did not move.
-        assert cache.mpcTransformation is None or cache.mpcTransformation.nDof == self.theDofManager.nDof
-        self.mpcTransformation = cache.mpcTransformation
-
-        M = self.theDofManager.constructDofVector()
-        M[:] = cache.lumpedMass
-        Minv = self.theDofManager.constructDofVector()
-        Minv[:] = cache.inverseLumpedMass
-        self._rawLumpedMass = self.theDofManager.constructDofVector()
-        self._rawLumpedMass[:] = cache.rawLumpedMass
-        self._dampingRate = self.theDofManager.constructDofVector()
-        self._dampingRate[:] = cache.dampingRate
-        self._lumpedMass = M
-
-        return M, Minv
-
-    def _assembleLumpedOperators(self, model: FEModel, step, verbosity: int) -> tuple[DofVector, DofVector]:
-        """Assemble everything the explicit update divides by, and everything derived from it.
+    def _assembleLumpedOperators(self):
+        """Assemble everything the explicit update divides by, and everything derived from it, for the new numbering.
 
         The lumped inertia and the lumped damping are summed from the elements, checked, and used
         to decide which time derivative each field carries; the multi-point-constraint
-        transformation is built alongside them because it folds the slave degrees of freedom's
-        mass onto their masters. Beyond the two vectors returned, this leaves the derived
-        classification, the raw (unfolded) mass, the damping rate and the field index sets on the
-        solver.
-
-        Parameters
-        ----------
-        model
-            The model tree.
-        step
-            The step, for the actions the multi-point-constraint transformation consults.
-        verbosity
-            The journal level to report at.
-
-        Returns
-        -------
-        tuple[DofVector, DofVector]
-            The vector the increment divides by, and its inverse.
+        transformation (:attr:`mpcTransformation`) folds the slave degrees of freedom's mass onto their masters.
+        This leaves on the solver, as arrays of the length of the numbering, the inverse lumped mass the increment
+        divides by, the lumped mass with and without the fold (the latter for the diagnostics), the damping rate, the
+        inertia and the damping of every degree of freedom, and the factors of the velocity update; and the derived
+        classification and the field index sets. The mass is that of the start of the step: nothing assembles it again
+        before the next numbering, which every step starts with.
         """
 
-        self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
-        self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
+        locations = self.system.locations
+        nDof = self.system.numbering.nDof
 
-        # Elements without kernels (contact facets) are left out of the per-increment loop. The loop's
-        # gather plan is keyed on this dict's identity.
-        self._kernelElements = {number: element for number, element in model.elements.items() if element.hasKernels}
-
-        # initialize mass and damping matrices
-        M = self.theDofManager.constructDofVector()  # initialize lumped mass matrix
-        Minv = self.theDofManager.constructDofVector()  # initialize inverse lumped mass matrix
-
-        M[:] = 0.0
-        for el in model.elements.values():
+        # The entities whose inertia is assembled element by element, as in every solver that does so (see
+        # DiscreteSystem.elementsWithNodalInertia). Their locations are the same in every locations made from this
+        # numbering, so the operators are the same too.
+        M = np.zeros(nDof)
+        damping = np.zeros(nDof)
+        for el in self.system.elementsWithNodalInertia:
             Me = np.zeros(el.nDof)
             el.computeLumpedInertia(Me)
-            M[el] += Me
+            M[locations[el]] += Me
 
-        # Each field's first-derivative coefficient: zero mechanically, the non-local viscosity always.
-        damping = self.theDofManager.constructDofVector()
-        damping[:] = 0.0
-        for el in model.elements.values():
+            # Each field's first-derivative coefficient: zero mechanically, the non-local viscosity always.
             Ce = np.zeros(el.nDof)
             el.computeLumpedDamping(Ce)
-            damping[el] += Ce
+            damping[locations[el]] += Ce
 
         # Checked separately: at second-order DOFs the damping enters only as the rate C/M, which the
         # inertia check below never sees, and a negative rate amplifies instead of damping.
@@ -1576,7 +1452,7 @@ class NED(NonlinearSolverBase):
                 ", ".join(self.firstOrderFields) or "(no field)",
             ),
             self.identification,
-            verbosity,
+            1,
         )
 
         self._checkDerivedSchemeAgainstTheDeck()
@@ -1627,161 +1503,30 @@ class NED(NonlinearSolverBase):
             # Folded like the inertia, so the ratio below is the damping rate of the folded system.
             self.mpcTransformation.foldLumpedMass(damping)
 
+        Minv = np.zeros(nDof)
         Minv[M != 0.0] = 1.0 / M[M != 0.0]
+        self._Minv = Minv
 
         # Damping rate alpha = C / M at second-order DOFs with nonzero (folded) inertia; zero elsewhere.
-        self._dampingRate = self.theDofManager.constructDofVector()
-        self._dampingRate[:] = 0.0
+        self._dampingRate = np.zeros(nDof)
         integrating = self.ids_2nd[M[self.ids_2nd] > 0.0]
         self._dampingRate[integrating] = damping[integrating] / M[integrating]
 
         # kept (instead of 1/Minv) for the kinetic energy: slave DOFs have Minv = 0
         self._lumpedMass = M
 
-        return M, Minv
-
-    @performancetiming.timeit("build equation system")
-    def buildEquationSystem(self, model: FEModel, step, previous: ExplicitSystem = None) -> ExplicitSystem:
-        """Build the equation system and everything sized by it.
-
-        Called once before the increment loop, and again from inside it whenever a constraint reports
-        that its DOF footprint changed -- one method for both, so the path every model takes and the
-        path only a contact model takes cannot drift apart. On that second path the DofManager is
-        refreshed rather than rebuilt and the lumped operators are kept; see
-        :meth:`_operatorsReusable`.
-
-        Parameters
-        ----------
-        model
-            The model tree.
-        step
-            The step being solved; its actions are needed to check the multi-point constraints
-            against the prescribed Dirichlet conditions.
-        previous
-            The system being replaced, when this is a rebuild rather than the initial build. Its
-            solution, velocity and net force are carried over verbatim rather than re-read from the model:
-            they are the vectors the increment continues from. A rebuild triggered by a
-            constraint's connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is
-            checked rather than assumed: copying between two different layouts would mis-index every
-            vector silently.
-
-        Returns
-        -------
-        ExplicitSystem
-            The freshly built system.
-        """
-
-        isRebuild = previous is not None
-        verbosity = 2 if isRebuild else 0
-
-        # A connectivity-only rebuild refreshes the DofManager and keeps the lumped operators; see
-        # _operatorsReusable(). Anything else builds from scratch.
-        reuseOperators = isRebuild and self._operatorsReusable(model, step.actions)
-
-        if reuseOperators:
-            self.journal.message(
-                "Constraint connectivity changed: re-locating the constraints' degrees of freedom, "
-                "keeping the lumped operators",
-                self.identification,
-                verbosity,
-            )
-            self.theDofManager.refreshConstraintIndices(model.activeConstraints())
-        else:
-            self.journal.message("Creating monolithic equation system", self.identification, verbosity)
-            # The numbering of the model's degrees of freedom, and how the state passes between the model and the
-            # vectors; this solver evaluates the model's elements itself, and assembles no system matrix.
-            self.equationSystemLayout = model.buildEquationSystem()
-            self.theDofManager = self.equationSystemLayout.dofManager
-        self.journal.message(
-            "total size of eq. system: {:}".format(self.theDofManager.nDof),
-            self.identification,
-            verbosity,
-        )
-
-        if not isRebuild:
-            self.journal.printSeperationLine()
-
-        if reuseOperators:
-            M, Minv = self._restoreLumpedOperators()
-        else:
-            M, Minv = self._assembleLumpedOperators(model, step, verbosity)
-            self._reusableOperators = _ReusableExplicitOperators(
-                elementKeys=frozenset(model.elements.keys()),
-                multiPointConstraintKeys=frozenset(model.multiPointConstraints.keys()),
-                nNodes=len(model.nodes),
-                nScalarVariables=len(model.scalarVariables),
-                lumpedMass=np.array(M),
-                rawLumpedMass=np.array(self._rawLumpedMass),
-                inverseLumpedMass=np.array(Minv),
-                dampingRate=np.array(self._dampingRate),
-                mpcTransformation=self.mpcTransformation,
-            )
-
         # Per-DOF factors of the velocity update, so that it runs on whole vectors.
-        self._secondOrderMask = np.zeros(self._dampingRate.shape[0])
-        if self.ids_2nd is not None:
-            self._secondOrderMask[self.ids_2nd] = 1.0
-        self._halfDampingRate = 0.5 * np.asarray(self._dampingRate) * self._secondOrderMask
+        self._secondOrderMask = np.zeros(nDof)
+        self._secondOrderMask[self.ids_2nd] = 1.0
+        self._halfDampingRate = 0.5 * self._dampingRate * self._secondOrderMask
 
         # The coefficients of every degree of freedom's equation of motion, M a + C v = f_net: by central differences,
         # the inertia and the damping (rate times inertia); by forward Euler, no inertia, and the damping the increment
         # divides by. Zero on a multi-point-constraint slave, whose inertia and damping are folded onto its masters.
-        lumpedMass = np.asarray(self._lumpedMass)
-        self._inertia = lumpedMass * self._secondOrderMask
-        self._damping = lumpedMass * (np.asarray(self._dampingRate) + (1.0 - self._secondOrderMask))
+        self._inertia = M * self._secondOrderMask
+        self._damping = M * (self._dampingRate + (1.0 - self._secondOrderMask))
 
-        U = self.theDofManager.constructDofVector()
-        dU = self.theDofManager.constructDofVector()
-        V = self.theDofManager.constructDofVector()
-        A = self.theDofManager.constructDofVector()
-        # Zero unless carried over below or formed at the start of a step: see the module documentation, "The net force
-        # is solver state, and a step starts from the model's state".
-        netForce = self.theDofManager.constructDofVector()
-        internalForce = self.theDofManager.constructDofVector()
-
-        if not isRebuild:
-            # After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new
-            # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
-            self.equationSystemLayout.readStateFromModel(U, V, A)
-        else:
-            if previous.U.shape != U.shape:
-                raise RuntimeError(
-                    "The equation system was rebuilt with {:} degrees of freedom instead of {:}. Only "
-                    "a constraint's connectivity is expected to trigger a rebuild here, and that "
-                    "cannot add or remove degrees of freedom -- so the solution and the velocity "
-                    "cannot be carried across safely.".format(U.shape[0], previous.U.shape[0])
-                )
-
-            # Carried straight over: the numbering is the same, and these are the vectors the increment
-            # continues from.
-            U[:] = previous.U
-            V[:] = previous.V
-            A[:] = previous.A
-            netForce[:] = previous.netForce
-
-        if isRebuild:
-            # The mesh is unchanged, so the stable time increment is kept (recomputing costs an element pass).
-            criticalTimeStep = previous.criticalTimeStep
-        else:
-            criticalTimeStep = self.options.get("courant-number") * self.getCriticalTimeStepForExplicitDynamics(
-                model, U
-            )
-            self.journal.message(
-                "Critical time step for explicit dynamics: {:e}".format(criticalTimeStep), self.identification, 1
-            )
-
-        return ExplicitSystem(
-            Minv=Minv,
-            U=U,
-            dU=dU,
-            V=V,
-            A=A,
-            netForce=netForce,
-            internalForce=internalForce,
-            criticalTimeStep=criticalTimeStep,
-        )
-
-    def secondOrderMomentum(self, mass: DofVector, V: DofVector, model: FEModel) -> np.ndarray:
+    def secondOrderMomentum(self, mass: np.ndarray, V: DofVector, model: FEModel) -> np.ndarray:
         """The linear momentum of the fields whose inertia is a mass, per spatial component; see
         :func:`~edelweissfe.solvers.base.conservationchecks.linearMomentum`.
 
@@ -1801,7 +1546,7 @@ class NED(NonlinearSolverBase):
             The momentum, one entry per spatial component.
         """
 
-        return linearMomentum(np.asarray(mass) * np.asarray(V), self.theDofManager, self.linearMomentumFields, model)
+        return linearMomentum(np.asarray(mass) * np.asarray(V), self.system.numbering, self.linearMomentumFields, model)
 
     def _perFieldLumpedTotals(self) -> dict[str, float]:
         """The assembled lumped total of every first- and second-order field, each on its own.
@@ -1825,7 +1570,7 @@ class NED(NonlinearSolverBase):
 
         totals = {}
         for fieldName in self.firstOrderFields + self.secondOrderFields:
-            indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
+            indices = self.system.numbering.idcsOfFieldsInDofVector[fieldName]
             totals[fieldName] = float(np.sum(self._rawLumpedMass[indices]))
         return totals
 
@@ -1835,7 +1580,7 @@ class NED(NonlinearSolverBase):
         Parameters
         ----------
         fieldNames
-            Names of fields present in the current DofManager.
+            Names of fields present in the current numbering.
 
         Returns
         -------
@@ -1846,7 +1591,7 @@ class NED(NonlinearSolverBase):
 
         indices = np.empty(0, dtype=int)
         for fieldName in fieldNames:
-            indices = np.r_[indices, self.theDofManager.idcsOfFieldsInDofVector[fieldName]]
+            indices = np.r_[indices, self.system.numbering.idcsOfFieldsInDofVector[fieldName]]
         return indices
 
     def _checkDerivedSchemeAgainstTheDeck(self):
@@ -1915,7 +1660,7 @@ class NED(NonlinearSolverBase):
                         )
                     )
 
-    def _classifyFieldsByScheme(self, inertia: DofVector, damping: DofVector) -> tuple[list[str], list[str]]:
+    def _classifyFieldsByScheme(self, inertia: np.ndarray, damping: np.ndarray) -> tuple[list[str], list[str]]:
         """Which fields are integrated second order in time and which first, read off the
         assembled operators rather than declared.
 
@@ -1953,7 +1698,7 @@ class NED(NonlinearSolverBase):
         firstOrderFields = []
         secondOrderFields = []
 
-        for fieldName, indices in self.theDofManager.idcsOfFieldsInDofVector.items():
+        for fieldName, indices in self.system.numbering.idcsOfFieldsInDofVector.items():
             carriesInertia = np.asarray(inertia[indices]) != 0.0
             carriesDamping = np.asarray(damping[indices]) != 0.0
 
@@ -2033,7 +1778,7 @@ class NED(NonlinearSolverBase):
         kineticBefore
             Kinetic energy before the change.
         V
-            The velocity vector of the rebuilt system.
+            The velocity vector of the new discrete system.
         model
             The model tree.
 
@@ -2100,13 +1845,14 @@ class NED(NonlinearSolverBase):
             1,
         )
 
-    def getCriticalTimeStepForExplicitDynamics(self, model: FEModel, U: DofVector) -> float:
-        """Compute the critical time step for explicit dynamics.
+    def getCriticalTimeStepForExplicitDynamics(self, U: DofVector) -> float:
+        """Compute the critical time step for explicit dynamics, over the entities the discrete system names for it
+        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).
 
         Parameters
         ----------
-        model
-            The model tree.
+        U
+            The solution vector.
 
         Returns
         -------
@@ -2115,8 +1861,7 @@ class NED(NonlinearSolverBase):
         """
         minTimeStep = np.inf
 
-        for element in model.elements.values():
-            elementTimeStep = np.inf
+        for element in self.system.elementsWithNodalInertia:
             elementTimeStep = element.computeCriticalTimeStepForExplicitDynamics(U[element])
             if elementTimeStep < minTimeStep:
                 minTimeStep = elementTimeStep

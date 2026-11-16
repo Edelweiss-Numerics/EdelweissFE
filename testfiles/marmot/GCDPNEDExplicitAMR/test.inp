@@ -4,7 +4,7 @@
 ** This is the case for the topology update in NED. What it establishes, beyond GCDPNEDExplicit:
 **
 **  * the topology update runs at all under this solver (supportsModelModifiers), exactly once,
-**    before the DofManager, the lumped mass, the multi-point-constraint condensation and the
+**    before the numbering of the degrees of freedom, the lumped mass, the multi-point-constraint condensation and the
 **    critical time step are derived from the mesh -- so all four see the refined mesh,
 **  * the hanging-node constraints refinement creates are ordinary multi-point constraints, so
 **    NED's existing mass folding / slave kinematics / force folding carries them with no new code,

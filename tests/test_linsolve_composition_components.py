@@ -862,7 +862,7 @@ def test_the_default_trees_on_the_reference_page_are_the_code_defaults():
 
     from edelweissfe.linsolve.composition.amg import defaultCornerNodeTwoLevelTree
 
-    page = (pathlib.Path(__file__).parents[1] / "doc/source/documentation/composedlinsolversreference.rst").read_text()
+    page = (pathlib.Path(__file__).parents[1] / "doc/source/analysis/composedlinsolversreference.rst").read_text()
     block = page.split("and change only what is intended. The defaults are", 1)[1].split(".. code-block:: json", 1)[1]
     trees = json.JSONDecoder().raw_decode(block.strip())[0]
     assert trees == {

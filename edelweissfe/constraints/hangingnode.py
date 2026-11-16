@@ -135,8 +135,8 @@ class Constraint(MultiPointConstraintBase):
         self._records = []
         self.updateRecords(records)
 
-    def getMultiPointConstraints(self, dofManager) -> list:
-        fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector
+    def getMultiPointConstraints(self, numbering) -> list:
+        fieldVariableIndices = numbering.idcsOfFieldVariablesInDofVector
         records = []
         for slaveNode, masters in self._records:
             # constrain every field the slave shares with all of its masters (all of them, for

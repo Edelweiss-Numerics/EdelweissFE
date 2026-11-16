@@ -140,15 +140,15 @@ def test_the_steps_that_name_a_linear_solver_share_it_and_leave_no_tree_behind(t
     assert len(created) == 1
 
 
-def test_a_new_step_drops_the_last_equation_system_before_it_builds_the_next(tmp_path, monkeypatch):
+def test_a_new_step_drops_the_last_discrete_system_before_it_builds_the_next(tmp_path, monkeypatch):
     generatorsAtBuild = []
-    original = FEModel.buildEquationSystem
+    original = FEModel.buildDiscreteSystem
 
-    def buildEquationSystem(self, *args, **kwargs):
+    def buildDiscreteSystem(self, *args, **kwargs):
         generatorsAtBuild.append(sum(isinstance(obj, CSRGenerator) for obj in gc.get_objects()))
         return original(self, *args, **kwargs)
 
-    monkeypatch.setattr(FEModel, "buildEquationSystem", buildEquationSystem)
+    monkeypatch.setattr(FEModel, "buildDiscreteSystem", buildDiscreteSystem)
     _simulate(tmp_path, monkeypatch, ["", ""])
     assert len(generatorsAtBuild) == 2 and generatorsAtBuild[1] == generatorsAtBuild[0]
 

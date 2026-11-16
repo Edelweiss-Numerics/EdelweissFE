@@ -205,18 +205,18 @@ def test_condensed_dofs_are_those_of_the_interior_nodes_of_the_marked_elements()
         elements={1: bar, 2: bond, 3: continuum}, elementSets={"bars": [bar], "bonds": [bond], "all": []}
     )
     dofs = {label: np.array([2 * (label - 1), 2 * (label - 1) + 1]) for label in nodes}
-    dofManager = SimpleNamespace(idcsOfFieldVariablesInDofVector=dofs)
+    numbering = SimpleNamespace(idcsOfFieldVariablesInDofVector=dofs)
 
     condensation = SchurComplementCondensation([ElementSetMarker("bars"), ElementSetMarker("bonds")])
-    condensation.setModel(model, dofManager)
+    condensation.setModel(model, numbering)
     assert np.array_equal(condensation._selectCondensedDofs()[0], [0, 1, 2, 3])
 
     onlyBars = SchurComplementCondensation([ElementSetMarker("bars")])
-    onlyBars.setModel(model, dofManager)
+    onlyBars.setModel(model, numbering)
     assert np.array_equal(onlyBars._selectCondensedDofs()[0], [0, 1])
 
     with pytest.raises(KeyError, match="element set 'rebars'"):
-        SchurComplementCondensation([ElementSetMarker("rebars")]).setModel(model, dofManager)
+        SchurComplementCondensation([ElementSetMarker("rebars")]).setModel(model, numbering)
 
 
 def test_remaining_field_blocks_drop_the_condensed_nodes():
@@ -309,20 +309,20 @@ class _CountingMarker(MarkerBase):
 
 
 def _chainModel(nElements=6):
-    """A chain of two-node elements, one dof per node: the model and the dof manager setModel reads."""
+    """A chain of two-node elements, one dof per node: the model and the numbering setModel reads."""
     nodes = [_Node(i) for i in range(nElements + 1)]
     elements = {i: _Element([nodes[i], nodes[i + 1]]) for i in range(nElements)}
-    dofManager = SimpleNamespace(idcsOfFieldVariablesInDofVector={i: i for i in range(nElements + 1)})
-    return SimpleNamespace(elements=elements), dofManager
+    numbering = SimpleNamespace(idcsOfFieldVariablesInDofVector={i: i for i in range(nElements + 1)})
+    return SimpleNamespace(elements=elements), numbering
 
 
 def test_the_condensed_dofs_are_selected_anew_only_when_a_marker_input_changes():
     # a selection is kept while every marker's stamp stays the same; a marker that cannot tell (None) marks on every
     # call, and a new model drops the selection
-    model, dofManager = _chainModel()
+    model, numbering = _chainModel()
     marker = _CountingMarker([model.elements[1], model.elements[2]])
     condensation = SchurComplementCondensation([marker])
-    condensation.setModel(model, dofManager)
+    condensation.setModel(model, numbering)
     first = condensation._selectCondensedDofs()
     assert np.array_equal(first[0], [2]) and condensation._selectCondensedDofs() is first and marker.marks == 1
     marker.stamp = (1,)
@@ -333,7 +333,7 @@ def test_the_condensed_dofs_are_selected_anew_only_when_a_marker_input_changes()
     condensation._selectCondensedDofs()
     assert marker.marks == 4
     marker.stamp = ()
-    condensation.setModel(model, dofManager)
+    condensation.setModel(model, numbering)
     condensation._selectCondensedDofs()
     assert marker.marks == 5
 

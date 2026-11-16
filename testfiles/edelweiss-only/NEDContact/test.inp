@@ -10,7 +10,7 @@
 ** constraint's forces actually reach the equations.
 **
 ** contact-update-frequency is lowered from its default of 100 so the connectivity tick, and the
-** equation-system rebuild it triggers when the slave-to-facet assignment changes, are exercised
+** discrete system rebuild it triggers when the slave-to-facet assignment changes, are exercised
 ** within this test's increment count rather than only in long runs.
 
 *material, name=LinearElastic, id=linearelastic, provider=edelweiss

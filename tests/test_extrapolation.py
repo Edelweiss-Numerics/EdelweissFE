@@ -26,13 +26,15 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """The prediction an increment of the implicit solvers starts from (the solver option ``extrapolation``), the retry of a
-failed extrapolated increment (``retryWithoutExtrapolation``), and the prediction across a rebuild of the equation
+failed extrapolated increment (``retryWithoutExtrapolation``), and the prediction across a rebuild of the discrete
 system after a change of the connectivity (``extrapolateAcrossConnectivityChange``).
 
 The decks are a linear elastic plate whose edge displacement follows a prescribed path in the step progress. For a
 linear problem, the solution follows that path: an extrapolation that reproduces the path exactly lets the increment
 converge without a single correction, which is what the tests count.
 """
+
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -41,8 +43,8 @@ from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
-from edelweissfe.numerics.dofmanager import DofManager
-from edelweissfe.solvers.base.nonlinearsolverbase import TopologyUpdate
+from edelweissfe.models.change import Change
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.stepactions.base.dirichletbase import DirichletBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -137,7 +139,7 @@ def displacements(model) -> np.ndarray:
 
 def solverWithHistory(extrapolation, sizes, dUs, dofNumbering="the numbering", **options) -> NIST:
     """A NIST solver whose accepted history is the given increments (oldest first), sizes in step progress, accepted in
-    an equation system with the given digest of its DOF numbering."""
+    a discrete system with the given digest of its DOF numbering."""
     solver = NIST(loadConfiguration({}), Journal(verbose=False), extrapolation=extrapolation, **options)
     timeSteps = [TimeStep(i + 1, size, 0.0, size, 0.0, 0.0) for i, size in enumerate(sizes)]
     solver.prevTimeStep, solver.dUOfLastIncrement = timeSteps[-1], np.array(dUs[-1], dtype=float)
@@ -304,7 +306,7 @@ def test_prediction_across_a_change_of_the_connectivity(tmp_path, increments, mo
     monkeypatch.setattr(
         NIST,
         "updateTopologyAndConnectivity",
-        lambda self, model, step, offerModelModifiers=True: TopologyUpdate(False, False, True),
+        lambda self, model, step, offerModelModifiers=True: Change.LOCATIONS,
     )
     result = displacements(
         run(
@@ -321,57 +323,60 @@ def test_prediction_across_a_change_of_the_connectivity(tmp_path, increments, mo
     np.testing.assert_allclose(result, reference, rtol=0.0, atol=1e-12)
 
 
-def test_a_rebuild_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tmp_path):
+def test_a_new_numbering_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tmp_path):
     model = run(tmp_path, deck())
     field = model.nodeFields["displacement"]
-    numbering = DofManager([field]).dofNumberingDigest
+    digest = DofNumbering([field]).digest
 
-    assert DofManager([field]).dofNumberingDigest == numbering
+    assert DofNumbering([field]).digest == digest
     renumbered = NodeField("displacement", field.dimension, list(reversed(field.nodes)))
-    assert DofManager([renumbered]).dofNumberingDigest != numbering
+    assert DofNumbering([renumbered]).digest != digest
 
     lastIncrement = np.zeros(field.dimension * len(field.nodes))
-    solver = solverWithHistory("linear", [0.1], [lastIncrement], numbering, extrapolateAcrossConnectivityChange=True)
-    # a rebuild after a change of the connectivity alone (True), or at the first increment of a step that continues
-    # from a checkpoint (False): the prediction survives only if the rebuilt system numbers the DOFs alike
-    for connectivityHasChanged in (True, False):
-        solver.theDofManager = DofManager([renumbered])
-        assert not solver.predictionSurvivesRebuild(False, connectivityHasChanged)
-        solver.theDofManager = DofManager([field])
-        assert solver.predictionSurvivesRebuild(False, connectivityHasChanged)
-    # never after a change of the topology
-    assert not solver.predictionSurvivesRebuild(True, False)
+    solver = solverWithHistory("linear", [0.1], [lastIncrement], digest, extrapolateAcrossConnectivityChange=True)
+    # a new numbering at the first increment of a step that continues from a checkpoint (NONE): the prediction survives
+    # only if the new numbering numbers the DOFs alike
+    solver.system = SimpleNamespace(numbering=DofNumbering([renumbered]))
+    assert not solver.predictionSurvives(Change.NONE)
+    solver.system = SimpleNamespace(numbering=DofNumbering([field]))
+    assert solver.predictionSurvives(Change.NONE)
+    # never after a change of the mesh
+    assert not solver.predictionSurvives(Change.MESH)
     # a prediction without the digest of its numbering cannot be compared, and does not survive
     solver.dofNumberingOfLastIncrement = None
-    assert not solver.predictionSurvivesRebuild(False, False)
-    solver.dofNumberingOfLastIncrement = numbering
-    # across a change of the connectivity only with the option
-    solver.options["extrapolateAcrossConnectivityChange"] = False
-    assert not solver.predictionSurvivesRebuild(False, True)
-    assert solver.predictionSurvivesRebuild(False, False)
+    assert not solver.predictionSurvives(Change.NONE)
 
 
-def test_a_rebuild_that_numbers_other_scalar_variables_drops_the_prediction():
+@pytest.mark.parametrize("change", [Change.LOCATIONS, Change.NUMBERING])
+def test_a_prediction_survives_a_change_of_the_connectivity_only_if_the_option_says_so(change):
+    digest = DofNumbering([], [ScalarVariable("tie_0")]).digest
+    for option, survives in ((True, True), (False, False)):
+        solver = solverWithHistory("linear", [0.1], [[0.5]], digest, extrapolateAcrossConnectivityChange=option)
+        solver.system = SimpleNamespace(numbering=DofNumbering([], [ScalarVariable("tie_0")]))
+        assert solver.predictionSurvives(change) is survives
+
+
+def test_a_new_numbering_of_other_scalar_variables_drops_the_prediction():
     """Two constraints with one Lagrange multiplier each, one switched on and the other off, then the other way round
-    (a constraint may switch within a step): the two equation systems have as many degrees of freedom, but the last one
+    (a constraint may switch within a step): the two discrete systems have as many degrees of freedom, but the last one
     numbers another multiplier. The digest names the scalar variables, by the names the model holds them under, so the
     prediction does not survive the switch."""
 
-    numbering = DofManager([], [ScalarVariable("tieA_0")]).dofNumberingDigest
+    digest = DofNumbering([], [ScalarVariable("tieA_0")]).digest
 
-    # the same names in another run, with other objects: the same numbering
-    assert DofManager([], [ScalarVariable("tieA_0")]).dofNumberingDigest == numbering
-    assert DofManager([], [ScalarVariable("tieB_0")]).dofNumberingDigest != numbering
+    # the same names in another run, with other objects: the same digest
+    assert DofNumbering([], [ScalarVariable("tieA_0")]).digest == digest
+    assert DofNumbering([], [ScalarVariable("tieB_0")]).digest != digest
     assert (
-        DofManager([], [ScalarVariable("tieA_0"), ScalarVariable("tieB_0")]).dofNumberingDigest
-        != DofManager([], [ScalarVariable("tieB_0"), ScalarVariable("tieA_0")]).dofNumberingDigest
+        DofNumbering([], [ScalarVariable("tieA_0"), ScalarVariable("tieB_0")]).digest
+        != DofNumbering([], [ScalarVariable("tieB_0"), ScalarVariable("tieA_0")]).digest
     )
 
-    solver = solverWithHistory("linear", [0.1], [[0.5]], numbering, extrapolateAcrossConnectivityChange=True)
-    solver.theDofManager = DofManager([], [ScalarVariable("tieB_0")])
-    assert not solver.predictionSurvivesRebuild(False, True)
-    solver.theDofManager = DofManager([], [ScalarVariable("tieA_0")])
-    assert solver.predictionSurvivesRebuild(False, True)
+    solver = solverWithHistory("linear", [0.1], [[0.5]], digest, extrapolateAcrossConnectivityChange=True)
+    solver.system = SimpleNamespace(numbering=DofNumbering([], [ScalarVariable("tieB_0")]))
+    assert not solver.predictionSurvives(Change.NUMBERING)
+    solver.system = SimpleNamespace(numbering=DofNumbering([], [ScalarVariable("tieA_0")]))
+    assert solver.predictionSurvives(Change.NUMBERING)
 
 
 def test_the_history_of_a_quadratic_extrapolation_is_checkpointed():

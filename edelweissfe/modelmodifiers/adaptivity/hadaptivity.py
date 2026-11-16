@@ -118,7 +118,7 @@ class HAdaptivitySchema:
     minMarkedElements: int = schemaField(
         description=(
             "Minimum number of eligible elements one evaluation of the markers must mark for a "
-            "refinement pass to happen; with fewer, nothing is refined and no equation system is "
+            "refinement pass to happen; with fewer, nothing is refined and no discrete system is "
             "rebuilt. Marks are not carried over to later evaluations: they are a function of the "
             "current state only. Individual markers may cap their own marks (e.g. "
             "'maxRefinedFraction') or expand them (e.g. 'halo') before this count is taken. Default 1 "
@@ -890,7 +890,7 @@ class ModelModifier(ModelModifierBase):
 
     def _resizeNodeFieldsAndWarmStart(self, model: FEModel, oldValues: dict, newValues: dict):
         """Resize the node fields to the new nodes, then write the warm-start values of the state
-        entries ``U``, ``V`` and ``A`` (see :doc:`/documentation/nodefieldresults`): the converged
+        entries ``U``, ``V`` and ``A`` (see :doc:`/output/nodefieldresults`): the converged
         value on a retained node, the interpolated value on a new one. The results ``dU`` and ``P``
         are not transferred: a new node holds zero until the next accepted increment writes them.
 

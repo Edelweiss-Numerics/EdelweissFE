@@ -46,7 +46,7 @@ class NodeField:
     A node field associates every node with the entries of a field variable listed in :attr:`ENTRIES`:
     the solution ``U``, its increment ``dU``, the nodal force ``P``, and the rates ``V`` and ``A``. Every
     node field holds all of them, from its construction on; their meaning is defined once, in
-    :doc:`/documentation/nodefieldresults`.
+    :doc:`/output/nodefieldresults`.
     Furthermore, for convencience, it allows to get fast access to values for individual nodes or node sets.
 
     The purpose is to store field data in an efficient, contiguos manner rather than distributing it across
@@ -83,7 +83,7 @@ class NodeField:
         The associated nodes. Only nodes with active fields are considered.
     """
 
-    #: The entries every node field holds, see :doc:`/documentation/nodefieldresults`: the solution ``U``,
+    #: The entries every node field holds, see :doc:`/output/nodefieldresults`: the solution ``U``,
     #: the increment ``dU`` of the last accepted increment, the nodal force ``P``, and the rate ``V`` and
     #: second rate ``A`` of the solution. There are no others.
     ENTRIES = ("U", "dU", "P", "V", "A")

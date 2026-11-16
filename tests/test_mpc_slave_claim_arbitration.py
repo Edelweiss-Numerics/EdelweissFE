@@ -17,6 +17,7 @@ quietly mis-solving.
 """
 
 import unittest
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -39,7 +40,7 @@ class _FakeConstraint:
     def __init__(self, records):
         self._records = records
 
-    def getMultiPointConstraints(self, dofManager):
+    def getMultiPointConstraints(self, numbering):
         return list(self._records)
 
 
@@ -49,7 +50,7 @@ class _ArbiterHost:
     identification = "TestSolver"
 
     def __init__(self):
-        self.theDofManager = None
+        self.system = SimpleNamespace(numbering=None)
         self.messages = []
         self.journal = self
 

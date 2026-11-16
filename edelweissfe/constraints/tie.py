@@ -173,7 +173,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         u_s = \\sum_a N_a \\, u_{m_a}.
 
     The constraint records are collected by the solver and enforced by condensing the slave DOFs
-    out of the equation system (see
+    out of the system of equations (see
     :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`) -- the
     identical mechanism serves the implicit solvers (system matrix transformation) and explicit
     dynamics (mass/force folding onto the masters, direct kinematic slaving). The enforcement is
@@ -249,7 +249,7 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self._publishTiedUntiedNodeSets(model)
 
         # Registration is what gets a tie refreshed after topology changes, via
-        # TopologyPipeline.refreshMeshDependents, before the DofManager rebuild.
+        # TopologyPipeline.refreshMeshDependents, before the discrete system is rebuilt.
         model.topology.registerMeshDependent(self)
 
     @classmethod
@@ -450,8 +450,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
 
         return {slaveNode for slaveNode, _, _ in self.tiedRecords}
 
-    def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
-        fieldVariableIndices = dofManager.idcsOfFieldVariablesInDofVector
+    def getMultiPointConstraints(self, numbering) -> list[tuple[int, list[tuple[int, float]]]]:
+        fieldVariableIndices = numbering.idcsOfFieldVariablesInDofVector
 
         def getDofs(node):
             if "displacement" not in node.fields:
@@ -459,7 +459,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             fieldVar = node.fields["displacement"]
             if fieldVar not in fieldVariableIndices:
                 raise KeyError(
-                    f"Constraint '{self.name}': displacement field of node {node.label} is not registered in the DofManager (no active degrees of freedom)."
+                    f"Constraint '{self.name}': displacement field of node {node.label} is not registered in the "
+                    "DofNumbering (no active degrees of freedom)."
                 )
             return fieldVariableIndices[fieldVar]
 

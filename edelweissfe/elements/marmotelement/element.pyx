@@ -146,6 +146,14 @@ cdef class MarmotElementWrapper:
         return self._dofIndicesPermutation
 
     @property
+    def scalarVariables(self):
+        return ()
+
+    @property
+    def connectivityChangesWithMotion(self):
+        return False
+
+    @property
     def ensightType(self):
         return self._ensightType
 

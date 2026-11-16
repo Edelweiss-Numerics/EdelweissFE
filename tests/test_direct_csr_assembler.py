@@ -276,7 +276,7 @@ def test_a_listed_block_with_nDof_squared_entries_is_scattered_entry_by_entry():
 
 
 def test_a_matrix_that_outlives_its_assembly_keeps_only_the_pattern_alive():
-    """A linear solver may keep the pattern arrays of the last matrix after the equation system was rebuilt (PARDISO
+    """A linear solver may keep the pattern arrays of the last matrix after the discrete system was rebuilt (PARDISO
     does, to compare the next pattern with). They keep the pattern alive, not the map of the assembly that is gone:
     the offsets and positions of the direct path, the gather map of the VIJ path."""
     nDof = 25

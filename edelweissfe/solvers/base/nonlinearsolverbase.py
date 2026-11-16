@@ -28,15 +28,16 @@
 
 import dataclasses
 from abc import ABC, abstractmethod
-from typing import NamedTuple
 
 import numpy as np
 from numpy import ndarray
 from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.models.change import Change
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
@@ -50,25 +51,13 @@ from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
-from edelweissfe.utils.exceptions import DivergingSolution, TopologyError
+from edelweissfe.utils.exceptions import DivergingSolution, RestartError, TopologyError
 from edelweissfe.utils.schema import (
     OptionSchemaProvider,
     coerceValue,
     fieldSchemaMeta,
     optionNames,
 )
-
-
-class TopologyUpdate(NamedTuple):
-    """What changed in one topology update, see :meth:`NonlinearSolverBase.updateTopologyAndConnectivity`."""
-
-    topologyChanged: bool
-    """A model modifier (e.g. AMR) changed the mesh."""
-    meshDependentsRefreshed: bool
-    """A mesh-dependent consumer (e.g. a tie or contact surface) was rebuilt on the changed mesh."""
-    connectivityChanged: bool
-    """The coupling of the degrees of freedom changed, e.g. a constraint after a contact search; see
-    :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`."""
 
 
 class NonlinearSolverBase(OptionSchemaProvider, ABC):
@@ -95,21 +84,34 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: need it later (see ModelModifierBase.actsOnlyAtSimulationStart and NED.validateModelCapabilities).
     supportsModelModifiers = False
 
+    #: The current discrete system of the model (see :meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`),
+    #: with its numbering, its locations, and how the solution passes between the model and the vectors of the solver.
+    #: Replaced by a new one, never changed (see :meth:`updateDiscreteSystem`); None until the first one is built.
+    system: DiscreteSystem | None = None
+
+    #: What the topology update changed at the start of the increment, which the increment reacts on (see
+    #: :meth:`updateTopologyAndConnectivity`).
+    _change: Change = Change.NONE
+
+    #: The actions of the step being solved, set when it begins. The multi-point constraints are reconciled with its
+    #: Dirichlet boundary conditions whenever the discrete system gets a new numbering.
+    _stepActions: dict | None = None
+
     #: The active multi-point-constraint (hanging node / tie) condensation, or None without MPCs. Lets
     #: applyDirichletToStiffness tell an MPC-transformed (disposable) system matrix apart from the
     #: assembler's persistent, in-place-updated one.
     mpcTransformation = None
 
     #: The layout of the iteration table that :meth:`checkConvergence` writes, one column per field; set up
-    #: by the solver whenever it (re)builds its equation system.
+    #: by the solver whenever it (re)builds its discrete system.
     convergenceTable: ConvergenceTable | None = None
 
-    #: Whether the header of the iteration table is written in this attempt of the increment: it comes with the
+    #: Whether the header of the iteration table is written in this attempt of the increment. It comes with the
     #: first row, so that what the linear solver reports while it solves for the first time (e.g. its set-up) stands
     #: above the table, not inside it.
     tableHeaderWritten: bool = False
 
-    #: The force buffer of each constraint, by name, with the DOF indices it was made for, which
+    #: The force buffer of each constraint, by constraint, with the DOF indices it was made for, which
     #: :meth:`assembleConstraintForces` reuses from increment to increment as long as the constraint has these indices.
     _constraintForcePlans: dict | None = None
 
@@ -187,16 +189,25 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         return updatedNames
 
     @performancetiming.timeit("topology update")
-    def updateTopologyAndConnectivity(self, model: FEModel, step, offerModelModifiers: bool = True) -> TopologyUpdate:
-        """Run the topology update, then let every mesh-dependent consumer catch up on it.
+    def updateTopologyAndConnectivity(self, model: FEModel, step, offerModelModifiers: bool = True) -> Change:
+        """Run the topology update, then let every mesh-dependent consumer catch up on it, and say what changed.
 
         Two phases. First, the model modifiers plan and apply to a fixed point inside one topology
         window (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`). Second, the pure
         readers of the settled model catch up, once, on the net change: the tie and contact surfaces,
-        then the coupling of the degrees of freedom, which the model brings up to date itself
+        then the connectivity, which the model brings up to date itself
         (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`; the constraints of a finite
         element model, e.g. a contact search). They may not create or delete elements: the topology
         window is closed by then, so an attempt raises.
+
+        One :class:`~edelweissfe.models.change.Change` comes out of it, the same for every solver:
+
+        * :attr:`~edelweissfe.models.change.Change.MESH` if the model modifiers changed the mesh, or if a
+          mesh-dependent consumer caught up (e.g. a tie or contact surface rebuilt on a mesh that changed in a way that
+          concerns it). A consumer refreshes only when the topology version advanced, i.e. when nodes or elements did
+          change, so its catching up is a change of the mesh whoever made it, and its changed records (e.g. the
+          multi-point constraints of a tie) are sized by that mesh.
+        * Otherwise the model's answer.
 
         Parameters
         ----------
@@ -210,14 +221,127 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         Returns
         -------
-        TopologyUpdate
-            What changed; the solver decides from it whether to rebuild its equation system.
+        Change
+            What changed; the solver decides from it how much of its discrete system to renew.
         """
 
-        topologyChanged = model.topology.update(step) if offerModelModifiers else False
+        meshChanged = model.topology.update(step) if offerModelModifiers else False
         meshDependentsRefreshed = model.topology.refreshMeshDependents()
-        connectivityChanged = model.updateConnectivity()
-        return TopologyUpdate(topologyChanged, meshDependentsRefreshed, connectivityChanged)
+        change = model.updateConnectivity()
+
+        if meshChanged or meshDependentsRefreshed:
+            return Change.MESH
+        return change
+
+    def updateDiscreteSystem(self, model: FEModel, change: Change):
+        """Bring the discrete system up to date with what changed: the one way a solver builds its discrete system, from
+        the first to the last increment.
+
+        * No discrete system yet, or a change of the numbering or of the mesh
+          (:attr:`~edelweissfe.models.change.Change.NUMBERING`, :attr:`~edelweissfe.models.change.Change.MESH`): the
+          model builds a new one (:meth:`~edelweissfe.models.femodel.FEModel.buildDiscreteSystem`), then
+          :meth:`onNewNumbering` and :meth:`onNewLocations` follow. The old one is dropped before
+          (:meth:`forgetDiscreteSystem`): never both at once.
+        * A change of the locations (:attr:`~edelweissfe.models.change.Change.LOCATIONS`): the same numbering, new
+          locations (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations`); only
+          :meth:`onNewLocations` follows, so that nothing sized by the numbering is touched.
+        * Else nothing.
+
+        The change is the one :meth:`updateTopologyAndConnectivity` reports: the model classifies what its entities
+        report, and the topology update adds a change of the mesh. The solver never tests whether an entity changed.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        change
+            What changed since the discrete system was built.
+        """
+
+        if self.system is not None and change == Change.NONE:
+            return
+
+        with performancetiming.timeit("discrete system rebuild"):
+            if self.system is None or change >= Change.NUMBERING:
+                self.forgetDiscreteSystem()
+                with performancetiming.timeit("numbering and locations"):
+                    self.system = model.buildDiscreteSystem()
+                self.journal.message(
+                    "discrete system built: {:} dof".format(self.system.numbering.nDof), self.identification, 2
+                )
+                self.onNewNumbering()
+            else:
+                with performancetiming.timeit("numbering and locations"):
+                    self.system = self.system.withNewLocations()
+            self.journal.message(
+                "locations of {:} entities in the numbering of {:} dof".format(
+                    len(self.system.locations.ofEntity), self.system.numbering.nDof
+                ),
+                self.identification,
+                2,
+            )
+            self.onNewLocations()
+
+    def checkNumberingOfRestartedVectors(self, numberingOfCheckpoint: str | None):
+        """Refuse the vectors of a restart checkpoint if they belong to another numbering than the discrete system just
+        built from the resumed model: a vector is only a vector of the degrees of freedom it was written for, and one
+        of equal length numbers other nodes if the active nodes changed (e.g. a meshfree model that searches its
+        particles' kernel functions anew on resuming). The checkpoint holds the digest of the numbering
+        (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`) with the vectors it numbers. Call it with the
+        discrete system built, before the vectors are taken over.
+
+        Parameters
+        ----------
+        numberingOfCheckpoint
+            The digest the checkpoint holds with the vectors; None if it holds none.
+
+        Raises
+        ------
+        RestartError
+            If the checkpoint holds no digest, or the digest of another numbering than the current one.
+        """
+
+        if numberingOfCheckpoint is None:
+            raise RestartError(
+                "The checkpoint does not hold the numbering of the degrees of freedom its vectors belong to: they "
+                "cannot be taken over."
+            )
+
+        if numberingOfCheckpoint != self.system.numbering.digest:
+            raise RestartError(
+                "The vectors of the checkpoint (what the solver carries from increment to increment, e.g. the net "
+                "force of the last increment) belong to another numbering of the degrees of freedom than the one the "
+                "resumed model has (a different set of nodes, or other nodes in the same number): they cannot be "
+                "taken over. The connectivity of a model is not part of a checkpoint; the resumed run finds it by a "
+                "fresh search, which can give other nodes than the running search had, e.g. in a meshfree model with "
+                "unbonded kernel functions and a neighbour-list skin, which can admit other kernel functions on its "
+                "first search, and with them other active nodes. See the documentation page 'Restart'."
+            )
+
+    def forgetDiscreteSystem(self) -> None:
+        """Drop the discrete system, and everything that belongs to it, before the next one is built: the
+        multi-point-constraint condensation as well, which is a function of the numbering. A solver that keeps more of
+        it extends this."""
+
+        self.system = None
+        self.mpcTransformation = None
+
+    @abstractmethod
+    def onNewNumbering(self):
+        """Everything that is sized by the numbering of the new discrete system, :attr:`system`, is built here, e.g. the
+        vectors, which the state is read into from the model, the linear solver's view of the degrees of freedom, the
+        layout of the convergence table. Called by :meth:`updateDiscreteSystem` when the discrete system was built
+        anew, before :meth:`onNewLocations`. Never called for new locations on the same numbering: what is built here
+        stays as it is.
+        """
+
+    @abstractmethod
+    def onNewLocations(self):
+        """Everything that is derived from the locations of the new discrete system, :attr:`system`, is built here: the
+        vectors are wrapped with them (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`, the values are
+        kept), and the system matrix assembly, whose sparsity pattern the locations determine. Called by
+        :meth:`updateDiscreteSystem` after every new discrete system, and after new locations on the same numbering.
+        """
 
     @staticmethod
     def collectLoads(stepActions: dict) -> list[LoadBase]:
@@ -284,7 +408,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """
 
         for load in loads:
-            load.assembleLoad(P, K, U_np, dU, timeStep, self.theDofManager)
+            load.assembleLoad(P, K, U_np, dU, timeStep, self.system.locations)
 
         if K is not None:
             # the block of the last load
@@ -295,15 +419,13 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     @performancetiming.timeit("assemble constraints")
     def assembleConstraintForces(
         self,
-        constraints: dict,
+        constraints: list,
         U_np: DofVector,
         dU: DofVector,
         P: DofVector,
         timeStep: TimeStep,
     ) -> DofVector:
-        """Evaluate every active constraint and add its residual contribution to the given vector; a constraint
-        that is switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is
-        skipped.
+        """Evaluate the constraints of the discrete system and add their residual contributions to the given vector.
 
         The explicit counterpart of
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same
@@ -318,16 +440,17 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         refuses it in its ``validateModelCapabilities``.
 
         The force buffer and the DOF indices of each constraint are kept in :attr:`_constraintForcePlans` (by
-        constraint name) and reused in every increment. They hold for the indices of the constraint they were made
-        for: whenever the DofManager locates the constraint anew -- a rebuilt equation system, or one whose
-        constraints are re-located in place --, the constraint has indices of its own, its plan is made anew, and the
+        constraint) and reused in every increment. They hold for the indices of the constraint they were made
+        for: whenever the locations locate the constraint anew -- a rebuilt discrete system, or one with new
+        locations --, the constraint has indices of its own, its plan is made anew, and the
         constraint is told so
         (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation`).
 
         Parameters
         ----------
         constraints
-            The constraints of the model, by name.
+            The constraints of the discrete system
+            (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`).
         U_np
             The current solution vector.
         dU
@@ -343,24 +466,20 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The augmented residual contribution vector.
         """
 
-        # Per-constraint buffers and index plans, made once per equation system.
+        # Per-constraint buffers and index plans, made once per discrete system.
         if self._constraintForcePlans is None:
             self._constraintForcePlans = {}
         PPlain = P.asPlainArray()
 
-        for name, constraint in constraints.items():
-            # a constraint that is switched off has no place in the equation system
-            if not constraint.active:
-                continue
-
+        for constraint in constraints:
             # A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.
-            indices = P.entitiesInDofVector[constraint]
-            plan = self._constraintForcePlans.get(name)
+            indices = self.system.locations[constraint]
+            plan = self._constraintForcePlans.get(constraint)
             if plan is None or plan[1] is not indices:
                 # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
                 # facet), since fancy-indexed += would drop repeated contributions.
                 plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
-                self._constraintForcePlans[name] = plan
+                self._constraintForcePlans[constraint] = plan
                 constraint.prepareExplicitEvaluation()
 
             Pc, _, namesDofMoreThanOnce = plan
@@ -566,7 +685,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         timeStep
             The current time step.
         R
-            The residual vector of the global equation system to be modified.
+            The residual vector of the global discrete system to be modified.
         dirichlets
             The list of dirichlet boundary conditions.
 
@@ -635,10 +754,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         nodesWithLargestResidual = {}
 
         spatialAveragedFluxes = self.convergenceCriterion.computeSpatialAveragedFluxes(
-            F, FConstraints, self.theDofManager
+            F, FConstraints, self.system.locations
         )
 
-        for field, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
+        for field, fieldIndices in self.system.numbering.idcsOfFieldsInDofVector.items():
             fieldConvergence = self.convergenceCriterion.checkField(
                 field,
                 R[fieldIndices],
@@ -648,7 +767,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 iterationCounter,
             )
 
-            nodesWithLargestResidual[field] = self.theDofManager.getNodeForIndexInDofVector(
+            nodesWithLargestResidual[field] = self.system.numbering.getNodeForIndexInDofVector(
                 range(len(R))[fieldIndices][fieldConvergence.indexOfLargestResidual]
             )
 
@@ -659,8 +778,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 convergedAtAll and fieldConvergence.correctionConverged and fieldConvergence.fluxResidualConverged
             )
 
-        if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            scalarVariableIndices = list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())
+        if self.system.numbering.idcsOfScalarVariablesInDofVector:
+            scalarVariableIndices = list(self.system.numbering.idcsOfScalarVariablesInDofVector.values())
             scalarVariablesConvergence = self.convergenceCriterion.checkScalarVariables(
                 R[scalarVariableIndices],
                 ddU[scalarVariableIndices] if ddU is not None else None,
@@ -698,7 +817,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
     @performancetiming.timeit("linear solve")
     def linearSolve(self, A: csr_matrix, b: DofVector) -> ndarray:
-        """Solve the linear equation system.
+        """Solve the linear system of equations.
 
         Parameters
         ----------
@@ -841,7 +960,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """Determine, up front, which global DOFs each Dirichlet BC constrains.
 
         Called at the start of every increment, before its iterations: the numbering of the degrees of freedom may
-        have changed since the last increment -- a rebuild of the equation system after a change of the mesh or of the
+        have changed since the last increment -- a rebuild of the discrete system after a change of the mesh or of the
         coupling, or a new active domain of a meshfree model, which locates a node set anew. The result
         is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, together with the
         positions of their nodes in the BC's node set (:attr:`~DirichletBase.constrainedNodePositions`),
@@ -861,7 +980,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         """Return the global DOF indices prescribed by a single Dirichlet BC, and the positions of their nodes in its
         node set.
 
-        The DofManager knows every DOF of ``field`` on ``nSet``, laid out node
+        The numbering knows every DOF of ``field`` on ``nSet``, laid out node
         by node in a single flat array::
 
             [ node0: (u_x u_y u_z),  node1: (u_x u_y u_z),  ... ]
@@ -873,19 +992,21 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         stays node-major, matching the prescribed values of these nodes
         (:meth:`~DirichletBase.getPrescribedIncrementOfConstrainedDofs`).
 
-        Only the nodes of the set that are part of the equation system count, see
-        :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`: all nodes of the set in a
+        Only the nodes of the set that are part of the discrete system count, see
+        :meth:`~edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet`: all nodes of the set in a
         finite element model, those in the active domain in a meshfree one.
         """
-        dofsOfFieldOnNodeSet, nodePositions = self.theDofManager.locateFieldOnNodeSet(dirichlet.field, dirichlet.nSet)
+        dofsOfFieldOnNodeSet, nodePositions = self.system.numbering.locateFieldOnNodeSet(
+            dirichlet.field, dirichlet.nSet
+        )
         perNodeDofs = dofsOfFieldOnNodeSet.reshape((-1, dirichlet.fieldSize))
 
         return perNodeDofs[:, dirichlet.components].flatten(), nodePositions
 
     def buildMPCTransformation(self, model: FEModel, stepActions: dict = None):
         """Collect the linear dependency records from all multi-point constraints of the model
-        and assemble the master-slave condensation operator for the current equation system.
-        Must be called whenever the DofManager is (re)built.
+        and assemble the master-slave condensation operator for the current discrete system.
+        Must be called whenever the discrete system is (re)built.
 
         Parameters
         ----------
@@ -922,7 +1043,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         transformation = MultiPointConstraintTransformation(
             records,
-            self.theDofManager.nDof,
+            self.system.numbering.nDof,
             useThreadedCondensation=self.options.get("useThreadedMPCCondensation", False),
         )
 
@@ -950,7 +1071,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             # the node set may have grown in place (adaptive refinement): let the BC catch up first
             dirichlet.reconcileIfSetChanged()
             indices, nodePositions = self._constrainedDofsOf(dirichlet)
-            # the prescribed values of the nodes that are part of the equation system, one row per node of the set
+            # the prescribed values of the nodes that are part of the discrete system, one row per node of the set
             values = np.asarray(dirichlet.delta)[nodePositions].flatten()
             if indices.shape != values.shape:
                 raise ValueError(
@@ -985,7 +1106,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         dropped = {}
 
         for name, mpc in model.multiPointConstraints.items():
-            for record in mpc.getMultiPointConstraints(self.theDofManager):
+            for record in mpc.getMultiPointConstraints(self.system.numbering):
                 if record[0] in claimed:
                     if not mpc.mayYieldSlaveToEarlierClaim:
                         raise TopologyError(
@@ -1104,6 +1225,17 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             )
 
         return [record for record in records if record[0] not in dropped]
+
+    def buildAndCheckMPCTransformation(self):
+        """Build the multi-point-constraint condensation of the new discrete system, :attr:`system`, as
+        :attr:`mpcTransformation`, and refuse a Dirichlet boundary condition of the step that prescribes a slave
+        degree of freedom. Called by the solvers that condense in :meth:`onNewNumbering`, with the actions of the step
+        (:attr:`_stepActions`) the condensation is reconciled with."""
+
+        with performancetiming.timeit("mpc transformation build"):
+            self.mpcTransformation = self.buildMPCTransformation(self.system.model, self._stepActions)
+        with performancetiming.timeit("mpc dirichlet conflict check"):
+            self.checkMPCDirichletConflicts(self.mpcTransformation, self._stepActions)
 
     def checkMPCDirichletConflicts(self, transformation, stepActions):
         """Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave

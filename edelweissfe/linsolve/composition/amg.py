@@ -57,7 +57,7 @@ from edelweissfe.linsolve.nullspace import (
 
 #: The coarsening and the smoother every vector field's default tree shares, whatever its dimension (why each value,
 #: and the measurements behind them: "Why the defaults are what they are" in
-#: ``doc/source/documentation/fieldsplitmeasurements.rst``):
+#: ``doc/source/theory/fieldsplitmeasurements.rst``):
 #:
 #: - ``estimate_spectral_radius``: a sharper weight of the prolongation smoother of smoothed aggregation than the
 #:   Gershgorin bound;

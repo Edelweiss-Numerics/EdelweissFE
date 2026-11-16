@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" width="980" height="560" role="img" aria-label="The topology update gives a Change. Change.NONE: nothing happens, both the DofNumbering and the DofLocations stay, and no hook is called. Change.LOCATIONS: withNewLocations gives the same DofNumbering and a new DofLocations, and only onNewLocations is called. Change.NUMBERING or Change.MESH: buildDiscreteSystem gives a new DofNumbering and a new DofLocations, and onNewNumbering, then onNewLocations, are called.">
+<title>The topology update gives a Change. Change.NONE: nothing happens, both the DofNumbering and the DofLocations stay, and no hook is called. Change.LOCATIONS: withNewLocations gives the same DofNumbering and a new DofLocations, and only onNewLocations is called. Change.NUMBERING or Change.MESH: buildDiscreteSystem gives a new DofNumbering and a new DofLocations, and onNewNumbering, then onNewLocations, are called.</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6e7781"/></marker><marker id="arrowStart" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="#6e7781"/></marker></defs>
+<rect x="0" y="0" width="980" height="560" fill="#ffffff"/>
+<rect x="10" y="10" width="960" height="58" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="24" y="32" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">Start of every increment and of every retry (NED: when due): the topology update</text>
+<text x="24" y="52" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">model modifiers may change the mesh (Change.MESH); model.updateConnectivity() brings the connectivity up to date and reports the rest.</text>
+<path d="M90,68 V100" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="98" y="90" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">Change</text>
+<rect x="10" y="100" width="160" height="100" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="20" y="124" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">Change.NONE</text>
+<text x="20" y="146" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">nothing changed</text>
+<path d="M170,150 H330" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="250" y="142" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">nothing</text>
+<rect x="330" y="100" width="135" height="100" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="340" y="124" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">DofNumbering</text>
+<text x="340" y="146" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">the same object</text>
+<text x="340" y="161" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">(ID array)</text>
+<rect x="485" y="100" width="135" height="100" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="495" y="124" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">DofLocations</text>
+<text x="495" y="146" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">the same object</text>
+<text x="495" y="161" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">(LM array)</text>
+<path d="M620,150 H660" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="640" y="142" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">calls</text>
+<rect x="660" y="100" width="310" height="48" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="670" y="129" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">onNewNumbering()</text>
+<text x="960" y="129" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="end">not called</text>
+<rect x="660" y="152" width="310" height="48" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="670" y="181" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">onNewLocations()</text>
+<text x="960" y="181" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="end">not called</text>
+<rect x="10" y="232" width="160" height="100" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="20" y="256" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">Change.LOCATIONS</text>
+<text x="20" y="278" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">an entity couples other</text>
+<text x="20" y="293" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">nodes, or takes part or not</text>
+<path d="M170,282 H330" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="250" y="274" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">withNewLocations()</text>
+<rect x="330" y="232" width="135" height="100" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="340" y="256" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">DofNumbering</text>
+<text x="340" y="278" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">the same object</text>
+<text x="340" y="293" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">(ID array)</text>
+<rect x="485" y="232" width="135" height="100" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.8"/>
+<text x="495" y="256" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">DofLocations</text>
+<text x="495" y="278" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">new object</text>
+<text x="495" y="293" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">(LM array)</text>
+<path d="M620,282 H660" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="640" y="274" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">calls</text>
+<rect x="660" y="232" width="310" height="48" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="670" y="261" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">onNewNumbering()</text>
+<text x="960" y="261" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="end">not called</text>
+<rect x="660" y="284" width="310" height="48" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.8"/>
+<text x="670" y="304" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">onNewLocations()</text>
+<text x="670" y="321" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">wrap the vectors, new pattern</text>
+<rect x="10" y="364" width="160" height="100" rx="6" fill="#ffffff" stroke="#8c959f" stroke-width="1.2"/>
+<text x="20" y="388" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">NUMBERING / MESH</text>
+<text x="20" y="410" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">scalar variables, or</text>
+<text x="20" y="425" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">the mesh, changed</text>
+<path d="M170,414 H330" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="250" y="406" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">buildDiscreteSystem()</text>
+<rect x="330" y="364" width="135" height="100" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.8"/>
+<text x="340" y="388" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">DofNumbering</text>
+<text x="340" y="410" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">new object</text>
+<text x="340" y="425" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">(ID array)</text>
+<rect x="485" y="364" width="135" height="100" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.8"/>
+<text x="495" y="388" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">DofLocations</text>
+<text x="495" y="410" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">new object</text>
+<text x="495" y="425" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#6e7781" text-anchor="start">(LM array)</text>
+<path d="M620,414 H660" fill="none" stroke="#6e7781" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="640" y="406" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="middle">calls</text>
+<rect x="660" y="364" width="310" height="48" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.8"/>
+<text x="670" y="384" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">onNewNumbering()</text>
+<text x="670" y="401" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">vectors, MPC, field blocks</text>
+<rect x="660" y="416" width="310" height="48" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.8"/>
+<text x="670" y="436" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12" font-weight="bold" fill="#1f2328" text-anchor="start">onNewLocations()</text>
+<text x="670" y="453" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">wrap the vectors, new pattern</text>
+<text x="660" y="482" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start" font-style="italic">onNewNumbering() first, then onNewLocations()</text>
+<rect x="10" y="500" width="960" height="48" rx="6" fill="#f6f8fa" stroke="#8c959f" stroke-width="1.2"/>
+<text x="24" y="520" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">blue: built anew     grey, dashed: kept     the larger Change wins:  NONE &lt; LOCATIONS &lt; NUMBERING &lt; MESH</text>
+<text x="24" y="538" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11" font-weight="normal" fill="#57606a" text-anchor="start">only a change of the mesh makes a solver re-equilibrate (equilibrateAfterModelChange)</text>
+</svg>

@@ -97,8 +97,8 @@ mesh = reader.read()
 
 The `*linearSolver, type=blockamg` block sets only `verbosity=info` (one log line per linear solve, with its outer
 iteration count): every other setting is the default of the `blockAMG()` preset. The table lists its data lines with
-their defaults; `doc/source/documentation/composedlinsolvers.rst` shows the tree they build and
-`doc/source/documentation/fieldsplitmeasurements.rst` explains why the defaults are what they are.
+their defaults; `doc/source/analysis/composedlinsolvers.rst` shows the tree they build and
+`doc/source/theory/fieldsplitmeasurements.rst` explains why the defaults are what they are.
 
 | Data line | Default | Meaning |
 |---|---|---|
