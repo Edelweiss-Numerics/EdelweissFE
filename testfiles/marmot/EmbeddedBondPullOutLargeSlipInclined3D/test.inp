@@ -104,7 +104,7 @@ maxSlip=35.0
 *solver, solver=NIST, name=theSolver
 
 *fieldOutput
-** F, uEnd: along the bar, the components times t; slip and bond stress at the first channel point of each bond element
+** F, uEnd: along the bar, the components times t = (0.8508086525124560, 0.4003805423588029, 0.3403234610049825); slip and bond stress at the first channel point of each bond element
 >>perNode, name=displacement, elSet=all, field=displacement, result=U
 >>perNode, name=F, nSet=loadedEnd, field=displacement, result=P, f(x)='sum(x[:,0]) * 0.8508086525124560 + sum(x[:,1]) * 0.4003805423588029 + sum(x[:,2]) * 0.3403234610049825', saveHistory=True,
 >>perNode, name=uEnd, nSet=loadedEnd, field=displacement, result=U, f(x)='sum(x[:,0]) * 0.8508086525124560 + sum(x[:,1]) * 0.4003805423588029 + sum(x[:,2]) * 0.3403234610049825', saveHistory=True,

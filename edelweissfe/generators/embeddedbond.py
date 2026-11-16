@@ -137,10 +137,10 @@ from edelweissfe.utils.isoparametricshapes import (
 )
 from edelweissfe.utils.schema import schemaField
 
-#: The abbreviation of a host element shape in the Marmot bond element names.
 #: Largest angle between consecutive bar elements of a bar with large slip (radians, 5 degrees).
 MAX_KINK_ANGLE = np.radians(5.0)
 
+#: The abbreviation of a host element shape in the Marmot bond element names.
 HOST_SHAPE_CODES = {
     "tria3": "T3",
     "quad4": "Q4",
