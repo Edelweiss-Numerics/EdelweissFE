@@ -1,4 +1,5 @@
-"""Unit tests of the isoparametric shape functions and of the host element locator."""
+"""Unit tests of the isoparametric shape functions, the inverse isoparametric mapping and the host element locator
+(collected by CI from tests/)."""
 
 from types import SimpleNamespace
 
@@ -8,6 +9,7 @@ import pytest
 from edelweissfe.utils.embedding import HostElementLocator
 from edelweissfe.utils.isoparametricshapes import (
     NODE_PARAMETRIC_COORDINATES,
+    SIMPLEX_SHAPES,
     inverseMapping,
     shapeFunctionsAndDerivatives,
 )
@@ -23,8 +25,8 @@ def test_kronecker_delta_and_partition_of_unity(shape):
         np.testing.assert_allclose(N, np.eye(len(nodes))[a], atol=1e-14)
     rng = np.random.default_rng(0)
     for _ in range(5):
-        xi = rng.uniform(-0.5, 0.5, nodes.shape[1]) * (0.5 if shape == "tetra4" else 1.0) + (
-            0.25 if shape == "tetra4" else 0.0
+        xi = rng.uniform(-0.5, 0.5, nodes.shape[1]) * (0.5 if shape in SIMPLEX_SHAPES else 1.0) + (
+            0.25 if shape in SIMPLEX_SHAPES else 0.0
         )
         N, dN = shapeFunctionsAndDerivatives(shape, xi)
         assert abs(N.sum() - 1.0) < 1e-14
@@ -54,15 +56,52 @@ def _distorted(shape):
     return np.array([A @ p + 0.1 * np.sin(p.sum()) + 0.05 * p**2 for p in nodes])
 
 
-@pytest.mark.parametrize("shape", ["quad4", "quad8", "hexa8", "hexa20", "tetra4"])
+@pytest.mark.parametrize("shape", ["quad4", "quad8", "hexa8", "hexa20", "tria3", "tria6", "tetra4", "tetra10"])
 def test_inverse_mapping(shape):
     coords = _distorted(shape)
     rng = np.random.default_rng(1)
     dim = coords.shape[1]
     for _ in range(10):
-        xi = rng.uniform(0.0, 0.3, dim) if shape == "tetra4" else rng.uniform(-0.9, 0.9, dim)
+        xi = rng.uniform(0.0, 0.3, dim) if shape in SIMPLEX_SHAPES else rng.uniform(-0.9, 0.9, dim)
         x = shapeFunctionsAndDerivatives(shape, xi)[0] @ coords
         np.testing.assert_allclose(inverseMapping(shape, coords, x), xi, atol=1e-10)
+
+
+@pytest.mark.parametrize("shape", ["quad4", "quad8", "hexa8", "hexa20", "tria3", "tria6", "tetra4", "tetra10"])
+def test_inverse_mapping_far_from_the_origin(shape):
+    """EMB-01: an element of size h ~ 25 (mm) offset by 1e4 h from the origin, 5 % distorted: interior points are
+    found with an error at round-off of the element size. An absolute step tolerance fails here (the residual carries
+    eps |x|), which made interior points "outside of all hosts"."""
+    rng = np.random.default_rng(2)
+    h = 25.0
+    for offset in (1e4 * h, 1e6 * h):
+        coords = h * _distorted(shape) / 2.0 + offset * np.linspace(
+            1.0, 0.7, NODE_PARAMETRIC_COORDINATES[shape].shape[1]
+        )
+        coords = coords + 0.05 * h * rng.uniform(-1, 1, coords.shape)
+        for _ in range(20):
+            xi = (
+                rng.uniform(0.0, 0.3, coords.shape[1])
+                if shape in SIMPLEX_SHAPES
+                else rng.uniform(-0.9, 0.9, coords.shape[1])
+            )
+            x = shapeFunctionsAndDerivatives(shape, xi)[0] @ coords
+            found = inverseMapping(shape, coords, x)
+            assert found is not None, f"{shape}: not converged at offset {offset}"
+            np.testing.assert_allclose(found, xi, atol=1e-8)
+
+
+def test_inverse_mapping_of_the_adaptivity_uses_the_shared_newton():
+    """the hex20 topology of the adaptivity uses the same Newton (its own node ordering): far from the origin too"""
+    from edelweissfe.adaptivity.hex20topology import Hex20Topology
+
+    topology = Hex20Topology()
+    from edelweissfe.adaptivity.hex20shapefunctions import LOCAL_COORDS
+
+    corners = 25.0 * np.asarray(LOCAL_COORDS, float) / 2.0 + 2.5e5
+    xi = np.array([0.3, -0.4, 0.6])
+    x = np.asarray(topology.shape_functions(*xi)) @ corners
+    np.testing.assert_allclose(topology.inverse_map(x, corners), xi, atol=1e-9)
 
 
 def _node(label, x):

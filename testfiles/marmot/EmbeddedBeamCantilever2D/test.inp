@@ -2,6 +2,7 @@
 ** practically rigid block (CPE4, E = 2.1e9); perfect bond by the embedded region constraint with the beam rotations
 ** tied to the rotation of the host material line along the axis (rotations=axis); the 200 mm free part deflects as
 ** a cantilever clamped at the block face: tip deflection P L^3 / (3 E I) = 0.0152381
+** units: N, mm, MPa
 *material, name=linearelastic, id=block, provider=marmot
 2.1e9, 0.2
 
@@ -68,13 +69,6 @@ embeddedElSet=beams, hostElSet=gen_all, rotations=axis, allowUnembedded=True
 >>perNode, name=beamRotation, elSet=beams, field=rotation, result=U
 >>perElement, name=bendingMoment, elSet=beams, result=bending moment, quadraturePoint=0,
 >>perNode, name=tipDeflection, nSet=tip, field=displacement, result=U, f(x)='x[:,1]', saveHistory=True,
-
-*output, type=ensight, name=esExport
->>perNode, fieldOutput=displacement
->>perNode, fieldOutput=beamDisplacement
->>perNode, fieldOutput=beamRotation
->>perElement, fieldOutput=bendingMoment
->>configuration, overwrite=yes
 
 *step, solver=theSolver
 maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1

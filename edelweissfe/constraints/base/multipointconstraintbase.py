@@ -126,6 +126,36 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
             ``(slaveDofIndex, [(masterDofIndex, coefficient), ...])``.
         """
 
+    @staticmethod
+    def nodalDofRecords(fieldVariableIndices, field: str, slaveNode, masters: list) -> list:
+        """The degree-of-freedom records of one nodal dependency :math:`\\boldsymbol{u}_s = \\sum_a w_a
+        \\boldsymbol{u}_a`, component by component: each record becomes one row :math:`s` of the transformation
+        :math:`\\mathbf{T}` of :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`,
+        which condenses the system matrix to :math:`\\mathbf{T}^\\mathsf{T} \\mathbf{K} \\mathbf{T}`.
+
+        Parameters
+        ----------
+        fieldVariableIndices
+            The global indices of the field variables, ``numbering.idcsOfFieldVariablesInDofVector``.
+        field
+            The field of the slave and the masters.
+        slaveNode
+            The slave node.
+        masters
+            ``[(masterNode, weight), ...]``.
+
+        Returns
+        -------
+        list[tuple[int, list[tuple[int, float]]]]
+            One record per component of the field.
+        """
+        slaveDofs = fieldVariableIndices[slaveNode.fields[field]]
+        masterDofs = [(fieldVariableIndices[mNode.fields[field]], w) for mNode, w in masters]
+        return [
+            (slaveDofs[component], [(mDofs[component], w) for mDofs, w in masterDofs if w != 0.0])
+            for component in range(len(slaveDofs))
+        ]
+
     def claimedSlaveNodes(self) -> set:
         """Return the nodes this constraint claims as multi-point-constraint slaves.
 

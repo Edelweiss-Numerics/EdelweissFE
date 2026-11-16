@@ -28,6 +28,7 @@
 
 import numpy as np
 
+from edelweissfe.utils.isoparametricshapes import shapeFunctions
 from edelweissfe.utils.trianglequadrature import TRIANGLE_RULES_BY_POINTS
 
 """
@@ -96,33 +97,10 @@ def parentFaceShapeFunctions(faceType: str, parametricCoords: np.ndarray) -> np.
         point of this module.
     """
 
-    nodes = PARENT_FACE_PARAMETRIC_COORDS[faceType]
-
-    if faceType == "quad8":
-        xi, eta = parametricCoords
-        N = np.empty(8)
-        for i in range(4):
-            a, b = nodes[i]
-            N[i] = 0.25 * (1.0 + xi * a) * (1.0 + eta * b) * (xi * a + eta * b - 1.0)
-        for i in range(4, 8):
-            a, b = nodes[i]
-            if a == 0.0:
-                N[i] = 0.5 * (1.0 - xi**2) * (1.0 + eta * b)
-            else:
-                N[i] = 0.5 * (1.0 + xi * a) * (1.0 - eta**2)
-        return N
-
-    if faceType == "quad4":
-        xi, eta = parametricCoords
-        return np.array([0.25 * (1.0 + xi * a) * (1.0 + eta * b) for a, b in nodes])
-
-    if faceType == "line3":
-        (xi,) = parametricCoords
-        return np.array([0.5 * xi * (xi - 1.0), 0.5 * xi * (xi + 1.0), 1.0 - xi**2])
-
-    if faceType == "line2":
-        (xi,) = parametricCoords
-        return np.array([0.5 * (1.0 - xi), 0.5 * (1.0 + xi)])
+    # the shape functions of EdelweissFE live in one place, with the same node orderings
+    shape = {"quad8": "quad8", "quad4": "quad4", "line3": "bar3", "line2": "bar2"}.get(faceType)
+    if shape is not None:
+        return shapeFunctions(shape, parametricCoords)
 
     raise ValueError(f"parentFaceShapeFunctions: unsupported parent face type '{faceType}'.")
 

@@ -1,5 +1,6 @@
 ** a concrete strip (CPE4) with an embedded, non-matching steel rebar (T2D2) in uniaxial tension; perfect bond by
 ** the embedded region constraint; reaction = (E_c/(1-nu^2) A_c + E_s A_s) eps = 33.25
+** units: N, mm, MPa
 *material, name=linearelastic, id=concrete, provider=marmot
 30000.0, 0.2
 
@@ -48,13 +49,6 @@ embeddedElSet=rebars, hostElSet=gen_all
 >>perElement, name=rebarStress, elSet=rebars, result=stress, quadraturePoint=0,
 >>perNode, name=rebarDisplacement, elSet=rebars, field=displacement, result=U
 >>perElement, name=rebarNormalForce, elSet=rebars, result=normal force, quadraturePoint=0,
-
-*output, type=ensight, name=esExport
->>perNode, fieldOutput=rebarDisplacement
->>perElement, fieldOutput=rebarNormalForce
->>perNode, fieldOutput=displacement
->>perElement, fieldOutput=rebarStress
->>configuration, overwrite=yes
 
 *step, solver=theSolver
 maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1

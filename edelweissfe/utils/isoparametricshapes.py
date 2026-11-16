@@ -37,11 +37,21 @@ The node orderings are the ones of Marmot (and Abaqus):
 * ``hexa8``: the four corners of the face :math:`\\zeta = -1`, then those of :math:`\\zeta = +1`, each
   counter-clockwise from :math:`(-1, -1)`; ``hexa20``: corners, the midsides of the bottom face, of the top face, and
   of the vertical edges.
-* ``tetra4``: :math:`N = (1 - \\xi - \\eta - \\zeta, \\xi, \\eta, \\zeta)`.
+* ``tria3``, ``tetra4``: the corners at the origin and on the parametric axes, :math:`N = L` with the area
+  (volume) coordinates :math:`L = (1 - \\xi - \\eta, \\xi, \\eta)`, :math:`(1 - \\xi - \\eta - \\zeta, \\xi, \\eta, \\zeta)`;
+  ``tria6``, ``tetra10``: the corners, then the mid nodes of the edges in the order of Abaqus and Marmot (triangle:
+  1-2, 2-3, 3-1; tetrahedron: 1-2, 2-3, 3-1, 1-4, 2-4, 3-4), :math:`N_i = L_i (2 L_i - 1)` and
+  :math:`N_{ij} = 4 L_i L_j`.
+
+To add a shape: its node coordinates in :data:`NODE_PARAMETRIC_COORDINATES`, a branch in
+:func:`shapeFunctionsAndDerivatives`, the parent domain in :func:`parentDomainExcess`, and a test entry (the tests of
+``tests/test_isoparametricshapes_embedding.py`` run over all shapes).
 
 Used to embed points (e.g., the nodes or integration points of reinforcement bars) in host elements, see
 :mod:`edelweissfe.utils.embedding`.
 """
+
+from collections.abc import Callable
 
 import numpy as np
 
@@ -76,6 +86,17 @@ _HEXA_MIDSIDES = np.array(
     ]
 )
 
+_TRIA_CORNERS = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
+_TETRA_CORNERS = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+#: The corner pairs of the mid nodes of the quadratic simplices (0-based), in node order
+_TRIA_EDGES = ((0, 1), (1, 2), (2, 0))
+_TETRA_EDGES = ((0, 1), (1, 2), (2, 0), (0, 3), (1, 3), (2, 3))
+
+
+def _midNodes(corners: np.ndarray, edges) -> np.ndarray:
+    return np.array([0.5 * (corners[i] + corners[j]) for i, j in edges])
+
+
 #: Parametric coordinates of the nodes of each supported shape.
 NODE_PARAMETRIC_COORDINATES = {
     "bar2": np.array([[-1.0], [1.0]]),
@@ -84,8 +105,14 @@ NODE_PARAMETRIC_COORDINATES = {
     "quad8": np.vstack([_QUAD_CORNERS, _QUAD_MIDSIDES]),
     "hexa8": _HEXA_CORNERS,
     "hexa20": np.vstack([_HEXA_CORNERS, _HEXA_MIDSIDES]),
-    "tetra4": np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+    "tria3": _TRIA_CORNERS,
+    "tria6": np.vstack([_TRIA_CORNERS, _midNodes(_TRIA_CORNERS, _TRIA_EDGES)]),
+    "tetra4": _TETRA_CORNERS,
+    "tetra10": np.vstack([_TETRA_CORNERS, _midNodes(_TETRA_CORNERS, _TETRA_EDGES)]),
 }
+
+#: The simplex shapes (parent domain: L >= 0 with the area / volume coordinates L).
+SIMPLEX_SHAPES = ("tria3", "tria6", "tetra4", "tetra10")
 
 #: The parametric dimension of each supported shape.
 PARAMETRIC_DIMENSION = {shape: coords.shape[1] for shape, coords in NODE_PARAMETRIC_COORDINATES.items()}
@@ -131,6 +158,18 @@ def _serendipity(xi: np.ndarray, corners: np.ndarray, midsides: np.ndarray) -> t
     return N, dN
 
 
+def _simplex(xi: np.ndarray, edges) -> tuple[np.ndarray, np.ndarray]:
+    """Linear (``edges=None``) or quadratic simplex shape functions from the area / volume coordinates."""
+    dim = xi.shape[0]
+    L = np.concatenate([[1.0 - xi.sum()], xi])
+    dL = np.vstack([-np.ones(dim), np.eye(dim)])  # dL_i / dxi
+    if edges is None:
+        return L, dL
+    N = np.concatenate([L * (2.0 * L - 1.0), [4.0 * L[i] * L[j] for i, j in edges]])
+    dN = np.vstack([(4.0 * L[:, None] - 1.0) * dL, np.array([4.0 * (L[i] * dL[j] + L[j] * dL[i]) for i, j in edges])])
+    return N, dN
+
+
 def shapeFunctionsAndDerivatives(shape: str, xi) -> tuple[np.ndarray, np.ndarray]:
     """The shape functions and their derivatives w.r.t. the parametric coordinates.
 
@@ -158,10 +197,12 @@ def shapeFunctionsAndDerivatives(shape: str, xi) -> tuple[np.ndarray, np.ndarray
     if shape == "bar3":
         x = xi[0]
         return np.array([0.5 * (x - 1) * x, 0.5 * (x + 1) * x, 1 - x * x]), np.array([[x - 0.5], [x + 0.5], [-2 * x]])
-    if shape == "tetra4":
-        N = np.array([1.0 - xi.sum(), xi[0], xi[1], xi[2]])
-        dN = np.vstack([-np.ones(3), np.eye(3)])
-        return N, dN
+    if shape in ("tria3", "tetra4"):
+        return _simplex(xi, None)
+    if shape == "tria6":
+        return _simplex(xi, _TRIA_EDGES)
+    if shape == "tetra10":
+        return _simplex(xi, _TETRA_EDGES)
     raise NotImplementedError(f"Shape functions of '{shape}' elements are not implemented.")
 
 
@@ -170,11 +211,22 @@ def shapeFunctions(shape: str, xi) -> np.ndarray:
     return shapeFunctionsAndDerivatives(shape, xi)[0]
 
 
-def isInside(shape: str, xi: np.ndarray, tolerance: float = 1e-8) -> bool:
+#: The tolerance of "inside the parent domain" (in parametric coordinates): a point on a host element's boundary is
+#: inside of both neighbours
+INSIDE_TOLERANCE = 1e-8
+
+
+def parentDomainExcess(shape: str, xi: np.ndarray) -> float:
+    """By how much the parametric coordinates exceed the parent domain; negative if strictly inside."""
+    xi = np.asarray(xi, dtype=float)
+    if shape in SIMPLEX_SHAPES:
+        return float(max(-np.min(xi), np.sum(xi) - 1.0))
+    return float(np.max(np.abs(xi)) - 1.0)
+
+
+def isInside(shape: str, xi: np.ndarray, tolerance: float = INSIDE_TOLERANCE) -> bool:
     """Whether the parametric coordinates ``xi`` lie inside of the parent domain (with a tolerance)."""
-    if shape == "tetra4":
-        return bool(np.min(xi) >= -tolerance and np.sum(xi) <= 1.0 + tolerance)
-    return bool(np.max(np.abs(xi)) <= 1.0 + tolerance)
+    return parentDomainExcess(shape, xi) <= tolerance
 
 
 def parentDomainCenter(shape: str) -> np.ndarray:
@@ -182,8 +234,73 @@ def parentDomainCenter(shape: str) -> np.ndarray:
     return NODE_PARAMETRIC_COORDINATES[shape].mean(axis=0)
 
 
+#: Newton converged when the parametric correction is below this (dimensionless: parametric coordinates are O(1))
+INVERSE_MAPPING_TOLERANCE = 1e-10
+
+
+def newtonInverseMapping(
+    shapeFunctionsAndDerivativesAt: Callable[[np.ndarray], tuple[np.ndarray, np.ndarray]],
+    nodeCoordinates: np.ndarray,
+    x: np.ndarray,
+    xiStart: np.ndarray,
+    maxIterations: int = 50,
+) -> tuple[np.ndarray, bool]:
+    """The inverse isoparametric mapping by Newton's method: find :math:`\\boldsymbol{\\xi}` with
+    :math:`\\boldsymbol{r}(\\boldsymbol{\\xi}) = \\sum_a N_a(\\boldsymbol{\\xi}) \\mathbf{X}_a - \\mathbf{x} = \\mathbf{0}`,
+
+    .. math::
+
+        \\mathbf{J} = \\sum_a \\mathbf{X}_a \\otimes \\frac{\\partial N_a}{\\partial \\boldsymbol{\\xi}}, \\qquad
+        \\Delta\\boldsymbol{\\xi} = -\\mathbf{J}^{-1} \\boldsymbol{r}
+
+    (e.g., Hughes, *The Finite Element Method*, ch. 3). The iteration runs on coordinates centred on the element,
+    :math:`\\mathbf{X}_a - \\bar{\\mathbf{X}}`, :math:`\\mathbf{x} - \\bar{\\mathbf{X}}`: the round-off of the residual is then
+    about :math:`\\varepsilon h` (element size :math:`h`) instead of :math:`\\varepsilon |\\mathbf{x}|`, which for a structure far
+    from the origin (e.g., mm coordinates of a model of several metres) exceeds any absolute tolerance. It stops when
+    the parametric correction is below :data:`INVERSE_MAPPING_TOLERANCE` (dimensionless).
+
+    Parameters
+    ----------
+    shapeFunctionsAndDerivativesAt
+        ``xi -> (N, dN_dXi)`` of the element.
+    nodeCoordinates
+        The nodal coordinates ``(nNodes, nDim)``, ordered as the shape functions.
+    x
+        The point.
+    xiStart
+        The start, e.g., the centre of the parent domain (inside it, and the unique solution of a convex element is
+        reached from it).
+    maxIterations
+        The maximum number of Newton iterations.
+
+    Returns
+    -------
+    tuple[np.ndarray, bool]
+        The last iterate and whether it converged.
+    """
+    nodeCoordinates = np.asarray(nodeCoordinates, dtype=float)
+    centre = nodeCoordinates.mean(axis=0)
+    X = nodeCoordinates - centre
+    xLocal = np.asarray(x, dtype=float) - centre
+    xi = np.array(xiStart, dtype=float)
+    for _ in range(maxIterations):
+        N, dN_dXi = shapeFunctionsAndDerivativesAt(xi)
+        residual = N @ X - xLocal
+        J = X.T @ dN_dXi  # dX/dxi
+        try:
+            dXi = -np.linalg.solve(J, residual)
+        except np.linalg.LinAlgError:
+            return xi, False
+        xi = xi + dXi
+        if np.linalg.norm(dXi) < INVERSE_MAPPING_TOLERANCE:
+            return xi, True
+        if np.max(np.abs(xi)) > 1e3:  # diverged: far outside of a distorted element
+            return xi, False
+    return xi, False
+
+
 def inverseMapping(shape: str, nodeCoordinates: np.ndarray, x: np.ndarray, maxIterations: int = 50) -> np.ndarray:
-    """The parametric coordinates of a point ``x`` in an element (inverse isoparametric mapping, Newton).
+    """The parametric coordinates of a point ``x`` in an element, see :func:`newtonInverseMapping`.
 
     Parameters
     ----------
@@ -199,22 +316,15 @@ def inverseMapping(shape: str, nodeCoordinates: np.ndarray, x: np.ndarray, maxIt
     Returns
     -------
     np.ndarray
-        The parametric coordinates, or ``None`` if the iteration did not converge (e.g., for a point far outside of a
-        distorted element).
+        The parametric coordinates, or ``None`` if the iteration did not converge (a point far outside of a
+        distorted element, or a singular Jacobian) -- not converged, which is different from "outside": the point may
+        still lie in the element.
     """
-    xi = parentDomainCenter(shape)
-    scale = np.max(np.ptp(nodeCoordinates, axis=0))
-    for _ in range(maxIterations):
-        N, dN = shapeFunctionsAndDerivatives(shape, xi)
-        residual = N @ nodeCoordinates - x
-        J = nodeCoordinates.T @ dN
-        try:
-            dXi = -np.linalg.solve(J, residual)
-        except np.linalg.LinAlgError:
-            return None
-        xi = xi + dXi
-        if np.linalg.norm(dXi) < 1e-13 and np.linalg.norm(residual) < 1e-10 * scale:
-            return xi
-        if np.max(np.abs(xi)) > 1e3:
-            return None
-    return None
+    xi, converged = newtonInverseMapping(
+        lambda xi_: shapeFunctionsAndDerivatives(shape, xi_),
+        nodeCoordinates,
+        x,
+        parentDomainCenter(shape),
+        maxIterations,
+    )
+    return xi if converged else None

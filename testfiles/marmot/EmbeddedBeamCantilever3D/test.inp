@@ -2,6 +2,7 @@
 ** a practically rigid block (C3D8); rotations tied to the host (rotations=axis); tip forces Py = 1, Pz = 0.5 and
 ** torque T = 20 on the 200 mm free part: u_y = Py L^3 / (3 E Iz) = 2e-3, u_z = Pz L^3 / (3 E Iy) = 4e-3,
 ** twist = T L / (G J)
+** units: N, mm, MPa
 *material, name=linearelastic, id=block, provider=marmot
 2.1e9, 0.2
 
@@ -67,14 +68,6 @@ embeddedElSet=beams, hostElSet=gen_all, rotations=axis, allowUnembedded=True
 >>perElement, name=bendingMoments, elSet=beams, result=bending moments, quadraturePoint=0,
 >>perElement, name=bendingMomentZ, elSet=beams, result=bending moments, quadraturePoint=0, f(x)='x[:,1:2]'
 >>perElement, name=torque, elSet=beams, result=torque, quadraturePoint=0,
-
-*output, type=ensight, name=esExport
->>perNode, fieldOutput=displacement
->>perNode, fieldOutput=beamDisplacement
->>perNode, fieldOutput=beamRotation
->>perElement, fieldOutput=bendingMomentZ
->>perElement, fieldOutput=torque
->>configuration, overwrite=yes
 
 *step, solver=theSolver
 maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1

@@ -36,6 +36,8 @@ pytestmark = pytest.mark.skipif(
 E_STEEL, NU_STEEL, E_CONCRETE, NU_CONCRETE = 200000.0, 0.3, 30000.0, 0.2
 A_STEEL = 0.01
 G_STEEL = E_STEEL / (2 * (1 + NU_STEEL))
+#: the embedded cantilever with free rotations relative to the clamped one (test_embedded_cantilever_clamped...)
+FREE_ROTATION_SOFTENING = 1.1094
 
 
 def _run(tmp_path, deck: str, *results):
@@ -45,38 +47,8 @@ def _run(tmp_path, deck: str, *results):
     return model, [fieldOutputController.fieldOutputs[r] for r in results]
 
 
-def _bar(firstLabel: int, start, end, nElements: int, elType: str = "T2D2"):
-    """*node and *element blocks of a straight bar, and its first and last node labels."""
-    start, end = np.asarray(start, float), np.asarray(end, float)
-    nodes = "\n".join(
-        f"{firstLabel + i}, " + ", ".join(f"{c:.12g}" for c in start + (end - start) * i / nElements)
-        for i in range(nElements + 1)
-    )
-    elements = "\n".join(f"{firstLabel + i}, {firstLabel + i}, {firstLabel + i + 1}" for i in range(nElements))
-    return f"*node\n{nodes}\n\n*element, type={elType}\n{elements}\n", firstLabel, firstLabel + nElements
-
-
-def _concreteStrip(nX=8, nY=2, elType="CPE4"):
-    return f"""*material, name=linearelastic, id=concrete, provider=marmot
-{E_CONCRETE}, {NU_CONCRETE}
-
-*material, name=linearelastic, id=steel, provider=marmot
-{E_STEEL}, 0.3
-
-*modelGenerator, generator=planeRectQuad, name=gen
-l=4
-h=1
-nX={nX}
-nY={nY}
-elType={elType}
-
-*section, name=concreteSection, thickness=1.0, material=concrete, type=plane
-gen_all
-"""
-
-
 def _rebarsInStrip(nRebarElements=5, y=0.37):
-    bar, first, last = _bar(100001, (0.0, y), (4.0, y), nRebarElements)
+    bar, first, last = _line(100001, (0.0, y), (4.0, y), nRebarElements, "T2D2")
     return f"""{bar}
 *elSet, elSet=rebars, generate=True
 {first}, {last - 1}, 1
@@ -108,10 +80,12 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
 REACTION_PERFECT_BOND = (E_CONCRETE / (1 - NU_CONCRETE**2) * 1.0 + E_STEEL * A_STEEL) * 1e-3
 
 
-def test_embedded_region_uniaxial_tension(tmp_path):
-    """perfect bond: the non-matching rebar follows the host strain, the reaction is concrete + steel"""
+@pytest.mark.parametrize("hostType", ["CPE4", "CPE8R"])
+def test_embedded_region_uniaxial_tension(tmp_path, hostType):
+    """perfect bond: the non-matching rebar follows the host strain, the reaction is concrete + steel (linear and
+    quadratic hosts)"""
     deck = (
-        _concreteStrip()
+        _strip(elType=hostType)
         + _rebarsInStrip()
         + """
 *constraint, type=embeddedRegion, name=embedded
@@ -127,7 +101,7 @@ embeddedElSet=rebars, hostElSet=gen_all
 
 def test_embedded_region_rejects_unembedded_nodes(tmp_path):
     deck = (
-        _concreteStrip()
+        _strip()
         + _rebarsInStrip().replace("100001, 0, 0.37", "100001, -0.5, 0.37")
         + """
 *constraint, type=embeddedRegion, name=embedded
@@ -143,7 +117,7 @@ def _line(firstLabel: int, start, end, nElements: int, elType: str, quadratic: b
     """*node and *element blocks of a straight line of 2-node (or 3-node: end, end, mid, the mid nodes labeled from
     firstLabel + 50000) elements, and its first and last node labels."""
     if quadratic is None:
-        quadratic = elType.endswith("3") or elType in ("T2D3", "T3D3")
+        quadratic = elType.endswith("3")
     start, end = np.asarray(start, float), np.asarray(end, float)
 
     def node(label, s):
@@ -194,7 +168,7 @@ def test_embedded_beam_follows_uniform_host_strain(tmp_path, rotations):
 *elSet, elSet=beams, generate=True
 {first}, {last - 1}, 1
 
-*section, name=beamSection, type=beam, profile=generic, area=1e-8, I=1e-8, material=steel
+*section, name=beamSection, type=beam, profile=generic, area=1e-8, Iz=1e-8, material=steel
 beams
 
 *constraint, type=embeddedRegion, name=embedded
@@ -234,7 +208,9 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
     assert np.abs(curvature).max() < 1e-4 * np.abs(curvatureOfHostRotation)
 
 
-@pytest.mark.parametrize("rotations, elType", [("axis", "B2D2"), ("free", "B2D2"), ("axis", "B2D3")])
+@pytest.mark.parametrize(
+    "rotations, elType", [("axis", "B2D2"), ("host", "B2D2"), ("free", "B2D2"), ("axis", "B2D3")]
+)
 def test_embedded_cantilever_clamped_in_stiff_block(tmp_path, rotations, elType):
     """a cantilever embedded with its root in a (practically rigid) block: with the rotations tied to the host, the
     free part deflects as a cantilever clamped at the block face, P L^3 / (3 E I); with free rotations the root is
@@ -275,10 +251,10 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
     _, (u,) = _run(tmp_path, deck, "u")
     deflection = u.getLastResult().ravel()[1]
     clamped = P * L**3 / (3 * E_STEEL * I)
-    if rotations == "axis":
+    if rotations in ("axis", "host"):  # the block barely deforms: both clamp the beam
         np.testing.assert_allclose(deflection, clamped, rtol=1e-5)
-    else:
-        assert deflection > 1.05 * clamped
+    else:  # free rotations: the root is clamped only by the tied displacements of the embedded nodes
+        np.testing.assert_allclose(deflection / clamped, FREE_ROTATION_SOFTENING, rtol=1e-3)
 
 
 def test_embedded_cantilever_clamped_in_stiff_block_3d(tmp_path):
@@ -286,6 +262,7 @@ def test_embedded_cantilever_clamped_in_stiff_block_3d(tmp_path):
     free part as clamped at the block face"""
     b, h, L = 10.0, 20.0, 200.0
     Iz, Iy = b * h**3 / 12, h * b**3 / 12  # h along the local y axis (orientation (0, 1, 0)), b along z
+    # torsion constant of the solid rectangle (Roark, Formulas for Stress and Strain), as the beam section
     J = h * b**3 * (1 / 3 - 0.21 * b / h * (1 - b**4 / (12 * h**4)))
     Py, Pz, T = 1.0, 0.5, 20.0
     embedded, _, _ = _line(100001, (50.0, 50.0, 50.0), (100.0, 50.0, 50.0), 2, "B3D2")
@@ -343,13 +320,16 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
     np.testing.assert_allclose(r[0], T * L / (G_STEEL * J), rtol=1e-5)
 
 
-@pytest.mark.parametrize("shape, nDim", [("quad4", 2), ("quad8", 2), ("hexa8", 3), ("hexa20", 3)])
+@pytest.mark.parametrize(
+    "shape, nDim",
+    [("quad4", 2), ("quad8", 2), ("tria3", 2), ("tria6", 2), ("hexa8", 3), ("hexa20", 3), ("tetra4", 3), ("tetra10", 3)],
+)
 def test_rotation_operator(shape, nDim):
-    """the rotation operators of the embedded region constraint: a rigid rotation gives the rotation itself (both
-    modes); a uniform strain leaves the axis mode at t x (eps t) and the host mode at zero"""
+    """the closed-form rotation operators dTheta/dU of the embedded region constraint: a rigid rotation gives the
+    rotation itself (both modes); a uniform strain leaves the axis mode at t x (eps t) and the host mode at zero"""
     from types import SimpleNamespace
 
-    from edelweissfe.constraints.embeddedregion import rotationOperator
+    from edelweissfe.constraints.embeddedregion import _dN_dX, dTheta_dU
     from edelweissfe.utils.embedding import HostPoint
     from edelweissfe.utils.isoparametricshapes import NODE_PARAMETRIC_COORDINATES
 
@@ -358,7 +338,7 @@ def test_rotation_operator(shape, nDim):
     A = np.eye(nDim) * 2.0 + 0.2 * rng.random((nDim, nDim))  # an affinely distorted element
     X = xiNodes @ A.T + 1.0
     element = SimpleNamespace(ensightType=shape, nodes=[SimpleNamespace(coordinates=x) for x in X])
-    point = HostPoint(element, 0.3 * np.ones(nDim) - 0.1)
+    point = HostPoint(element, 0.2 * np.ones(nDim) + (0.0 if shape.startswith("t") else -0.1))
     t = np.ones(nDim) / math.sqrt(nDim)
 
     if nDim == 2:
@@ -373,7 +353,7 @@ def test_rotation_operator(shape, nDim):
     eps = 1e-3 * np.diag(np.arange(1, nDim + 1, dtype=float))
 
     for mode in ("axis", "host"):
-        C = rotationOperator(point, mode, [t])
+        C = dTheta_dU(_dN_dX(point), mode, t)
         np.testing.assert_allclose(np.einsum("rai,ai->r", C, X @ W.T), rotation, atol=1e-15)
         theta = np.einsum("rai,ai->r", C, X @ eps.T)
         if mode == "host":
@@ -384,6 +364,77 @@ def test_rotation_operator(shape, nDim):
             np.testing.assert_allclose(theta, np.cross(t, eps @ t), atol=1e-15)
 
 
-# ---------------------------------------------------------------------------------------------------------------------
-# section points (edelweissfe.utils.beamsections)
-# ---------------------------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize("reverse", [False, True])
+def test_rotation_on_a_host_boundary_is_independent_of_the_host_order(reverse):
+    """EMB-02: a beam node on the edge between two quad4 hosts ([0, 1] and [1, 2] x [0, 1]) with the nodal field
+    u_y = -x^2 / 2 (non-uniform: the gradient jumps across the edge): the rotation of the axis e_x at (1, 0.5) is
+    -0.5 in the left host and -1.5 in the right one; the constraint averages them to the continuous value -1.0, for
+    either order of the hosts"""
+    from types import SimpleNamespace
+
+    from edelweissfe.constraints.embeddedregion import Constraint
+    from edelweissfe.utils.embedding import HostElementLocator
+
+    class Node:  # hashable, as the model's nodes
+        def __init__(self, label, x, y):
+            self.label, self.coordinates = label, np.array([x, y], dtype=float)
+
+    def node(label, x, y):
+        return Node(label, x, y)
+
+    nodes = {(x, y): node(10 * x + y, x, y) for x in (0, 1, 2) for y in (0, 1)}
+    left = SimpleNamespace(elNumber=1, ensightType="quad4", nodes=[nodes[p] for p in ((0, 0), (1, 0), (1, 1), (0, 1))])
+    right = SimpleNamespace(elNumber=2, ensightType="quad4", nodes=[nodes[p] for p in ((1, 0), (2, 0), (2, 1), (1, 1))])
+    hosts = [right, left] if reverse else [left, right]
+
+    constraint = Constraint.__new__(Constraint)
+    constraint._rotationMode = "axis"
+    points = HostElementLocator(hosts).locateAll(np.array([1.0, 0.5]))
+    assert len(points) == 2
+    masters = constraint._rotationMasters(points, [np.array([1.0, 0.0])])
+    uY = {n: -n.coordinates[0] ** 2 / 2 for n in nodes.values()}
+    theta = sum(c[0] * (uY[m] if i == 1 else 0.0) for m, i, c in masters)
+    np.testing.assert_allclose(theta, -1.0, rtol=1e-12)
+
+
+def test_embedded_region_follows_adaptive_refinement(tmp_path):
+    """EMB-03: the embedded bar of the dynamic refinement deck (two C3D20 hosts, one refined during the step): after
+    the refinement the bar nodes are tied to the refined hosts, i.e. they move with the interpolation of the refined
+    field -- not with the coarse elements the constraint was built on"""
+    import pathlib
+
+    from edelweissfe.utils.embedding import HostElementLocator
+
+    deck = (pathlib.Path(__file__).parent.parent / "testfiles/marmot/AMR_DynamicRefinement/test.inp").read_text()
+    # the deck's element set "all" would also contain the bars (and give them the solid section): name the hosts
+    deck = deck.replace("elSet=all", "elSet=host").replace("type=solid\nall", "type=solid\nhost")
+    bar, first, last = _line(900001, (0.1, 0.3, 0.6), (1.9, 0.3, 0.6), 6, "T3D2")
+    deck = deck.replace(
+        "*job, name=amr, domain=3d",
+        f"""*material, name=linearelastic, id=steel, provider=marmot
+{E_STEEL}, 0.3
+
+{bar}
+*elSet, elSet=bars, generate=True
+{first}, {last - 1}, 1
+
+*section, name=barSection, area=1e-3, material=steel, type=truss
+bars
+
+*constraint, type=embeddedRegion, name=embedded
+embeddedElSet=bars, hostElSet=host
+
+*job, name=amr, domain=3d""",
+    )
+    model, _ = _run(tmp_path, deck)
+    hosts = list(model.elementSets["host"])
+    assert len(hosts) > 2, "the deck must refine"
+    field = model.nodeFields["displacement"]
+    U = {node: np.asarray(field["U"][k]) for k, node in enumerate(field.nodes)}
+    locator = HostElementLocator(hosts)
+    barNodes = {n for el in model.elementSets["bars"] for n in el.nodes}
+    scale = max(np.abs(u).max() for u in U.values())
+    for node in barNodes:
+        point = locator.locate(node.coordinates)
+        interpolated = sum(N * U[m] for N, m in zip(point.shapeFunctions(), point.element.nodes))
+        np.testing.assert_allclose(U[node], interpolated, atol=1e-10 * scale)

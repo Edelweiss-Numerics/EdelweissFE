@@ -37,9 +37,10 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.utils.isoparametricshapes import (
+    INSIDE_TOLERANCE,
     PARAMETRIC_DIMENSION,
     inverseMapping,
-    isInside,
+    parentDomainExcess,
     shapeFunctions,
 )
 
@@ -71,12 +72,11 @@ class HostElementLocator:
         The tolerance of the parametric coordinates of a point on the boundary of a host element.
     """
 
-    def __init__(self, hostElements, tolerance: float = 1e-10):
+    def __init__(self, hostElements, tolerance: float = INSIDE_TOLERANCE):
         self.elements = list(hostElements)
         if not self.elements:
             raise ValueError("No host elements given.")
         self.tolerance = tolerance
-        self._index = {id(el): i for i, el in enumerate(self.elements)}
 
         self.coordinates = []
         for el in self.elements:
@@ -94,47 +94,50 @@ class HostElementLocator:
         margin = 0.1 * (maxs - mins).max(axis=1, keepdims=True)
         self._boxMin = mins - margin
         self._boxMax = maxs + margin
-        self.characteristicSize = float(np.min((maxs - mins).max(axis=1)))
 
-    def locate(self, x: np.ndarray, exclude=None) -> HostPoint | None:
-        """The host element containing the point ``x``, and the parametric coordinates of ``x`` therein.
+    def _candidates(self, x: np.ndarray):
+        """The hosts whose (enlarged) bounding box contains ``x``, with the parametric coordinates of ``x``."""
+        for i in np.flatnonzero(np.all((self._boxMin <= x) & (x <= self._boxMax), axis=1)):
+            el = self.elements[i]
+            xi = inverseMapping(el.ensightType, self.coordinates[i], x)
+            if xi is not None:
+                yield el, xi, parentDomainExcess(el.ensightType, xi)
+
+    def locate(self, x: np.ndarray) -> HostPoint | None:
+        """The host element containing the point ``x``, and the parametric coordinates of ``x`` therein. On a
+        boundary between hosts, the one it lies deepest in (round-off decides between equals: use :meth:`locateAll`
+        for quantities that jump between hosts).
 
         Parameters
         ----------
         x
             The point.
-        exclude
-            An optional host element not to be considered.
 
         Returns
         -------
         HostPoint
             The located point, or ``None`` if no host element contains ``x``.
         """
-        candidates = np.flatnonzero(np.all((self._boxMin <= x) & (x <= self._boxMax), axis=1))
         best, bestExcess = None, np.inf
-        for i in candidates:
-            el = self.elements[i]
-            if el is exclude:
-                continue
-            xi = inverseMapping(el.ensightType, self.coordinates[i], x)
-            if xi is None:
-                continue
-            excess = _parentDomainExcess(el.ensightType, xi)
+        for el, xi, excess in self._candidates(x):
             if excess <= self.tolerance and excess < bestExcess:
                 best, bestExcess = HostPoint(el, xi), excess
-                if excess < 0:  # strictly inside: unique
+                if excess < -self.tolerance:  # strictly inside: unique
                     break
         return best
 
-    def contains(self, element, x: np.ndarray) -> bool:
-        """Whether the host ``element`` contains the point ``x``."""
-        xi = inverseMapping(element.ensightType, self.coordinates[self._index[id(element)]], x)
-        return xi is not None and isInside(element.ensightType, xi, self.tolerance)
+    def locateAll(self, x: np.ndarray) -> list[HostPoint]:
+        """All host elements containing the point ``x`` within the tolerance: one for an interior point, several for
+        a point on a face, an edge or a node shared by hosts.
 
+        Parameters
+        ----------
+        x
+            The point.
 
-def _parentDomainExcess(shape: str, xi: np.ndarray) -> float:
-    """By how much the parametric coordinates exceed the parent domain; negative if strictly inside."""
-    if shape == "tetra4":
-        return float(max(-np.min(xi), np.sum(xi) - 1.0))
-    return float(np.max(np.abs(xi)) - 1.0)
+        Returns
+        -------
+        list[HostPoint]
+            The located points, in the order of the host elements.
+        """
+        return [HostPoint(el, xi) for el, xi, excess in self._candidates(x) if excess <= self.tolerance]
