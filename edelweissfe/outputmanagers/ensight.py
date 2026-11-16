@@ -30,7 +30,6 @@
 # @author: Matthias Neuner
 
 import datetime
-import functools
 import os
 from collections import defaultdict
 from dataclasses import dataclass
@@ -40,8 +39,8 @@ import h5py
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from edelweissfe.elements._hexa3dnodeordering import hexa8N, hexa20N
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.outputmanagers._quadraturepointpart import subdivideAtQuadraturePoints
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.rigidbody import RigidBody
@@ -791,138 +790,18 @@ def createUnstructuredPartFromElementSet(setName, elementSet: list, partID: int)
     return EnsightUnstructuredPart(setName, partID, partNodes.keys(), elementDict)
 
 
-# natural coordinates of the Hexa20 nodes (Abaqus/Marmot ordering): 8 corners, then the edge midpoints
-_hexa20NodeXi = np.array(
-    [
-        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
-        [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
-        [0, -1, -1], [1, 0, -1], [0, 1, -1], [-1, 0, -1],
-        [0, -1, 1], [1, 0, 1], [0, 1, 1], [-1, 0, 1],
-        [-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0],
-    ]
-)  # fmt: skip
-
-# natural coordinates of the Quad8 nodes: the bottom face of the Hexa20
-_quad8NodeXi = _hexa20NodeXi[[0, 1, 2, 3, 8, 9, 10, 11], :2]
-
-
-def _quad4N(xi, eta):
-    """Bilinear shape functions of the Quad4 element."""
-    return 0.25 * np.array([(1 - xi) * (1 - eta), (1 + xi) * (1 - eta), (1 + xi) * (1 + eta), (1 - xi) * (1 + eta)])
-
-
-def _quad8N(xi, eta):
-    """Serendipity shape functions of the Quad8 element."""
-    return 0.25 * np.array(
-        [
-            (1 - xi) * (1 - eta) * (-xi - eta - 1),
-            (1 + xi) * (1 - eta) * (xi - eta - 1),
-            (1 + xi) * (1 + eta) * (xi + eta - 1),
-            (1 - xi) * (1 + eta) * (-xi + eta - 1),
-            2 * (1 - xi**2) * (1 - eta),
-            2 * (1 + xi) * (1 - eta**2),
-            2 * (1 - xi**2) * (1 + eta),
-            2 * (1 - xi) * (1 - eta**2),
-        ]
-    )
-
-
-# ensight shape -> (natural coordinates of the nodes, shape functions, shape of the sub-elements)
-_quadraturePointSubdivisions = {
-    "quad4": (_quad8NodeXi[:4], _quad4N, "quad4"),
-    "quad8": (_quad8NodeXi, _quad8N, "quad4"),
-    "hexa8": (_hexa20NodeXi[:8], hexa8N, "hexa8"),
-    "hexa20": (_hexa20NodeXi, hexa20N, "hexa8"),
-}
-
-
-@functools.lru_cache
-def _gaussSubdivision(n: int) -> tuple[np.ndarray, np.ndarray]:
-    """The points of the Gauss rule with n points, and the n + 1 natural coordinates which split
-    [-1, 1] in proportion to its weights: each point lies in the interval of its weight."""
-
-    points, weights = np.polynomial.legendre.leggauss(n)
-    breakpoints = np.concatenate([[-1.0], -1.0 + np.cumsum(weights)])
-    # symmetric, with the exact values -1, 1 and, for even n, 0 of the element nodes
-    breakpoints = 0.5 * (breakpoints - breakpoints[::-1])
-    breakpoints[[0, -1]] = -1.0, 1.0
-    return points, breakpoints
-
-
-@functools.lru_cache
-def _quadraturePointSubdivisionTemplate(ensightType: str, n: int) -> dict:
-    """The split of an element of a shape with n Gauss points per direction in natural coordinates,
-    the same for all elements of that shape: the lattice of the n + 1 breakpoints per direction, the
-    element's own nodes on it, the shape functions at its points and at the Gauss points, the
-    lattice points of each cell, and how the points on edges and faces are identified."""
-
-    nodeXi, shapeFunctions, subShape = _quadraturePointSubdivisions[ensightType]
-    dim = nodeXi.shape[1]
-    cornerXi = nodeXi[: 2**dim]
-    gaussPoints, breakpoints = _gaussSubdivision(n)
-    latticeShape = dim * (n + 1,)
-    cells = np.indices(dim * (n,)).reshape(dim, -1).T
-    lattice = np.indices(latticeShape).reshape(dim, -1).T
-
-    # the element's own nodes on the lattice: the corners, and the edge midpoints for an even n
-    latticeIndex = {-1: 0, 1: n} | ({0: n // 2} if n % 2 == 0 else {})
-    ownNodes = [i for i, xi in enumerate(nodeXi) if all(c in latticeIndex for c in xi)]
-    ownPoints = [np.ravel_multi_index(tuple(latticeIndex[c] for c in nodeXi[i]), latticeShape) for i in ownNodes]
-
-    # points on edges and faces are shared with the neighbors, whose natural directions differ: such a point is
-    # identified by the corner nodes of its edge or face and its lattice distances to each of them
-    cornerLattice = (cornerXi + 1) // 2 * n
-    onBoundary = (lattice == 0) | (lattice == n)
-    nBoundary = onBoundary.sum(axis=1)
-    sharedPoints = {}
-    for b in range(1, dim):
-        points = np.flatnonzero(nBoundary == b)
-        nCorners, nFree = 2 ** (dim - b), dim - b
-        corners = [np.flatnonzero(np.all((cornerLattice == lattice[p])[:, onBoundary[p]], axis=1)) for p in points]
-        distances = [
-            np.sort(np.abs(lattice[p] - cornerLattice[c])[:, ~onBoundary[p]], axis=1) for p, c in zip(points, corners)
-        ]
-        sharedPoints[b] = (
-            points,
-            np.reshape(np.array(corners, dtype=int), (len(points), nCorners)),
-            np.reshape(np.array(distances, dtype=int), (len(points), nCorners, nFree)),
-        )
-
-    # the lattice points of the corners of each cell, ordered as the corners of the element
-    cellCorners = cells[:, None, :] + (cornerXi[None, :, :] + 1) // 2
-    return dict(
-        dim=dim,
-        subShape=subShape,
-        shapeFunctionsAtGaussPoints=np.asarray(shapeFunctions(*gaussPoints[cells].T), dtype=float).T,
-        shapeFunctionsAtLattice=np.asarray(shapeFunctions(*breakpoints[lattice].T), dtype=float).T,
-        ownNodes=np.array(ownNodes, dtype=int),
-        ownPoints=np.array(ownPoints, dtype=int),
-        interiorPoints=np.flatnonzero(nBoundary == 0),
-        sharedPoints=sharedPoints,
-        cellCorners=np.ravel_multi_index(tuple(np.moveaxis(cellCorners, 2, 0)), latticeShape),
-        nLattice=len(lattice),
-    )
-
-
 def createQuadraturePointPartFromElementSet(
     setName: str, elementSet: list, basePart: EnsightUnstructuredPart, partID: int
 ) -> tuple[EnsightUnstructuredPart, csr_matrix]:
-    """Splits each element of an element set into one linear sub-element per quadrature point of its
-    Gauss rule with n points per direction (n x n for Quad4 and Quad8, n x n x n for Hexa8 and Hexa20);
-    sub-element g of an element contains its quadrature point g, in whatever order the element
-    numbers them. Along each natural direction the element is split in proportion to the Gauss
-    weights, so a sub-element covers the share of the element its quadrature point integrates.
-
-    The part's nodes are those nodes of the base part which are corners of sub-elements (in the
-    order of the base part), followed by the added nodes, placed by the element's interpolation.
-    Nodes on edges and faces are shared by neighboring elements.
+    """The part ``<setName>_QP``, which splits each element of an element set into one linear sub-element per
+    quadrature point (see :mod:`edelweissfe.outputmanagers._quadraturepointpart`).
 
     Parameters
     ----------
     setName
         The name of the element set.
     elementSet
-        The elements, all quadrilaterals or all hexahedra, with the same number of quadrature points.
+        The elements, all quadrilaterals or all hexahedra, with the same Gauss rule.
     basePart
         The part of the element set.
     partID
@@ -935,188 +814,15 @@ def createQuadraturePointPartFromElementSet(
     """
 
     elements = list(elementSet)
-    if not elements:
-        raise Exception("Quadrature point output on sub-elements requires a non-empty element set")
+    subdivision = subdivideAtQuadraturePoints(setName, elements, list(basePart.nodes))
+    nElements, nQp, _ = subdivision.connectivity.shape
 
-    baseNodes = list(basePart.nodes)
-    baseIndices = {node: i for i, node in enumerate(baseNodes)}
-    nBase = len(baseNodes)
-    baseCoordinates = np.reshape(basePart.nodeCoordinateArray, (nBase, -1))
-    nCoordinates = baseCoordinates.shape[1]
-
-    # what is needed of each element, which is then processed for all elements of a shape at once
-    nQp = elements[0].getNumberOfQuadraturePoints()
-    positionsOfShape = defaultdict(list)
-    nodeIndices, quadraturePoints = [], []
-    for position, element in enumerate(elements):
-        if element.ensightType not in _quadraturePointSubdivisions:
-            raise Exception(
-                "Quadrature point output on sub-elements requires Quad4, Quad8, Hexa8 or Hexa20 elements, "
-                "element {:} is {:}".format(element.elNumber, element.ensightType)
-            )
-        if element.getNumberOfQuadraturePoints() != nQp:
-            raise Exception(
-                "Quadrature point output on sub-elements requires the same number of quadrature points in all "
-                "elements, element set {:} holds elements with {:} and with {:}".format(
-                    setName, nQp, element.getNumberOfQuadraturePoints()
-                )
-            )
-        positionsOfShape[element.ensightType].append(position)
-        nodeIndices.append([baseIndices[node] for node in element.visualizationNodes])
-        quadraturePoints.append(np.asarray(element.getCoordinatesAtQuadraturePoints(), dtype=float))
-
-    if len({_quadraturePointSubdivisions[shape][0].shape[1] for shape in positionsOfShape}) > 1:
-        raise Exception(
-            "Quadrature point output on sub-elements requires an element set of quadrilaterals only or of "
-            "hexahedra only, element set {:} holds both".format(setName)
-        )
-
-    def notAGaussRule(element):
-        return Exception(
-            "Quadrature point output on sub-elements requires a Gauss rule with the same number of quadrature "
-            "points in each direction, element {:} with {:} quadrature points does not use one".format(
-                element.elNumber, nQp
-            )
-        )
-
-    dim = _quadraturePointSubdivisions[next(iter(positionsOfShape))][0].shape[1]
-    n = round(nQp ** (1 / dim))
-    if n < 1 or n**dim != nQp:
-        raise notAGaussRule(elements[0])
-
-    # the added nodes get the indices after the nodes of the base part
-    nNodes = nBase
-    addedIds, addedCoordinates, rows, cols, weights = [], [], [], [], []
-
-    def addNodes(count: int) -> np.ndarray:
-        nonlocal nNodes
-        nNodes += count
-        return np.arange(nNodes - count, nNodes)
-
-    def interpolate(ids: np.ndarray, N: np.ndarray, elementNodes: np.ndarray, X: np.ndarray):
-        """Place the added nodes ids by the shape functions N of their elements with nodes elementNodes at X."""
-        addedIds.append(ids)
-        addedCoordinates.append(np.einsum("mn,mnd->md", N, X))
-        rows.append(np.repeat(ids, N.shape[1]))
-        cols.append(elementNodes.ravel())
-        weights.append(N.ravel())
-
-    isGaussRule = np.ones(len(elements), dtype=bool)
-    shapes = []
-    for shape, positions in positionsOfShape.items():
-        template = _quadraturePointSubdivisionTemplate(shape, n)
-        positions = np.array(positions)
-        E = np.array([nodeIndices[p] for p in positions])
-        X = baseCoordinates[E]
-        nE = len(positions)
-
-        # each quadrature point must be a Gauss point, the one of its cell; coordinates of another dimension are not
-        Q = np.array(
-            [
-                (
-                    np.reshape(q, (nQp, nCoordinates))
-                    if q.size == nQp * nCoordinates
-                    else np.full((nQp, nCoordinates), np.nan)
-                )
-                for q in (quadraturePoints[p] for p in positions)
-            ]
-        )
-        gaussPoints = np.einsum("qn,end->eqd", template["shapeFunctionsAtGaussPoints"], X)
-        tolerance = 1e-8 * np.ptp(X, axis=1).max(axis=1)
-        cellOfQp = np.empty((nE, nQp), dtype=int)
-        for chunk in range(0, nE, 512):
-            c = slice(chunk, chunk + 512)
-            distances = np.linalg.norm(Q[c, :, None, :] - gaussPoints[c, None, :, :], axis=3)
-            cellOfQp[c] = distances.argmin(axis=2)
-            isGaussRule[positions[c]] = distances.min(axis=2).max(axis=1) <= tolerance[c]
-        isGaussRule[positions] &= np.all(np.sort(cellOfQp, axis=1) == np.arange(nQp), axis=1)
-
-        # node indices of the lattice points of each element: its own nodes, and new ones in its interior
-        lattice = np.full((nE, template["nLattice"]), -1, dtype=int)
-        lattice[:, template["ownPoints"]] = E[:, template["ownNodes"]]
-        interior = template["interiorPoints"]
-        ids = addNodes(nE * len(interior)).reshape(nE, len(interior))
-        lattice[:, interior] = ids
-        N = template["shapeFunctionsAtLattice"]
-        interpolate(
-            ids.ravel(),
-            np.broadcast_to(N[interior], (nE,) + N[interior].shape).reshape(-1, N.shape[1]),
-            np.repeat(E, len(interior), axis=0),
-            np.repeat(X, len(interior), axis=0),
-        )
-        shapes.append((template, positions, E, X, lattice, cellOfQp))
-
-    if not isGaussRule.all():
-        raise notAGaussRule(elements[np.flatnonzero(~isGaussRule)[0]])
-
-    # the points on edges (and faces): the same key in all elements holding them, their own node or a new one
-    for b in range(1, dim):
-        keys, own, shapeOf, rowOf, pointOf = [], [], [], [], []
-        for s, (template, positions, E, X, lattice, cellOfQp) in enumerate(shapes):
-            points, corners, distances = template["sharedPoints"][b]
-            G = E[:, corners]
-            order = np.argsort(G, axis=2)
-            D = np.take_along_axis(np.broadcast_to(distances, (len(E),) + distances.shape), order[..., None], axis=2)
-            key = np.concatenate([np.take_along_axis(G, order, axis=2)[..., None], D], axis=3)
-            keys.append(key.reshape(-1, corners.shape[1] * (1 + distances.shape[2])))
-            own.append(lattice[:, points].ravel())
-            shapeOf.append(np.full(lattice[:, points].size, s))
-            rowOf.append(np.repeat(np.arange(len(E)), len(points)))
-            pointOf.append(np.tile(points, len(E)))
-        keys, own, shapeOf, rowOf, pointOf = map(np.concatenate, (keys, own, shapeOf, rowOf, pointOf))
-        if not len(keys):
-            continue
-
-        _, first, inverse = np.unique(keys, axis=0, return_index=True, return_inverse=True)
-        inverse = inverse.ravel()
-        index = np.full(len(first), -1, dtype=int)
-        np.maximum.at(index, inverse, own)
-        new = np.flatnonzero(index < 0)
-        index[new] = addNodes(len(new))
-
-        for s, (template, positions, E, X, lattice, cellOfQp) in enumerate(shapes):
-            # a new node is placed by the element it occurs in first
-            newHere = new[shapeOf[first[new]] == s]
-            r, p = rowOf[first[newHere]], pointOf[first[newHere]]
-            interpolate(index[newHere], template["shapeFunctionsAtLattice"][p], E[r], X[r])
-            occurrences = shapeOf == s
-            lattice[rowOf[occurrences], pointOf[occurrences]] = index[inverse[occurrences]]
-
-    # the sub-element of a quadrature point is its cell of the lattice, its nodes ordered as the corners
-    connectivity = np.empty((len(elements), nQp, 2**dim), dtype=int)
-    for template, positions, E, X, lattice, cellOfQp in shapes:
-        cellCorners = template["cellCorners"][cellOfQp].reshape(len(E), -1)
-        connectivity[positions] = np.take_along_axis(lattice, cellCorners, axis=1).reshape(len(E), nQp, -1)
-
-    # keep the nodes of the base part which the sub-elements use, e.g. not the edge midpoints for an odd n
-    used = np.zeros(nNodes, dtype=bool)
-    used[nBase:] = True
-    used[connectivity.ravel()] = True
-    usedBase = np.flatnonzero(used[:nBase])
-    newIndices = np.cumsum(used) - 1
-    connectivity = newIndices[connectivity]
-
-    coordinates = np.empty((nNodes - nBase, nCoordinates))
-    for ids, x in zip(addedIds, addedCoordinates):
-        coordinates[ids - nBase] = x
-    nextLabel = int(basePart.nodeLabels.max()) + 1 if nBase else 1
-    nodes = [baseNodes[i] for i in usedBase] + [Node(nextLabel + i, x) for i, x in enumerate(coordinates)]
-
-    mapping = csr_matrix(
-        (
-            np.concatenate([np.ones(len(usedBase))] + weights),
-            (
-                np.concatenate([np.arange(len(usedBase))] + [newIndices[r] for r in rows]),
-                np.concatenate([usedBase] + cols),
-            ),
-        ),
-        shape=(len(nodes), nBase),
-    )
-
+    # sub-element g of element e is labeled nQp * e + g, which stays in Ensight's int32 for e < 2**31 / nQp
+    # (80 million elements for 27 quadrature points)
     labels = (nQp * np.array([element.elNumber for element in elements])[:, None] + np.arange(nQp)).ravel()
-    subShape = shapes[0][0]["subShape"]
-    elementTree = {subShape: dict(zip(labels.tolist(), connectivity.reshape(len(labels), -1).tolist()))}
-    return EnsightUnstructuredPart(setName + "_QP", partID, nodes, elementTree), mapping
+    connectivity = subdivision.connectivity.reshape(nElements * nQp, -1)
+    elementTree = {subdivision.subShape: dict(zip(labels.tolist(), connectivity.tolist()))}
+    return EnsightUnstructuredPart(setName + "_QP", partID, subdivision.nodes, elementTree), subdivision.mapping
 
 
 def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):

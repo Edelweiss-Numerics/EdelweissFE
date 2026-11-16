@@ -415,7 +415,7 @@ _GAUSS_2X2 = [(0.5 + 0.5 * a / np.sqrt(3), 0.5 + 0.5 * b / np.sqrt(3)) for a in 
         # as many, but elsewhere
         ([_StubElement(1, "quad4", [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])], "requires a Gauss rule"),
         # as many, but with coordinates of another dimension than the nodes
-        ([_StubElement(1, "quad4", [(*x, 0.0) for x in _GAUSS_2X2])], "requires a Gauss rule"),
+        ([_StubElement(1, "quad4", [(*x, 0.0) for x in _GAUSS_2X2])], "quadrature points of another dimension"),
         # as many, but two of them at the same Gauss point
         ([_StubElement(1, "quad4", _GAUSS_2X2[:3] + _GAUSS_2X2[:1])], "requires a Gauss rule"),
         # two rules in one element set
