@@ -50,6 +50,11 @@ class TopologyBase(ABC):
     """
 
     @cached_property
+    def dim(self) -> int:
+        """The spatial dimension of the reference element (3 for HEX20, 2 for QUAD8)."""
+        return int(np.asarray(self.reference_node_param()).shape[1])
+
+    @cached_property
     def reference_node_lattice(self) -> np.ndarray:
         """The element's own nodes on the reference lattice with two units per edge: reference
         coordinate :math:`\\xi \\in \\{-1, 0, 1\\}` becomes the integer :math:`\\xi + 1 \\in \\{0, 1, 2\\}`."""
@@ -82,23 +87,27 @@ class TopologyBase(ABC):
         extent
             The element's edge length on that lattice (even).
         """
-        return [
-            entity
-            for _, entity, fixed in self._fixedCoordinatesOfEntities
-            if all(point[k] * 2 == value * extent for k, value in fixed)
-        ]
+        # in 2D, faces and edges are the same entities: each is listed once
+        return list(
+            dict.fromkeys(
+                entity
+                for _, entity, fixed in self._fixedCoordinatesOfEntities
+                if all(point[k] * 2 == value * extent for k, value in fixed)
+            )
+        )
 
     def lowest_entity_containing(self, point, extent: int) -> tuple:
         """The lowest-dimensional entity of an element containing a lattice point, as
         ``(kind, entity)``: ``("vertex", corner slot)``, ``("edge", node slots)``, ``("face", node
         slots)`` or ``("interior", None)``. See :meth:`entities_containing` for the arguments."""
         onBoundary = sum(1 for v in point if v == 0 or v == extent)
-        if onBoundary == 3:
+        if onBoundary == self.dim:
             doubled = tuple(2 * v // extent for v in point)
             return "vertex", next(s for s in self.corner_slots if tuple(self.reference_node_lattice[s]) == doubled)
         if onBoundary == 0:
             return "interior", None
-        wanted = "edge" if onBoundary == 2 else "face"
+        # named by the entity's own dimension: in 2D, a point on one boundary line lies on an edge
+        wanted = "edge" if self.dim - onBoundary == 1 else "face"
         return wanted, next(
             entity
             for kind, entity, fixed in self._fixedCoordinatesOfEntities
@@ -108,7 +117,8 @@ class TopologyBase(ABC):
     @property
     @abstractmethod
     def faces(self) -> list:
-        """List of faces, each defined by a list of local node indices."""
+        """List of faces, each defined by a list of local node indices: the codimension-one boundary
+        entities (in 2D, the edges)."""
 
     @property
     @abstractmethod

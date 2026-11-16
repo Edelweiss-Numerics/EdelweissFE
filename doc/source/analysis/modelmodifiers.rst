@@ -54,8 +54,8 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
   modifiers running to a fixed point, a per-mutation callback fires mid-pipeline and hands the
   consumer a state that no longer exists by the time the solve begins. See :doc:`/developer/topologypipeline`.
 
-``hAdaptivity`` - Hanging-node h-adaptivity for HEX20
------------------------------------------------------
+``hAdaptivity`` - Hanging-node h-adaptivity for HEX20 and QUAD8
+---------------------------------------------------------------
 
 Module ``edelweissfe.modelmodifiers.adaptivity.hadaptivity``
 
@@ -72,6 +72,15 @@ interpolation) and quadrature-point history (via a pluggable state-transfer stra
 ``edelweissfe.adaptivity.statetransfer``) to the children, and couples the resulting
 non-conforming interface with an exact hanging-node multi-point constraint. Element/node sets, sections and element-based surfaces are propagated to
 the children so material assignment and surface loads stay consistent.
+
+**2D models (QUAD8).** In a 2D model (``*job, domain=2d``) the same input refines 8-node serendipity
+quadrilaterals (Marmot CPS8 node order, e.g. ``GCPS8R``, ``GCPE8R``, ``GCCPS8R``, ``GMSCPE8R``) into
+``splitFactor**2`` children (a quadtree). The family follows from the model's dimension: by default
+every 8-node element of a 2D model (every 20-node element of a 3D one) becomes a root, and a
+``refineElSet`` holding elements of another node count is rejected. The machinery below -- the exact
+lattice, root entities, 2:1 edge balance, hanging nodes on the coarse 3-node edge trace, set, surface
+and state transfer, restart replay -- is the same; in 2D a root mesh's codimension-one entities are its
+edges, so there are no face keys. The ``recoveryError`` marker supports HEX20 only.
 
 A child is assigned its section exactly like an element of the initial mesh: parameters set by
 ``>>materialParameterFromField`` (e.g. a random strength field) are evaluated at the child's own

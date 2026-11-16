@@ -354,7 +354,7 @@ _BRACKET_MODULE_SPECS = [
         "modelmodifier",
         "hadaptivity",
         "hadaptivity",
-        "Dynamic hanging-node h-adaptivity model modifier for HEX20 elements.",
+        "Dynamic hanging-node h-adaptivity model modifier for HEX20 and QUAD8 elements.",
     ),
     _BracketModuleSpec(
         "edelweissfe.outputmanagers.computetimemonitor",

@@ -63,8 +63,10 @@ class NodeKey(NamedTuple):
     ``vertex``    the vertex's node label               ``()``
     ``edge``      its two corner labels, ascending      ``(t,)`` from the smaller label, in [0, 2M]
     ``face``      its four corner labels, ascending     ``(u, v)`` in the canonical face frame
-    ``interior``  the root element's id                 ``(x, y, z)`` in the root's lattice
+    ``interior``  the root element's id                 the point in the root's lattice
     ============  ====================================  ===========================================
+
+    In 2D (QUAD8 roots) there are no ``face`` keys: a boundary point lies on an ``edge`` or a ``vertex``.
 
     ``component`` is the body the node belongs to: two bodies that touch at a flush interface
     (a tie, a contact pair, a crack plane) share no entity, even where their coordinates coincide.
@@ -77,7 +79,7 @@ class NodeKey(NamedTuple):
 
 
 class RootFace(NamedTuple):
-    """A face of the root mesh, named by the ascending labels of its four corner nodes."""
+    """A face of the root mesh (in 2D: an edge), named by the ascending labels of its corner nodes."""
 
     component: int
     cornerLabels: tuple
@@ -97,6 +99,7 @@ class RootEntityTable:
 
     def __init__(self, topology, latticeUnits: int):
         self._topology = topology
+        self._dim = topology.dim
         self._latticeUnits = latticeUnits
         self._cornerSlots = topology.corner_slots
         #: a corner's position in the root lattice (every coordinate 0 or 2M)
@@ -144,7 +147,7 @@ class RootEntityTable:
                 )
 
     def key(self, rootEid: int, point) -> NodeKey:
-        """The :class:`NodeKey` of a lattice point (three integers in [0, 2M]) of root ``rootEid``."""
+        """The :class:`NodeKey` of a lattice point (one integer in [0, 2M] per axis) of root ``rootEid``."""
         cached = self._keyOfPoint.get((rootEid, point))
         if cached is None:
             cached = self._keyOfPoint[(rootEid, point)] = self._computeKey(rootEid, point)
@@ -192,12 +195,14 @@ class RootEntityTable:
         if key.kind == "edge":
             a, b = (self._cornerPoint[slotOf[label]] for label in key.entity)
             (t,) = key.position
-            return tuple(a[k] + t * (b[k] - a[k]) // (2 * self._latticeUnits) for k in range(3))
+            return tuple(a[k] + t * (b[k] - a[k]) // (2 * self._latticeUnits) for k in range(self._dim))
         faceCorners = next(fc for fc in self._faceCorners if tuple(sorted(corners[s] for s in fc)) == key.entity)
         origin, first, second = (self._cornerPoint[s] for s in self._canonicalFaceFrame(faceCorners, corners))
         u, v = key.position
         twoM = 2 * self._latticeUnits
-        return tuple(origin[k] + (u * (first[k] - origin[k]) + v * (second[k] - origin[k])) // twoM for k in range(3))
+        return tuple(
+            origin[k] + (u * (first[k] - origin[k]) + v * (second[k] - origin[k])) // twoM for k in range(self._dim)
+        )
 
     # ---- internals ----
     def _computeKey(self, rootEid: int, point) -> NodeKey:
@@ -225,7 +230,7 @@ class RootEntityTable:
     def _edgeParameter(self, point, a, b) -> int:
         """Position along the root edge from corner ``a`` (0) to corner ``b`` (2M)."""
         pa, pb = self._cornerPoint[a], self._cornerPoint[b]
-        axis = next(k for k in range(3) if pa[k] != pb[k])
+        axis = next(k for k in range(self._dim) if pa[k] != pb[k])
         return abs(point[axis] - pa[axis])
 
     def _canonicalFaceFrame(self, faceCorners, corners):
@@ -236,7 +241,11 @@ class RootEntityTable:
                   |           |       first:  its loop neighbour with the smaller label
                 origin ---- first     second: its other loop neighbour
 
-        so both roots sharing the face choose the same frame, whatever their local numbering."""
+        so both roots sharing the face choose the same frame, whatever their local numbering. A 2D face
+        (an edge, two corners) has no ``second``: its frame runs from the smaller label to the larger."""
+        if len(faceCorners) == 2:
+            a, b = sorted(faceCorners, key=lambda slot: corners[slot])
+            return a, b, None
         k = min(range(4), key=lambda i: corners[faceCorners[i]])
         previous, following = faceCorners[(k - 1) % 4], faceCorners[(k + 1) % 4]
         first, second = (previous, following) if corners[previous] < corners[following] else (following, previous)
@@ -244,8 +253,12 @@ class RootEntityTable:
 
     def _faceCoordinates(self, point, origin, first, second) -> tuple:
         """Position of ``point`` in the face frame: the distances from the origin along the two frame
-        edges, which are lattice-axis-aligned, each spanning [0, 2M]."""
-        o, e1, e2 = (self._cornerPoint[s] for s in (origin, first, second))
-        axisU = next(k for k in range(3) if e1[k] != o[k])
-        axisV = next(k for k in range(3) if e2[k] != o[k])
+        edges, which are lattice-axis-aligned, each spanning [0, 2M]; a 2D face (an edge) has the one
+        coordinate along it."""
+        o, e1 = self._cornerPoint[origin], self._cornerPoint[first]
+        axisU = next(k for k in range(self._dim) if e1[k] != o[k])
+        if second is None:
+            return (abs(point[axisU] - o[axisU]),)
+        e2 = self._cornerPoint[second]
+        axisV = next(k for k in range(self._dim) if e2[k] != o[k])
         return (abs(point[axisU] - o[axisU]), abs(point[axisV] - o[axisV]))

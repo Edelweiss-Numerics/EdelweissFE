@@ -173,7 +173,8 @@ class FaceOnEntity(NamedTuple):
 
 
 class AdaptiveMesh:
-    """Octree hierarchy of HEX20 elements: refinement, 2:1 balancing and hanging-node classification.
+    """Octree (in 2D: quadtree) hierarchy of HEX20 or QUAD8 elements: refinement, 2:1 balancing and
+    hanging-node classification.
 
     Every decision about how elements and nodes relate -- which nodes coincide, which node lies on
     which face or edge, which elements share a face, which nodes hang and with which weights, which new
@@ -187,7 +188,7 @@ class AdaptiveMesh:
     Parameters
     ----------
     splitFactor
-        ``n``: a refined element is split into ``n`` parts per axis, i.e. ``n**3`` children.
+        ``n``: a refined element is split into ``n`` parts per axis, i.e. ``n**dim`` children.
     topology
         The element :class:`~edelweissfe.adaptivity.topologybase.TopologyBase` (default: HEX20).
     reserve_labels
@@ -200,6 +201,8 @@ class AdaptiveMesh:
 
             topology = Hex20Topology()
         self.topology = topology
+        #: the spatial dimension of the elements (3 for HEX20, 2 for QUAD8)
+        self.dim = topology.dim
         self.registry = NodeRegistry(reserve_labels=reserve_labels)
         self.splitFactor = splitFactor
         #: M: reference coordinate xi of a root is the lattice integer (xi + 1) * M
@@ -216,11 +219,11 @@ class AdaptiveMesh:
         self._next = 1
         n = splitFactor
         lattice = self.topology.reference_node_lattice  # own nodes, 0..2 per axis
-        #: per child (in subdivision order ix * n * n + iy * n + iz): its nodes on the parent's lattice
-        #: with 2n units per edge -- the child at position i along an axis covers [2i, 2i + 2] there
+        #: per child (in subdivision order ix * n * n + iy * n + iz, in 2D ix * n + iy): its nodes on the
+        #: parent's lattice with 2n units per edge -- the child at position i along an axis covers [2i, 2i + 2]
         self._childLattice = [
             [tuple(2 * i + int(p[k]) for k, i in enumerate(position)) for p in lattice]
-            for position in product(range(n), repeat=3)
+            for position in product(range(n), repeat=self.dim)
         ]
         #: the parent's own nodes on the same lattice, so a child node landing on one reuses it
         self._ownNodeAt = {tuple(int(v) * n for v in p): slot for slot, p in enumerate(lattice)}
@@ -245,7 +248,8 @@ class AdaptiveMesh:
 
     # ---- building the hierarchy ----
     def add_root(self, coords, labels, componentId: int = 0) -> int:
-        """Add a root (level-0) element: its 20 node coordinates and node labels, in C3D20 order.
+        """Add a root (level-0) element: its node coordinates and node labels, in the topology's (C3D20
+        or CPS8) order.
 
         The labels are the model's own, and each must have been registered with
         :meth:`NodeRegistry.seed`. ``componentId`` is the connected body the element belongs to: node
@@ -268,13 +272,13 @@ class AdaptiveMesh:
         eid = self._next
         self._next += 1
         if parent is None:
-            rootEid, origin, edgeLength = eid, (0, 0, 0), 2 * self.latticeUnits
+            rootEid, origin, edgeLength = eid, (0,) * self.dim, 2 * self.latticeUnits
         else:
             # the child's box in its root's lattice: the parent's box, split n ways per axis
             p = self.elements[parent]
             rootEid = p["rootEid"]
             edgeLength = p["referenceBoxEdgeLength"] // self.splitFactor
-            origin = tuple(p["referenceBoxOrigin"][k] + childPosition[k] * edgeLength for k in range(3))
+            origin = tuple(p["referenceBoxOrigin"][k] + childPosition[k] * edgeLength for k in range(self.dim))
         self.elements[eid] = dict(
             conn=conn,
             coords=np.asarray(coords, dtype=float),
@@ -311,7 +315,7 @@ class AdaptiveMesh:
             spanning = []
             for cornerSlot in self._cornerSlots:
                 weight = 1
-                for k in range(3):
+                for k in range(self.dim):
                     weight *= point[k] if lattice[cornerSlot][k] == 2 else extent - point[k]
                 if weight:
                     spanning.append((parentConn[cornerSlot], weight))
@@ -320,10 +324,10 @@ class AdaptiveMesh:
         return conn
 
     def refine(self, eid) -> list:
-        """Split an active element into ``splitFactor**3`` children; deactivate it and keep element sets,
+        """Split an active element into ``splitFactor**dim`` children; deactivate it and keep element sets,
         surfaces and node sets consistent.
 
-        Children are returned in subdivision order, ``ix * n * n + iy * n + iz``
+        Children are returned in subdivision order, ``ix * n * n + iy * n + iz`` (2D: ``ix * n + iy``)
         (see :meth:`~edelweissfe.adaptivity.topologybase.TopologyBase.subdivision_children_param`).
 
         Raises
@@ -340,7 +344,7 @@ class AdaptiveMesh:
         parentConn = e["conn"]
         kids = []
         for childIndex, (childCoords, position) in enumerate(
-            zip(self.topology.subdivide(e["coords"], n), product(range(n), repeat=3))
+            zip(self.topology.subdivide(e["coords"], n), product(range(n), repeat=self.dim))
         ):
             # children stay in the parent's body, and take their node identities from it
             conn = self._childConnectivity(parentConn, childIndex, childCoords, e["componentId"])
@@ -399,7 +403,9 @@ class AdaptiveMesh:
         """The lattice points, in the element's root, of the element's own nodes (slot order)."""
         e = self.elements[eid]
         origin, half = e["referenceBoxOrigin"], e["referenceBoxEdgeLength"] // 2
-        return [tuple(origin[k] + int(p[k]) * half for k in range(3)) for p in self.topology.reference_node_lattice]
+        return [
+            tuple(origin[k] + int(p[k]) * half for k in range(self.dim)) for p in self.topology.reference_node_lattice
+        ]
 
     def node_keys(self, eid) -> list:
         """The :class:`~edelweissfe.adaptivity.rootentities.NodeKey` of each of the element's own nodes,
@@ -455,7 +461,7 @@ class AdaptiveMesh:
                     if label in e["conn"]:
                         continue
                     edgeLength = e["referenceBoxEdgeLength"]
-                    pointInElement = tuple(point[k] - e["referenceBoxOrigin"][k] for k in range(3))
+                    pointInElement = tuple(point[k] - e["referenceBoxOrigin"][k] for k in range(self.dim))
                     if any(v == 0 or v == edgeLength for v in pointInElement):
                         found.append((eid, label, pointInElement))
         self._boundaryNodesCache = found
@@ -475,12 +481,19 @@ class AdaptiveMesh:
                 continue
             childEdgeLength = e["referenceBoxEdgeLength"] // n
             candidates = []
-            for k in range(3):
+            for k in range(self.dim):
                 i, remainder = divmod(point[k] - e["referenceBoxOrigin"][k], childEdgeLength)
                 candidates.append([c for c in (i - 1, i) if 0 <= c < n] if remainder == 0 else [i])
-            for ix, iy, iz in product(*candidates):
-                stack.append(e["children"][ix * n * n + iy * n + iz])
+            for position in product(*candidates):
+                stack.append(e["children"][self._childIndex(position)])
         return found
+
+    def _childIndex(self, position) -> int:
+        """The subdivision-order index of the child at ``position`` (one index per axis, x outer)."""
+        index = 0
+        for i in position:
+            index = index * self.splitFactor + i
+        return index
 
     # ---- conformity ----
     def check_conformity(self, slaveLabels):
@@ -516,13 +529,14 @@ class AdaptiveMesh:
 
     # ---- 2:1 balancing ----
     def _facesOnEntities(self, eid) -> list:
-        """The six faces of an element as :class:`FaceOnEntity`, exact and topological.
+        """The faces (in 2D: edges) of an element as :class:`FaceOnEntity`, exact and topological.
 
         A face on the boundary of the element's root lies on a root face, named by its corner labels,
         and its rectangle is measured in that face's canonical frame, so a neighbouring root derives the
         identical entity and rectangle. A face inside the root lies on an :class:`InternalPlane`, with
         the rectangle in the other two lattice coordinates. Two elements share a face iff they have faces
-        on one entity whose rectangles overlap with positive area.
+        on one entity whose rectangles overlap with positive area. In 2D a face is an edge: its rectangle
+        is the interval along it times the fixed interval ``[0, 1]``.
         """
         e = self.elements[eid]
         rootEid, origin, length = e["rootEid"], e["referenceBoxOrigin"], e["referenceBoxEdgeLength"]
@@ -531,21 +545,24 @@ class AdaptiveMesh:
         faces = []
         for faceIndex, face in enumerate(self.topology.faces):
             rows = lattice[list(face)]
-            axis = next(k for k in range(3) if np.all(rows[:, k] == rows[0, k]))
+            axis = next(k for k in range(self.dim) if np.all(rows[:, k] == rows[0, k]))
             value = origin[axis] + int(rows[0, axis]) * length // 2
-            u, v = (k for k in range(3) if k != axis)
+            inPlane = [k for k in range(self.dim) if k != axis]
             if value in (0, rootExtent):
                 corners = []
-                for du, dv in ((0, 0), (length, length)):
-                    point = [0, 0, 0]
-                    point[axis], point[u], point[v] = value, origin[u] + du, origin[v] + dv
+                for d in (0, length):
+                    point = [0] * self.dim
+                    point[axis] = value
+                    for k in inPlane:
+                        point[k] = origin[k] + d
                     entity, position = self.rootEntities.root_face_position(rootEid, faceIndex, tuple(point))
-                    corners.append(position)
+                    # an edge's position is 1D: its second coordinate is the fixed interval [0, 1]
+                    corners.append(tuple(position) if len(position) == 2 else (position[0], d // length))
                 (u0, v0), (u1, v1) = corners
                 faces.append(FaceOnEntity(entity, Rectangle(min(u0, u1), max(u0, u1), min(v0, v1), max(v0, v1))))
             else:
-                rectangle = Rectangle(origin[u], origin[u] + length, origin[v], origin[v] + length)
-                faces.append(FaceOnEntity(InternalPlane(rootEid, axis, value), rectangle))
+                (uMin, uMax), (vMin, vMax) = ([(origin[k], origin[k] + length) for k in inPlane] + [(0, 1)])[:2]
+                faces.append(FaceOnEntity(InternalPlane(rootEid, axis, value), Rectangle(uMin, uMax, vMin, vMax)))
         return faces
 
     def balance_2to1(self) -> int:
@@ -634,16 +651,20 @@ class AdaptiveMesh:
         """Raise unless ``exactWeights`` are the exact trace weights of a node at ``xi`` on ``entity``.
 
         Checked in exact rational arithmetic, so without any tolerance: the weight of every node off the
-        entity vanishes, and the entity's weights reproduce the constant, the three reference coordinates
-        and the six quadratic monomials :math:`\\xi_a \\xi_b` at the node -- which catches a wrong entity
+        entity vanishes, and the entity's weights reproduce the constant, the reference coordinates
+        and the quadratic monomials :math:`\\xi_a \\xi_b` at the node -- which catches a wrong entity
         or orientation, not just a wrong formula.
         """
         reference = [tuple(int(v) - 1 for v in p) for p in self.topology.reference_node_lattice]
-        exponents = [(0, 0, 0)] + [tuple(int(k == a) for k in range(3)) for a in range(3)]
-        exponents += [tuple(int(k == a) + int(k == b) for k in range(3)) for a in range(3) for b in range(a, 3)]
+        d = self.dim
+        exponents = [(0,) * d] + [tuple(int(k == a) for k in range(d)) for a in range(d)]
+        exponents += [tuple(int(k == a) + int(k == b) for k in range(d)) for a in range(d) for b in range(a, d)]
 
         def monomial(point, exponent):
-            return point[0] ** exponent[0] * point[1] ** exponent[1] * point[2] ** exponent[2]
+            result = 1
+            for x, e in zip(point, exponent):
+                result *= x**e
+            return result
 
         onEntity = set(entity)
         offEntityWeightVanishes = all(w == 0 for i, w in enumerate(exactWeights) if i not in onEntity)

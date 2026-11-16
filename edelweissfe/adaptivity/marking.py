@@ -977,6 +977,8 @@ class RecoveryErrorMarker(MarkerBase):
             connectivity.append(localConnectivity)
 
         if not elements:
+            if any(len(element.nodes) != N_NODES for element in candidateElements):
+                raise NotImplementedError("hAdaptivity: the recoveryError marker supports HEX20 elements only")
             return set()
 
         coordsAll = np.asarray(coordsList, dtype=float)  # (nElem, 20, 3)

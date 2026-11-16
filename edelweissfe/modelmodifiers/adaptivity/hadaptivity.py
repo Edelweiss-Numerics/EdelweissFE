@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR."""
+"""Dynamic h-adaptivity model modifier for hanging-node AMR of HEX20 (3D) and QUAD8 (2D) elements."""
 
 from collections import defaultdict
 from dataclasses import dataclass
@@ -35,6 +35,7 @@ import numpy as np
 
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
 from edelweissfe.adaptivity.marking import RefineableElements
+from edelweissfe.adaptivity.quad8topology import Quad8Topology
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.config.elementlibrary import getElementClass
@@ -109,7 +110,8 @@ class HAdaptivitySchema:
             "Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in "
             "a mesh that also contains contact-facet elements. Elements outside this set never "
             "become octree roots and are left untouched by refinement. Defaults to 'elSet' if given, "
-            "otherwise to every 20-node (HEX20-family) element in the model."
+            "otherwise to every 20-node (HEX20-family) element of a 3D model, or every 8-node "
+            "(QUAD8-family) element of a 2D model."
         ),
         dtype=str,
         default=None,
@@ -130,8 +132,8 @@ class HAdaptivitySchema:
     splitFactor: int = schemaField(
         description=(
             "Number of equal parts per axis a marked element is split into (2 = octree bisection "
-            "into 8 children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact "
-            "for any factor."
+            "into 8 children, in 2D quadtree bisection into 4; 3 = 3x3x3 = 27 children, in 2D 3x3 = 9, "
+            "etc.). The hanging-node coupling stays exact for any factor."
         ),
         dtype=int,
         default=2,
@@ -305,16 +307,25 @@ class ModelModifier(ModelModifierBase):
                 self._elementPropertiesOf.setdefault(element, []).append(elementProperty)
 
         # restrict the octree mirror to the refineable solid elements (not e.g. contact-facet elements):
-        # the given set, or else all 20-node (HEX20-family) elements.
+        # the given set, or else all elements of the supported family: HEX20 in 3D, QUAD8 in 2D.
+        nNodesOfFamily = {3: 20, 2: 8}.get(model.domainSize)
+        if nNodesOfFamily is None:
+            raise ValueError(f"hAdaptivity supports 2D and 3D models, not a {model.domainSize}D one")
         refineSetName = options.refineElSet or options.elSet
         if refineSetName is not None:
             refineElements = list(model.elementSets[refineSetName])
         else:
-            refineElements = [el for el in model.elements.values() if len(el.nodes) == 20]
+            refineElements = [el for el in model.elements.values() if len(el.nodes) == nNodesOfFamily]
         if not refineElements:
             raise ValueError(
-                "hAdaptivity found no refineable (20-node) elements in the model; specify "
+                f"hAdaptivity found no refineable ({nNodesOfFamily}-node) elements in the model; specify "
                 "'refineElSet' (or 'elSet') to select the solid element set explicitly."
+            )
+        wrongFamily = [el.elNumber for el in refineElements if len(el.nodes) != nNodesOfFamily]
+        if wrongFamily:
+            raise ValueError(
+                f"hAdaptivity refines {nNodesOfFamily}-node elements in a {model.domainSize}D model, but the "
+                f"refineable set holds elements with another node count, e.g. {wrongFamily[:5]}"
             )
 
         # Which elements this instance owns; TopologyPipeline.checkModelModifierDomains rejects overlaps
@@ -331,7 +342,7 @@ class ModelModifier(ModelModifierBase):
 
         # build the AdaptiveMesh mirror: the roots are the refineable elements with the model's own
         # connectivity and node labels; new node labels come from the model's own allocator.
-        self._topology = Hex20Topology()
+        self._topology = Hex20Topology() if model.domainSize == 3 else Quad8Topology()
         self._mesh = AdaptiveMesh(
             splitFactor=self.splitFactor, topology=self._topology, reserve_labels=model.topology.reserveNodeNumbers
         )
@@ -406,7 +417,7 @@ class ModelModifier(ModelModifierBase):
         AMR-created boundary nodes onto an analytical surface.
 
         Without this, the mirror silently keeps subdividing from its own pre-mutation coordinates:
-        ``AdaptiveMesh.refine`` calls ``Hex20Topology.subdivide(e["coords"], ...)``, where
+        ``AdaptiveMesh.refine`` calls ``topology.subdivide(e["coords"], ...)``, where
         ``e["coords"]`` was captured once, at the moment that element's own parent was refined --
         never re-read from ``model.nodes`` afterward. A LATER refinement of an already-corrected
         element would therefore generate its children from the geometry as it stood before the
@@ -779,8 +790,8 @@ class ModelModifier(ModelModifierBase):
             child.assignProperty(elementProperty.propertyName, elementProperty.values)
         self._stateTransfer.transferState(parentEl, [child], self._topology)
 
-        # warm start: interpolate each NEW node's field values from the parent via the HEX20
-        # isoparametric map, so the increment restarts from a consistent state, not zero
+        # warm start: interpolate each NEW node's field values from the parent via its isoparametric
+        # map, so the increment restarts from a consistent state, not zero
         octant = mesh.elements[parentEid]["children"].index(eid)
         childParams = self._octantParams[octant]
         for i, label in enumerate(e["conn"]):
