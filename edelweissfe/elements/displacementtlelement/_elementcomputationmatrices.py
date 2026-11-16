@@ -30,6 +30,7 @@ import numpy as np
 import numpy.linalg as lin
 
 from edelweissfe.elements._hexa3dnodeordering import hexa8DNdXi, hexa20DNdXi
+from edelweissfe.elements._quad2dnodeordering import quad4DNdXi, quad8DNdXi
 
 
 def computeDeformationGradient(U: np.ndarray, nablaN: np.ndarray, nInt: int, nNodes: int, dim: int):
@@ -179,48 +180,11 @@ def _Ndiff2D(xi: np.ndarray, eta: np.ndarray, nNodes: int):
     np.ndarray
         The derivative of the 2D shape functions w.r.t. the local coordinates."""
 
+    # Node ordering and natural directions: see edelweissfe.elements._quad2dnodeordering
     if nNodes == 4:  # Quad4
-        return np.array(
-            [
-                [
-                    -1 / 4 * (1 - xi),
-                    1 / 4 * (1 - xi),
-                    1 / 4 * (1 + xi),
-                    -1 / 4 * (1 + xi),
-                ],
-                [
-                    -1 / 4 * (1 - eta),
-                    -1 / 4 * (1 + eta),
-                    1 / 4 * (1 + eta),
-                    1 / 4 * (1 - eta),
-                ],
-            ]
-        )
+        return quad4DNdXi(xi, eta)
     else:  # Quad8
-        return np.array(
-            [
-                [
-                    -1 / 4 * (-1 + xi) * (2 * eta + xi),
-                    1 / 4 * (-1 + xi) * (xi - 2 * eta),
-                    1 / 4 * (1 + xi) * (2 * eta + xi),
-                    -1 / 4 * (1 + xi) * (xi - 2 * eta),
-                    eta * (-1 + xi),
-                    -1 / 2 * (1 + xi) * (-1 + xi),
-                    -eta * (1 + xi),
-                    1 / 2 * (1 + xi) * (-1 + xi),
-                ],
-                [
-                    -1 / 4 * (-1 + eta) * (eta + 2 * xi),
-                    1 / 4 * (1 + eta) * (2 * xi - eta),
-                    1 / 4 * (1 + eta) * (eta + 2 * xi),
-                    -1 / 4 * (-1 + eta) * (2 * xi - eta),
-                    1 / 2 * (1 + eta) * (-1 + eta),
-                    -xi * (1 + eta),
-                    -1 / 2 * (1 + eta) * (-1 + eta),
-                    xi * (-1 + eta),
-                ],
-            ]
-        )
+        return quad8DNdXi(xi, eta)
 
 
 def _Ndiff3D(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nNodes: int):

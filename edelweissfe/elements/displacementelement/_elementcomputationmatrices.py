@@ -34,6 +34,12 @@ from edelweissfe.elements._hexa3dnodeordering import (
     hexa20DNdXi,
     hexa20N,
 )
+from edelweissfe.elements._quad2dnodeordering import (
+    quad4DNdXi,
+    quad4N,
+    quad8DNdXi,
+    quad8N,
+)
 
 
 def computeJacobian(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: int, nNodes: int, dim: int):
@@ -62,10 +68,7 @@ def computeJacobian(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarra
         The requested Jacobian matrix."""
 
     if dim == 2:
-        if nNodes == 4:
-            return _J2D4(xi, eta, x, nInt)
-        elif nNodes == 8:
-            return _J2D8(xi, eta, x, nInt)
+        return _JFromDNdXi(_dNdXi2D(xi, eta, nInt, nNodes), x, nInt)
     elif dim == 3:
         if nNodes == 8:
             return _J3D8(xi, eta, z, x, nInt)
@@ -99,10 +102,8 @@ def computeBOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarr
         The requested B operator."""
 
     if dim == 2:
-        if nNodes == 4:
-            return _B2D4(xi, eta, x, nInt)
-        elif nNodes == 8:
-            return _B2D8(xi, eta, x, nInt)
+        dNdXi = _dNdXi2D(xi, eta, nInt, nNodes)
+        return _B2DGeneric(dNdXi, _JFromDNdXi(dNdXi, x, nInt), nInt, nNodes)
     elif dim == 3:
         if nNodes == 8:
             return _B3D8(xi, eta, z, x, nInt)
@@ -135,40 +136,13 @@ def computeNOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int, 
 
     N = np.zeros([nInt, nNodes])
     if dim == 2:
-        # the 2D Jacobian and B operator take eta along the first and xi along the second natural direction
-        xi, eta = eta, xi
+        # Quad4/Quad8 node ordering and natural directions: see edelweissfe.elements._quad2dnodeordering
         if nNodes == 4:  # Quad4
             for i in range(nInt):
-                N[i] = (
-                    1
-                    / 4
-                    * np.array(
-                        [
-                            (1 - xi[i]) * (1 - eta[i]),
-                            (1 + xi[i]) * (1 - eta[i]),
-                            (1 + xi[i]) * (1 + eta[i]),
-                            (1 - xi[i]) * (1 + eta[i]),
-                        ]
-                    )
-                )
+                N[i] = quad4N(xi[i], eta[i])
         elif nNodes == 8:  # Quad8
             for i in range(nInt):
-                N[i] = (
-                    1
-                    / 4
-                    * np.array(
-                        [
-                            (1 - xi[i]) * (1 - eta[i]) * (-xi[i] - eta[i] - 1),
-                            (1 + xi[i]) * (1 - eta[i]) * (xi[i] - eta[i] - 1),
-                            (1 + xi[i]) * (1 + eta[i]) * (xi[i] + eta[i] - 1),
-                            (1 - xi[i]) * (1 + eta[i]) * (-xi[i] + eta[i] - 1),
-                            2 * (1 - xi[i] ** 2) * (1 - eta[i]),
-                            2 * (1 + xi[i]) * (1 - eta[i] ** 2),
-                            2 * (1 - xi[i] ** 2) * (1 + eta[i]),
-                            2 * (1 - xi[i]) * (1 - eta[i] ** 2),
-                        ]
-                    )
-                )
+                N[i] = quad8N(xi[i], eta[i])
     elif dim == 3:
         # Hexa8/Hexa20 node ordering (see edelweissfe.elements._hexa3dnodeordering) follows the Abaqus
         # C3D8/C3D20 convention (corner ring 0-3 at zeta=-1, ring 4-7 at zeta=+1), as in Marmot.
@@ -179,97 +153,6 @@ def computeNOperator(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int, 
             for i in range(nInt):
                 N[i] = hexa20N(xi[i], eta[i], z[i])
     return N
-
-
-def _J2D4(xi: np.ndarray, eta: np.ndarray, x: np.ndarray, nInt: int):
-    """Get the Jacobi matrix for a Quad4 element.
-
-    Parameters
-    ----------
-    xi
-        Local coordinates xi for the integration points.
-    eta
-        Local coordinates eta for the integration points.
-    x
-        Coordinates of the element points.
-    nInt
-        Number of quadrature points the element has.
-
-    Returns
-    -------
-    np.ndarray
-        The requested Jacobian matrix."""
-
-    J = np.zeros([nInt, 2, 2])
-    # calc all parameters for the X and Y functions (Q4)
-    A = np.array([[1, -1, -1, 1], [1, 1, -1, -1], [1, 1, 1, 1], [1, -1, 1, -1]])
-    invA = np.linalg.inv(A)
-    # calculate parameters
-    ax = invA @ np.transpose(x[0])
-    ay = invA @ np.transpose(x[1])
-    for i in range(0, nInt):  # for all Gauss points (N in total)
-        # [J] Jacobi matrix (only Q4)
-        J[i] = np.array(
-            [
-                [ax[1] + ax[3] * xi[i], ay[1] + ay[3] * xi[i]],
-                [ax[2] + ax[3] * eta[i], ay[2] + ay[3] * eta[i]],
-            ]
-        )
-    return J
-
-
-def _J2D8(xi: np.ndarray, eta: np.ndarray, x: np.ndarray, nInt: int):
-    """Get the Jacobi matrix for a Quad8 element.
-
-    Parameters
-    ----------
-    xi
-        Local coordinates xi for the integration points.
-    eta
-        Local coordinates eta for the integration points.
-    x
-        Coordinates of the element points.
-    nInt
-        Number of quadrature points the element has.
-
-    Returns
-    -------
-    np.ndarray
-        The requested Jacobian matrix."""
-
-    J = np.zeros([nInt, 2, 2])
-    # calc all parameters for the X and Y functions (Q8)
-    A = np.array(
-        [
-            [1, -1, -1, 1, 1, 1, -1, -1],
-            [1, 1, -1, -1, 1, 1, -1, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, -1, 1, -1, 1, 1, 1, -1],
-            [1, 0, -1, 0, 0, 1, 0, 0],
-            [1, 1, 0, 0, 1, 0, 0, 0],
-            [1, 0, 1, 0, 0, 1, 0, 0],
-            [1, -1, 0, 0, 1, 0, 0, 0],
-        ]
-    )
-    invA = np.linalg.inv(A)
-    # calculate parameters
-    ax = invA @ np.transpose(x[0])
-    ay = invA @ np.transpose(x[1])
-    for i in range(0, nInt):  # for all Gauss points (N in total)
-        # [J] Jacobi matrix for Q8
-        J[i] = np.array(
-            [
-                [
-                    ax[1] + ax[3] * xi[i] + 2 * ax[4] * eta[i] + 2 * ax[6] * eta[i] * xi[i] + ax[7] * xi[i] ** 2,
-                    ay[1] + ay[3] * xi[i] + 2 * ay[4] * eta[i] + 2 * ay[6] * eta[i] * xi[i] + ay[7] * xi[i] ** 2,
-                ],
-                [
-                    ax[2] + ax[3] * eta[i] + 2 * ax[5] * xi[i] + ax[6] * eta[i] ** 2 + 2 * ax[7] * eta[i] * xi[i],
-                    ay[2] + ay[3] * eta[i] + 2 * ay[5] * xi[i] + ay[6] * eta[i] ** 2 + 2 * ay[7] * eta[i] * xi[i],
-                ],
-            ]
-        )
-    return J
 
 
 def _dNdXi3D8(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int):
@@ -297,13 +180,39 @@ def _dNdXi3D8(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, nInt: int):
     return dNdXi
 
 
+def _dNdXi2D(xi: np.ndarray, eta: np.ndarray, nInt: int, nNodes: int):
+    """Get dN/dxi for a Quad4 or Quad8 element (see :mod:`edelweissfe.elements._quad2dnodeordering`).
+
+    Parameters
+    ----------
+    xi
+        Local coordinates xi for the integration points.
+    eta
+        Local coordinates eta for the integration points.
+    nInt
+        Number of quadrature points the element has.
+    nNodes
+        Number of nodes the element has, 4 or 8.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(nInt, 2, nNodes)``: row 0/1 are d/dxi, d/deta; columns are nodes."""
+
+    dNdXiOfQuad = quad4DNdXi if nNodes == 4 else quad8DNdXi
+    dNdXi = np.zeros([nInt, 2, nNodes])
+    for i in range(nInt):
+        dNdXi[i] = dNdXiOfQuad(xi[i], eta[i])
+    return dNdXi
+
+
 def _JFromDNdXi(dNdXi: np.ndarray, x: np.ndarray, nInt: int):
-    """Get the Jacobi matrix for a 3D solid element from its (already computed) dN/dxi.
+    """Get the Jacobi matrix for a 2D or 3D solid element from its (already computed) dN/dxi.
 
     Parameters
     ----------
     dNdXi
-        Shape ``(nInt, 3, nNodes)``, as returned by :func:`_dNdXi3D8`/:func:`_dNdXi3D20`.
+        Shape ``(nInt, dim, nNodes)``, as returned by :func:`_dNdXi2D`/:func:`_dNdXi3D8`/:func:`_dNdXi3D20`.
     x
         Coordinates of the element points.
     nInt
@@ -314,7 +223,8 @@ def _JFromDNdXi(dNdXi: np.ndarray, x: np.ndarray, nInt: int):
     np.ndarray
         The requested Jacobian matrix."""
 
-    J = np.zeros([nInt, 3, 3])
+    dim = dNdXi.shape[1]
+    J = np.zeros([nInt, dim, dim])
     for i in range(nInt):
         J[i] = dNdXi[i] @ x.T
     return J
@@ -393,139 +303,33 @@ def _J3D20(xi: np.ndarray, eta: np.ndarray, z: np.ndarray, x: np.ndarray, nInt: 
     return _JFromDNdXi(_dNdXi3D20(xi, eta, z, nInt), x, nInt)
 
 
-def _B2D4(xi: np.ndarray, eta: np.ndarray, x: np.ndarray, nInt: int):
-    """Get the B operator for a linear Quad4 element.
+def _B2DGeneric(dNdXi: np.ndarray, J: np.ndarray, nInt: int, nNodes: int):
+    """Assemble the standard isoparametric strain-displacement (B) operator for a 2D solid
+    element from its dN/dxi and Jacobian, given a node-major local DOF vector
+    ``(ux1,uy1,ux2,uy2,...)``.
 
     Parameters
     ----------
-    xi
-        Local coordinates xi for the integration points.
-    eta
-        Local coordinates eta for the integration points.
-    x
-        Coordinates of the element points.
+    dNdXi
+        Shape ``(nInt, 2, nNodes)``, as returned by :func:`_dNdXi2D`.
+    J
+        The Jacobian matrices, shape ``(nInt, 2, 2)``.
     nInt
         Number of quadrature points the element has.
+    nNodes
+        Number of nodes the element has.
 
     Returns
     -------
     np.ndarray
-        The requested B operator."""
+        The B operator, shape ``(nInt, 3, 2*nNodes)``, Voigt order ``(exx, eyy, gxy)``."""
 
-    Bi = np.zeros([nInt, 3, 8])
-    # [a] matrix that connects strain and displacement derivatives
-    a = np.array([[1, 0, 0, 0], [0, 0, 0, 1], [0, 1, 1, 0]])
-    J = _J2D4(xi, eta, x, nInt)
-    for i in range(0, nInt):  # for all Gauss points (N in total)
-        # make inverse of Jacobi
-        invJ = np.linalg.inv(J[i])
-        # [b] connects displacement derivatives (Q4)
-        bi = np.array([[invJ, np.zeros([2, 2])], [np.zeros([2, 2]), invJ]])
-        # make [b] what it should actually look like
-        b = bi.transpose(0, 2, 1, 3).reshape(4, 4)
-        # [h] as a temporary matrix
-        h = np.array(
-            [
-                [
-                    -1 / 4 * (1 - xi[i]),
-                    0,
-                    1 / 4 * (1 - xi[i]),
-                    0,
-                    1 / 4 * (1 + xi[i]),
-                    0,
-                    -1 / 4 * (1 + xi[i]),
-                ],
-                [
-                    -1 / 4 * (1 - eta[i]),
-                    0,
-                    -1 / 4 * (1 + eta[i]),
-                    0,
-                    1 / 4 * (1 + eta[i]),
-                    0,
-                    1 / 4 * (1 - eta[i]),
-                ],
-            ]
-        )
-        # assemble [c] differentiated shapefunctions (Q4)
-        c = np.vstack([np.hstack([h, np.zeros([2, 1])]), np.hstack([np.zeros([2, 1]), h])])
-        # [B] for all different s and t
-        Bi[i] = a @ b @ c
-    return Bi
-
-
-def _B2D8(xi: np.ndarray, eta: np.ndarray, x: np.ndarray, nInt: int):
-    """Get the B operator for a linear Quad8 element.
-
-    Parameters
-    ----------
-    xi
-        Local coordinates xi for the integration points.
-    eta
-        Local coordinates eta for the integration points.
-    x
-        Coordinates of the element points.
-    nInt
-        Number of quadrature points the element has.
-
-    Returns
-    -------
-    np.ndarray
-        The requested B operator."""
-
-    Bi = np.zeros([nInt, 3, 16])
-    # [a] matrix that connects strain and displacement derivatives
-    a = np.array([[1, 0, 0, 0], [0, 0, 0, 1], [0, 1, 1, 0]])
-    J = _J2D8(xi, eta, x, nInt)
-    for i in range(0, nInt):  # for all Gauss points (N in total)
-        # make inverse of Jacobi
-        invJ = np.linalg.inv(J[i])
-        # [b] connects displacement derivatives (Q8)
-        bi = np.array([[invJ, np.zeros([2, 2])], [np.zeros([2, 2]), invJ]])
-        # make [b] what it should actually look like
-        b = bi.transpose(0, 2, 1, 3).reshape(4, 4)
-        # [h] as a temporary matrix
-        h = np.array(
-            [
-                [
-                    -1 / 4 * (-1 + xi[i]) * (2 * eta[i] + xi[i]),
-                    0,
-                    1 / 4 * (-1 + xi[i]) * (xi[i] - 2 * eta[i]),
-                    0,
-                    1 / 4 * (1 + xi[i]) * (2 * eta[i] + xi[i]),
-                    0,
-                    -1 / 4 * (1 + xi[i]) * (xi[i] - 2 * eta[i]),
-                    0,
-                    eta[i] * (-1 + xi[i]),
-                    0,
-                    -1 / 2 * (1 + xi[i]) * (-1 + xi[i]),
-                    0,
-                    -eta[i] * (1 + xi[i]),
-                    0,
-                    1 / 2 * (1 + xi[i]) * (-1 + xi[i]),
-                ],
-                [
-                    -1 / 4 * (-1 + eta[i]) * (eta[i] + 2 * xi[i]),
-                    0,
-                    1 / 4 * (1 + eta[i]) * (2 * xi[i] - eta[i]),
-                    0,
-                    1 / 4 * (1 + eta[i]) * (eta[i] + 2 * xi[i]),
-                    0,
-                    -1 / 4 * (-1 + eta[i]) * (2 * xi[i] - eta[i]),
-                    0,
-                    1 / 2 * (1 + eta[i]) * (-1 + eta[i]),
-                    0,
-                    -xi[i] * (1 + eta[i]),
-                    0,
-                    -1 / 2 * (1 + eta[i]) * (-1 + eta[i]),
-                    0,
-                    xi[i] * (-1 + eta[i]),
-                ],
-            ]
-        )
-        # assemble [c] differentiated shapefunctions (Q8)
-        c = np.vstack([np.hstack([h, np.zeros([2, 1])]), np.hstack([np.zeros([2, 1]), h])])
-        # [B] for all different s and t
-        Bi[i] = a @ b @ c
+    Bi = np.zeros([nInt, 3, 2 * nNodes])
+    for i in range(nInt):
+        dNdX = np.linalg.solve(J[i], dNdXi[i])  # (2, nNodes): row b = dN/dX_b
+        for k in range(nNodes):
+            dNkdX, dNkdY = dNdX[:, k]
+            Bi[i, :, 2 * k : 2 * k + 2] = np.array([[dNkdX, 0], [0, dNkdY], [dNkdY, dNkdX]])
     return Bi
 
 
