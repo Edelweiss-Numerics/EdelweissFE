@@ -26,8 +26,9 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-Integration points of beam cross sections ("section points"), for beam elements that integrate their section over
-given points, e.g., the Marmot beams ``B<d>D<n>``.
+Integration points of beam cross sections ("section points", the fibers of Marmot's ``BeamFiberSection``), for beam
+elements that integrate their section over given points, e.g., the Marmot beams ``B<d>D<n>``. The triangle rules
+of the polygons come from :mod:`edelweissfe.utils.trianglequadrature`.
 
 A section is a set of points :math:`(y_i, z_i)` with areas (weights) :math:`A_i` in the section coordinates
 :math:`(y, z)` of the beam. The generators cover
@@ -47,6 +48,11 @@ moments of area are integrated exactly by gauss with :math:`n \\geq 2`, lobatto 
 from dataclasses import dataclass
 
 import numpy as np
+
+from edelweissfe.utils.trianglequadrature import (
+    TRIANGLE_RULES_BY_DEGREE,
+    triangleRuleByDegree,
+)
 
 #: The 1D integration rules.
 RULES = ("gauss", "lobatto", "simpson")
@@ -199,29 +205,8 @@ def iProfile(
     return flange.shifted(0.5 * (h - tf), 0.0) + flange.shifted(-0.5 * (h - tf), 0.0) + web
 
 
-#: Symmetric triangle rules with positive weights (Dunavant), by polynomial degree: (barycentric points, weights).
-_TRIANGLE_RULES = {
-    1: ([(1 / 3, 1 / 3, 1 / 3)], [1.0]),
-    2: ([(2 / 3, 1 / 6, 1 / 6), (1 / 6, 2 / 3, 1 / 6), (1 / 6, 1 / 6, 2 / 3)], [1 / 3] * 3),
-}
-
-
-def _orbit(a: float) -> list:
-    b = 1 - 2 * a
-    return [(b, a, a), (a, b, a), (a, a, b)]
-
-
-_TRIANGLE_RULES[4] = (
-    _orbit(0.445948490915965) + _orbit(0.091576213509771),
-    [0.223381589678011] * 3 + [0.109951743655322] * 3,
-)
-_TRIANGLE_RULES[5] = (
-    [(1 / 3, 1 / 3, 1 / 3)] + _orbit(0.470142064105115) + _orbit(0.101286507323456),
-    [0.225] + [0.132394152788506] * 3 + [0.125939180544827] * 3,
-)
-
 #: The available orders (polynomial degrees) of the triangle rules.
-TRIANGLE_ORDERS = tuple(sorted(_TRIANGLE_RULES))
+TRIANGLE_ORDERS = tuple(sorted(TRIANGLE_RULES_BY_DEGREE))
 
 
 def _trapezoids(loops: list) -> list:
@@ -268,12 +253,12 @@ def polygon(loops: list, meshSize: float = None, order: int = 2) -> SectionPoint
     order
         The polynomial degree of the triangle rule.
     """
-    if order not in _TRIANGLE_RULES:
+    if order not in TRIANGLE_RULES_BY_DEGREE:
         raise ValueError(f"Triangle rules of the orders {TRIANGLE_ORDERS} are available.")
     allVertices = np.concatenate([np.asarray(loop, dtype=float) for loop in loops])
     if meshSize is None:
         meshSize = np.ptp(allVertices, axis=0).max() / 10
-    bary, weights = (np.asarray(v, dtype=float) for v in _TRIANGLE_RULES[order])
+    bary, weights = triangleRuleByDegree(order)
 
     ys, zs, areas = [], [], []
 

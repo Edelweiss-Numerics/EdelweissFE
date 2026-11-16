@@ -1,5 +1,5 @@
 """Beams: the Marmot Euler-Bernoulli beam elements (B2D2, B2D3, B3D2, B3D3) and their co-rotational
-(finite rotation) variant B2D2CR with the beam section (section points of parametric profiles, polygons, point
+(finite rotation) variants B2D2CR and B3D2CR with the beam section (section points of parametric profiles, polygons, point
 files), verified against analytical solutions.
 
 Needs the Marmot module BeamElement.
@@ -29,7 +29,7 @@ def _marmotHas(elementType: str) -> bool:
 
 
 pytestmark = pytest.mark.skipif(
-    not all(_marmotHas(t) for t in ("B2D2", "B2D3", "B3D2", "B3D3", "B2D2CR")),
+    not all(_marmotHas(t) for t in ("B2D2", "B2D3", "B3D2", "B3D3", "B2D2CR", "B3D2CR")),
     reason="Marmot is built without the BeamElement module",
 )
 
@@ -48,7 +48,7 @@ def _line(firstLabel: int, start, end, nElements: int, elType: str, quadratic: b
     """*node and *element blocks of a straight line of 2-node (or 3-node: end, end, mid, the mid nodes labeled from
     firstLabel + 50000) elements, and its first and last node labels."""
     if quadratic is None:
-        quadratic = elType.endswith("3") or elType in ("TR2D3", "TR3D3")
+        quadratic = elType.endswith("3")
     start, end = np.asarray(start, float), np.asarray(end, float)
 
     def node(label, s):
@@ -298,8 +298,9 @@ def test_l_profile_polygon_cantilever_couples_bending(tmp_path):
 
 
 def test_composite_section_by_overlapping_elements(tmp_path):
-    """one material per element: a steel tube filled with concrete as two beam elements on the same nodes; the
-    cantilever deflection is P L^3 / (3 (E_s I_s + E_c I_c))"""
+    """one material per element: a steel tube filled with concrete as two beam elements on the same nodes, both
+    measured from the common axis (centroidAtAxis=False); the cantilever deflection is P L^3 / (3 (E_s I_s + E_c I_c))
+    """
     d, di, L, P = 100.0, 90.0, 1000.0, 50.0
     line, first, last = _line(1, (0, 0), (L, 0), 4, "B2D2")
     core = "\n".join(f"{100 + i}, {first + i}, {first + i + 1}" for i in range(4))
@@ -321,9 +322,9 @@ def test_composite_section_by_overlapping_elements(tmp_path):
 *nSet, nSet=tip
 {last}
 
-*section, name=tubeSection, type=beam, profile=tube, d={d}, di={di}, nRings=2, nSectors=12, material=steel
+*section, name=tubeSection, type=beam, profile=tube, d={d}, di={di}, nRings=2, nSectors=12, material=steel, centroidAtAxis=False
 tube
-*section, name=coreSection, type=beam, profile=circle, d={di}, nRings=3, nSectors=12, material=concrete
+*section, name=coreSection, type=beam, profile=circle, d={di}, nRings=3, nSectors=12, material=concrete, centroidAtAxis=False
 core
 
 *job, name=job, domain=2d
@@ -423,7 +424,7 @@ def test_elastica_tip_force(tmp_path, lam, ref):
     np.testing.assert_allclose([U[1] / L, -U[0] / L, R_[0]], ref, atol=1e-3)
 
 
-def test_small_load_equals_BE2D2(tmp_path):
+def test_small_load_corotational_equals_linear(tmp_path):
     """small tip load: B2D2CR = B2D2 (geometrically linear) up to the second order effects"""
     L, b, h, n, P = 100.0, 2.0, 4.0, 4, 1e-3
     results = []
@@ -459,3 +460,161 @@ def test_section_multiplicity(tmp_path):
         tips.append(u.getLastResult().ravel()[1])
     np.testing.assert_allclose(tips[0] / tips[1], 3.0, rtol=1e-9)
     np.testing.assert_allclose(tips[0], P * L**3 / (3 * E_STEEL * math.pi * d**4 / 64), rtol=1e-6)
+
+
+def _rectanglePointsFile(path, y0, y1, b, nLayers):
+    """a points file (y, z, area) of a rectangle y in [y0, y1], width b: nLayers with 2 Gauss points each (exact A,
+    first and second moments)"""
+    g, dy = 1 / math.sqrt(3), (y1 - y0) / nLayers
+    lines = [f"{y0 + (i + 0.5 + 0.5 * a) * dy:.15g}, 0, {0.5 * b * dy:.15g}" for i in range(nLayers) for a in (-g, g)]
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def _compositeDeck(tmp_path, centroidAtAxis, elType="B2D3", n=1):
+    """a steel strip y in [0, 20] on a concrete web y in [-60, 0] (both b = 10) as two beam elements on the same
+    nodes: a non-concentric composite"""
+    L, P = 1000.0, 20.0
+    steel = _rectanglePointsFile(tmp_path / "steel.csv", 0.0, 20.0, 10.0, 4)
+    concrete = _rectanglePointsFile(tmp_path / "concrete.csv", -60.0, 0.0, 10.0, 6)
+    line, first, last = _line(1, (0, 0), (L, 0), n, elType)
+    mid = (lambda i: f", {first + 50000 + i}") if elType.endswith("3") else (lambda i: "")
+    web = "\n".join(f"{100 + i}, {first + i}, {first + i + 1}{mid(i)}" for i in range(n))
+    axis = "" if centroidAtAxis else ", centroidAtAxis=False"
+    return (
+        L,
+        P,
+        f"""*material, name=linearelastic, id=steel, provider=marmot
+{E_STEEL}, 0.3
+*material, name=linearelastic, id=concrete, provider=marmot
+{E_CONCRETE}, 0.2
+
+{line}
+*element, type={elType}
+{web}
+
+*elSet, elSet=strip, generate=True
+{first}, {last - 1}, 1
+*elSet, elSet=web, generate=True
+100, {100 + n - 1}, 1
+*nSet, nSet=root
+{first}
+*nSet, nSet=tip
+{last}
+
+*section, name=stripSection, type=beam, profile=points, pointsFile={steel}, material=steel{axis}
+strip
+*section, name=webSection, type=beam, profile=points, pointsFile={concrete}, material=concrete{axis}
+web
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=u, nSet=tip, field=displacement, result=U, saveHistory=True,
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
+>>dirichlet, name=root, nSet=root, field=displacement, 1=0, 2=0
+>>dirichlet, name=rootR, nSet=root, field=rotation, 1=0
+>>nodeforces, name=P, nSet=tip, field=displacement, 2={P}
+""",
+    )
+
+
+def test_composite_section_non_concentric(tmp_path):
+    """a non-concentric composite (steel strip on a concrete web, coordinates from the common axis): the cantilever
+    bends about the modulus-weighted centroid, tip deflection P L^3 / (3 EI) with the transformed-section EI. One
+    B2D3 is exact; B2D2 converges with h^2 (its axial strain is constant per element, the eccentric section needs the
+    linear one, eps_0 = -y_n kappa)"""
+    parts = [(E_STEEL, 10.0 * 20.0, 10.0, 20.0, 10.0), (E_CONCRETE, 10.0 * 60.0, -30.0, 60.0, 10.0)]  # E, A, yc, h, b
+    yn = sum(E * A * yc for E, A, yc, _, _ in parts) / sum(E * A for E, A, _, _, _ in parts)
+    EI = sum(E * (b * h**3 / 12 + A * (yc - yn) ** 2) for E, A, yc, h, b in parts)
+
+    def relativeError(elType, n):
+        path = tmp_path / f"{elType}_{n}"
+        path.mkdir()
+        L, P, deck = _compositeDeck(path, False, elType, n)
+        _, (u,) = _run(path, deck, "u")
+        return u.getLastResult().ravel()[1] / (P * L**3 / (3 * EI)) - 1
+
+    assert abs(relativeError("B2D3", 1)) < 1e-10
+    e4, e8 = relativeError("B2D2", 4), relativeError("B2D2", 8)
+    assert 3.9 < e4 / e8 < 4.1
+
+
+def test_composite_section_requires_common_axis(tmp_path):
+    """the parts of a composite with centroidAtAxis=True would each be shifted to their own centroid: rejected"""
+    _, _, deck = _compositeDeck(tmp_path, centroidAtAxis=True)
+    with pytest.raises(ValueError, match="composite section"):
+        _run(tmp_path, deck, "u")
+
+
+def test_3d_section_requires_orientation(tmp_path):
+    """a 3D rectangle without the orientation vector: rejected (a default chosen per element would rotate the section
+    along a curved member)"""
+    deck = _beamDeck(
+        "B3D2",
+        (0, 0, 0),
+        (100, 0, 0),
+        2,
+        "profile=rectangle, b=10, h=20",
+        "3d",
+        ">>dirichlet, name=root, nSet=root, field=displacement, 1=0, 2=0, 3=0",
+    )
+    with pytest.raises(ValueError, match="orientation vector"):
+        _run(tmp_path, deck, "u")
+
+
+@pytest.mark.parametrize("elType, domain", [("B2D3", "2d"), ("B3D3", "3d")])
+def test_line_load_one_quadratic_element(tmp_path, elType, domain):
+    """one 3-node (quintic Hermite) beam under a uniform line load q = b A (a body force): the exact cantilever
+    deflection q L^4 / (8 EI) and rotation q L^3 / (6 EI)"""
+    L, bf = 200.0, 0.01
+    b, h = 10.0, 20.0
+    q = bf * b * h
+    is3d = domain == "3d"
+    orientation = ", n1x=0, n1y=1, n1z=0" if is3d else ""
+    fix = "1=0, 2=0, 3=0" if is3d else "1=0, 2=0"
+    fixR = "1=0, 2=0, 3=0" if is3d else "1=0"
+    force = "'0, -{0}, 0'".format(bf) if is3d else "'0, -{0}'".format(bf)
+    deck = _beamDeck(
+        elType,
+        (0, 0, 0) if is3d else (0, 0),
+        (L, 0, 0) if is3d else (L, 0),
+        1,
+        f"profile=rectangle, b={b}, h={h}, nY=2, nZ=2{orientation}",
+        domain,
+        f""">>dirichlet, name=root, nSet=root, field=displacement, {fix}
+>>dirichlet, name=rootR, nSet=root, field=rotation, {fixR}
+>>bodyforce, name=q, elSet=beam, forceVector={force}, f(t)=t
+""",
+    )
+    _, (u, r) = _run(tmp_path, deck, "u", "r")
+    EI = E_STEEL * b * h**3 / 12
+    np.testing.assert_allclose(u.getLastResult().ravel()[1], -q * L**4 / (8 * EI), rtol=1e-10)
+    np.testing.assert_allclose(r.getLastResult().ravel()[-1], -q * L**3 / (6 * EI), rtol=1e-10)
+
+
+@pytest.mark.parametrize("lam, ref", [(2.0, (0.49346, 0.16064, 0.78175))])
+def test_elastica_tip_force_3d(tmp_path, lam, ref):
+    """B3D2CR: the 3D cantilever along x with a dead tip force along y gives the planar elastica of
+    test_elastica_tip_force (tip deflection v/L, shortening (L - x)/L, rotation about z)"""
+    L, b, h, n = 100.0, 1.0, 1.0, 40
+    EI = E_STEEL * b * h**3 / 12
+    deck = _beamDeck(
+        "B3D2CR",
+        (0, 0, 0),
+        (L, 0, 0),
+        n,
+        f"profile=rectangle, b={b}, h={h}, nY=2, nZ=2, n1x=0, n1y=1, n1z=0",
+        "3d",
+        f""">>dirichlet, name=root, nSet=root, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=rootR, nSet=root, field=rotation, 1=0, 2=0, 3=0
+>>nodeforces, name=P, nSet=tip, field=displacement, 2={lam * EI / L**2}
+""",
+    ).replace("maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10", "maxInc=0.1, minInc=1e-8, maxNumInc=100, maxIter=15")
+    _, (u, r) = _run(tmp_path, deck, "u", "r")
+    U, R_ = u.getLastResult().ravel(), r.getLastResult().ravel()
+    np.testing.assert_allclose([U[1] / L, -U[0] / L, R_[2]], ref, atol=1e-3)
+    assert abs(U[2]) < 1e-12 * L and np.abs(R_[:2]).max() < 1e-12  # stays in the x-y plane

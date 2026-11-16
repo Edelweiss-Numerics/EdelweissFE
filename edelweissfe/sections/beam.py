@@ -26,51 +26,84 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-A section for beam elements, e.g., the Marmot Euler-Bernoulli beams ``B2D2``, ``B2D3``, ``B3D2``, ``B3D3``,
-``B2D2CR`` (co-rotational),
-which integrate their cross section over section points with one material instance per point (any Marmot
-hypoelastic material). This section generates the points (see :mod:`edelweissfe.utils.beamsections`) and passes
-them, with the orientation and the torsion constant, as element properties.
+A section for beam elements: the Marmot Euler-Bernoulli beams ``B2D2``, ``B2D3``, ``B3D2``, ``B3D3`` and their
+co-rotational (finite rotation) variants ``B2D2CR`` and ``B3D2CR``. They integrate their cross section over section
+points (fibers), each with its own material instance (any Marmot hypoelastic material). This section generates the
+fibers (see :mod:`edelweissfe.utils.beamsections`) and passes them, with the orientation and the torsion constant,
+as element properties. The element documentation is Marmot's beam element page.
 
 Profiles (``profile=``):
 
-* ``rectangle`` (``b`` along z, ``h`` along y; ``nY`` x ``nZ`` points),
-* ``circle`` (``d``) and ``tube`` (``d``, ``di``; ``nRings`` x ``nSectors`` points),
-* ``iprofile`` (``h``, ``b``, ``tf``, ``tw``; ``nY`` points along the web, ``nZ`` across a flange, ``nT`` through a
+* ``rectangle`` (``b`` along z, ``h`` along y; ``nY`` x ``nZ`` fibers),
+* ``circle`` (``d``) and ``tube`` (``d``, ``di``; ``nRings`` x ``nSectors`` fibers),
+* ``iprofile`` (``h``, ``b``, ``tf``, ``tw``; ``nY`` fibers along the web, ``nZ`` across a flange, ``nT`` through a
   flange or the web thickness),
 * ``polygon`` (``polygonFile``: vertices ``y, z`` per line, loops separated by empty lines, holes by the even-odd
   rule; ``meshSize``, ``triangleOrder``),
 * ``points`` (``pointsFile``: ``y, z, area`` per line, or ``y, area``),
-* ``generic`` (``area``, ``Iz`` (2D: also ``I``), 3D: ``Iy``; 2 or 4 points reproducing them).
+* ``generic`` (``area``, ``Iz``, 3D: ``Iy``; 2 or 4 fibers reproducing them).
 
-The 1D rule of the parametric profiles is ``rule=gauss|lobatto|simpson`` (lobatto and simpson place points on the
-outer fibers, which detects the first yield exactly). The torsion constant ``J`` (3D) is computed for rectangles
+The 1D rule of the parametric profiles is ``rule=gauss|lobatto|simpson`` (lobatto and simpson place fibers on the
+outer edges, which detects the first yield exactly). The torsion constant ``J`` (3D) is computed for rectangles
 (Roark), circles and tubes (exact) and I-profiles (thin-walled, :math:`\\sum b t^3 / 3`); it is required for the
-other profiles. With ``centroidAtAxis=True`` (default) the points are shifted such that their centroid lies on the
+other profiles. With ``centroidAtAxis=True`` (default) the fibers are shifted such that their centroid lies on the
 beam axis (the line through the nodes); otherwise the given coordinates are measured from the axis (an eccentric
-beam). The local y axis lies in the plane of a 2D beam; in 3D it is the part of the orientation vector ``(n1x, n1y,
-n1z)`` normal to the beam axis, and :math:`z = x \\times y`. Without an orientation vector, :math:`(0, 0, 1)` is
-used, or :math:`(0, 1, 0)` for beams (almost) parallel to the global z axis. In 2D, the z coordinates of the points
-are dropped (use ``nZ=1`` for rectangles).
+beam).
 
-``multiplicity=k`` makes the beam stand for k identical parallel members (the point areas, A, I and J are scaled by
+Local axes: the local y axis lies in the plane of a 2D beam; in 3D it is the part of the orientation vector ``(n1x,
+n1y, n1z)`` (Marmot's :math:`\\mathbf{v}`) normal to the beam axis, and :math:`z = x \\times y`. In 3D the
+orientation vector is required, except for circles and tubes. In 2D, the z coordinates of the fibers are dropped
+(use ``nZ=1`` for rectangles).
+
+``multiplicity=k`` makes the beam stand for k identical parallel members (the fiber areas, A, I and J are scaled by
 k, the coordinates are not), e.g., k fibres stacked through the thickness of a 2D model, as the area of a truss.
 
-The co-rotational (finite rotation) variant ``B2D2CR`` takes the same section.
-
 One material per element: a composite section (e.g., steel and concrete) is modeled by several beam elements on
-the same nodes, one per material, each with its part of the section (the fiber integration is additive).
+the same nodes, one per material, each with its part of the section (the fiber integration is additive). The parts
+must measure their coordinates from one common axis: give them ``centroidAtAxis=False`` (enforced). The torsion
+constants of the parts are added, which is not the torsion constant of a composite (in particular a closed)
+section; give ``J`` per part accordingly. An eccentric section (a non-concentric composite, or ``centroidAtAxis=False``)
+couples axial strain and bending: the 3-node beams represent it exactly for a tip load, the 2-node beams (axial
+strain constant per element) converge with :math:`h^2`.
+
+The co-rotational variants take the same section. For ``B3D2CR`` the rotation dofs are total rotation vectors: a
+nodal moment load on the ``rotation`` field acts on these dofs and is a physical moment only for small rotations
+(apply finite-rotation moments as force couples).
+
+Units: none of their own, use one consistent system, e.g., N, mm, MPa.
 
 .. code-block:: edelweiss
-    :caption: Example:
+    :caption: Example: a 2D cantilever, length 1000 mm, rectangle 100 x 200 mm, tip force 1 kN
+        (testfiles/marmot/BeamCantilever2D; tip deflection P L^3 / (3 E I))
 
-    *material, name=VonMises, id=steel, provider=marmot
-        200000, 0.3, 500, 1000, 0, 1, 7.85e-9
+    *material, name=linearelastic, id=steel, provider=marmot
+    ** E [MPa], nu
+    200000, 0.3
 
-    *section, name=pile, type=beam, profile=tube, d=300, di=260, nRings=3, nSectors=16, rule=lobatto, material=steel
-        piles
+    *node
+    1, 0, 0
+    2, 1000, 0
+
+    *element, type=B2D2
+    1, 1, 2
+
+    *elSet, elSet=beam
+    1
+
+    *section, name=s, type=beam, profile=rectangle, b=100, h=200, nY=6, material=steel
+    beam
+
+    *step, solver=theSolver
+    >>dirichlet, name=clamp, nSet=root, field=displacement, 1=0, 2=0
+    >>dirichlet, name=clampR, nSet=root, field=rotation, 1=0
+    >>nodeforces, name=P, nSet=tip, field=displacement, 2=-1000
+
+Results of the quadrature points: ``normal force``, ``bending moment`` (3D: ``bending moments``, ``torque``),
+``axial strain``, ``curvature``, ``section forces``, ``fiber k stress`` (:math:`\\sigma_{11}, \\sigma_{12},
+\\sigma_{13}` of fiber k), ``elastic energy``, ``dissipation``.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -82,14 +115,70 @@ from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils import beamsections
 from edelweissfe.utils.schema import datalineField, schemaField, subKeywordField
 
-#: The profiles of the beam section.
-PROFILES = ("rectangle", "circle", "tube", "iprofile", "polygon", "points", "generic")
-
 
 def rectangleTorsionConstant(b: float, h: float) -> float:
-    """The torsion constant of a solid rectangle (Roark's approximation, error below 0.5 %)."""
+    """The torsion constant of a solid rectangle (Roark, *Formulas for Stress and Strain*, torsion of a solid
+    rectangular section; error below 0.5 %)."""
     a, c = max(b, h), min(b, h)
     return a * c**3 * (1.0 / 3.0 - 0.21 * c / a * (1.0 - c**4 / (12.0 * a**4)))
+
+
+@dataclass(frozen=True)
+class _Profile:
+    """A parametric profile of the beam section: everything about one shape in one place."""
+
+    #: The options the profile requires, with their values: ``(configuration, nDim) -> {name: value}``.
+    requiredOptions: Callable
+    #: The section points: ``(configuration, nZ) -> SectionPoints``.
+    points: Callable
+    #: The torsion constant, or ``None`` if it must be given (``J``): ``configuration -> float``.
+    torsionConstant: Callable | None = None
+    #: Rotationally symmetric profiles need no orientation vector in 3D.
+    rotationallySymmetric: bool = False
+
+
+#: The profiles of the beam section. Adding a profile: a generator of its section points in
+#: :mod:`edelweissfe.utils.beamsections`, its options in :class:`BeamSectionSchema`, an entry here (required options,
+#: points, torsion constant with its reference) and a line in the module docstring.
+PROFILE_TABLE = {
+    "rectangle": _Profile(
+        lambda c, nDim: {"b": c.b, "h": c.h},
+        lambda c, nZ: beamsections.rectangle(c.b, c.h, c.nY, nZ, c.rule),
+        lambda c: rectangleTorsionConstant(c.b, c.h),
+    ),
+    "circle": _Profile(
+        lambda c, nDim: {"d": c.d},
+        lambda c, nZ: beamsections.tube(c.d, 0.0, c.nRings, c.nSectors, c.rule),
+        lambda c: np.pi * c.d**4 / 32,  # exact (polar moment)
+        rotationallySymmetric=True,
+    ),
+    "tube": _Profile(
+        lambda c, nDim: {"d": c.d},
+        lambda c, nZ: beamsections.tube(c.d, c.di, c.nRings, c.nSectors, c.rule),
+        lambda c: np.pi * (c.d**4 - c.di**4) / 32,  # exact (polar moment)
+        rotationallySymmetric=True,
+    ),
+    "iprofile": _Profile(
+        lambda c, nDim: {"h": c.h, "b": c.b, "tf": c.tf, "tw": c.tw},
+        lambda c, nZ: beamsections.iProfile(c.h, c.b, c.tf, c.tw, c.nY, nZ, c.nT, c.rule),
+        lambda c: (2 * c.b * c.tf**3 + (c.h - 2 * c.tf) * c.tw**3) / 3,  # thin-walled open section, sum b t^3 / 3
+    ),
+    "polygon": _Profile(
+        lambda c, nDim: {"polygonFile": c.polygonFile},
+        lambda c, nZ: beamsections.polygon(beamsections.readPolygon(c.polygonFile), c.meshSize, c.triangleOrder),
+    ),
+    "points": _Profile(
+        lambda c, nDim: {"pointsFile": c.pointsFile},
+        lambda c, nZ: beamsections.readPoints(c.pointsFile),
+    ),
+    "generic": _Profile(
+        lambda c, nDim: {"area": c.area, "Iz": c.Iz} | ({"Iy": c.Iy} if nDim == 3 else {}),
+        lambda c, nZ: beamsections.genericPoints(c.area, c.Iy if c.Iy is not None else 0.0, c.Iz),
+    ),
+}
+
+#: The names of the profiles.
+PROFILES = tuple(PROFILE_TABLE)
 
 
 @dataclass(frozen=True)
@@ -124,11 +213,6 @@ class BeamSectionSchema:
     triangleOrder: int = schemaField(description="polygon: the degree of the triangle rule", dtype=int, default=2)
     pointsFile: str | None = schemaField(description="points: the file of the points", dtype=str, default=None)
     area: float | None = schemaField(description="generic: cross section area", dtype=float, default=None)
-    I: float | None = schemaField(  # noqa: E741
-        description="generic, 2D: second moment of area for bending in the plane (synonym of Iz)",
-        dtype=float,
-        default=None,
-    )
     Iy: float | None = schemaField(description="generic, 3D: int z^2 dA", dtype=float, default=None)
     Iz: float | None = schemaField(description="generic: int y^2 dA", dtype=float, default=None)
     J: float | None = schemaField(
@@ -167,46 +251,20 @@ class BeamSectionSchema:
 
 def sectionPoints(c: BeamSectionSchema, nDim: int) -> tuple[beamsections.SectionPoints, float | None]:
     """The section points and the torsion constant (``None`` if unknown) of a beam section definition."""
-
-    def need(*names):
-        missing = [n for n in names if getattr(c, n) is None]
-        if missing:
-            raise ValueError(f"A beam section of profile '{c.profile}' requires {missing}.")
-
-    profile = (c.profile or "").lower()
-    nZ = c.nZ or (5 if nDim == 3 else 1)
-    J = None
-    if profile == "rectangle":
-        need("b", "h")
-        points = beamsections.rectangle(c.b, c.h, c.nY, nZ, c.rule)
-        J = rectangleTorsionConstant(c.b, c.h)
-    elif profile in ("circle", "tube"):
-        need("d")
-        di = c.di if profile == "tube" else 0.0
-        points = beamsections.tube(c.d, di, c.nRings, c.nSectors, c.rule)
-        J = np.pi * (c.d**4 - di**4) / 32
-    elif profile == "iprofile":
-        need("h", "b", "tf", "tw")
-        points = beamsections.iProfile(c.h, c.b, c.tf, c.tw, c.nY, nZ, c.nT, c.rule)
-        J = (2 * c.b * c.tf**3 + (c.h - 2 * c.tf) * c.tw**3) / 3
-    elif profile == "polygon":
-        need("polygonFile")
-        points = beamsections.polygon(beamsections.readPolygon(c.polygonFile), c.meshSize, c.triangleOrder)
-    elif profile == "points":
-        need("pointsFile")
-        points = beamsections.readPoints(c.pointsFile)
-    elif profile == "generic":
-        Iz = c.Iz if c.Iz is not None else c.I
-        if c.area is None or Iz is None or (nDim == 3 and c.Iy is None):
-            raise ValueError("A generic beam section requires area and Iz (or I), and Iy in 3D.")
-        points = beamsections.genericPoints(c.area, c.Iy if nDim == 3 else 0.0, Iz)
-    else:
+    profileName = (c.profile or "").lower()
+    if profileName not in PROFILE_TABLE:
         raise ValueError(f"Unknown beam profile '{c.profile}', use one of {PROFILES}.")
+    profile = PROFILE_TABLE[profileName]
+    missing = [name for name, value in profile.requiredOptions(c, nDim).items() if value is None]
+    if missing:
+        raise ValueError(f"A beam section of profile '{profileName}' requires {missing}.")
+
+    nZ = c.nZ or (5 if nDim == 3 else 1)
+    points = profile.points(c, nZ)
+    J = c.J if c.J is not None else (profile.torsionConstant(c) if profile.torsionConstant else None)
 
     if c.centroidAtAxis:
         points = points.centered()
-    if c.J is not None:
-        J = c.J
     if c.multiplicity != 1.0:
         if c.multiplicity <= 0:
             raise ValueError("The multiplicity of a beam section must be positive.")
@@ -266,6 +324,32 @@ class Section(SectionBase):
                 raise ValueError(f"Beam section {name}: the orientation vector must not be zero.")
         else:
             self.orientation = None
+            # a default orientation chosen per element jumps by 90 degrees along a curved member, which silently
+            # rotates a non-circular section; only rotationally symmetric profiles may omit it
+            if self.nDim == 3 and not PROFILE_TABLE[configuration.profile.lower()].rotationallySymmetric:
+                raise ValueError(
+                    f"Beam section {name}: a 3D section of profile '{configuration.profile}' requires the orientation "
+                    "vector n1x, n1y, n1z (the local y axis, Marmot's v)."
+                )
+
+        self.centroidAtAxis = configuration.centroidAtAxis
+        self._checkCompositeParts(name, model, elementSets)
+
+    def _checkCompositeParts(self, name, model, elementSets):
+        """The parts of a composite section (beam elements on the same nodes) must measure their coordinates from
+        one common axis: with ``centroidAtAxis=True`` each part would be shifted to its own centroid, and a
+        non-concentric composite (e.g., a slab with a rebar layer) would silently become concentric parts."""
+        self._elementNodes = {
+            frozenset(node.label for node in element.nodes) for elementSet in elementSets for element in elementSet
+        }
+        for other in model.sections.values():
+            if other is self or not isinstance(other, Section):
+                continue
+            if (self.centroidAtAxis or other.centroidAtAxis) and self._elementNodes & other._elementNodes:
+                raise ValueError(
+                    f"Beam sections {other.name} and {name} are parts of a composite section (elements on the same "
+                    "nodes): give both centroidAtAxis=False and their section coordinates from the common beam axis."
+                )
 
     def elementProperties(self, element) -> np.ndarray:
         """The Marmot element properties of a beam element of this section."""
@@ -274,7 +358,7 @@ class Section(SectionBase):
             return np.concatenate([[len(p)], np.column_stack([p.y, p.area]).ravel()])
 
         n1 = self.orientation
-        if n1 is None:
+        if n1 is None:  # a rotationally symmetric section: any vector normal to the axis
             coordinates = np.array([n.coordinates for n in element.nodes[:2]], dtype=float)
             axis = coordinates[1] - coordinates[0]
             axis /= np.linalg.norm(axis)

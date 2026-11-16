@@ -15,6 +15,10 @@ Relevant module: ``edelweissfe.config.sections``
 .. pprint:: section:beam
    :caption: Options:
 
+.. literalinclude:: ../../../testfiles/marmot/BeamCantilever2D/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/BeamCantilever2D/test.inp``
+
 Section points (module ``edelweissfe.utils.beamsections``):
 
 .. automodule:: edelweissfe.utils.beamsections
