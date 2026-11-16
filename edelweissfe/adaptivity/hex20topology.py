@@ -38,8 +38,6 @@ providing its own such adapter -- this file is the template to copy.
 
 import numpy as np
 
-from edelweissfe.utils.isoparametricshapes import newtonInverseMapping
-
 from edelweissfe.adaptivity.hex20shapefunctions import (
     EDGES,
     FACEID_TO_FACE,
@@ -52,6 +50,7 @@ from edelweissfe.adaptivity.hex20shapefunctions import (
     subdivision_children_param,
 )
 from edelweissfe.adaptivity.topologybase import TopologyBase
+from edelweissfe.utils.isoparametricshapes import newtonInverseMapping
 
 
 class Hex20Topology(TopologyBase):

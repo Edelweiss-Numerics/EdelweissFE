@@ -208,9 +208,7 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
     assert np.abs(curvature).max() < 1e-4 * np.abs(curvatureOfHostRotation)
 
 
-@pytest.mark.parametrize(
-    "rotations, elType", [("axis", "B2D2"), ("host", "B2D2"), ("free", "B2D2"), ("axis", "B2D3")]
-)
+@pytest.mark.parametrize("rotations, elType", [("axis", "B2D2"), ("host", "B2D2"), ("free", "B2D2"), ("axis", "B2D3")])
 def test_embedded_cantilever_clamped_in_stiff_block(tmp_path, rotations, elType):
     """a cantilever embedded with its root in a (practically rigid) block: with the rotations tied to the host, the
     free part deflects as a cantilever clamped at the block face, P L^3 / (3 E I); with free rotations the root is
@@ -322,7 +320,16 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
 
 @pytest.mark.parametrize(
     "shape, nDim",
-    [("quad4", 2), ("quad8", 2), ("tria3", 2), ("tria6", 2), ("hexa8", 3), ("hexa20", 3), ("tetra4", 3), ("tetra10", 3)],
+    [
+        ("quad4", 2),
+        ("quad8", 2),
+        ("tria3", 2),
+        ("tria6", 2),
+        ("hexa8", 3),
+        ("hexa20", 3),
+        ("tetra4", 3),
+        ("tetra10", 3),
+    ],
 )
 def test_rotation_operator(shape, nDim):
     """the closed-form rotation operators dTheta/dU of the embedded region constraint: a rigid rotation gives the
@@ -438,3 +445,56 @@ embeddedElSet=bars, hostElSet=host
         point = locator.locate(node.coordinates)
         interpolated = sum(N * U[m] for N, m in zip(point.shapeFunctions(), point.element.nodes))
         np.testing.assert_allclose(U[node], interpolated, atol=1e-10 * scale)
+
+
+def test_embedded_region_explicit_dynamics(tmp_path):
+    """EMB-07: explicit dynamics (NED, masses of the embedded nodes folded onto the hosts): the embedded rebar of the
+    reinforced strip follows the host field exactly, at the end of the explicit step every rebar node is at the
+    interpolation of its host"""
+    from edelweissfe.utils.embedding import HostElementLocator
+
+    rebar, first, last = _line(100001, (0.0, 0.37), (4.0, 0.37), 5, "T2D2")
+    deck = f"""*material, name=linearelastic, id=concrete, provider=marmot
+{E_CONCRETE}, {NU_CONCRETE}, 2.4e-9
+
+*material, name=linearelastic, id=steel, provider=marmot
+{E_STEEL}, 0.3, 7.85e-9
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=4
+h=1
+nX=8
+nY=2
+elType=CPE4
+
+*section, name=concreteSection, thickness=1.0, material=concrete, type=plane
+gen_all
+
+{rebar}
+*elSet, elSet=rebars, generate=True
+{first}, {last - 1}, 1
+
+*section, name=rebarSection, area={A_STEEL}, material=steel, type=truss
+rebars
+
+*constraint, type=embeddedRegion, name=embedded
+embeddedElSet=rebars, hostElSet=gen_all
+
+*job, name=job, domain=2d
+*solver, solver=NED, name=theSolver
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1e-3, minInc=1e-12, maxNumInc=100000, maxIter=25, stepLength=1e-3
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.004
+"""
+    model, _ = _run(tmp_path, deck)
+    field = model.nodeFields["displacement"]
+    U = {node: np.asarray(field["U"][k]) for k, node in enumerate(field.nodes)}
+    assert max(np.abs(u).max() for u in U.values()) > 1e-4, "the strip must be loaded"
+    locator = HostElementLocator(list(model.elementSets["gen_all"]))
+    for el in model.elementSets["rebars"]:
+        for node in el.nodes:
+            point = locator.locate(node.coordinates)
+            interpolated = sum(N * U[m] for N, m in zip(point.shapeFunctions(), point.element.nodes))
+            np.testing.assert_allclose(U[node], interpolated, rtol=0, atol=1e-12)
