@@ -47,6 +47,8 @@ from fractions import Fraction
 
 import numpy as np
 
+from edelweissfe.utils.isoparametricshapes import shapeFunctions
+
 # Local node parametric coordinates, C3D20 order.
 LOCAL_COORDS = np.array(
     [
@@ -118,21 +120,10 @@ def hex20_from_corners(corners8):
     return out
 
 
-# QUAD8 serendipity reference nodes: 4 corners then 4 edge midsides (matches a FACES entry).
-_QUAD8_NODES = np.array([(-1, -1), (1, -1), (1, 1), (-1, 1), (0, -1), (1, 0), (0, 1), (-1, 0)], dtype=float)
-
-
 def quad8_shape(xi, eta):
-    """Evaluate the 8 QUAD8 serendipity shape functions at (xi, eta), in FACES node order."""
-    N = np.zeros(8)
-    for a, (xi_a, eta_a) in enumerate(_QUAD8_NODES):
-        if xi_a != 0 and eta_a != 0:  # corner
-            N[a] = 0.25 * (1 + xi * xi_a) * (1 + eta * eta_a) * (xi * xi_a + eta * eta_a - 1)
-        elif xi_a == 0:  # midside on eta = +-1
-            N[a] = 0.5 * (1 - xi**2) * (1 + eta * eta_a)
-        else:  # midside on xi = +-1
-            N[a] = 0.5 * (1 + xi * xi_a) * (1 - eta**2)
-    return N
+    """Evaluate the 8 QUAD8 serendipity shape functions at (xi, eta), in FACES node order (4 corners, then the 4 edge
+    midsides), which is the node order of :mod:`edelweissfe.utils.isoparametricshapes`."""
+    return shapeFunctions("quad8", (xi, eta))
 
 
 def _partition_local_coords():
