@@ -585,6 +585,59 @@ Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
   required arguments
     [stop] Model accessible function describing the stop condition. (<class 'str'>)
 ===== module documentation: edelweissfe.outputmanagers.ensight =====
+Output manager for Ensight exports.
+If loaded, it automatically exports all elSets as Ensight parts.
+For each part, perNode and perElement results can be exported, which are imported from fieldOutputs.
+
+**Quadrature point results.** ``>>perQuadraturePoint`` writes an element result at all quadrature points on an
+additional part ``<elSet>_QP``, which splits each quadrilateral or hexahedron into one linear sub-element per
+quadrature point of its Gauss rule. The results are shown where they are computed, without averaging over the element
+or extrapolating to the nodes.
+
+1. Collect the result at **all** quadrature points of the elements in a ``*fieldOutput``:
+
+   ================================ =========== ===================
+   Elements                         Gauss rule  ``quadraturePoint``
+   ================================ =========== ===================
+   CPE4, CPS4, CPE8R, CPS8R         2x2         ``0:4``
+   CPE8, CPS8                       3x3         ``0:9``
+   C3D8, C3D20R                     2x2x2       ``0:8``
+   C3D20                            3x3x3       ``0:27``
+   ================================ =========== ===================
+
+2. Hand that field output to the Ensight output manager with ``>>perQuadraturePoint`` instead of ``>>perElement``:
+
+.. code-block:: edelweiss
+
+    *fieldOutput
+    >>perNode,    name=displacement, elSet=all, field=displacement, result=U
+    >>perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:8
+    >>perElement, name=sigma yy,     elSet=all, result=stress, quadraturePoint=0:8, f(x)='x[:,:,1]'
+
+    *output, type=ensight, name=esExport
+    >>perNode,            fieldOutput=displacement
+    >>perQuadraturePoint, fieldOutput=stress
+    >>perQuadraturePoint, fieldOutput=sigma yy
+
+- The variables are per element variables of the part ``<elSet>_QP``, named after the field output (``stress``,
+  ``sigma_yy``). Their size follows from the result: scalar, vector or tensor.
+- An ``f(x)`` of the field output may reduce or rescale the components, e.g. ``f(x)='x[:,:,1]'`` or
+  ``f(x)='np.linalg.norm(x, axis=2)'``, but the first two axes of its result must stay elements and quadrature points.
+  Reducing over the quadrature points (``np.mean(x, axis=1)``) belongs to ``>>perElement``.
+- ``>>perNode`` results defined on the same element set are written on the part ``<elSet>_QP`` as well, interpolated
+  to its added nodes, so it can be shown deformed. Node results defined on a node set are not.
+- ``>>perElement`` and ``>>perQuadraturePoint`` can be combined in one output manager, with different field outputs.
+- The export is refused if the field output does not cover exactly all quadrature points of the elements, if its
+  result is not laid out as (elements, quadrature points, ...), if the element set mixes quadrilaterals and hexahedra
+  or quadrature rules, or if an element is of another shape or not integrated by a Gauss rule.
+
+Along each natural direction, an element is split at :math:`b_k = -1 + \sum_{m<k} w_m` of the Gauss weights
+:math:`w_m`: sub-element :math:`(i, j)` spans :math:`[b_i, b_{i+1}] \times [b_j, b_{j+1}]` in natural coordinates
+(and :math:`[b_k, b_{k+1}]` in 3D), so its natural area is the weight of its Gauss point, which it contains. That is
+a split at 0 for 2 points and at :math:`\pm 4/9` for 3 points. Sub-element g of an element contains its quadrature
+point g, in the order of either element provider. The added nodes are placed by the element's interpolation and shared
+between neighboring elements; nodes of the element set which no sub-element uses (the edge midpoints of quadratic
+elements with 3 points per direction) are left out. The part is rebuilt after a mesh change (h-adaptivity).
 [ensight] Ensight export.
   optional keywords
     < perNode > Node-based Ensight export.
@@ -593,6 +646,9 @@ Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
     < perElement > Element-based Ensight export.
       required arguments
         [fieldOutput] Name of the result, defined on an elSet (also for perNode results!) (<class 'str'>)
+    < perQuadraturePoint > Quadrature point-based Ensight export on sub-elements.
+      required arguments
+        [fieldOutput] Name of an element result at all quadrature points of quadrilaterals or hexahedra, e.g. quadraturePoint=0:4 for CPE8R, 0:9 for CPE8, 0:8 for C3D20R, 0:27 for C3D20; written on a separate part, which splits each element into linear sub-elements, one per quadrature point (<class 'str'>)
     < configuration >
       optional arguments
         [overwrite] Overwrite results. (<class 'bool'>, default = False)

@@ -29,6 +29,62 @@
 
 # @author: Matthias Neuner
 
+r"""
+Output manager for Ensight exports.
+If loaded, it automatically exports all elSets as Ensight parts.
+For each part, perNode and perElement results can be exported, which are imported from fieldOutputs.
+
+**Quadrature point results.** ``>>perQuadraturePoint`` writes an element result at all quadrature points on an
+additional part ``<elSet>_QP``, which splits each quadrilateral or hexahedron into one linear sub-element per
+quadrature point of its Gauss rule. The results are shown where they are computed, without averaging over the element
+or extrapolating to the nodes.
+
+1. Collect the result at **all** quadrature points of the elements in a ``*fieldOutput``:
+
+   ================================ =========== ===================
+   Elements                         Gauss rule  ``quadraturePoint``
+   ================================ =========== ===================
+   CPE4, CPS4, CPE8R, CPS8R         2x2         ``0:4``
+   CPE8, CPS8                       3x3         ``0:9``
+   C3D8, C3D20R                     2x2x2       ``0:8``
+   C3D20                            3x3x3       ``0:27``
+   ================================ =========== ===================
+
+2. Hand that field output to the Ensight output manager with ``>>perQuadraturePoint`` instead of ``>>perElement``:
+
+.. code-block:: edelweiss
+
+    *fieldOutput
+    >>perNode,    name=displacement, elSet=all, field=displacement, result=U
+    >>perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:8
+    >>perElement, name=sigma yy,     elSet=all, result=stress, quadraturePoint=0:8, f(x)='x[:,:,1]'
+
+    *output, type=ensight, name=esExport
+    >>perNode,            fieldOutput=displacement
+    >>perQuadraturePoint, fieldOutput=stress
+    >>perQuadraturePoint, fieldOutput=sigma yy
+
+- The variables are per element variables of the part ``<elSet>_QP``, named after the field output (``stress``,
+  ``sigma_yy``). Their size follows from the result: scalar, vector or tensor.
+- An ``f(x)`` of the field output may reduce or rescale the components, e.g. ``f(x)='x[:,:,1]'`` or
+  ``f(x)='np.linalg.norm(x, axis=2)'``, but the first two axes of its result must stay elements and quadrature points.
+  Reducing over the quadrature points (``np.mean(x, axis=1)``) belongs to ``>>perElement``.
+- ``>>perNode`` results defined on the same element set are written on the part ``<elSet>_QP`` as well, interpolated
+  to its added nodes, so it can be shown deformed. Node results defined on a node set are not.
+- ``>>perElement`` and ``>>perQuadraturePoint`` can be combined in one output manager, with different field outputs.
+- The export is refused if the field output does not cover exactly all quadrature points of the elements, if its
+  result is not laid out as (elements, quadrature points, ...), if the element set mixes quadrilaterals and hexahedra
+  or quadrature rules, or if an element is of another shape or not integrated by a Gauss rule.
+
+Along each natural direction, an element is split at :math:`b_k = -1 + \sum_{m<k} w_m` of the Gauss weights
+:math:`w_m`: sub-element :math:`(i, j)` spans :math:`[b_i, b_{i+1}] \times [b_j, b_{j+1}]` in natural coordinates
+(and :math:`[b_k, b_{k+1}]` in 3D), so its natural area is the weight of its Gauss point, which it contains. That is
+a split at 0 for 2 points and at :math:`\pm 4/9` for 3 points. Sub-element g of an element contains its quadrature
+point g, in the order of either element provider. The added nodes are placed by the element's interpolation and shared
+between neighboring elements; nodes of the element set which no sub-element uses (the edge midpoints of quadratic
+elements with 3 points per direction) are left out. The part is rebuilt after a mesh change (h-adaptivity).
+"""
+
 import datetime
 import os
 from collections import defaultdict
@@ -37,8 +93,10 @@ from io import TextIOBase
 
 import h5py
 import numpy as np
+from scipy.sparse import csr_matrix
 
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.outputmanagers._quadraturepointpart import subdivideAtQuadraturePoints
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.points.node import Node
 from edelweissfe.rigidbodies.rigidbody import RigidBody
@@ -51,13 +109,6 @@ from edelweissfe.utils.fieldoutput import (
 )
 from edelweissfe.utils.meshtools import disassembleElsetToEnsightShapes
 from edelweissfe.utils.schema import schemaField, subKeywordField
-
-"""
-Output manager for Ensight exports.
-If loaded, it automatically exports all elSets as Ensight parts.
-For each part, perNode and perElement results can be exported, which are imported from fieldOutputs.
-
-"""
 
 
 @dataclass(frozen=True)
@@ -78,6 +129,20 @@ class EnsightPerElementSchema:
 
     fieldOutput: str | None = schemaField(
         description="Name of the result, defined on an elSet (also for perNode results!)",
+        dtype=str,
+        default=None,
+        required=True,
+    )
+
+
+@dataclass(frozen=True)
+class EnsightPerQuadraturePointSchema:
+    """The options of a single ``>>perQuadraturePoint`` block."""
+
+    fieldOutput: str | None = schemaField(
+        description="Name of an element result at all quadrature points of quadrilaterals or hexahedra, e.g. "
+        "quadraturePoint=0:4 for CPE8R, 0:9 for CPE8, 0:8 for C3D20R, 0:27 for C3D20; written on a separate part, "
+        "which splits each element into linear sub-elements, one per quadrature point",
         dtype=str,
         default=None,
         required=True,
@@ -127,6 +192,10 @@ class EnsightSchema:
     )
     perElement: tuple[EnsightPerElementSchema, ...] = subKeywordField(
         description="Element-based Ensight export.", schema=EnsightPerElementSchema
+    )
+    perQuadraturePoint: tuple[EnsightPerQuadraturePointSchema, ...] = subKeywordField(
+        description="Quadrature point-based Ensight export on sub-elements.",
+        schema=EnsightPerQuadraturePointSchema,
     )
     configurations: tuple[EnsightConfigurationSchema, ...] = subKeywordField(
         description="", schema=EnsightConfigurationSchema, optionName="configuration"
@@ -768,6 +837,41 @@ def createUnstructuredPartFromElementSet(setName, elementSet: list, partID: int)
     return EnsightUnstructuredPart(setName, partID, partNodes.keys(), elementDict)
 
 
+def createQuadraturePointPartFromElementSet(
+    setName: str, elementSet: list, basePart: EnsightUnstructuredPart, partID: int
+) -> tuple[EnsightUnstructuredPart, csr_matrix]:
+    """The part ``<setName>_QP``, which splits each element of an element set into one linear sub-element per
+    quadrature point (see :mod:`edelweissfe.outputmanagers._quadraturepointpart`).
+
+    Parameters
+    ----------
+    setName
+        The name of the element set.
+    elementSet
+        The elements, all quadrilaterals or all hexahedra, with the same Gauss rule.
+    basePart
+        The part of the element set.
+    partID
+        The id of this part.
+
+    Returns
+    -------
+    tuple[EnsightUnstructuredPart, csr_matrix]
+        The part, and the sparse matrix mapping per-node results of the base part to the nodes of the part.
+    """
+
+    elements = list(elementSet)
+    subdivision = subdivideAtQuadraturePoints(setName, elements, list(basePart.nodes))
+    nElements, nQp, _ = subdivision.connectivity.shape
+
+    # sub-element g of element e is labeled nQp * e + g, which stays in Ensight's int32 for e < 2**31 / nQp
+    # (80 million elements for 27 quadrature points)
+    labels = (nQp * np.array([element.elNumber for element in elements])[:, None] + np.arange(nQp)).ravel()
+    connectivity = subdivision.connectivity.reshape(nElements * nQp, -1)
+    elementTree = {subdivision.subShape: dict(zip(labels.tolist(), connectivity.tolist()))}
+    return EnsightUnstructuredPart(setName + "_QP", partID, subdivision.nodes, elementTree), subdivision.mapping
+
+
 def createUnstructuredPartFromNodeSet(setName, nodeSet: list, partID: int):
     """Construtcts an EnSight part for a node set. Since EnSight parts comprise nodes and elements, each node is assigned to a dummy point element.
 
@@ -857,6 +961,7 @@ class OutputManager(OutputManagerBase):
         """
         perNodeDefs = configuration.perNode
         perElementDefs = configuration.perElement
+        perQuadraturePointDefs = configuration.perQuadraturePoint
         configurations = configuration.configurations
 
         self.name = name
@@ -877,11 +982,19 @@ class OutputManager(OutputManagerBase):
         self.elSetToEnsightPartMappings = {}
         self.nSetToEnsightPartMappings = {}
         self.rigidBodyToEnsightPartMappings = {}
+        # base part -> (sub-element part, mapping of per-node results to its nodes)
+        self._quadraturePointParts = {}
 
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
 
         self.exportName = name
+
+        # store the definitions so parts + variable jobs can be rebuilt when the mesh changes (AMR)
+        self._perNodeDefs = perNodeDefs
+        self._perElementDefs = perElementDefs
+        self._perQuadraturePointDefs = perQuadraturePointDefs
+        self._fieldOutputController = fieldOutputController
 
         self.geometryParts = self._createGeometryParts(1)
 
@@ -911,10 +1024,6 @@ class OutputManager(OutputManagerBase):
         if not self.overwrite:
             self.exportName = "{:}_{:}".format(self.name, datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-        # store the definitions so parts + variable jobs can be rebuilt when the mesh changes (AMR)
-        self._perNodeDefs = perNodeDefs
-        self._perElementDefs = perElementDefs
-        self._fieldOutputController = fieldOutputController
         self._configSetName = configSetName
         self._configIsNodeSet = configIsNodeSet
         self._configPart = None
@@ -948,12 +1057,18 @@ class OutputManager(OutputManagerBase):
             name = fieldOutput.name.replace(" ", "_")
             self.createPerElementOutput(fieldOutput, self._configPart, name, transient=self._transientCfg)
 
+        for definition in self._perQuadraturePointDefs:
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
+            name = fieldOutput.name.replace(" ", "_")
+            self.createPerQuadraturePointOutput(fieldOutput, name)
+
     def _rebuildForMeshChange(self):
         """Rebuild geometry parts + variable jobs after an AMR mesh change, so both stay consistent
         with the current (refined) mesh."""
         self.elSetToEnsightPartMappings = {}
         self.nSetToEnsightPartMappings = {}
         self.rigidBodyToEnsightPartMappings = {}
+        self._quadraturePointParts = {}
         self._transientPerNodeVariableJobs = defaultdict(list)
         self._transientPerElementVariableJobs = defaultdict(list)
         self.geometryParts = self._createGeometryParts(1)
@@ -986,39 +1101,115 @@ class OutputManager(OutputManagerBase):
             3-component vector even in 2D (the implicit z-component is 0).
         """
 
-        variableJob = dict()
-        variableJob["fieldOutput"] = fieldOutput
-        variableJob["part"] = part
+        if not transient:
+            raise Exception("Only transient per element outputs are supported!")
         if not name:
             name = fieldOutput.name
-        variableJob["name"] = name
-        variableJob["transient"] = transient
-
-        nEntries, varSizeFp = self._ensureArrayIs2D(fieldOutput.getLastResult()).shape
-        if self.model.domainSize == 2 and varSizeFp == 2:
-            varSizeFp = 3
-
         if not part:
             part = self._getTargetPartForFieldOutput(fieldOutput)
-        variableJob["part"] = part
 
+        nEntries = len(self._ensureArrayIs2D(fieldOutput.getLastResult()))
         if nEntries != len(fieldOutput.associatedSet):
             raise Exception(
                 "Variable {:} result size ({:}) does not match the number of nodes ({:})".format(
-                    variableJob["name"], nEntries, len(variableJob["part"].nodes)
+                    name, nEntries, len(part.nodes)
                 )
             )
 
+        elementsOfShape = disassembleElsetToEnsightShapes(fieldOutput.associatedSet)
+        self._addPerElementJob(fieldOutput, part, name, elementsOfShape, nEntries, varSize)
+
+    def createPerQuadraturePointOutput(self, fieldOutput: ElementFieldOutput, name: str = None):
+        """Create a per quadrature point output job: a per element job on the sub-element part
+        ``<elSet>_QP`` of the element set, one entry per sub-element. Per-node results of the
+        element set are also written on that part, interpolated to its added nodes.
+
+        Parameters
+        ----------
+        fieldOutput
+            The field output to export: a result at all quadrature points of quadrilaterals or
+            hexahedra integrated by a Gauss rule.
+        name
+            The name of the output. If not specified, the name of the field output is taken.
+        """
+
+        if not name:
+            name = fieldOutput.name
+        if name in self._transientPerElementVariableJobs:
+            raise Exception("Ensight variable {:} is defined more than once".format(name))
+
+        if not isinstance(fieldOutput, ElementFieldOutput):
+            raise Exception("Quadrature point output {:} requires an element field output".format(name))
+
+        part = self._getQuadraturePointPartForFieldOutput(fieldOutput)
+        nElements = len(fieldOutput.associatedSet)
+        ((subShape, subElements),) = part.elementTree.items()
+        nQp = len(subElements) // nElements
+
+        # the sub-elements follow the quadrature points 0, 1, ... of each element
+        if list(fieldOutput.quadraturePoints) != list(range(nQp)):
+            raise Exception(
+                "Quadrature point output {:} requires an element field output with quadraturePoint=0:{:}".format(
+                    name, nQp
+                )
+            )
+
+        # an f(x) of the field output may reduce the components, but has to keep one entry per quadrature point
+        resultShape = np.shape(fieldOutput.getLastResult())
+        if resultShape[:2] != (nElements, nQp):
+            raise Exception(
+                "Variable {:} result shape {:} does not start with {:} elements and {:} quadrature points".format(
+                    name, resultShape, nElements, nQp
+                )
+            )
+
+        # one entry per sub-element: element by element, quadrature point by quadrature point
+        self._addPerElementJob(fieldOutput, part, name, {subShape: np.arange(nElements * nQp)}, nElements * nQp)
+
+    def _addPerElementJob(
+        self,
+        fieldOutput: ElementFieldOutput,
+        part: EnsightUnstructuredPart,
+        name: str,
+        elementsOfShape: dict[str, np.ndarray],
+        nEntries: int,
+        varSize: int = None,
+    ):
+        """Add a transient per element job: the result of the field output, as nEntries rows, written on the
+        elements of the part, which take the rows elementsOfShape[shape] for each shape.
+
+        Parameters
+        ----------
+        fieldOutput
+            The field output to export.
+        part
+            The part to which the output belongs.
+        name
+            The name of the output.
+        elementsOfShape
+            The rows of the result for the elements of each shape of the part.
+        nEntries
+            The number of rows of the result.
+        varSize
+            The size of the variable. If not specified, the number of components of a row, promoted from 2 to 3
+            for a 2D-domain vector field, since Ensight expects a 3-component vector even in 2D.
+        """
+
         if not varSize:
-            varSize = varSizeFp
-        variableJob["varSize"] = varSize
+            nComponents = np.size(fieldOutput.getLastResult()) // nEntries
+            varSize = 3 if self.model.domainSize == 2 and nComponents == 2 else nComponents
 
-        variableJob["elementsOfShape"] = disassembleElsetToEnsightShapes(fieldOutput.associatedSet)
-
-        if transient:
-            self._transientPerElementVariableJobs[variableJob["name"]].append(variableJob)
-        else:
-            raise Exception("Only transient per element outputs are supported!")
+        self._transientPerElementVariableJobs[name].append(
+            {
+                "fieldOutput": fieldOutput,
+                "part": part,
+                "name": name,
+                "transient": True,
+                "varSize": varSize,
+                "elementsOfShape": elementsOfShape,
+                "nEntries": nEntries,
+            }
+        )
 
     def createPerNodeOutput(
         self,
@@ -1166,6 +1357,9 @@ class OutputManager(OutputManagerBase):
                     "coordinates",
                     result,
                 )
+                if perNodeVariableJob["part"] in self._quadraturePointParts:
+                    subPart, mapping = self._quadraturePointParts[perNodeVariableJob["part"]]
+                    resultsByParts[subPart.partNumber] = ("coordinates", mapping @ result)
             enSightVariable = EnsightPerNodeVariable(resultName, resultsByParts, perNodeVariableJob["varSize"])
             self.ensightCase.writeVariableTrendChunk(enSightVariable, self.transientVariableTAndFSetNumber)
             del enSightVariable
@@ -1178,7 +1372,9 @@ class OutputManager(OutputManagerBase):
             for perElementVariableJob in perElementVariableJobs:
                 part = perElementVariableJob["part"]
                 elementsOfShape = perElementVariableJob["elementsOfShape"]
-                result = self._ensureArrayIs2D(perElementVariableJob["fieldOutput"].getLastResult())
+                result = np.reshape(
+                    perElementVariableJob["fieldOutput"].getLastResult(), (perElementVariableJob["nEntries"], -1)
+                )
 
                 if self.model.domainSize == 2 and result.shape[1] == 2:
                     result = self._make2DVector3D(result)
@@ -1307,7 +1503,35 @@ class OutputManager(OutputManagerBase):
             rigidBodyParts.append(bodyPart)
             partCounter += 1
 
-        return elSetParts + nodeSetParts + rigidBodyParts
+        # the sub-element part of each element set with quadrature point results
+        quadraturePointParts = []
+        for definition in self._perQuadraturePointDefs:
+            fieldOutput = self._fieldOutputController.fieldOutputs[definition.fieldOutput]
+            if not isinstance(fieldOutput, ElementFieldOutput):
+                continue  # refused by createPerQuadraturePointOutput
+            if self.elSetToEnsightPartMappings[fieldOutput.associatedSet.name] not in self._quadraturePointParts:
+                quadraturePointParts.append(self._createQuadraturePointPart(fieldOutput.associatedSet, partCounter))
+                partCounter += 1
+
+        return elSetParts + nodeSetParts + rigidBodyParts + quadraturePointParts
+
+    def _createQuadraturePointPart(self, elSet: ElementSet, partID: int) -> EnsightUnstructuredPart:
+        """Create the sub-element part of an element set, and register it with the mapping of per-node results."""
+
+        basePart = self.elSetToEnsightPartMappings[elSet.name]
+        part, mapping = createQuadraturePointPartFromElementSet(elSet.name, elSet, basePart, partID)
+        self._quadraturePointParts[basePart] = (part, mapping)
+        return part
+
+    def _getQuadraturePointPartForFieldOutput(self, fieldOutput: ElementFieldOutput) -> EnsightUnstructuredPart:
+        """The sub-element part of the element set of a field output. A job created in code, which no
+        ``>>perQuadraturePoint`` definition announced to :meth:`_createGeometryParts`, adds the part here."""
+
+        basePart = self._getTargetPartForFieldOutput(fieldOutput)
+        if basePart not in self._quadraturePointParts:
+            partID = max(part.partNumber for part in self.geometryParts) + 1
+            self.geometryParts.append(self._createQuadraturePointPart(fieldOutput.associatedSet, partID))
+        return self._quadraturePointParts[basePart][0]
 
     def _getTargetPartForFieldOutput(self, fieldOutput: _FieldOutputBase) -> EnsightUnstructuredPart:
         """
