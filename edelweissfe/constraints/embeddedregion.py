@@ -61,7 +61,7 @@ Which mode?
 ==========  =======================================================================================================
 ``free``    displacements only (default; as Abaqus' embedded elements): the beam resists bending only by the tied
             displacements of its nodes, i.e., by the curvature of its nodal polygon -- an embedded cantilever is
-            softer than a clamped one (about 1.11 times in the test of this module). Right for rebar-like beams.
+            softer than a clamped one. Right for rebar-like beams.
 ``axis``    the rotation of the host material line along the beam axis (above): clamps the beam, consistent with
             the Euler-Bernoulli kinematics; a host in uniform strain (also in shear) leaves a straight embedded beam
             straight. For members carrying moments into the host.
