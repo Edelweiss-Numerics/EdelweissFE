@@ -103,8 +103,10 @@ cdef class MarmotElementWrapper:
         elNumber
             The number of the element."""
 
+        # __cinit__ runs before __init__, so self._elNumber is still 0 here: pass the argument.
+        self._elNumber = elNumber
         try:
-            self.marmotElement = MarmotElementFactory.createElement(elementType.upper().encode("utf-8"), self._elNumber)
+            self.marmotElement = MarmotElementFactory.createElement(elementType.upper().encode("utf-8"), elNumber)
         except ValueError:
             raise NotImplementedError("Marmot element {:} not found in library.".format(elementType))
 

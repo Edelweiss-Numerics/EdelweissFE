@@ -135,6 +135,27 @@ class Section(OptionSchemaProvider, ABC):
         """
         self.assignSectionPropertiesToElement(element, material=self.materialAtElement(element, model))
 
+    def assignMaterialToElement(self, element, material):
+        """Assign a material to an element, for every element provider: a material object (EdelweissFE materials) or
+        a Marmot material definition ``{"name": ..., "properties": ...}``.
+
+        The steps of a section, in this order: set the element properties, ``element.initializeElement()``, then this.
+
+        Parameters
+        ----------
+        element
+            The element.
+        material
+            The material, as returned by :meth:`materialAtElement`.
+        """
+        if not isinstance(material, dict):
+            element.setMaterial(material)
+            return
+        try:  # Marmot
+            element.setMaterial(material["name"], material["properties"])
+        except TypeError:
+            raise Exception("Material provider and element are not compatible!")
+
     def materialAtElement(self, element, model):
         """The material of this section at an element, including ``materialParameterFromField``.
 
