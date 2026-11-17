@@ -1,0 +1,60 @@
+** A shallow two-bar truss ("von Mises truss") of finite strain trusses (T2D2CR, compressible Neo-Hooke), pushed into
+** its snap-through by displacement control of the apex: from (10, 1) down to (10, 0), where both bars are compressed
+** to their shortest length and the tie is in tension (the end state is not the stress-free mirrored one).
+** Units: N, mm, MPa (any consistent set). Supports (0, 0) and (20, 0), free horizontally; a quadratic truss (T2D3CR)
+** ties them, so that the bars push against it instead of spreading the supports.
+** tests/test_trusses.py checks the equilibrium of the apex, F = 2 N sin(theta), along this path.
+*material, name=compressibleneohooke, id=rubber, provider=marmot
+** K [MPa], G [MPa], density
+3000.0, 1000.0, 1e-9
+
+*node
+1, 0.0, 0.0
+2, 10.0, 1.0
+3, 20.0, 0.0
+4, 10.0, 0.0
+
+*element, type=T2D2CR
+1, 1, 2
+2, 2, 3
+
+*element, type=T2D3CR
+3, 1, 3, 4
+
+*elSet, elSet=bars
+1, 2
+
+*elSet, elSet=tie
+3
+
+*nSet, nSet=supports
+1, 3
+*nSet, nSet=apex
+2
+** the mid node of the quadratic tie has a zero-energy mode transverse to the tie (a truss has no lateral stiffness):
+** it is held vertically
+*nSet, nSet=tieMid
+4
+
+*section, name=barSection, area=1.0, material=rubber, type=truss
+bars
+
+*section, name=tieSection, area=0.2, material=rubber, type=truss
+tie
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
+>>perElement, name=normalForce, elSet=all, result=normal force, quadraturePoint=0,
+>>perNode, name=F, nSet=apex, field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True,
+>>perElement, name=N, elSet=bars, result=normal force, quadraturePoint=0, saveHistory=True,
+>>perNode, name=uSupport, nSet=supports, field=displacement, result=U, saveHistory=True,
+
+*step, solver=theSolver
+maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=15, stepLength=1
+>>initializematerial, name=init, elSet=all
+>>dirichlet, name=supports, nSet=supports, field=displacement, 2=0
+>>dirichlet, name=tieMid, nSet=tieMid, field=displacement, 2=0
+>>dirichlet, name=apex, nSet=apex, field=displacement, 1=0, 2=-1.0
