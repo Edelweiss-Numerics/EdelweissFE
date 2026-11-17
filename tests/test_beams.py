@@ -281,7 +281,7 @@ def test_l_profile_polygon_cantilever_couples_bending(tmp_path):
         (0, 0, 0),
         (L, 0, 0),
         4,
-        f"profile=polygon, polygonFile={path}, meshSize=6, J=5000, n1x=0, n1y=1, n1z=0",
+        f"profile=polygon, polygonFile={path}, meshSize=6, J=5000, vx=0, vy=1, vz=0",
         "3d",
         f""">>dirichlet, name=root, nSet=root, field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=rootR, nSet=root, field=rotation, 1=0, 2=0, 3=0
@@ -574,7 +574,7 @@ def test_line_load_one_quadratic_element(tmp_path, elType, domain):
     b, h = 10.0, 20.0
     q = bf * b * h
     is3d = domain == "3d"
-    orientation = ", n1x=0, n1y=1, n1z=0" if is3d else ""
+    orientation = ", vx=0, vy=1, vz=0" if is3d else ""
     fix = "1=0, 2=0, 3=0" if is3d else "1=0, 2=0"
     fixR = "1=0, 2=0, 3=0" if is3d else "1=0"
     force = "'0, -{0}, 0'".format(bf) if is3d else "'0, -{0}'".format(bf)
@@ -607,7 +607,7 @@ def test_elastica_tip_force_3d(tmp_path, lam, ref):
         (0, 0, 0),
         (L, 0, 0),
         n,
-        f"profile=rectangle, b={b}, h={h}, nY=2, nZ=2, n1x=0, n1y=1, n1z=0",
+        f"profile=rectangle, b={b}, h={h}, nY=2, nZ=2, vx=0, vy=1, vz=0",
         "3d",
         f""">>dirichlet, name=root, nSet=root, field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=rootR, nSet=root, field=rotation, 1=0, 2=0, 3=0
