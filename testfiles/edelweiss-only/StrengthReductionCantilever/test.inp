@@ -1,0 +1,37 @@
+** Strength reduction of a plane strain cantilever, l = 4, h = 1, clamped at x = 0, under a constant uniform load b per
+** volume (doc/source/analysis/solvers.rst, "Strength reduction"). The yield stress of the perfectly plastic von Mises
+** material is reduced to fy0 / eta, eta = 1 + lambda, under arc length control of the tip deflection, until a plastic
+** hinge forms at the clamp, and the reduction factor reaches its plateau, the factor of safety.
+** Beam theory, b l^2 / 2 = M_p = (2 / sqrt(3)) (fy0 / eta) h^2 / 4, estimates eta = fy0 h^2 / (sqrt(3) b l^2) = 2; it
+** ignores the constraint of the clamped wall on the short beam. The plateau decreases with mesh refinement: 2.47 for
+** this mesh (16 x 4 CPE8R), 2.36 for 32 x 8 and 2.30 for 64 x 16.
+** Until the first point yields, the tip does not move; the load parameter advances there through the weight cLambda of
+** the controller.
+
+*material, name=VonMises, id=steel, provider=edelweiss
+210000.0, 0.3, 240.0, 0.0, 0.0, 0.0
+
+*job, name=strengthReductionJob, domain=2d
+*solver, solver=NISTPArcLength, name=theSolver
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, y0=0, l=4.0, h=1.0, nX=16, nY=4, elType=CPE8R, elProvider=edelweiss
+
+*section, name=section1, thickness=1.0, material=steel, type=plane
+gen_all
+
+*fieldOutput
+>>perNode, nSet=gen_rightTop, field=displacement, result=U, name=tipDeflection, f(x)='-x[0, 1]'
+
+** the load, applied without arc length control
+*step, solver=theSolver
+maxInc=1.0, minInc=1e-6, maxNumInc=10, maxIter=25, stepLength=1
+>>dirichlet, name=clamp, nSet=gen_left, field=displacement, 1=0.0, 2=0.0
+>>bodyforce, name=load, elSet=gen_all, forceVector='0.0, -4.330127018922193'
+
+** the strength reduction: the load is held, the yield stress follows the load parameter
+*step, solver=theSolver
+maxInc=5e-2, startInc=5e-2, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=1
+>>options, name=theSolver, arcLengthController=tipDeflection, stopCondition='fieldOutputs["tipDeflection"] > 0.25'
+>>indirectcontrol, name=tipDeflection, dof1='model.nodeSets["gen_rightTop"][0].fields["displacement"]', cVector1='0, -1', dof2='model.nodeSets["gen_leftBottom"][0].fields["displacement"]', cVector2='0, 0', L=0.5, absolute=False, cLambda=0.05
+>>changematerialproperty, name=reduceYieldStress, material=steel, index=2, relative=True, f(t)='1/(1+t)'

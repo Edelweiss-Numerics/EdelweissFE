@@ -68,7 +68,8 @@ Relevant module: ``edelweissfe.stepactions.geostatic``
 Relevant module: ``edelweissfe.stepactions.indirectcontrol``
 
 An arc length controller (see :ref:`arc-length-control`): the solver option ``arcLengthController`` of
-``NISTPArcLength`` selects it by its ``name``.
+``NISTPArcLength`` selects it by its ``name``. Its option ``cLambda`` adds the load parameter to the controlled
+quantity, for a strength reduction (see :ref:`strength-reduction`).
 
 .. automodule:: edelweissfe.stepactions.indirectcontrol
     :members: __doc__
@@ -159,6 +160,9 @@ Relevant module: ``edelweissfe.stepactions.changematerialproperty``
 
 .. automodule:: edelweissfe.stepactions.changematerialproperty
     :members: __doc__
+
+Under arc length control, the argument of ``f(t)`` is the load parameter instead of the step time, for a strength
+reduction analysis (see :ref:`strength-reduction`).
 
 .. pprint:: stepaction:changematerialproperty
    :caption: Options:
