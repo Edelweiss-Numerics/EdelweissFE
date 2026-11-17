@@ -86,13 +86,15 @@ cdef extern from "Marmot/MarmotUtils.h":
 
 
 cdef extern from "Marmot/MarmotElement.h":
+    # Every call that may throw is declared `except +`: an untranslated C++ exception reaches
+    # std::terminate and aborts the Python process (e.g. a misspelled result name in getStateView).
     cdef cppclass MarmotElement "Marmot::Discretizations::Elements::Element" nogil:
 
         int getNumberOfRequiredStateVars()
 
         void assignStateVars(double *_stateVars, int nStateVars)
 
-        void assignProperty(const ElementProperties& property)
+        void assignProperty(const ElementProperties& property) except +ValueError
 
         void assignProperty(const MarmotMaterialSection& property) except +ValueError
 
@@ -100,9 +102,9 @@ cdef extern from "Marmot/MarmotElement.h":
 
         vector[string] getPropertyNames() const
 
-        void assignNodeCoordinates(const double* elementCoordinates)
+        void assignNodeCoordinates(const double* elementCoordinates) except +ValueError
 
-        void initializeYourself()
+        void initializeYourself() except +ValueError
 
         void computeKernels(const double* QTotal,
                             const double* dQ,
@@ -118,7 +120,7 @@ cdef extern from "Marmot/MarmotElement.h":
                                     double dT) except +
 
         void setInitialConditions(StateTypes state,
-                                  const double* values)
+                                  const double* values) except +ValueError
 
         void computeDistributedLoad(
                                 DistributedLoadTypes loadType,
@@ -128,7 +130,7 @@ cdef extern from "Marmot/MarmotElement.h":
                                 const double* load,
                                 const double* QTotal,
                                 double time,
-                                double dT)
+                                double dT) except +ValueError
 
         void computeBodyForce(
                         double* P,
@@ -136,7 +138,7 @@ cdef extern from "Marmot/MarmotElement.h":
                         const double* load,
                         const double* QTotal,
                         double time,
-                        double dT)
+                        double dT) except +ValueError
 
         # `except +`: the material may throw when asked for its coefficients (too few properties, or a
         # micro-inertia above the eta^2/4 its viscosity admits); unhandled, that would reach std::terminate.
@@ -152,7 +154,7 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void computeInternalEnergy(double& internalEnergy)
 
-        StateView getStateView(const string& stateName, int gaussPt)
+        StateView getStateView(const string& stateName, int gaussPt) except +ValueError
 
         vector[vector[string]] getNodeFields()
 

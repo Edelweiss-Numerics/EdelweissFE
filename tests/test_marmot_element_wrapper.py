@@ -45,6 +45,15 @@ def _elementOrSkip(elementType: str, elNumber: int):
         pytest.skip(f"Marmot has no {elementType} element")
 
 
+def test_a_misspelled_result_raises_instead_of_aborting():
+    """Marmot throws for an unknown state name; undeclared as `except +`, that reached std::terminate."""
+    element = _elementOrSkip("CPE4", 42)
+    element.setMaterial("LINEARELASTIC", np.array([30000.0, 0.2]))
+
+    with pytest.raises(ValueError, match="nonsense"):
+        element.getResultArray("nonsense", 0)
+
+
 def test_the_element_number_reaches_marmot():
     """__cinit__ runs before __init__: it passed the still unset self._elNumber, so every Marmot element was 0.
 
