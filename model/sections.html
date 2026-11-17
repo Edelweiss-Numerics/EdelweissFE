@@ -17,6 +17,7 @@
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -56,7 +57,10 @@
 <li class="toctree-l1"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="generators.html">Generators</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sets.html">Sets</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Sections</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Sections</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-edelweissfe.sections.truss"><code class="docutils literal notranslate"><span class="pre">truss</span></code> - Truss (bar) elements</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="elements.html">Elements</a></li>
 <li class="toctree-l1"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
@@ -150,6 +154,184 @@ with properties, such as materials.</p>
 </pre></div>
 </div>
 </div>
+<section id="module-edelweissfe.sections.truss">
+<span id="truss-truss-bar-elements"></span><h2><code class="docutils literal notranslate"><span class="pre">truss</span></code> - Truss (bar) elements<a class="headerlink" href="#module-edelweissfe.sections.truss" title="Link to this heading"></a></h2>
+<p>A section for truss (bar) elements, the Marmot truss elements, assigning the cross section area (in the units of the
+model, e.g., mm² for N, mm, MPa). Element and material go in pairs:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>element</p></th>
+<th class="head"><p>materials</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">T2D2</span></code>, <code class="docutils literal notranslate"><span class="pre">T2D3</span></code>, <code class="docutils literal notranslate"><span class="pre">T3D2</span></code>, <code class="docutils literal notranslate"><span class="pre">T3D3</span></code></p></td>
+<td><p>hypoelastic (geometrically linear), e.g., <code class="docutils literal notranslate"><span class="pre">LinearElastic</span></code>,
+<code class="docutils literal notranslate"><span class="pre">VonMises</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">T2D2CR</span></code>, <code class="docutils literal notranslate"><span class="pre">T2D3CR</span></code>, <code class="docutils literal notranslate"><span class="pre">T3D2CR</span></code>, <code class="docutils literal notranslate"><span class="pre">T3D3CR</span></code></p></td>
+<td><p>finite strain (rigid rotations stress free), e.g.,
+<code class="docutils literal notranslate"><span class="pre">CompressibleNeoHooke</span></code>, <code class="docutils literal notranslate"><span class="pre">FiniteStrainJ2Plasticity</span></code>,
+<code class="docutils literal notranslate"><span class="pre">VonMises/Hughes-Winget</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>A material of the other kind is rejected by Marmot with a hint to the matching element. Use the <code class="docutils literal notranslate"><span class="pre">CR</span></code> elements
+whenever the bars rotate, as the geometrically linear ones strain under a finite rotation. A truss has no lateral
+stiffness: restrain nodes only connected to collinear bars, and the transverse modes of the mid node of quadratic
+bars, unless the bars are embedded (see Marmot’s truss element page).</p>
+<p>Results of the quadrature points: <code class="docutils literal notranslate"><span class="pre">normal</span> <span class="pre">force</span></code>, <code class="docutils literal notranslate"><span class="pre">stress</span></code> (axial Cauchy stress), <code class="docutils literal notranslate"><span class="pre">strain</span></code>, <code class="docutils literal notranslate"><span class="pre">elastic</span>
+<span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">dissipation</span></code>, the material states, and for the <code class="docutils literal notranslate"><span class="pre">CR</span></code> elements <code class="docutils literal notranslate"><span class="pre">lateral</span> <span class="pre">stretches</span></code> and <code class="docutils literal notranslate"><span class="pre">kirchhoff</span> <span class="pre">stress</span></code>. A complete worked
+example with the hand check <span class="math notranslate nohighlight">\(N = E A \Delta / L\)</span> is <code class="docutils literal notranslate"><span class="pre">tests/test_trusses.py::test_truss_small_strain_inclined</span></code>.</p>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">Example:</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">VonMises</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">steel</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">marmot</span>
+<span class="c c-Singleline">** E [MPa], nu, fy, HLin, deltaYieldStress, delta, density</span>
+    200000, 0.3, 500, 1000, 0, 1, 7.85e-9
+
+<span class="k">*element</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">T3D2</span>
+    1, 1, 2
+
+<span class="k">*elSet</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">rebars</span>
+    1
+
+<span class="c c-Singleline">** a bar of diameter 12 mm</span>
+<span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">rebarSection</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">truss</span>,<span class="nv"> area</span><span class="ow">=</span><span class="m">113.1</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">steel</span>
+    rebars
+</pre></div>
+</div>
+</div>
+<table class="docutils align-default" id="id3">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id3" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">area</span></code></td>
+<td><p>float (required)</p></td>
+<td><p>cross section area</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">materialParameterFromField</span></code></td>
+<td><p>tuple, default=()</p></td>
+<td><p>use material properties given by an analytical field</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">writeMaterialPropertiesToFile</span></code></td>
+<td><p>tuple, default=()</p></td>
+<td><p>export material properties to file</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text">Keyword: materialParameterFromField</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">index</span></code></td>
+<td><p>int (required)</p></td>
+<td><p>index of material parameter</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">field</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>name of analytical field</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">type</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>either ‘setToValue’ or ‘scale’</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(p,f)</span></code></td>
+<td><p>str, default=’f’</p></td>
+<td><p>p…value of parameter from material definition; f…value of analytical field</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default" id="id5">
+<caption><span class="caption-text">Keyword: writeMaterialPropertiesToFile</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">filename</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>file name for material property export</p></td>
+</tr>
+</tbody>
+</table>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">Example (finite strain): <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/TrussSnapThroughNeoHooke/test.inp</span></code></span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="c c-Singleline">** A shallow two-bar truss ("von Mises truss") of finite strain trusses (T2D2CR, compressible Neo-Hooke), pushed into</span>
+<span class="c c-Singleline">** its snap-through by displacement control of the apex: from (10, 1) down to (10, 0), where both bars are compressed</span>
+<span class="c c-Singleline">** to their shortest length and the tie is in tension (the end state is not the stress-free mirrored one).</span>
+<span class="c c-Singleline">** Units: N, mm, MPa (any consistent set). Supports (0, 0) and (20, 0), free horizontally; a quadratic truss (T2D3CR)</span>
+<span class="c c-Singleline">** ties them, so that the bars push against it instead of spreading the supports.</span>
+<span class="c c-Singleline">** tests/test_trusses.py checks the equilibrium of the apex, F = 2 N sin(theta), along this path.</span>
+<span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">compressibleneohooke</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">rubber</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">marmot</span>
+<span class="c c-Singleline">** K [MPa], G [MPa], density</span>
+3000.0, 1000.0, 1e-9
+
+<span class="k">*node</span>
+1, 0.0, 0.0
+2, 10.0, 1.0
+3, 20.0, 0.0
+4, 10.0, 0.0
+
+<span class="k">*element</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">T2D2CR</span>
+1, 1, 2
+2, 2, 3
+
+<span class="k">*element</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">T2D3CR</span>
+3, 1, 3, 4
+
+<span class="k">*elSet</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">bars</span>
+1, 2
+
+<span class="k">*elSet</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">tie</span>
+3
+
+<span class="k">*nSet</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">supports</span>
+1, 3
+<span class="k">*nSet</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">apex</span>
+2
+<span class="c c-Singleline">** the mid node of the quadratic tie has a zero-energy mode transverse to the tie (a truss has no lateral stiffness):</span>
+<span class="c c-Singleline">** it is held vertically</span>
+<span class="k">*nSet</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">tieMid</span>
+4
+
+<span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">barSection</span>,<span class="nv"> area</span><span class="ow">=</span><span class="m">1.0</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">rubber</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">truss</span>
+bars
+
+<span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">tieSection</span>,<span class="nv"> area</span><span class="ow">=</span><span class="m">0.2</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">rubber</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">truss</span>
+tie
+
+<span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">job</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">2d</span>
+<span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
+
+<span class="k">*fieldOutput</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">normalForce</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">normal force</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0</span>,
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">F</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">apex</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'sum(x[:,1])'</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">True</span>,
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">N</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">bars</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">normal force</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">True</span>,
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">uSupport</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">supports</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">True</span>,
+
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">0.05</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-8</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">15</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
+&gt;&gt;initializematerial,<span class="nv"> name</span><span class="ow">=</span><span class="m">init</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">supports</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">supports</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">tieMid</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">tieMid</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">apex</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">apex</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">-1.0</span>
+</pre></div>
+</div>
+</div>
+</section>
 </section>
 
 
