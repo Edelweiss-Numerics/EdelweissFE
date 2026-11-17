@@ -29,7 +29,7 @@ def _marmotHas(elementType: str) -> bool:
 
 
 pytestmark = pytest.mark.skipif(
-    not all(_marmotHas(t) for t in ("T3D2", "T2D2CR", "B2D2", "B2D3", "B3D2")),
+    not all(_marmotHas(t) for t in ("T3D2", "T2D2CR", "B2D2", "B2D2CR", "B2D3", "B3D2")),
     reason="Marmot is built without the TrussElement / BeamElement modules",
 )
 
@@ -253,6 +253,67 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
         np.testing.assert_allclose(deflection, clamped, rtol=1e-5)
     else:  # free rotations: the root is clamped only by the tied displacements of the embedded nodes
         np.testing.assert_allclose(deflection / clamped, FREE_ROTATION_SOFTENING, rtol=1e-3)
+
+
+def _beamInStripDeck(elType: str, options: str) -> str:
+    """the strip with an embedded inclined beam of ``elType`` (2D), the constraint with ``options``, in tension"""
+    beam, first, last = _line(100001, (0.3, 0.2), (3.7, 0.8), 3, elType)
+    return (
+        _strip()
+        + f"""{beam}
+*elSet, elSet=beams, generate=True
+{first}, {last - 1}, 1
+
+*nSet, nSet=rebarRight
+{last}
+
+*section, name=beamSection, type=beam, profile=rectangle, b=0.1, h=0.1, material=steel
+beams
+
+*constraint, type=embeddedRegion, name=embedded
+embeddedElSet=beams, hostElSet=gen_all, {options}
+"""
+        + _UNIAXIAL_STEP.replace(
+            ">>perElement, name=rebarStrain, elSet=rebars, result=strain, quadraturePoint=0, saveHistory=True,\n", ""
+        )
+    )
+
+
+@pytest.mark.parametrize("rotations", ["axis", "host"])
+def test_embedded_corotational_beam_rejects_tied_rotations(tmp_path, rotations):
+    """the rotation ties are infinitesimal: a co-rotational beam (B2D2CR) may only be embedded with free rotations"""
+    with pytest.raises(ValueError, match="co-rotational beam .* cannot be embedded with rotations=" + rotations):
+        _run(tmp_path, _beamInStripDeck("B2D2CR", f"rotations={rotations}"), "RF")
+
+
+def test_embedded_corotational_beam_with_free_rotations(tmp_path):
+    """a co-rotational beam (B2D2CR) embedded with free rotations: no rotation is tied, and every beam node is at
+    the interpolation of its host"""
+    from edelweissfe.utils.embedding import HostElementLocator
+
+    model, _ = _run(tmp_path, _beamInStripDeck("B2D2CR", "rotations=free"))
+    constraint = model.multiPointConstraints["embedded"]
+    assert constraint._rotationRecords == [] and len(constraint._records) == 4
+    field = model.nodeFields["displacement"]
+    U = {node: np.asarray(field["U"][k]) for k, node in enumerate(field.nodes)}
+    assert max(np.abs(u).max() for u in U.values()) > 1e-3, "the strip must be loaded"
+    locator = HostElementLocator(list(model.elementSets["gen_all"]))
+    for el in model.elementSets["beams"]:
+        for node in el.nodes:
+            point = locator.locate(node.coordinates)
+            interpolated = sum(N * U[m] for N, m in zip(point.shapeFunctions(), point.element.nodes))
+            np.testing.assert_allclose(U[node], interpolated, rtol=0, atol=1e-12)
+
+
+def test_embedded_region_rejects_an_unknown_rotations_mode(tmp_path):
+    with pytest.raises(ValueError, match="unknown rotations mode 'clamped'"):
+        _run(tmp_path, _beamInStripDeck("B2D2", "rotations=clamped"), "RF")
+
+
+def test_embedded_region_rejects_tied_rotations_of_another_field(tmp_path):
+    """the rotation ties act on the host displacements: another constrained field with tied rotations is rejected"""
+    with pytest.raises(ValueError, match="needs field=displacement, not field=temperature"):
+        _run(tmp_path, _beamInStripDeck("B2D2", "rotations=axis, field=temperature"), "RF")
 
 
 def test_embedded_cantilever_clamped_in_stiff_block_3d(tmp_path):

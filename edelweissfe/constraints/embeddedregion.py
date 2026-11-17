@@ -202,7 +202,12 @@ class EmbeddedRegionSchema:
         default=None,
         required=True,
     )
-    field: str = schemaField(description="The field to be constrained.", dtype=str, default="displacement")
+    field: str = schemaField(
+        description="The field to be constrained; tied beam rotations (rotations other than 'free') need "
+        "'displacement'.",
+        dtype=str,
+        default="displacement",
+    )
     allowUnembedded: bool = schemaField(
         description="Whether embedded nodes lying outside of all host elements are left free (with a warning) "
         "instead of raising an error, e.g., for bars sticking out of the host.",
@@ -256,6 +261,11 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self._rotationMode = configuration.rotations.lower()
         if self._rotationMode not in ROTATION_MODES:
             raise ValueError(f"{name}: unknown rotations mode '{configuration.rotations}', use one of {ROTATION_MODES}")
+        if self._rotationMode != "free" and self._field != "displacement":
+            raise ValueError(
+                f"{name}: rotations={self._rotationMode} ties the beam rotations to the host displacement gradient; "
+                f"it needs field=displacement, not field={self._field}"
+            )
 
         self._build(model)
         # rebuilt after a refinement of the host (or the embedded elements), see refresh()
@@ -416,7 +426,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             if "rotation" not in slaveNode.fields:
                 continue
             slaveDofs = fieldVariableIndices[slaveNode.fields["rotation"]]
-            masterDofs = [(fieldVariableIndices[mNode.fields[self._field]][i], c) for mNode, i, c in masters]
+            # the rotation operator dTheta/dU acts on the host displacements (field=displacement, see __init__)
+            masterDofs = [(fieldVariableIndices[mNode.fields["displacement"]][i], c) for mNode, i, c in masters]
             for r in range(len(slaveDofs)):
                 records.append((slaveDofs[r], [(dof, c[r]) for dof, c in masterDofs if c[r] != 0.0]))
         return records
