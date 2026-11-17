@@ -26,7 +26,6 @@ from _embeddingdecks import (  # noqa: E402
     _strip,
 )
 
-
 pytestmark = pytest.mark.skipif(
     not all(_marmotHas(t) for t in ("T2D2", "T3D2", "B2D2", "EB2D2Q4", "EB3D2H8")),
     reason="Marmot is built without the TrussElement / BeamElement / EmbeddedBondElement modules",
