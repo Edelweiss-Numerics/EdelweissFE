@@ -856,6 +856,84 @@ kept, apart from the changed one.
     [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
     [analyticalField] Scales the defined boundary condition (<class 'str'>, default = None)
     [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+===== module documentation: edelweissfe.stepactions.dissipationcontrol =====
+Dissipation controller for the NISTPArcLength solver, after the dissipation-based arc length method of Gutiérrez
+(2004) and Verhoosel, Remmers and Gutiérrez (2009), for loading by prescribed displacements (Dirichlet boundary
+conditions scaled by the load parameter).
+
+The controller adds the equation
+
+.. math::
+
+    g(\boldsymbol{U}) = D(\boldsymbol{U}) - D_n - \Delta \tau = 0
+
+for the increment of the load parameter :math:`\Delta\lambda`. Here, :math:`D` is the dissipated energy of the
+material, summed from the quadrature point result ``dissipation`` over the elements of ``elSet`` (instead of the
+expressions of Verhoosel et al. in terms of the load and the displacements, which assume a particular material),
+:math:`D_n` its value at the start of the increment, and :math:`\Delta\tau = \Delta p \, \tau` the share of the
+increment (of size :math:`\Delta p`) in the dissipation ``dissipation`` of the step. Linearized along the correction
+:math:`\Delta\Delta\boldsymbol{U} = \Delta\Delta\boldsymbol{U}_0 + \Delta\Delta\lambda \, \Delta\Delta
+\boldsymbol{U}_f`, the correction of the load parameter is
+
+.. math::
+
+    \Delta\Delta\lambda = \frac{\Delta\tau - (D - D_n) - \nabla D \cdot \Delta\Delta\boldsymbol{U}_0}
+        {\nabla D \cdot \Delta\Delta\boldsymbol{U}_f},
+
+with :math:`D` and its gradient :math:`\nabla D` of the iterate. The elements write their share of the gradient in
+every evaluation of their kernels (:meth:`~edelweissfe.elements.base.baseelement.BaseElement.assignEnergyGradientOutput`),
+which needs Marmot elements and materials that provide the energy gradients. The solver accepts an increment once its
+residual has converged and :math:`|D - D_n - \Delta\tau| \le \epsilon \, \Delta\tau`, with the relative
+tolerance :math:`\epsilon` = ``constraintTolerance``.
+
+The dissipation equation is singular where nothing dissipates. Two ways cover these parts of the path:
+
+* With ``displacement`` (the combined constraint, a heuristic), every increment ends at the first of the dissipation
+  target and the limit :math:`\Delta u_{\max} = \Delta p \, u_{\max}` of the largest nodal displacement increment,
+
+  .. math::
+
+      \max_i \left| \Delta U_i + \Delta\Delta U_{0,i} + \Delta\Delta\lambda \, \Delta\Delta U_{f,i} \right|
+          \le \Delta u_{\max}
+
+  over all displacement degrees of freedom :math:`i`. This bounds :math:`\Delta\Delta\lambda` to an interval; the
+  dissipation target is taken within it, and otherwise an end of the interval: the one where the linearized
+  dissipation does not decrease, as an increment cannot release dissipated energy (at the onset of a snap-back, the
+  end in the direction of the last converged increment does), and if both ends or neither qualify, the end whose
+  increment points in the direction of the last converged increment. The displacement limit thus governs the
+  elastic range and the final failure, where the dissipation hardly constrains the deformation anymore.
+* Without ``displacement``, the load parameter is controlled directly, :math:`\Delta\lambda = \Delta p \,
+  \lambda_{\mathrm{step}}` with :math:`\lambda_{\mathrm{step}}` = ``loadParameter``, until the dissipation at
+  the start of an increment exceeds ``threshold``; then the dissipation is. An elastic iterate in the dissipation
+  controlled phase (the first one from a zero prediction) is moved by the secant of the last increment, or, without
+  one, by the load parameter rule.
+
+References
+----------
+Gutiérrez, M. A. (2004). Energy release control for numerical simulations of failure in quasi-brittle solids.
+Communications in Numerical Methods in Engineering, 20(1), 19-29.
+
+Verhoosel, C. V., Remmers, J. J. C., Gutiérrez, M. A. (2009). A dissipation-based arc-length method for robust
+simulation of brittle and ductile failure. International Journal for Numerical Methods in Engineering, 77(9),
+1290-1321.
+< dissipationcontrol > Dissipation controller for the NISTPArcLength solver.
+  required arguments
+    [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
+    [dissipation] Energy to be dissipated over the step. (<class 'float'>)
+  optional arguments
+    [elSet] Element set whose quadrature point result 'dissipation' is summed. (<class 'str'>, default = all)
+    [displacement] Maximum nodal displacement increment over the step; enables the combined constraint. (<class 'float'>, default = None)
+    [loadParameter] Load parameter increment over the step before dissipating (without displacement). (<class 'float'>, default = None)
+    [threshold] Dissipated energy beyond which the dissipation controlled phase starts (without displacement). (<class 'float'>, default = 0.0)
+< dissipationcontrol > Dissipation controller for the NISTPArcLength solver.
+  required arguments
+    [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
+    [dissipation] Energy to be dissipated over the step. (<class 'float'>)
+  optional arguments
+    [elSet] Element set whose quadrature point result 'dissipation' is summed. (<class 'str'>, default = all)
+    [displacement] Maximum nodal displacement increment over the step; enables the combined constraint. (<class 'float'>, default = None)
+    [loadParameter] Load parameter increment over the step before dissipating (without displacement). (<class 'float'>, default = None)
+    [threshold] Dissipated energy beyond which the dissipation controlled phase starts (without displacement). (<class 'float'>, default = 0.0)
 ===== module documentation: edelweissfe.stepactions.distributedload =====
 < distributedload > Standard distributed load, applied on a surface set.
   required arguments

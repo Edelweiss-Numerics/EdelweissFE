@@ -505,6 +505,12 @@ _STEP_ACTION_SPECS = [
         "UpdateDirichletSchema",
     ),
     _StepActionModuleSpec(
+        "edelweissfe.stepactions.dissipationcontrol",
+        "dissipationcontrol",
+        "dissipationcontrol",
+        "Dissipation controller for the NISTPArcLength solver.",
+    ),
+    _StepActionModuleSpec(
         "edelweissfe.stepactions.distributedload",
         "distributedload",
         "distributedload",

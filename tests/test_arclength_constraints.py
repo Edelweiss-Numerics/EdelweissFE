@@ -1,9 +1,11 @@
 """NISTPArcLength with constraints: the constraint forces enter the residual as in NIST.
 
 A cantilever whose right edge is tied to a reference point RP (linearizedRigidBody) is pulled at RP, by NIST with a
-prescribed displacement of RP and by NISTPArcLength under indirect control (load at RP; linear elastic material). The
-response is linear, so the arc length run ends in the state of its NIST reference. With the constraint forces assembled
-into the internal instead of the external forces, the arc length solver diverged.
+prescribed displacement of RP and by NISTPArcLength under indirect control (load at RP; linear elastic material) and
+under dissipation control (prescribed displacement of RP scaled by the load parameter; von Mises, which provides the
+energy gradients, loaded within its elastic range). The response is linear, so each arc length run ends in
+the state of its NIST reference. With the constraint forces assembled into the internal instead of the external forces,
+the arc length solver diverged.
 """
 
 import os
@@ -15,12 +17,18 @@ import pytest
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils.inputfileparser import parseInputFile
 
+# within the elastic range of the von Mises material (yield stress 10 MPa, max. bending stress about 0.45 MPa)
 URP = -0.1
 
 MATERIALS = {
     "linearElastic": dict(
         elType="CPE4\nelProvider=edelweiss",
         material="*material, name=linearelastic, id=theMaterial, provider=edelweiss\n30000.0, 0.2",
+    ),
+    # E, nu, yield stress, linear hardening, exponential hardening and its rate
+    "vonMises": dict(
+        elType="CPE8R",
+        material="*material, name=VONMISES, id=theMaterial\n30000.0, 0.2, 10.0, 0.0, 0.0, 1.0",
     ),
 }
 
@@ -69,6 +77,15 @@ INDIRECT = dict(
 >>nodeforces, name=pull, nSet=RP, components='0,-100', field=displacement""",
 )
 
+# elastic range: nothing is dissipated, the displacement limit governs every increment
+DISSIPATION = dict(
+    solver="NISTPArcLength",
+    maxInc=0.25,
+    actions=f""">>options, name=theSolver, arcLengthController=control, stopCondition='fieldOutputs["URP"] < {URP}+1e-9'
+>>dissipationcontrol, name=control, elSet=all, dissipation=1.0, displacement={abs(URP)}
+>>dirichlet, name=pull, nSet=RP, field=displacement, 2={URP}""",
+)
+
 
 def _simulate(tmp_path, case, material):
     deck = tmp_path / "test.inp"
@@ -96,6 +113,10 @@ def _assertSameState(result, reference):
 
 def test_indirect_control_with_a_rigid_body_constraint_matches_nist(tmp_path, reference):
     _assertSameState(_simulate(tmp_path, INDIRECT, "linearElastic"), reference["linearElastic"])
+
+
+def test_dissipation_control_with_a_rigid_body_constraint_matches_nist(tmp_path, reference):
+    _assertSameState(_simulate(tmp_path, DISSIPATION, "vonMises"), reference["vonMises"])
 
 
 # hanging nodes (multi-point constraint by DOF elimination): the AMR test case with GC3D20R elements and the AT2 phase
