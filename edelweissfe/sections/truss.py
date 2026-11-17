@@ -45,7 +45,7 @@ stiffness: restrain nodes only connected to collinear bars, and the transverse m
 bars, unless the bars are embedded (see Marmot's truss element page).
 
 Results of the quadrature points: ``normal force``, ``stress`` (axial Cauchy stress), ``strain``, ``elastic
-energy``, ``dissipation``, the material states, and for the ``CR`` elements ``lateral stretches``. A complete worked
+energy``, ``dissipation``, the material states, and for the ``CR`` elements ``lateral stretches`` and ``kirchhoff stress``. A complete worked
 example with the hand check :math:`N = E A \\Delta / L` is ``tests/test_trusses.py::test_truss_small_strain_inclined``.
 
 .. code-block:: edelweiss

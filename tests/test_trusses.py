@@ -197,7 +197,7 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
 
 def test_truss_snap_through_equilibrium(tmp_path):
     """the regression deck TrussSnapThroughNeoHooke along its path: the apex force is F = 2 N sin(theta) of the two
-    compressed bars (theta from the current geometry, the supports moving apart), the bars shorten monotonically"""
+    compressed bars (theta from the current geometry, the supports moving apart)"""
     import pathlib
 
     deck = (pathlib.Path(__file__).parent.parent / "testfiles/marmot/TrussSnapThroughNeoHooke/test.inp").read_text()
