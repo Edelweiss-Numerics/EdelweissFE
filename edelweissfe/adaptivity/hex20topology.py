@@ -86,11 +86,11 @@ class Hex20Topology(TopologyBase):
     def shape_functions_and_grad(self, *params) -> tuple:
         return hex20_shape_grad(*params)
 
-    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
+    def inverse_map(self, point, elementNodeCoords, itmax=30) -> np.ndarray:
         """The parametric coordinates of a point, by the one Newton inverse mapping of EdelweissFE
         (:func:`edelweissfe.utils.isoparametricshapes.newtonInverseMapping`, on this module's node ordering); a point
         it does not converge for is clipped to slightly outside of the parent domain (for the state transfer).
-        ``tol`` is kept for compatibility; the criterion is the dimensionless one of the shared mapping."""
+        The convergence criterion is the dimensionless one of the shared mapping; ``itmax`` bounds the iterations."""
         xi, converged = newtonInverseMapping(
             lambda xi_: self.shape_functions_and_grad(*xi_), elementNodeCoords, point, np.zeros(3), itmax
         )

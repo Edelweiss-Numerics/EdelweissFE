@@ -64,7 +64,7 @@ Which mode?
 ==========  =======================================================================================================
 ``free``    displacements only (default; as Abaqus' embedded elements): the beam resists bending only by the tied
             displacements of its nodes, i.e., by the curvature of its nodal polygon -- an embedded cantilever is
-            softer than a clamped one (about 1.11 times in the test of this module). Right for rebar-like beams.
+            softer than a clamped one. Right for rebar-like beams.
 ``axis``    the rotation of the host material line along the beam axis (above): clamps the beam, consistent with
             the Euler-Bernoulli kinematics; a host in uniform strain (also in shear) leaves a straight embedded beam
             straight. For members carrying moments into the host.
@@ -205,7 +205,12 @@ class EmbeddedRegionSchema:
         default=None,
         required=True,
     )
-    field: str = schemaField(description="The field to be constrained.", dtype=str, default="displacement")
+    field: str = schemaField(
+        description="The field to be constrained; tied beam rotations (rotations other than 'free') need "
+        "'displacement'.",
+        dtype=str,
+        default="displacement",
+    )
     allowUnembedded: bool = schemaField(
         description="Whether embedded nodes lying outside of all host elements are left free (with a warning) "
         "instead of raising an error, e.g., for bars sticking out of the host.",
@@ -259,6 +264,11 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         self._rotationMode = configuration.rotations.lower()
         if self._rotationMode not in ROTATION_MODES:
             raise ValueError(f"{name}: unknown rotations mode '{configuration.rotations}', use one of {ROTATION_MODES}")
+        if self._rotationMode != "free" and self._field != "displacement":
+            raise ValueError(
+                f"{name}: rotations={self._rotationMode} ties the beam rotations to the host displacement gradient; "
+                f"it needs field=displacement, not field={self._field}"
+            )
 
         self._build(model)
         # rebuilt after a refinement of the host (or the embedded elements), see refresh()
@@ -269,8 +279,6 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         configuration = self._configuration
         embeddedElements = list(model.elementSets[configuration.embeddedElSet])
         hostElements = list(model.elementSets[configuration.hostElSet])
-        self._hostElementIds = {id(el) for el in hostElements}
-        self._embeddedElementIds = {id(el) for el in embeddedElements}
         hostNodes = {n for el in hostElements for n in el.nodes}
         locator = HostElementLocator(hostElements, tolerance=configuration.tolerance)
 
@@ -374,17 +382,25 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         return cls(name, model, journal, configuration=configuration)
 
     def refresh(self, model: FEModel, change) -> bool:
-        """Rebuild the records on the current mesh if the host or the embedded elements changed (e.g., after an
-        adaptive refinement of the host: the embedded nodes are then tied to the refined elements).
+        """Rebuild the records on the current mesh if ``change`` touched the host or the embedded element set (e.g.,
+        an adaptive refinement of the host: the embedded nodes are then tied to the refined elements).
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        change
+            The net :class:`~edelweissfe.models.modelchange.ModelChange` since the last refresh.
 
         Returns
         -------
         bool
             Whether the records were rebuilt.
         """
-        hostIds = {id(el) for el in model.elementSets[self._configuration.hostElSet]}
-        embeddedIds = {id(el) for el in model.elementSets[self._configuration.embeddedElSet]}
-        if hostIds == self._hostElementIds and embeddedIds == self._embeddedElementIds:
+        configuration = self._configuration
+        if not (
+            change.touchesElementSet(configuration.hostElSet) or change.touchesElementSet(configuration.embeddedElSet)
+        ):
             return False
         self._build(model)
         return True
@@ -413,7 +429,8 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
             if "rotation" not in slaveNode.fields:
                 continue
             slaveDofs = fieldVariableIndices[slaveNode.fields["rotation"]]
-            masterDofs = [(fieldVariableIndices[mNode.fields[self._field]][i], c) for mNode, i, c in masters]
+            # the rotation operator dTheta/dU acts on the host displacements (field=displacement, see __init__)
+            masterDofs = [(fieldVariableIndices[mNode.fields["displacement"]][i], c) for mNode, i, c in masters]
             for r in range(len(slaveDofs)):
                 records.append((slaveDofs[r], [(dof, c[r]) for dof, c in masterDofs if c[r] != 0.0]))
         return records
