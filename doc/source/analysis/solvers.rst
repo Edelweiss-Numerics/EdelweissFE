@@ -321,7 +321,8 @@ With the ``abaqus`` criterion, the zero increment that begins a step converges o
 a model at equilibrium, lies below :math:`R_l \, \tilde{q}`: its increment is the round-off of its own corrections, so
 the relative correction check cannot pass. In the first step, before any field has carried flux, :math:`\tilde{q}` is
 the small initial value :math:`\tilde{q}^0`, and the zero increment of a large model at rest may fail. A zero increment
-threshold below any increment the analysis means accepts it:
+threshold accepts it; it is off by default, an absolute value and one for all fields, so it must lie above the round-off
+of the increments and below the smallest increment the analysis means, in the units of every field:
 
 .. code-block:: edelweiss
 

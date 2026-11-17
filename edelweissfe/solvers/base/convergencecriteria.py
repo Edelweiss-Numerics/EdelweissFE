@@ -129,6 +129,11 @@ Two criteria are available, selected by the solver option ``convergenceCriterion
     * Minimum iterations (``minimumIterations``, :math:`n`): no flux residual counts as converged before iteration
       :math:`n`, the linear case included.
 
+    :math:`\\Delta u_0` is an absolute value, one for all fields: it must lie between the round-off of the increments
+    and the smallest increment the analysis means, in the units of every field it applies to. There is no default
+    scaled to the model, so the zero increment of a model whose round-off residual exceeds :math:`R_l \\, \\tilde{q}`
+    needs it set.
+
     The criterion is formulated for fields; the scalar variables are checked by the ``legacy`` criterion, with
     :math:`I_p` as the iteration of its alternative tolerance. The options ``zeroFluxThreshold`` and
     ``iterationsForAlternativeTolerance`` of the ``legacy`` criterion mean nothing with this one, and are refused.
@@ -170,6 +175,26 @@ class FieldConvergence:
     correction: float
     correctionConverged: bool
     indexOfLargestResidual: int
+
+
+def hasNotMoved(largestIncrement: float, zeroIncrementThreshold: float | None) -> bool:
+    """The zero increment rule of both criteria: whether a field whose largest increment is ``largestIncrement`` has not
+    moved, so that there is no increment to relate its correction to.
+
+    Parameters
+    ----------
+    largestIncrement
+        The largest absolute increment :math:`\\Delta u_{\\max}` of the field.
+    zeroIncrementThreshold
+        :math:`\\Delta u_0`, the absolute threshold; None for off.
+
+    Returns
+    -------
+    bool
+        True if the rule is on and :math:`\\Delta u_{\\max}` does not exceed :math:`\\Delta u_0`.
+    """
+    # 'not above' rather than 'at most', as for the zero flux rule; a NaN in the residual ends the increment before
+    return zeroIncrementThreshold is not None and not largestIncrement > zeroIncrementThreshold
 
 
 class ConvergenceCriterionBase(ABC):
@@ -430,7 +455,7 @@ class LegacyConvergenceCriterion(ConvergenceCriterionBase):
 
         largestIncrement = np.linalg.norm(dU, np.inf)
 
-        if self.zeroIncrementThreshold is not None and not largestIncrement > self.zeroIncrementThreshold:
+        if hasNotMoved(largestIncrement, self.zeroIncrementThreshold):
             return True
 
         return correction < self.relativeFieldCorrectionTolerances[field] * largestIncrement
@@ -602,8 +627,7 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         if ddU is None:
             return False
 
-        # 'not above' rather than 'at most', as in the legacy criterion
-        if self.zeroIncrementThreshold is not None and not largestIncrement > self.zeroIncrementThreshold:
+        if hasNotMoved(largestIncrement, self.zeroIncrementThreshold):
             return True
 
         return correction <= tolerance * largestIncrement
