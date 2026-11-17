@@ -218,10 +218,10 @@ def test_restart_resumes_the_dissipation_control(tmp_path):
     )
 
 
-def test_refinement_rebuilds_the_buffers_and_rebases_the_dissipation():
-    """The refinement changes the controlled element set; afterwards, every increment dissipates its share again.
-    Without the dissipation at the increment start taken from the transferred state, the increment after the
-    refinement cannot meet its target."""
+def test_refinement_conserves_the_dissipation_and_keeps_the_control():
+    """The refinement changes the controlled element set; the controller rebuilds its buffers, and every increment
+    dissipates its share, also the one in which the mesh changed: the state transfer conserves the summed dissipation
+    (the energies Marmot stores per quadrature point are totals, scaled by the child's share of the parent)."""
 
     inputFile, model, fieldOutputController = _simulate(TESTFILES / "AMR_DissipationControl" / "test.inp")
     options = _controllerOptions(inputFile)
@@ -234,9 +234,7 @@ def test_refinement_rebuilds_the_buffers_and_rebases_the_dissipation():
     nonzero = np.flatnonzero(np.diff(t) > 0.0)
     dTau = np.diff(t)[nonzero] * options["dissipation"]
     dD = np.diff(D)[nonzero]
-    # the field output counts the change of the summed dissipation by the state transfer to the refinement's increment
-    overshooting = dD > (1 + TOLERANCE) * dTau
-    assert overshooting.sum() <= 1
+    assert np.all(dD <= (1 + TOLERANCE) * dTau)
     assert np.sum(np.abs(dD - dTau) <= TOLERANCE * dTau) > 10
 
 
@@ -265,7 +263,10 @@ class _Element:
 
 class _ElementSet(list):
     name = "controlled"
-    _version = 0
+
+    def __init__(self, elements):
+        super().__init__(elements)
+        self._version = 0
 
 
 class _Topology:
@@ -352,6 +353,25 @@ def test_the_gradient_output_is_assigned_only_while_controlling():
 
     controller.endControl(_Model())
     assert all(el.assigned is None for el in elements)
+
+
+def test_a_mesh_change_rebuilds_the_buffers_and_rebases_the_dissipation():
+    """A refinement replaces elements of the set; a state transfer that does not conserve the dissipation (e.g.
+    ``virgin``) changes the dissipation at the start of the next increment."""
+
+    parent, kept = _Element(1, dissipation=1.0), _Element(2, dissipation=0.5)
+    controller = _controller([parent, kept], displacement=1.0)
+    controller.beginControl(_Model())
+    controller.D_n = 1.5
+
+    children = [_Element(3, dissipation=0.0), _Element(4, dissipation=0.0)]
+    controller.elSet[:] = [kept, *children]
+    controller.elSet._version += 1
+    assert controller.refresh(_Model(), change=None) is False
+
+    assert controller.D_n == 0.5
+    assert parent.assigned is None
+    assert all(el.assigned is not None for el in (kept, *children))
 
 
 def test_a_zero_increment_rebases_the_dissipation_and_keeps_the_predictor():

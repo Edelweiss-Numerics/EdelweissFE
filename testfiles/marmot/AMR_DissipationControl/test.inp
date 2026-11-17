@@ -1,8 +1,8 @@
 ** Dissipation control across a mesh refinement: the two-element C3D20 cantilever of AMR_DynamicRefinement, of von
 ** Mises with linear hardening, bent by a prescribed displacement of its free end under dissipation control. The
 ** stress marker refines the element at the fixed end once it yields; the controller rebuilds its views and buffers
-** for the refined element set, and re-bases the dissipation at the increment start on the re-equilibrated state.
-** tests/test_dissipationcontrol.py checks the dissipation increments before and after the refinement.
+** for the refined element set, and the state transfer conserves the summed dissipation.
+** tests/test_dissipationcontrol.py checks the dissipation increments before, at and after the refinement.
 ** E, nu, yield stress, linear hardening, exponential hardening and its rate
 *material, name=VONMISES, id=mat
 20000.0, 0.2, 0.5, 2000.0, 0.0, 1.0

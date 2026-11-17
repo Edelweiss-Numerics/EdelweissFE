@@ -36,6 +36,7 @@ import numpy as np
 from edelweissfe.adaptivity.hex20topology import Hex20Topology
 from edelweissfe.adaptivity.marking import RefineableElements
 from edelweissfe.adaptivity.refinement import AdaptiveMesh
+from edelweissfe.adaptivity.statetransfer.base import scaleExtensiveStateVars
 from edelweissfe.adaptivity.statetransfer.perstatevar import PerStateVarStateTransfer
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.markerlibrary import getMarkerClass
@@ -778,6 +779,8 @@ class ModelModifier(ModelModifierBase):
         for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
             child.assignProperty(elementProperty.propertyName, elementProperty.values)
         self._stateTransfer.transferState(parentEl, [child], self._topology)
+        # weighted energies (density x J0xW) are the parent's totals: keep the child's share of the parent volume
+        scaleExtensiveStateVars(child, 1.0 / len(mesh.elements[parentEid]["children"]))
 
         # warm start: interpolate each NEW node's field values from the parent via the HEX20
         # isoparametric map, so the increment restarts from a consistent state, not zero

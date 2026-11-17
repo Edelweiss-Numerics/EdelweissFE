@@ -237,6 +237,13 @@ everything except ``<var1>`` (projected) and ``<var2>`` (reset to its initial va
     :caption: Example (per-state-variable transfer device; the routed variable is arbitrary, chosen
               only to exercise the mechanism): ``testfiles/marmot/AMR_DynamicRefinementProjection/test.inp``
 
+Whatever the strategy, the energies an element stores per quadrature point as totals, i.e. the density times the
+quadrature weight and the Jacobian, ``elastic strain energy``, ``total strain energy`` and ``dissipation`` (Marmot's
+displacement elements), are scaled by the child's share of its parent's volume, :math:`1/8`, after the transfer.
+A child quadrature point weighs an eighth of a parent one, so a refinement conserves the summed energies instead of
+multiplying those of the refined element by eight. Elements that do not carry these state variables are left as they
+are.
+
 Predictor after a refinement
 ----------------------------
 
