@@ -17,6 +17,7 @@
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -223,6 +224,75 @@ all
 </div>
 <section id="module-edelweissfe.outputmanagers.ensight">
 <span id="ensight-export-to-ensight-gold-format"></span><h2><code class="docutils literal notranslate"><span class="pre">ensight</span></code> - Export to Ensight Gold format<a class="headerlink" href="#module-edelweissfe.outputmanagers.ensight" title="Link to this heading"></a></h2>
+<p>Output manager for Ensight exports.
+If loaded, it automatically exports all elSets as Ensight parts.
+For each part, perNode and perElement results can be exported, which are imported from fieldOutputs.</p>
+<p><strong>Quadrature point results.</strong> <code class="docutils literal notranslate"><span class="pre">&gt;&gt;perQuadraturePoint</span></code> writes an element result at all quadrature points on an
+additional part <code class="docutils literal notranslate"><span class="pre">&lt;elSet&gt;_QP</span></code>, which splits each quadrilateral or hexahedron into one linear sub-element per
+quadrature point of its Gauss rule. The results are shown where they are computed, without averaging over the element
+or extrapolating to the nodes.</p>
+<ol class="arabic">
+<li><p>Collect the result at <strong>all</strong> quadrature points of the elements in a <code class="docutils literal notranslate"><span class="pre">*fieldOutput</span></code>:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Elements</p></th>
+<th class="head"><p>Gauss rule</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">quadraturePoint</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>CPE4, CPS4, CPE8R, CPS8R</p></td>
+<td><p>2x2</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0:4</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>CPE8, CPS8</p></td>
+<td><p>3x3</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0:9</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>C3D8, C3D20R</p></td>
+<td><p>2x2x2</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0:8</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>C3D20</p></td>
+<td><p>3x3x3</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0:27</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</li>
+<li><p>Hand that field output to the Ensight output manager with <code class="docutils literal notranslate"><span class="pre">&gt;&gt;perQuadraturePoint</span></code> instead of <code class="docutils literal notranslate"><span class="pre">&gt;&gt;perElement</span></code>:</p></li>
+</ol>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*fieldOutput</span>
+&gt;&gt;perNode,<span class="nv">    name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">       elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">sigma yy</span>,<span class="nv">     elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'x[:,:,1]'</span>
+
+<span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">esExport</span>
+&gt;&gt;perNode,<span class="nv">            fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;perQuadraturePoint,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">stress</span>
+&gt;&gt;perQuadraturePoint,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">sigma yy</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>The variables are per element variables of the part <code class="docutils literal notranslate"><span class="pre">&lt;elSet&gt;_QP</span></code>, named after the field output (<code class="docutils literal notranslate"><span class="pre">stress</span></code>,
+<code class="docutils literal notranslate"><span class="pre">sigma_yy</span></code>). Their size follows from the result: scalar, vector or tensor.</p></li>
+<li><p>An <code class="docutils literal notranslate"><span class="pre">f(x)</span></code> of the field output may reduce or rescale the components, e.g. <code class="docutils literal notranslate"><span class="pre">f(x)='x[:,:,1]'</span></code> or
+<code class="docutils literal notranslate"><span class="pre">f(x)='np.linalg.norm(x,</span> <span class="pre">axis=2)'</span></code>, but the first two axes of its result must stay elements and quadrature points.
+Reducing over the quadrature points (<code class="docutils literal notranslate"><span class="pre">np.mean(x,</span> <span class="pre">axis=1)</span></code>) belongs to <code class="docutils literal notranslate"><span class="pre">&gt;&gt;perElement</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&gt;&gt;perNode</span></code> results defined on the same element set are written on the part <code class="docutils literal notranslate"><span class="pre">&lt;elSet&gt;_QP</span></code> as well, interpolated
+to its added nodes, so it can be shown deformed. Node results defined on a node set are not.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&gt;&gt;perElement</span></code> and <code class="docutils literal notranslate"><span class="pre">&gt;&gt;perQuadraturePoint</span></code> can be combined in one output manager, with different field outputs.</p></li>
+<li><p>The export is refused if the field output does not cover exactly all quadrature points of the elements, if its
+result is not laid out as (elements, quadrature points, …), if the element set mixes quadrilaterals and hexahedra
+or quadrature rules, or if an element is of another shape or not integrated by a Gauss rule.</p></li>
+</ul>
+<p>Along each natural direction, an element is split at <span class="math notranslate nohighlight">\(b_k = -1 + \sum_{m&lt;k} w_m\)</span> of the Gauss weights
+<span class="math notranslate nohighlight">\(w_m\)</span>: sub-element <span class="math notranslate nohighlight">\((i, j)\)</span> spans <span class="math notranslate nohighlight">\([b_i, b_{i+1}] \times [b_j, b_{j+1}]\)</span> in natural coordinates
+(and <span class="math notranslate nohighlight">\([b_k, b_{k+1}]\)</span> in 3D), so its natural area is the weight of its Gauss point, which it contains. That is
+a split at 0 for 2 points and at <span class="math notranslate nohighlight">\(\pm 4/9\)</span> for 3 points. Sub-element g of an element contains its quadrature
+point g, in the order of either element provider. The added nodes are placed by the element’s interpolation and shared
+between neighboring elements; nodes of the element set which no sub-element uses (the edge midpoints of quadratic
+elements with 3 points per direction) are left out. The part is rebuilt after a mesh change (h-adaptivity).</p>
 <table class="docutils align-default" id="id2">
 <caption><span class="caption-text">Options:</span><a class="headerlink" href="#id2" title="Link to this table"></a></caption>
 <thead>
@@ -240,15 +310,19 @@ all
 <td><p>tuple, default=()</p></td>
 <td><p>Element-based Ensight export.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">configuration</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">perQuadraturePoint</span></code></td>
+<td><p>tuple, default=()</p></td>
+<td><p>Quadrature point-based Ensight export on sub-elements.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">configuration</span></code></td>
 <td><p>tuple, default=()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">intermediateSaveInterval</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">intermediateSaveInterval</span></code></td>
 <td><p>int, default=None</p></td>
 <td><p>Set the intermediate save interval for the Ensight export. Not writing it leaves whatever the ‘&gt;&gt;configuration’ block set (or its own default) in place.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">minDTForOutput</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">minDTForOutput</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Set the minimum time between two Ensight exports. Not writing it leaves no minimum in place.</p></td>
 </tr>
@@ -285,7 +359,22 @@ all
 </tbody>
 </table>
 <table class="docutils align-default" id="id5">
-<caption><span class="caption-text">Keyword: configuration</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<caption><span class="caption-text">Keyword: perQuadraturePoint</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">fieldOutput</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>Name of an element result at all quadrature points of quadrilaterals or hexahedra, e.g. quadraturePoint=0:4 for CPE8R, 0:9 for CPE8, 0:8 for C3D20R, 0:27 for C3D20; written on a separate part, which splits each element into linear sub-elements, one per quadrature point</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default" id="id6">
+<caption><span class="caption-text">Keyword: configuration</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -318,8 +407,8 @@ all
 </section>
 <section id="module-edelweissfe.outputmanagers.monitor">
 <span id="monitor-monitor-quantities-in-the-terminal"></span><h2><code class="docutils literal notranslate"><span class="pre">monitor</span></code> - Monitor quantities in the terminal<a class="headerlink" href="#module-edelweissfe.outputmanagers.monitor" title="Link to this heading"></a></h2>
-<table class="docutils align-default" id="id6">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id7">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -366,8 +455,8 @@ options</p>
 </ul>
 </dd>
 </dl>
-<table class="docutils align-default" id="id7">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id8">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id8" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -384,8 +473,8 @@ options</p>
 </section>
 <section id="module-edelweissfe.outputmanagers.fractureenergyintegrator">
 <span id="fractureenergyintegrator-determine-the-fracture-energy"></span><h2><code class="docutils literal notranslate"><span class="pre">fractureenergyintegrator</span></code> - Determine the fracture energy<a class="headerlink" href="#module-edelweissfe.outputmanagers.fractureenergyintegrator" title="Link to this heading"></a></h2>
-<table class="docutils align-default" id="id8">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id8" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id9">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id9" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -410,8 +499,8 @@ options</p>
 </section>
 <section id="module-edelweissfe.outputmanagers.plotalongpath">
 <span id="plotalongpath-plot-a-result-along-a-line"></span><h2><code class="docutils literal notranslate"><span class="pre">plotalongpath</span></code> - Plot a result along a line<a class="headerlink" href="#module-edelweissfe.outputmanagers.plotalongpath" title="Link to this heading"></a></h2>
-<table class="docutils align-default" id="id9">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id9" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id10">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id10" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -456,8 +545,8 @@ options</p>
 </section>
 <section id="module-edelweissfe.outputmanagers.conditionalstop">
 <span id="conditionalstop-conditional-stop-if-expression-becomes-true"></span><h2><code class="docutils literal notranslate"><span class="pre">conditionalstop</span></code> - Conditional stop if expression becomes true<a class="headerlink" href="#module-edelweissfe.outputmanagers.conditionalstop" title="Link to this heading"></a></h2>
-<table class="docutils align-default" id="id10">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id10" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id11">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id11" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -474,8 +563,8 @@ options</p>
 </section>
 <section id="module-edelweissfe.outputmanagers.statusfile">
 <span id="statusfile-write-the-status-of-the-simulation-to-a-file"></span><h2><code class="docutils literal notranslate"><span class="pre">statusfile</span></code> - Write the status of the simulation to a file<a class="headerlink" href="#module-edelweissfe.outputmanagers.statusfile" title="Link to this heading"></a></h2>
-<table class="docutils align-default" id="id11">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id11" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id12">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id12" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -492,8 +581,8 @@ options</p>
 </section>
 <section id="module-edelweissfe.outputmanagers.meshdatatofile">
 <span id="meshdatatofile-write-the-generated-mesh-data-to-a-file"></span><h2><code class="docutils literal notranslate"><span class="pre">meshdatatofile</span></code> - Write the (generated) mesh data to a file<a class="headerlink" href="#module-edelweissfe.outputmanagers.meshdatatofile" title="Link to this heading"></a></h2>
-<table class="docutils align-default" id="id12">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id12" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id13">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id13" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -510,8 +599,8 @@ options</p>
 </section>
 <section id="module-edelweissfe.outputmanagers.computetimemonitor">
 <span id="computetimemonitor-print-and-write-compute-times-per-increment"></span><h2><code class="docutils literal notranslate"><span class="pre">computetimemonitor</span></code> - Print and write compute times per increment<a class="headerlink" href="#module-edelweissfe.outputmanagers.computetimemonitor" title="Link to this heading"></a></h2>
-<table class="docutils align-default" id="id13">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id13" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id14">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id14" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -528,8 +617,8 @@ options</p>
 </section>
 <section id="module-edelweissfe.outputmanagers.restart">
 <span id="restart-write-restart-checkpoints-during-the-analysis"></span><h2><code class="docutils literal notranslate"><span class="pre">restart</span></code> - Write restart checkpoints during the analysis<a class="headerlink" href="#module-edelweissfe.outputmanagers.restart" title="Link to this heading"></a></h2>
-<table class="docutils align-default" id="id14">
-<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id14" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id15">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id15" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
