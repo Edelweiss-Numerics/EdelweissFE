@@ -447,6 +447,26 @@ embeddedElSet=bars, hostElSet=host
         np.testing.assert_allclose(U[node], interpolated, atol=1e-10 * scale)
 
 
+@pytest.mark.parametrize(
+    "changedElementSets, rebuilt",
+    [(set(), False), ({"otherSet"}, False), ({"host"}, True), ({"bars"}, True), ({"host", "bars"}, True)],
+)
+def test_embedded_region_refreshes_only_if_the_change_touches_its_element_sets(changedElementSets, rebuilt):
+    """R2-EMB-01: the records are rebuilt if and only if the model change touches the host or the embedded element
+    set (as hAdaptivity reports a refined host set in ``changedElementSets``)"""
+    from edelweissfe.constraints.embeddedregion import Constraint, EmbeddedRegionSchema
+    from edelweissfe.models.modelchange import ModelChange
+    from edelweissfe.models.modelchangeobserver import ModelChangeType
+
+    builds = []
+    constraint = Constraint.__new__(Constraint)
+    constraint._configuration = EmbeddedRegionSchema(embeddedElSet="bars", hostElSet="host")
+    constraint._build = builds.append
+    change = ModelChange(kind=ModelChangeType.REFINEMENT, changedElementSets=changedElementSets)
+    assert constraint.refresh("model", change) is rebuilt
+    assert builds == (["model"] if rebuilt else [])
+
+
 def test_embedded_region_explicit_dynamics(tmp_path):
     """EMB-07: explicit dynamics (NED, masses of the embedded nodes folded onto the hosts): the embedded rebar of the
     reinforced strip follows the host field exactly, at the end of the explicit step every rebar node is at the

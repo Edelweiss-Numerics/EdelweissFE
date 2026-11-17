@@ -266,8 +266,6 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         configuration = self._configuration
         embeddedElements = list(model.elementSets[configuration.embeddedElSet])
         hostElements = list(model.elementSets[configuration.hostElSet])
-        self._hostElementIds = {id(el) for el in hostElements}
-        self._embeddedElementIds = {id(el) for el in embeddedElements}
         hostNodes = {n for el in hostElements for n in el.nodes}
         locator = HostElementLocator(hostElements, tolerance=configuration.tolerance)
 
@@ -371,17 +369,25 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         return cls(name, model, journal, configuration=configuration)
 
     def refresh(self, model: FEModel, change) -> bool:
-        """Rebuild the records on the current mesh if the host or the embedded elements changed (e.g., after an
-        adaptive refinement of the host: the embedded nodes are then tied to the refined elements).
+        """Rebuild the records on the current mesh if ``change`` touched the host or the embedded element set (e.g.,
+        an adaptive refinement of the host: the embedded nodes are then tied to the refined elements).
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        change
+            The net :class:`~edelweissfe.models.modelchange.ModelChange` since the last refresh.
 
         Returns
         -------
         bool
             Whether the records were rebuilt.
         """
-        hostIds = {id(el) for el in model.elementSets[self._configuration.hostElSet]}
-        embeddedIds = {id(el) for el in model.elementSets[self._configuration.embeddedElSet]}
-        if hostIds == self._hostElementIds and embeddedIds == self._embeddedElementIds:
+        configuration = self._configuration
+        if not (
+            change.touchesElementSet(configuration.hostElSet) or change.touchesElementSet(configuration.embeddedElSet)
+        ):
             return False
         self._build(model)
         return True
