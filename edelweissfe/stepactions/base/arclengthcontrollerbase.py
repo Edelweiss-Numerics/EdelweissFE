@@ -30,7 +30,8 @@
 
 from abc import abstractmethod
 
-from edelweissfe.numerics.dofnumbering import DofNumbering
+from edelweissfe.models.discretesystem import DiscreteSystem
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -51,14 +52,27 @@ class ArcLengthControllerBase(StepActionBase):
     equation. A line search asks it the same for every trial state, with :math:`\\Delta\\Delta U_0` scaled by the trial
     step length, so that no trial state leaves the equation unsatisfied; the controller is asked several times per
     iteration, and the answers must not change it.
+
+    Every hook that needs the degrees of freedom receives the current discrete system: its numbering, and the
+    locations of its elements and constraints, both renewed when the model changes.
+
+    A controller whose equation is nonlinear in the solution, e.g. one that controls the dissipated energy, may
+    override the optional hooks: :meth:`beginControl` and :meth:`endControl` (the step it controls),
+    :meth:`setSystemState` (the state of the iterate), :meth:`isConstraintSatisfied` (its equation in the convergence
+    check, as it is only linearized in :meth:`computeDDLambda`) and :meth:`getExtrapolationFactor` (the predictor), with
+    :attr:`extrapolatesAfterCutback`.
     """
 
     #: The name of this step action, by which the solver option ``arcLengthController`` selects it.
     name: str
 
+    #: Whether the increment that follows a cutback is predicted from the last accepted increment as well, for a
+    #: controller whose equation needs the direction of the path (a zero prediction may follow an unloading branch).
+    extrapolatesAfterCutback = False
+
     @abstractmethod
     def computeDDLambda(
-        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, numbering: DofNumbering
+        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, system: DiscreteSystem
     ) -> float:
         """Compute the correction of the load parameter in the current Newton iteration.
 
@@ -74,8 +88,8 @@ class ArcLengthControllerBase(StepActionBase):
         timeStep
             The increment being solved: ``timeStep.stepProgress`` is the progress of the step at its end, and
             ``timeStep.stepProgressIncrement`` its size, so it starts at their difference.
-        numbering
-            The numbering of the degrees of freedom of the current discrete system.
+        system
+            The current discrete system.
 
         Returns
         -------
@@ -84,7 +98,7 @@ class ArcLengthControllerBase(StepActionBase):
         """
 
     @abstractmethod
-    def finishIncrement(self, U: DofVector, dU: DofVector, dLambda: float, timeStep: TimeStep, numbering: DofNumbering):
+    def finishIncrement(self, U: DofVector, dU: DofVector, dLambda: float, timeStep: TimeStep, system: DiscreteSystem):
         """Called once an increment has converged, e.g. to report or to store the controlled quantity it reached.
 
         Parameters
@@ -97,6 +111,86 @@ class ArcLengthControllerBase(StepActionBase):
             The converged increment of the load parameter.
         timeStep
             The converged time step.
-        numbering
-            The numbering of the degrees of freedom of the current discrete system.
+        system
+            The current discrete system.
         """
+
+    def beginControl(self, model: FEModel):
+        """Called when the solver starts (or resumes) a step this controller controls, before its first increment. By
+        default, nothing is done.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+
+    def endControl(self, model: FEModel):
+        """Called when the solver ends a step this controller controls, whether it finished or failed. By default,
+        nothing is done.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+
+    def setSystemState(
+        self, reaction: DofVector, referenceIncrement: DofVector, loadParameter: float, loadParameterIncrement: float
+    ):
+        """Receive the state of the iterate: called in every Newton iteration before :meth:`computeDDLambda`, and once
+        an increment has converged, before :meth:`finishIncrement`. By default, nothing is kept.
+
+        Parameters
+        ----------
+        reaction
+            The internal forces of the elements and the constraints, i.e. the reactions at the prescribed degrees of
+            freedom.
+        referenceIncrement
+            The change of the prescribed degrees of freedom over the step (zero elsewhere), conjugate to their
+            reactions.
+        loadParameter
+            The load parameter at the start of the increment.
+        loadParameterIncrement
+            The increment of the load parameter of the iterate.
+        """
+
+    def isConstraintSatisfied(self, timeStep: TimeStep, dU: DofVector, system: DiscreteSystem) -> bool:
+        """Whether the iterate satisfies the controller's equation: checked once the residual has converged. A linear
+        equation holds after every correction, which is the default.
+
+        Parameters
+        ----------
+        timeStep
+            The increment being solved.
+        dU
+            The current increment of the solution.
+        system
+            The current discrete system.
+
+        Returns
+        -------
+        bool
+            True if the equation is satisfied.
+        """
+
+        return True
+
+    def getExtrapolationFactor(self, timeStep: TimeStep, prevTimeStep: TimeStep) -> float:
+        """The factor by which the last accepted increment, of the solution and of the load parameter, is scaled for
+        the linear prediction of a new increment. By default the ratio of their sizes, as without arc length control.
+
+        Parameters
+        ----------
+        timeStep
+            The new increment.
+        prevTimeStep
+            The last accepted increment.
+
+        Returns
+        -------
+        float
+            The scale factor.
+        """
+
+        return timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement
