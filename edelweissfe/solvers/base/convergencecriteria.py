@@ -119,7 +119,19 @@ Two criteria are available, selected by the solver option ``convergenceCriterion
     :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is converged if
     :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`.
 
-    The criterion is formulated for fields; the scalar variables are checked by the ``legacy`` criterion.
+    Two rules of the ``legacy`` criterion apply to this one as well, with the same solver options, off by default:
+
+    * Zero increment (``zeroIncrementThreshold``, :math:`\\Delta u_0`): the correction of a field with
+      :math:`\\Delta u_{\\max} \\leq \\Delta u_0` counts as converged. Without it, the zero increment that begins a
+      step (``makeZeroIncrementFirst``) can only converge in the linear case: its increment is the round-off of its
+      own corrections, so :math:`c_{\\max} \\leq C \\, \\Delta u_{\\max}` fails whenever the round-off residual exceeds
+      :math:`R_l \\, \\tilde{q}`, as for a model at rest in the first step, where :math:`\\tilde{q} = \\tilde{q}^0`.
+    * Minimum iterations (``minimumIterations``, :math:`n`): no flux residual counts as converged before iteration
+      :math:`n`, the linear case included.
+
+    The criterion is formulated for fields; the scalar variables are checked by the ``legacy`` criterion, with
+    :math:`I_p` as the iteration of its alternative tolerance. The options ``zeroFluxThreshold`` and
+    ``iterationsForAlternativeTolerance`` of the ``legacy`` criterion mean nothing with this one, and are refused.
 
     Not implemented: the estimate of the next correction from the convergence rate (Abaqus accepts an increment
     if it predicts a small enough correction), and the detection of inactive regions for the spatial average.
@@ -453,6 +465,11 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         :math:`R_l`, below which a field is converged irrespective of its correction.
     initialTimeAveragedFlux
         :math:`\\tilde{q}^0`, the time average flux of a field that has not carried flux yet, in the first step.
+    zeroIncrementThreshold
+        :math:`\\Delta u_0`: the correction of a field whose largest increment does not exceed it counts as converged;
+        None for off.
+    minimumIterations
+        :math:`n`, the iteration before which no flux residual counts as converged.
     """
 
     #: The time average flux of every field, as the converged increments of the step and the previous step left it.
@@ -473,6 +490,8 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         zeroFluxCorrectionTolerance: float = 1e-3,
         linearResidualTolerance: float = 1e-8,
         initialTimeAveragedFlux: float = 1e-2,
+        zeroIncrementThreshold: float | None = None,
+        minimumIterations: int = 0,
     ):
         self.scalarVariableCriterion = scalarVariableCriterion
         self.residualTolerance = residualTolerance
@@ -483,6 +502,8 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         self.zeroFluxCorrectionTolerance = zeroFluxCorrectionTolerance
         self.linearResidualTolerance = linearResidualTolerance
         self.initialTimeAveragedFlux = initialTimeAveragedFlux
+        self.zeroIncrementThreshold = zeroIncrementThreshold
+        self.minimumIterations = minimumIterations
 
         # Per field: the sum and the number of the spatial average fluxes of the converged increments with flux.
         self._sumOfConvergedSpatialAveragedFluxes = {}
@@ -553,25 +574,39 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         # field before the onset of damage, whose residual is round-off or exactly zero) has nothing left to iterate
         # on, even if its correction is pure round-off of the size of its increment.
         if fluxResidual <= self.linearResidualTolerance * timeAveragedFlux:
-            return FieldConvergence(fluxResidual, True, correction, True, indexOfMax)
+            fluxResidualConverged, correctionConverged = True, True
 
-        if not self._carriesFlux(field, spatialAveragedFlux):
-            correctionConverged = ddU is not None and correction <= self.zeroFluxCorrectionTolerance * largestIncrement
-            return FieldConvergence(fluxResidual, True, correction, correctionConverged, indexOfMax)
+        elif not self._carriesFlux(field, spatialAveragedFlux):
+            fluxResidualConverged = True
+            correctionConverged = self._correctionConverged(
+                ddU, correction, largestIncrement, self.zeroFluxCorrectionTolerance
+            )
 
-        residualTolerance = (
-            self.residualTolerance
-            if iterationCounter < self.iterationsForAlternativeTolerance
-            else self.residualToleranceAlternative
-        )
+        else:
+            residualTolerance = (
+                self.residualTolerance
+                if iterationCounter < self.iterationsForAlternativeTolerance
+                else self.residualToleranceAlternative
+            )
+            fluxResidualConverged = fluxResidual <= residualTolerance * timeAveragedFlux
+            correctionConverged = self._correctionConverged(ddU, correction, largestIncrement, self.correctionTolerance)
 
-        return FieldConvergence(
-            fluxResidual,
-            fluxResidual <= residualTolerance * timeAveragedFlux,
-            correction,
-            ddU is not None and correction <= self.correctionTolerance * largestIncrement,
-            indexOfMax,
-        )
+        if iterationCounter < self.minimumIterations:
+            fluxResidualConverged = False
+
+        return FieldConvergence(fluxResidual, fluxResidualConverged, correction, correctionConverged, indexOfMax)
+
+    def _correctionConverged(self, ddU, correction: float, largestIncrement: float, tolerance: float) -> bool:
+        """The correction part of the criterion, relative to the largest increment of the field, unless the field has
+        not moved (the zero increment rule)."""
+        if ddU is None:
+            return False
+
+        # 'not above' rather than 'at most', as in the legacy criterion
+        if self.zeroIncrementThreshold is not None and not largestIncrement > self.zeroIncrementThreshold:
+            return True
+
+        return correction <= tolerance * largestIncrement
 
     def checkScalarVariables(self, R, ddU, dU, iterationCounter):
         return self.scalarVariableCriterion.checkScalarVariables(R, ddU, dU, iterationCounter)

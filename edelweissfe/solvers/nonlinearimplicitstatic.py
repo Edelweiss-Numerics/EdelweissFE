@@ -267,7 +267,8 @@ class NISTSchema:
     iterationsForAlternativeTolerance: int | None = schemaField(
         description=(
             "legacy criterion: I, the iteration from which on the flux residual is checked against "
-            "fluxResidualToleranceAlternative instead of fluxResidualTolerance."
+            "fluxResidualToleranceAlternative instead of fluxResidualTolerance. Refused with the abaqus criterion, "
+            "which uses abaqusIterationsForAlternativeTolerance, for the scalar variables too."
         ),
         dtype=int,
         default=15,
@@ -276,7 +277,8 @@ class NISTSchema:
         description=(
             "legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its "
             "residual could be compared with, so its flux residual counts as converged; needs minimumIterations >= 1, "
-            "and refuses a smaller one. Off if not set."
+            "and refuses a smaller one. Off if not set. Refused with the abaqus criterion, which uses "
+            "abaqusZeroFluxThreshold."
         ),
         dtype=float,
         default=None,
@@ -284,8 +286,9 @@ class NISTSchema:
     )
     zeroIncrementThreshold: float | None = schemaField(
         description=(
-            "legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is "
-            "no increment to relate its correction to, and its correction counts as converged. Off if not set."
+            "Both criteria: a field whose largest increment does not exceed this value has not moved, so there is no "
+            "increment to relate its correction to, and its correction counts as converged (e.g., in the zero "
+            "increment that begins a step). Off if not set."
         ),
         dtype=float,
         default=None,
@@ -293,7 +296,7 @@ class NISTSchema:
     )
     minimumIterations: int | None = schemaField(
         description=(
-            "legacy criterion: no flux residual counts as converged before this iteration, so an increment takes at "
+            "Both criteria: no flux residual counts as converged before this iteration, so an increment takes at "
             "least this many Newton iterations; 0 accepts a prediction that already satisfies the criterion."
         ),
         dtype=int,
@@ -377,6 +380,9 @@ class NIST(NonlinearSolverBase):
 
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTSchema
+
+    #: The options of the legacy convergence criterion that the abaqus criterion replaces by its own, refused with it.
+    legacyOnlyCriterionOptions = ("zeroFluxThreshold", "iterationsForAlternativeTolerance")
 
     SolverSpecificOptions = {
         "defaultMaxIter": 10,
@@ -487,7 +493,9 @@ class NIST(NonlinearSolverBase):
 
         * ``retryWithoutExtrapolation`` and ``extrapolateAcrossConnectivityChange`` switched on with
           ``extrapolation=off``: there is no prediction to retry without, nor one to keep across a rebuild;
-        * an option of the abaqus criterion (``abaqus...``) with ``convergenceCriterion=legacy``.
+        * an option of the abaqus criterion (``abaqus...``) with ``convergenceCriterion=legacy``;
+        * an option of the legacy criterion that the abaqus criterion replaces by its own (``zeroFluxThreshold``,
+          ``iterationsForAlternativeTolerance``) with ``convergenceCriterion=abaqus``.
 
         An option the declaration does not set is not refused: an option set for some steps keeps its value in a step
         that switches off what it acts on, and rests there.
@@ -514,6 +522,15 @@ class NIST(NonlinearSolverBase):
             raise ValueError(
                 "{:}: an option of the abaqus convergence criterion means nothing with "
                 "convergenceCriterion=legacy".format(", ".join(abaqusCriterionOptions))
+            )
+
+        legacyCriterionOptions = sorted(name for name in declaredOptions if name in self.legacyOnlyCriterionOptions)
+        if legacyCriterionOptions and options["convergenceCriterion"] == "abaqus":
+            raise ValueError(
+                "{:}: an option of the legacy convergence criterion means nothing with convergenceCriterion=abaqus, "
+                "which uses its own (abaqusZeroFluxThreshold, abaqusIterationsForAlternativeTolerance)".format(
+                    ", ".join(legacyCriterionOptions)
+                )
             )
 
     def selectLinearSolverForStep(self) -> None:
@@ -1097,24 +1114,27 @@ class NIST(NonlinearSolverBase):
         """
         criterion = self.options["convergenceCriterion"]
 
-        legacyCriterion = LegacyConvergenceCriterion(
-            fluxResidualTolerances=self.fluxResidualTolerances,
-            fluxResidualTolerancesAlternative=self.fluxResidualTolerancesAlternative,
-            absoluteFluxResidualTolerances=self.absoluteFluxResidualTolerances,
-            fieldCorrectionTolerances=self.fieldCorrectionTolerances,
-            relativeFieldCorrectionTolerances=self.relativeFieldCorrectionTolerances,
-            iterationsForAlternativeTolerance=self.options["iterationsForAlternativeTolerance"],
-            zeroFluxThreshold=self.options["zeroFluxThreshold"],
-            zeroIncrementThreshold=self.options["zeroIncrementThreshold"],
-            minimumIterations=self.options["minimumIterations"],
-        )
+        def legacyCriterion(iterationsForAlternativeTolerance, zeroFluxThreshold):
+            return LegacyConvergenceCriterion(
+                fluxResidualTolerances=self.fluxResidualTolerances,
+                fluxResidualTolerancesAlternative=self.fluxResidualTolerancesAlternative,
+                absoluteFluxResidualTolerances=self.absoluteFluxResidualTolerances,
+                fieldCorrectionTolerances=self.fieldCorrectionTolerances,
+                relativeFieldCorrectionTolerances=self.relativeFieldCorrectionTolerances,
+                iterationsForAlternativeTolerance=iterationsForAlternativeTolerance,
+                zeroFluxThreshold=zeroFluxThreshold,
+                zeroIncrementThreshold=self.options["zeroIncrementThreshold"],
+                minimumIterations=self.options["minimumIterations"],
+            )
 
         if criterion == "legacy":
-            return legacyCriterion
+            return legacyCriterion(self.options["iterationsForAlternativeTolerance"], self.options["zeroFluxThreshold"])
 
         if criterion == "abaqus":
+            # The scalar variables: the legacy criterion with I_p, and without the zero flux rule, which skips them; the
+            # legacy-only options, resting from steps with the legacy criterion, play no part.
             return AbaqusConvergenceCriterion(
-                scalarVariableCriterion=legacyCriterion,
+                scalarVariableCriterion=legacyCriterion(self.options["abaqusIterationsForAlternativeTolerance"], None),
                 residualTolerance=self.options["abaqusResidualTolerance"],
                 correctionTolerance=self.options["abaqusCorrectionTolerance"],
                 residualToleranceAlternative=self.options["abaqusResidualToleranceAlternative"],
@@ -1123,6 +1143,8 @@ class NIST(NonlinearSolverBase):
                 zeroFluxCorrectionTolerance=self.options["abaqusZeroFluxCorrectionTolerance"],
                 linearResidualTolerance=self.options["abaqusLinearResidualTolerance"],
                 initialTimeAveragedFlux=self.options["abaqusInitialTimeAveragedFlux"],
+                zeroIncrementThreshold=self.options["zeroIncrementThreshold"],
+                minimumIterations=self.options["minimumIterations"],
             )
 
         raise ValueError("Unknown convergence criterion '{:}', use 'legacy' or 'abaqus'".format(criterion))

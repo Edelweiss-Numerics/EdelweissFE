@@ -532,6 +532,46 @@ def test_an_option_of_the_abaqus_criterion_is_refused_with_the_legacy_one():
     assert solver.options["abaqusZeroFluxThreshold"] == 1e-4
 
 
+def test_an_option_the_abaqus_criterion_replaces_is_refused_with_it():
+    """The abaqus criterion has its own zero flux threshold and iteration of the alternative tolerance, the latter for
+    the scalar variables too: the legacy ones mean nothing with it. An option set for earlier steps rests in a step
+    that switches to the abaqus criterion."""
+
+    for name, value in (("zeroFluxThreshold", 1e-9), ("iterationsForAlternativeTolerance", 5)):
+        with pytest.raises(ValueError, match=name):
+            nist(convergenceCriterion="abaqus", **{name: value})
+        solver = nist(convergenceCriterion="abaqus")
+        with pytest.raises(ValueError, match=name):
+            solver.applyOptionsOverride({name: value})
+        assert solver.options[name] == NIST.SolverSpecificOptions[name]
+
+    solver = nist(zeroFluxThreshold=1e-9, minimumIterations=1, iterationsForAlternativeTolerance=5)
+    # the resting zero flux threshold would refuse less than one minimum iteration with the legacy criterion
+    solver.applyOptionsOverride({"convergenceCriterion": "abaqus", "minimumIterations": 0})
+    criterion = solver.createConvergenceCriterion()
+    assert criterion.scalarVariableCriterion.zeroFluxThreshold is None
+    assert (
+        criterion.scalarVariableCriterion.iterationsForAlternativeTolerance
+        == criterion.iterationsForAlternativeTolerance
+    )
+
+
+def test_the_options_shared_by_both_criteria_make_the_abaqus_criterion():
+    criterion = nist(
+        convergenceCriterion="abaqus", zeroIncrementThreshold=1e-10, minimumIterations=1
+    ).createConvergenceCriterion()
+    assert (criterion.zeroIncrementThreshold, criterion.minimumIterations) == (1e-10, 1)
+    scalarVariableCriterion = criterion.scalarVariableCriterion
+    assert (scalarVariableCriterion.zeroIncrementThreshold, scalarVariableCriterion.minimumIterations) == (1e-10, 1)
+    assert (
+        scalarVariableCriterion.iterationsForAlternativeTolerance
+        == NIST.SolverSpecificOptions["abaqusIterationsForAlternativeTolerance"]
+    )
+
+    defaults = nist(convergenceCriterion="abaqus").createConvergenceCriterion()
+    assert (defaults.zeroIncrementThreshold, defaults.minimumIterations) == (None, 0)
+
+
 def test_every_job_changes_its_own_tolerances():
     """``*updateConfiguration`` changes the tolerances of its own job and of the solvers made for it, never the defaults
     in :mod:`edelweissfe.config.phenomena`, from which the jobs that follow in the same process start (e.g. the decks of
@@ -661,6 +701,33 @@ def test_abaqus_linear_case_converges_without_correction():
     criterion = abaqus()
     converged = criterion.checkField("u", np.array([1e-9]), None, np.ones(1), 1.0, 0)
     assert converged.fluxResidualConverged and converged.correctionConverged
+
+
+def test_abaqus_zero_increment_rule():
+    """The zero increment of a model at rest (a large mesh with penalty contact): its residual is round-off above
+    the linear case (4e-9 > 1e-8 * q~0), and its increment is the round-off of its own corrections, so the relative
+    correction check fails, with or without flux, unless the field counts as not moved."""
+
+    R, ddU, dU = np.array([4e-9]), np.array([7e-14]), np.array([7e-14])
+    # without flux (below 1e-5 * q~0), and with a flux whose R_l * q~ is still below the residual
+    for spatialAveragedFlux in (1e-12, 1e-3):
+        assert not abaqus().checkField("u", R, ddU, dU, spatialAveragedFlux, 1).correctionConverged
+        converged = abaqus(zeroIncrementThreshold=1e-10).checkField("u", R, ddU, dU, spatialAveragedFlux, 1)
+        assert converged.fluxResidualConverged and converged.correctionConverged
+
+    # a field that has moved more than the threshold is checked against its increment as before
+    criterion = abaqus(zeroIncrementThreshold=1e-10)
+    assert not criterion.checkField("u", np.array([1.0]), np.array([0.1]), np.array([1.0]), 1e3, 1).correctionConverged
+    # no correction computed yet: nothing to accept, not even for a field that has not moved
+    assert not criterion.checkField("u", R, None, np.zeros(1), 1e-3, 1).correctionConverged
+
+
+def test_abaqus_minimum_iterations():
+    criterion = abaqus(minimumIterations=1)
+    # not even the linear case converges before the minimum number of iterations
+    assert not criterion.checkField("u", np.zeros(1), np.zeros(1), np.ones(1), 1.0, 0).fluxResidualConverged
+    assert criterion.checkField("u", np.zeros(1), np.zeros(1), np.ones(1), 1.0, 1).fluxResidualConverged
+    assert not criterion.checkField("u", np.array([1.0]), np.zeros(1), np.ones(1), 1e-12, 0).fluxResidualConverged
 
 
 def test_abaqus_previous_step_is_zero_flux_reference():

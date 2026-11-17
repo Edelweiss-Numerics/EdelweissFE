@@ -312,7 +312,20 @@ criterion of their Newton iterations with the solver option ``convergenceCriteri
 
 The options of the ``abaqus`` criterion are named ``abaqus...``; a declaration of options -- the ``*solver`` datalines,
 or an ``>>options`` block -- that sets one of them with ``convergenceCriterion=legacy`` is refused, since it would mean
-nothing.
+nothing. Conversely, ``zeroFluxThreshold`` and ``iterationsForAlternativeTolerance``, which the ``abaqus`` criterion
+replaces by ``abaqusZeroFluxThreshold`` and ``abaqusIterationsForAlternativeTolerance``, are refused with
+``convergenceCriterion=abaqus``. The options ``zeroIncrementThreshold`` and ``minimumIterations`` apply to both
+criteria.
+
+With the ``abaqus`` criterion, the zero increment that begins a step converges only if its residual, the round-off of
+a model at equilibrium, lies below :math:`R_l \, \tilde{q}`: its increment is the round-off of its own corrections, so
+the relative correction check cannot pass. In the first step, before any field has carried flux, :math:`\tilde{q}` is
+the small initial value :math:`\tilde{q}^0`, and the zero increment of a large model at rest may fail. A zero increment
+threshold below any increment the analysis means accepts it:
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, convergenceCriterion=abaqus, zeroIncrementThreshold=1e-10
 
 The ``legacy`` criterion is configured by tolerances per field and by solver options. EdelweissMeshfree's parameter
 set, for instance, reads for a model with a displacement field
