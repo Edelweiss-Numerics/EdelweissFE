@@ -25,7 +25,6 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-# Created on Sun Jan 15 14:22:48 2017
 
 """
 The sub-elements of the quadrature point output of :mod:`edelweissfe.outputmanagers.ensight`: each quadrilateral or
@@ -50,13 +49,13 @@ independent of that: the corner nodes of the edge (face), sorted, each with the 
 along the edge (face), sorted. If one of the elements has a node at the point (a Quad8 next to a Quad4), all of
 them use it.
 
-All elements of a shape are processed at once, as arrays: a Python loop over the elements took about 30 s for 8000
-C3D20 elements, and the part is rebuilt after each mesh change.
+All elements of a shape are processed at once, as arrays: a loop over the elements is too slow for large meshes, and
+the part is rebuilt after each mesh change.
 """
 
 import functools
 from collections import namedtuple
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -176,7 +175,13 @@ class _Occurrences:
 
     @staticmethod
     def concatenate(occurrences: list) -> "_Occurrences":
-        return _Occurrences(*(np.concatenate([getattr(o, f.name) for o in occurrences]) for f in fields(_Occurrences)))
+        return _Occurrences(
+            keys=np.concatenate([o.keys for o in occurrences]),
+            node=np.concatenate([o.node for o in occurrences]),
+            group=np.concatenate([o.group for o in occurrences]),
+            element=np.concatenate([o.element for o in occurrences]),
+            point=np.concatenate([o.point for o in occurrences]),
+        )
 
 
 class _AddedNodes:
