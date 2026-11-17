@@ -407,3 +407,24 @@ def test_an_elastic_iterate_without_a_secant_follows_the_load_parameter():
     ddLambda = controller.computeDDLambda(np.zeros(2), np.zeros(2), np.ones(2), _timeStep(0.1), _System())
 
     assert ddLambda == pytest.approx(0.1 * 2.0)
+
+
+@pytest.mark.parametrize("extrapolatesAfterCutback", [True, False])
+def test_the_prediction_survives_a_cutback_only_for_a_controller_that_asks_for_it(extrapolatesAfterCutback):
+    """After a failed increment, NIST drops the prediction; the dissipation controller keeps it, since a zero
+    prediction may start the smaller increment on an elastic unloading branch."""
+
+    from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import (
+        NISTPArcLength,
+    )
+
+    controller = _controller([_Element(1)], displacement=1.0)
+    controller.extrapolatesAfterCutback = extrapolatesAfterCutback
+    solver = object.__new__(NISTPArcLength)
+    solver.options = {"retryWithoutExtrapolation": False}
+    solver.arcLengthController = controller
+    solver.prevTimeStep = lastAccepted = _timeStep(0.1)
+
+    solver.forgetPredictionAfterFailure()
+
+    assert solver.prevTimeStep is (lastAccepted if extrapolatesAfterCutback else None)
