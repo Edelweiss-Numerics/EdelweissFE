@@ -50,13 +50,13 @@ other profiles. With ``centroidAtAxis=True`` (default) the fibers are shifted su
 beam axis (the line through the nodes); otherwise the given coordinates are measured from the axis (an eccentric
 beam).
 
-Local axes: the local y axis lies in the plane of a 2D beam; in 3D it is the part of the orientation vector ``(n1x,
-n1y, n1z)`` (Marmot's :math:`\\mathbf{v}`) normal to the beam axis, and :math:`z = x \\times y`. In 3D the
+Local axes: the local y axis lies in the plane of a 2D beam; in 3D it is the part of the orientation vector ``(vx,
+vy, vz)`` (Marmot's :math:`\\mathbf{v}`) normal to the beam axis, and :math:`z = x \\times y`. In 3D the
 orientation vector is required, except for circles and tubes. In 2D, the z coordinates of the fibers are dropped
 (use ``nZ=1`` for rectangles).
 
 ``multiplicity=k`` makes the beam stand for k identical parallel members (the fiber areas, A, I and J are scaled by
-k, the coordinates are not), e.g., k fibres stacked through the thickness of a 2D model, as the area of a truss.
+k, the coordinates are not), e.g., k fibers stacked through the thickness of a 2D model, as the area of a truss.
 
 One material per element: a composite section (e.g., steel and concrete) is modeled by several beam elements on
 the same nodes, one per material, each with its part of the section (the fiber integration is additive). The parts
@@ -220,20 +220,20 @@ class BeamSectionSchema:
     )
     multiplicity: float = schemaField(
         description="The number of identical parallel members this beam stands for (scales the point areas, and thus "
-        "A, I and J, but not the coordinates; e.g., k fibres stacked through the thickness of a 2D model).",
+        "A, I and J, but not the coordinates; e.g., k fibers stacked through the thickness of a 2D model).",
         dtype=float,
         default=1.0,
     )
     centroidAtAxis: bool = schemaField(
         description="Shift the section points such that their centroid lies on the beam axis.", dtype=bool, default=True
     )
-    n1x: float | None = schemaField(
+    vx: float | None = schemaField(
         description="3D: orientation vector of the local y axis, x", dtype=float, default=None
     )
-    n1y: float | None = schemaField(
+    vy: float | None = schemaField(
         description="3D: orientation vector of the local y axis, y", dtype=float, default=None
     )
-    n1z: float | None = schemaField(
+    vz: float | None = schemaField(
         description="3D: orientation vector of the local y axis, z", dtype=float, default=None
     )
     materialParameterFromField: tuple[MaterialParameterFromFieldSchema, ...] = subKeywordField(
@@ -317,9 +317,9 @@ class Section(SectionBase):
         if self.nDim == 3 and (self.J is None or self.J <= 0):
             raise ValueError(f"Beam section {name}: a positive torsion constant J is required for this profile in 3D.")
 
-        n1 = (configuration.n1x, configuration.n1y, configuration.n1z)
-        if any(c is not None for c in n1):
-            self.orientation = np.array([c or 0.0 for c in n1], dtype=float)
+        v = (configuration.vx, configuration.vy, configuration.vz)
+        if any(c is not None for c in v):
+            self.orientation = np.array([c or 0.0 for c in v], dtype=float)
             if np.linalg.norm(self.orientation) == 0:
                 raise ValueError(f"Beam section {name}: the orientation vector must not be zero.")
         else:
@@ -329,7 +329,7 @@ class Section(SectionBase):
             if self.nDim == 3 and not PROFILE_TABLE[configuration.profile.lower()].rotationallySymmetric:
                 raise ValueError(
                     f"Beam section {name}: a 3D section of profile '{configuration.profile}' requires the orientation "
-                    "vector n1x, n1y, n1z (the local y axis, Marmot's v)."
+                    "vector vx, vy, vz (the local y axis, Marmot's v)."
                 )
 
         self.centroidAtAxis = configuration.centroidAtAxis
@@ -357,13 +357,13 @@ class Section(SectionBase):
         if self.nDim == 2:
             return np.concatenate([[len(p)], np.column_stack([p.y, p.area]).ravel()])
 
-        n1 = self.orientation
-        if n1 is None:  # a rotationally symmetric section: any vector normal to the axis
+        v = self.orientation
+        if v is None:  # a rotationally symmetric section: any vector normal to the axis
             coordinates = np.array([n.coordinates for n in element.nodes[:2]], dtype=float)
             axis = coordinates[1] - coordinates[0]
             axis /= np.linalg.norm(axis)
-            n1 = np.array([0.0, 0.0, 1.0]) if abs(axis[2]) < 0.99 else np.array([0.0, 1.0, 0.0])
-        return np.concatenate([n1, [self.J, len(p)], np.column_stack([p.y, p.z, p.area]).ravel()])
+            v = np.array([0.0, 0.0, 1.0]) if abs(axis[2]) < 0.99 else np.array([0.0, 1.0, 0.0])
+        return np.concatenate([v, [self.J, len(p)], np.column_stack([p.y, p.z, p.area]).ravel()])
 
     def assignSectionPropertiesToElement(self, element, **kwargs):
         material = kwargs.get("material", self.material)

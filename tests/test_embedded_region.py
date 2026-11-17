@@ -292,7 +292,7 @@ gen_all
 *nSet, nSet=tip
 {tip}
 
-*section, name=beamSection, type=beam, profile=rectangle, b={b}, h={h}, n1x=0, n1y=1, n1z=0, nY=4, nZ=4, material=steel
+*section, name=beamSection, type=beam, profile=rectangle, b={b}, h={h}, vx=0, vy=1, vz=0, nY=4, nZ=4, material=steel
 beams
 
 *constraint, type=embeddedRegion, name=embedded
