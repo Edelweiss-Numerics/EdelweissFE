@@ -46,13 +46,13 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
 
     between a slave degree of freedom :math:`u_s` and master degrees of freedom :math:`u_{m_a}`.
     The solver collects these records from all multi-point constraints in the model, condenses
-    the slave degrees of freedom out of the equation system (implicit solvers), or folds slave
+    the slave degrees of freedom out of the system of equations (implicit solvers), or folds slave
     masses/forces onto the masters and slaves the kinematics directly (explicit dynamics). See
     :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`.
 
     Multi-point constraints are defined via the ``*constraint`` keyword like ordinary constraints,
     but live in :attr:`~edelweissfe.models.femodel.FEModel.multiPointConstraints` and stay outside
-    the DofManager and the constraint assembly loop entirely.
+    the numbering of the degrees of freedom and the constraint assembly loop entirely.
 
     A degree of freedom may be claimed as slave by at most one multi-point constraint of a model --
     the condensation operator rejects duplicate claims. Constraints that build their slave set
@@ -109,14 +109,14 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
         """
 
     @abstractmethod
-    def getMultiPointConstraints(self, dofManager) -> list[tuple[int, list[tuple[int, float]]]]:
+    def getMultiPointConstraints(self, numbering) -> list[tuple[int, list[tuple[int, float]]]]:
         """Return the linear dependency records of this constraint in global degree-of-freedom
-        indices of the given DofManager.
+        indices of the given numbering.
 
         Parameters
         ----------
-        dofManager
-            The current :class:`~edelweissfe.numerics.dofmanager.DofManager`, used to resolve
+        numbering
+            The current :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`, used to resolve
             (node, field, component) to global degree-of-freedom indices.
 
         Returns
@@ -160,7 +160,7 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
         return []
 
     @property
-    def fieldsOnNodes(self) -> list:
+    def fields(self) -> list:
         """The fields this constraint needs on each of :attr:`nodes`, as for
-        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes`."""
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.fields`."""
         return []

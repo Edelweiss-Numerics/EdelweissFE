@@ -39,10 +39,12 @@ import numpy as np
 from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.journal.journal import Journal
-from edelweissfe.models.equationsystemlayout import EquationSystemLayout
+from edelweissfe.models.change import Change
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.modelchange import TopologyRecord
 from edelweissfe.models.topologypipeline import TopologyPipeline
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfWorkerThreads,
     mapChunksInParallel,
@@ -191,7 +193,7 @@ class FEModel:
         """
 
         for constraint in itertools.chain(self.constraints.values(), self.multiPointConstraints.values()):
-            for node, nodeFields in zip(constraint.nodes, constraint.fieldsOnNodes):
+            for node, nodeFields in zip(constraint.nodes, constraint.fields):
                 for field in nodeFields:
                     if field not in node.fields:
                         node.fields[field] = FieldVariable(node, field)
@@ -411,7 +413,7 @@ class FEModel:
         self.topology.recordSetupFingerprint()
 
     def activeConstraints(self) -> list:
-        """The constraints that take part in the equation system: all constraints, in their order, that are active,
+        """The constraints that take part in the discrete system: all constraints, in their order, that are active,
         i.e. switched on and within reach (see
         :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).
 
@@ -423,36 +425,76 @@ class FEModel:
 
         return [constraint for constraint in self.constraints.values() if constraint.active]
 
-    def updateConnectivity(self) -> bool:
-        """Bring the coupling of the degrees of freedom up to date with the converged state, before an increment: which
-        nodes the entities of the equation system couple. Called by the solvers' topology update at the start of every
-        increment and of every retry after a cutback, before the increment is proposed (see
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`). If it
-        reports a change, an implicit solver rebuilds its equation system (:meth:`buildEquationSystem`).
-
-        In a finite element model, the elements keep their nodes, and only a constraint may change the nodes it
-        couples: a contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves
-        its material points through a background grid, and its particles carry their kernel functions along: it
-        reassigns them here first, then lets its constraints follow.
-
-        Only the constraints that are switched on are located anew
-        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,
-        so that they can find themselves within reach again. A constraint switched off from outside rests until it is
-        switched on again, and is located anew at the start of the next increment then.
-
-        A change of the coupling is not a change of the mesh: it neither moves nodes nor creates them, so a solver
-        rebuilds its equation system, but does not re-equilibrate (``equilibrateAfterModelChange``).
+    def activeScalarVariables(self) -> list:
+        """The scalar variables (e.g. Lagrange multipliers) of the active constraints, constraint by constraint: the
+        scalar variables that are numbered in the discrete system (see :meth:`activeConstraints`).
 
         Returns
         -------
-        bool
-            True if a coupling changed, so that the equation system has to be rebuilt.
+        list[ScalarVariable]
+            The scalar variables.
         """
 
+        return [
+            scalarVariable for constraint in self.activeConstraints() for scalarVariable in constraint.scalarVariables
+        ]
+
+    def updateConnectivity(self) -> Change:
+        """Bring the connectivity up to date with the converged state, before an increment, and say what that changed
+        in the discrete system: which nodes the entities couple, and which entities take part. Called by the solvers'
+        topology update at the start of every increment and of every retry after a cutback, before the increment is
+        proposed (see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), and by
+        an explicit solver at its ``contact-update-frequency``.
+
+        In a finite element model, the elements keep their nodes, and only a constraint may change what it couples: a
+        contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves its
+        material points through a background grid, and its particles carry their kernel functions along: it reassigns
+        them here first, then lets its constraints follow.
+
+        Only the constraints that are switched on are updated
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,
+        so that they can find themselves within reach again. A constraint switched off from outside rests until it is
+        switched on again, and is updated at the start of the next increment then. The comparison of which constraints
+        take part starts with this call, so it holds only if ``active`` is switched from outside between steps, never
+        between two calls within a step (a ``modelupdate`` takes effect before the step begins, which starts from a new
+        discrete system). A constraint reports only that its
+        nodes changed (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity`), and sets
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach`; the model compares which
+        constraints take part, and which scalar variables they bring, before and after, and classifies the change:
+
+        * a constraint took part or does not any more, or couples other nodes, and the scalar variables of the active
+          constraints are the same: :attr:`~edelweissfe.models.change.Change.LOCATIONS`;
+        * the scalar variables of the active constraints changed: :attr:`~edelweissfe.models.change.Change.NUMBERING`;
+        * neither: :attr:`~edelweissfe.models.change.Change.NONE`.
+
+        A constraint that is switched on but out of reach is updated too, and a change of its nodes is reported
+        whether or not it takes part: the answer is then :attr:`~edelweissfe.models.change.Change.LOCATIONS`, so a
+        solver rebuilds for a constraint that has no rows.
+
+        A change of the connectivity is not a change of the mesh: it neither moves nodes nor creates them
+        (:attr:`~edelweissfe.models.change.Change.MESH` is the topology update's to report), so a solver does not
+        re-equilibrate after it (``equilibrateAfterModelChange``).
+
+        Returns
+        -------
+        Change
+            What changed.
+        """
+
+        scalarVariablesBefore = self.activeScalarVariables()
+        activeBefore = self.activeConstraints()
+
         # A list, not a generator in any(): every constraint must update, not just those up to the first change.
-        return any(
+        nodesChanged = any(
             [constraint.updateConnectivity(self) for constraint in self.constraints.values() if constraint.switchedOn]
         )
+
+        if self.activeScalarVariables() != scalarVariablesBefore:
+            return Change.NUMBERING
+        if nodesChanged or self.activeConstraints() != activeBefore:
+            return Change.LOCATIONS
+        return Change.NONE
 
     def setNewmarkParametersOfEntities(self, beta: float, gamma: float):
         """Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by
@@ -473,34 +515,77 @@ class FEModel:
             The Newmark parameter :math:`\\gamma`; 0 for no inertia.
         """
 
-    def buildEquationSystem(self) -> EquationSystemLayout:
-        """Lay out the global equation system of the model as it is now: number its degrees of freedom, and say which
-        elements contribute to it, see :class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`. Called
-        by a solver whenever it (re)builds its equation system: at the start of a step, and after the topology update
-        reported a change of the mesh or of the coupling (:meth:`updateConnectivity`).
-
-        The equation system of a finite element model holds the node fields, the elements, and the active constraints
-        with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see
-        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
-        scalar variables, which would otherwise be unknowns without an equation.
+    def elementsWithKernels(self) -> list:
+        """The elements of the model that take part in a discrete system: those that carry kernels (see
+        :attr:`~edelweissfe.elements.base.baseelement.BaseElement.hasKernels`). An entity of the element container that
+        carries geometry only, e.g. a contact facet, has no block in the system matrix and takes no part; its nodes
+        have rows only if an element that carries kernels couples them, see :meth:`buildDiscreteSystem`.
 
         Returns
         -------
-        EquationSystemLayout
-            The layout of the equation system.
+        list
+            The elements, in the order of the element container.
         """
 
-        constraints = self.activeConstraints()
+        return [element for element in self.elements.values() if element.hasKernels]
 
-        dofManager = DofManager(
-            self.nodeFields.values(),
-            [scalarVariable for constraint in constraints for scalarVariable in constraint.scalarVariables],
-            self.elements.values(),
-            constraints,
-            self.nodeSets.values(),
+    def indicesRelatedByMultiPointConstraints(self, numbering: DofNumbering) -> np.ndarray:
+        """The indices of the degrees of freedom that the multi-point constraints of the model relate, as slaves and as
+        masters, in the given numbering.
+
+        Parameters
+        ----------
+        numbering
+            The numbering of the degrees of freedom.
+
+        Returns
+        -------
+        np.ndarray
+            The indices, in no particular order, with repetitions.
+        """
+
+        return np.fromiter(
+            (
+                index
+                for constraint in self.multiPointConstraints.values()
+                for slave, masters in constraint.getMultiPointConstraints(numbering)
+                for index in (slave, *(master for master, _ in masters))
+            ),
+            dtype=int,
         )
 
-        return EquationSystemLayout(self, dofManager, list(self.elements.values()))
+    def buildDiscreteSystem(self) -> DiscreteSystem:
+        """Build the discrete system of the model as it is now: number its degrees of freedom, and say which elements
+        and which constraints contribute to it, see :class:`~edelweissfe.models.discretesystem.DiscreteSystem`. Called
+        by a solver whenever it (re)builds its discrete system: at the start of a step, and after the topology update
+        reported a change that needs one (:class:`~edelweissfe.models.change.Change`).
+
+        The discrete system of a finite element model holds the node fields, the elements that carry kernels, and the
+        active constraints with their scalar variables (e.g. Lagrange multipliers); the elements are those of
+        :meth:`elementsWithKernels`. A constraint that is not active (see
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
+        scalar variables, which would otherwise be unknowns without an equation.
+
+        Every degree of freedom that is numbered must be in the location of an entity, or related by a multi-point
+        constraint, or it would have no row in the system matrix: a node that only an entity without kernels touches
+        (e.g. a contact facet) has none, and the discrete system is not built.
+
+        Returns
+        -------
+        DiscreteSystem
+            The discrete system.
+
+        Raises
+        ------
+        ValueError
+            If a numbered degree of freedom is in no location; the error names the node and the field.
+        """
+
+        numbering = DofNumbering(self.nodeFields.values(), self.activeScalarVariables(), self.nodeSets.values())
+        locations = DofLocations(numbering, self.elementsWithKernels(), self.activeConstraints())
+        locations.checkEveryDofIsLocated(self.indicesRelatedByMultiPointConstraints(numbering))
+
+        return DiscreteSystem(self, locations)
 
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and
@@ -535,7 +620,7 @@ class FEModel:
         and publishes the acceleration at the end of every increment. At the end of its step, it advances the velocity
         by the half increment it lags behind, so that the step leaves the velocity at its end time, as every solver
         does (see the documentation page *Node field results*). Where the acceleration is zero, the velocity stays as
-        it is. The model does this itself, without an equation system: a step resumed at its very end has built none.
+        it is. The model does this itself, without a discrete system: a step resumed at its very end has built none.
 
         Parameters
         ----------

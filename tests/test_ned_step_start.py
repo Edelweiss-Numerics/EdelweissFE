@@ -108,9 +108,9 @@ _RELEASED_UNDER_ITS_WEIGHT = """
 
 @pytest.fixture
 def fixedTimeIncrement(monkeypatch):
-    """Every equation system's stable time increment is replaced by the fixed one (with a courant number of 1)."""
+    """Every discrete system's stable time increment is replaced by the fixed one (with a courant number of 1)."""
 
-    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, model, U: _TIME_INCREMENT)
+    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, U: _TIME_INCREMENT)
 
 
 def _run(deck: str, directory: Path):
@@ -211,7 +211,7 @@ def test_the_damping_terms_of_the_step_start_rule(tmp_path, monkeypatch):
     """
     dt = _BINARY_TIME_INCREMENT
     nIncrements = 32
-    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, model, U: dt)
+    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, U: dt)
 
     def massProportionalDamping(self, C):
         M = np.zeros_like(C)

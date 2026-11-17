@@ -164,11 +164,11 @@ class Constraint(MultiPointConstraintBase, MeshDependent):
         return [self.rp]
 
     @property
-    def fieldsOnNodes(self) -> list:
+    def fields(self) -> list:
         return [["displacement", "rotation"]]
 
-    def getMultiPointConstraints(self, dofManager) -> list:
-        idcs = dofManager.idcsOfFieldVariablesInDofVector
+    def getMultiPointConstraints(self, numbering) -> list:
+        idcs = numbering.idcsOfFieldVariablesInDofVector
         uRP = idcs[self.rp.fields["displacement"]]
         phi = idcs[self.rp.fields["rotation"]]
         records = []

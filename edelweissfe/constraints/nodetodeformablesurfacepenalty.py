@@ -234,10 +234,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     contact's triangulated master surface didn't need a curvature term either. Unlike that rigid
     case, though, each facet's nodes are ordinary displacement DOFs of a deformable body, and
     different facets have disjoint DOFs -- so the set of candidate master facets must be kept in
-    sync with the actual equation system rather than fixed once for the whole analysis.
+    sync with the actual discrete system rather than fixed once for the whole analysis.
 
     This constraint implements :meth:`updateConnectivity`, called once per increment (before the
-    equation system is (re)built, see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST`),
+    discrete system is (re)built, see :class:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST`),
     re-assigning each slave node to its single closest facet (within ``searchDistance``, if given)
     based on the last converged configuration -- mirroring the pattern already used by
     EdelweissMeshfree's ``NonlinearQuasistaticSolver``/``DiscreteRigidBodyPenaltyContact`` for
@@ -272,7 +272,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     penetration guard. Note that no measured benefit has been demonstrated for that option: a
     quadratic face under near-uniform pressure opens its corner gaps regardless, which makes the
     corner weight moot. See the :doc:`contact theory documentation
-    </documentation/contacttheory>`.
+    </theory/contact>`.
 
     With ``sliding=small`` (Abaqus-style small sliding), the closest-point projection of each
     slave onto the master surface -- assigned facet, *clamped* local coordinates (closed-domain
@@ -321,6 +321,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = NodeToDeformableSurfacePenaltySchema
+
+    #: The contact searches for the surface it touches.
+    connectivityChangesWithMotion = True
 
     def __init__(
         self,
@@ -423,7 +426,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._normalForceCurrent = np.zeros(self.nSlaves)
 
         self._nodes = []
-        self._fieldsOnNodes = []
+        self._fields = []
         self._nDof = 0
 
         self.totalNormalForce = 0.0
@@ -455,8 +458,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
@@ -464,12 +467,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def updateConnectivity(self, model: FEModel) -> bool:
         """Re-assign each slave node to its single closest facet, based on the last converged
-        configuration. Called once per increment by the solver, before the equation system is
-        (re)built. Reconciles against a mesh mutation (e.g. an AMR refinement of either surface's
-        source solid elements) first, at this natural per-increment tick -- see
+        configuration. Called once per increment by the solver, before the discrete system is
+        (re)built. A mesh mutation (e.g. an AMR refinement of either surface's source solid
+        elements) has been reconciled before, by the topology update -- see
         :class:`~edelweissfe.models.meshdependent.MeshDependent`."""
-
-        # refreshed by TopologyPipeline.refreshMeshDependents; nothing extra to do at this tick
 
         slaveCoords = currentNodeCoordinates(self.slaveNodes, model, self._referenceCoordsSlaves)
         facetCoords = [
@@ -541,20 +542,20 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._assignedFacetIdx = newAssignment
 
         newNodes = []
-        newFieldsOnNodes = []
+        newFields = []
         for s in range(self.nSlaves):
             newNodes.append(self.slaveNodes[s])
-            newFieldsOnNodes.append(["displacement"])
+            newFields.append(["displacement"])
             if newAssignment[s] is not None:
                 facetNodes = self.facetElements[newAssignment[s]].nodes
                 newNodes.extend(facetNodes)
-                newFieldsOnNodes.extend([["displacement"]] * len(facetNodes))
+                newFields.extend([["displacement"]] * len(facetNodes))
 
         if newNodes != self._nodes:
             hasChanged = True
 
         self._nodes = newNodes
-        self._fieldsOnNodes = newFieldsOnNodes
+        self._fields = newFields
         self._nDof = sum(self.nDim for _ in newNodes)
 
         return hasChanged

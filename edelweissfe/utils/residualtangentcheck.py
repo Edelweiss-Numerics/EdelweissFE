@@ -65,7 +65,7 @@ def localVector(constraint, nodalValue, scalarValues=()) -> np.ndarray:
 
     parts = [
         np.atleast_1d(nodalValue(node, field))
-        for node, fields in zip(constraint.nodes, constraint.fieldsOnNodes)
+        for node, fields in zip(constraint.nodes, constraint.fields)
         for field in fields
     ]
     parts.append(np.asarray(scalarValues, dtype=float))

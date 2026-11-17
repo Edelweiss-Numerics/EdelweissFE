@@ -41,6 +41,7 @@ Besides the behaviour of each rule, two equivalences are pinned, each against a 
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -258,11 +259,12 @@ def test_legacy_defaults_decide_as_the_original_criterion():
         field = fields[number % len(fields)]
         nAccumulatedFluxes = 1 + number % 7
 
-        class DofManager:
-            idcsOfFieldsInDofVector = {field: slice(0, len(F))}
-            nAccumulatedNodalFluxesFieldwise = {field: nAccumulatedFluxes}
+        locations = SimpleNamespace(
+            numbering=SimpleNamespace(idcsOfFieldsInDofVector={field: slice(0, len(F))}),
+            nAccumulatedNodalFluxesFieldwise={field: nAccumulatedFluxes},
+        )
 
-        spatialAveragedFlux = criterion.computeSpatialAveragedFluxes(F, None, DofManager())[field]
+        spatialAveragedFlux = criterion.computeSpatialAveragedFluxes(F, None, locations)[field]
 
         assert criterion.checkField(field, R, ddU, dU, spatialAveragedFlux, iteration) == originalLegacyCheckField(
             field, R, ddU, originalLegacySpatialAveragedFlux(F, nAccumulatedFluxes), iteration
@@ -675,15 +677,16 @@ def test_abaqus_previous_step_is_zero_flux_reference():
 
 
 def test_spatial_averaged_fluxes_include_constraints_only_for_abaqus():
-    class DofManager:
-        idcsOfFieldsInDofVector = {"u": slice(0, 3)}
-        nAccumulatedNodalFluxesFieldwise = {"u": 4}
+    locations = SimpleNamespace(
+        numbering=SimpleNamespace(idcsOfFieldsInDofVector={"u": slice(0, 3)}),
+        nAccumulatedNodalFluxesFieldwise={"u": 4},
+    )
 
     F = np.array([1.0, 2.0, 1.0])
     FConstraints = np.array([0.0, 4.0, 0.0])
 
-    assert legacy().computeSpatialAveragedFluxes(F, FConstraints, DofManager())["u"] == 1.0
-    assert abaqus().computeSpatialAveragedFluxes(F, FConstraints, DofManager())["u"] == 2.0
+    assert legacy().computeSpatialAveragedFluxes(F, FConstraints, locations)["u"] == 1.0
+    assert abaqus().computeSpatialAveragedFluxes(F, FConstraints, locations)["u"] == 2.0
 
 
 def test_abaqus_initial_time_average_flux_for_a_field_without_flux_yet():

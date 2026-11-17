@@ -62,7 +62,7 @@ surface of a :class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBod
 This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if an AMR refinement
 (e.g. :mod:`~edelweissfe.modelmodifiers.adaptivity.hadaptivity`) adds nodes to the watched slave
 ``nSet`` (a boundary reaching into a refined region), the new nodes are picked up and protected from
-penetrating the rigid body at the constraint's own next :meth:`updateConnectivity` tick -- no
+penetrating the rigid body when the topology update refreshes the mesh dependents -- no
 separate wiring needed. There is no per-slave history to preserve across the rebuild (unlike the
 deformable-surface/tie facet constraints): every quantity is recomputed fresh from the current
 geometry every Newton iteration.
@@ -264,7 +264,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._referenceCoords = np.array([n.coordinates for n in self.slaveNodes])
 
         self._nodes = self.slaveNodes + [self.rpNode]
-        self._fieldsOnNodes = [["displacement"]] * self.nSlaves + [["displacement", "rotation"]]
+        self._fields = [["displacement"]] * self.nSlaves + [["displacement", "rotation"]]
         self._nDof = self.nSlaves * self.nDim + self.rprpDof
 
         # Local DOF index blocks, in the order [slave_0, slave_1, ..., RP displacement, RP rotation].
@@ -284,17 +284,13 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildFromSlaveNodes()
         return True
 
-    def updateConnectivity(self, model: FEModel) -> bool:
-        # refreshed by TopologyPipeline.refreshMeshDependents; nothing extra to do at this tick
-        return False
-
     @property
     def nodes(self) -> list:
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:

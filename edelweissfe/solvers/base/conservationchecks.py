@@ -53,7 +53,7 @@ them to the functions here.
 import numpy as np
 
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.dofnumbering import DofNumbering
 
 #: Default tolerance on the relative change, across one topology change, of a field's total
 #: coefficient. Conservation is a geometric identity, but Gauss quadrature on distorted elements is
@@ -65,7 +65,7 @@ CUMULATIVE_DRIFT_TOLERANCE = 1e-4
 
 
 def linearMomentum(
-    massTimesVelocity: np.ndarray, dofManager: DofManager, fieldNames: list[str], model: FEModel
+    massTimesVelocity: np.ndarray, numbering: DofNumbering, fieldNames: list[str], model: FEModel
 ) -> np.ndarray:
     """The linear momentum of the given fields, per spatial component.
 
@@ -80,9 +80,9 @@ def linearMomentum(
     ----------
     massTimesVelocity
         The mass applied to the velocity -- :math:`m \\odot v` for a lumped mass, :math:`M v` for a
-        consistent one -- as a vector over the dof manager's degrees of freedom.
-    dofManager
-        The manager that vector is indexed by.
+        consistent one -- as a vector over the degrees of freedom of the numbering.
+    numbering
+        The numbering that vector is indexed by.
     fieldNames
         The fields whose inertia is a mass; any other has no linear momentum.
     model
@@ -101,7 +101,7 @@ def linearMomentum(
 
     total = None
     for fieldName in fieldNames:
-        indices = dofManager.idcsOfFieldsInDofVector[fieldName]
+        indices = numbering.idcsOfFieldsInDofVector[fieldName]
         dimension = model.nodeFields[fieldName].dimension
         contribution = np.asarray(massTimesVelocity[indices]).reshape((-1, dimension)).sum(axis=0)
         # numpy would silently broadcast a (1,) contribution onto a (3,) total

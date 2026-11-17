@@ -39,8 +39,9 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.linsolve import createLinearSolver
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import (
     DirectCSRSystemMatrixAssembly,
     SystemMatrixAssembly,
@@ -127,7 +128,7 @@ class NISTSchema:
     )
     extrapolateAcrossConnectivityChange: bool | None = schemaField(
         description=(
-            "Keep extrapolating across a rebuild of the equation system caused by a change of the connectivity alone "
+            "Keep extrapolating across a rebuild of the discrete system caused by a change of the connectivity alone "
             "(e.g., a contact search), as long as the rebuilt system numbers the degrees of freedom as before. Off: "
             "every rebuild starts the increment from a zero prediction."
         ),
@@ -203,7 +204,7 @@ class NISTSchema:
         description=(
             "Condense the multi-point-constraint system matrix, T^T K T + C, in place, with an "
             "OpenMP-threaded kernel, instead of with SciPy's single-threaded CSR routines, which build a "
-            "second matrix. The CSR pattern of K gains, once per equation system, the entries where a "
+            "second matrix. The CSR pattern of K gains, once per discrete system, the entries where a "
             "master collects the couplings of its slaves; the result does not depend on the number of "
             "threads. Explicit zeros (the slave columns among them) are pruned from a copy according to "
             "pruneCondensedMatrixZeros. Off by default."
@@ -413,10 +414,6 @@ class NIST(NonlinearSolverBase):
         "abaqusInitialTimeAveragedFlux": 1e-2,
     }
 
-    #: What the model's current equation system is made of (see
-    #: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), rebuilt with it; None until it is built.
-    equationSystemLayout = None
-
     #: The predictor's state between increments: the last accepted increment and its dU, for a quadratic
     #: extrapolation the accepted increment before it and its dU, and the digest of the numbering of the degrees of
     #: freedom these dU are vectors of; and the state of the convergence criterion.
@@ -452,17 +449,17 @@ class NIST(NonlinearSolverBase):
         #: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).
         self.prevTimeStep = None
         #: The solution increment of the last accepted increment, kept for the predictor: a copy, since the working
-        #: increment of the equation system changes in every iteration, and the model's entry ``dU`` is a result,
+        #: increment of the discrete system changes in every iteration, and the model's entry ``dU`` is a result,
         #: which no solver reads back.
         self.dUOfLastIncrement = None
         #: The accepted increment before :attr:`prevTimeStep`, kept for a quadratic extrapolation only (else None).
         self.timeStepOfIncrementBeforeLast = None
         #: The solution increment of :attr:`timeStepOfIncrementBeforeLast`.
         self.dUOfIncrementBeforeLast = None
-        #: The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted
-        #: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dUOfLastIncrement` is a
+        #: The digest of the numbering of the degrees of freedom of the discrete system the last increment was accepted
+        #: in (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`): :attr:`dUOfLastIncrement` is a
         #: vector of it, and so is :attr:`dUOfIncrementBeforeLast`, which is kept only as long as the prediction
-        #: survives the rebuilds of the equation system (see :meth:`predictionSurvivesRebuild`).
+        #: survives the change of the discrete system (see :meth:`predictionSurvives`).
         self.dofNumberingOfLastIncrement = None
         #: The convergence criterion of the current step, created when the step begins (None before).
         self.convergenceCriterion = None
@@ -523,7 +520,7 @@ class NIST(NonlinearSolverBase):
         """Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the
         previous step if it names the same, else a new one.
 
-        A kept solver builds anew for the step's equation system (``setModel``) and frees what it built before. A new
+        A kept solver builds anew for the step's discrete system (``setModel``) and frees what it built before. A new
         solver per step would leave the previous one to Python's cyclic garbage collector whenever its tree refers
         back to itself (a function in a solver script, whose globals hold the tree), and the steps' matrices would
         pile up."""
@@ -535,14 +532,82 @@ class NIST(NonlinearSolverBase):
         self.linSolverName = self.options["linsolver"]
         self.linSolver.setJournal(self.journal)
 
-    def forgetEquationSystem(self) -> None:
-        """Drop the equation system of the last build -- the model's layout of it with the DOF manager, the system
-        matrix assembly and its CSR pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone
-        before the next one is built, never both at once."""
-        self.equationSystemLayout = None
-        self.theDofManager = None
-        self.mpcTransformation = None
+    def forgetDiscreteSystem(self) -> None:
+        """Drop the discrete system of the last build -- with its numbering and locations, the system matrix assembly
+        and its CSR pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the
+        next one is built, never both at once."""
+
+        super().forgetDiscreteSystem()
         self._U = self._dU = self._P = self._K = None
+
+    def onNewNumbering(self):
+        """Build what is sized by the numbering of the new discrete system: the linear solver's view of the degrees of
+        freedom, which it is re-pushed on every new numbering so that it tracks the mesh across refinement; the layout of
+        the convergence table; the solution, its increment and the force, the solution read from the model; and the
+        multi-point-constraint condensation, which is reconciled with the Dirichlet boundary conditions of the actions
+        of the step (``self._stepActions``, set when the step begins).
+
+        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering`.
+        """
+
+        system = self.system
+        numbering = system.numbering
+
+        # Fields are laid out in contiguous slices: report the block structure per field.
+        for fieldName, fieldIndices in numbering.idcsOfFieldsInDofVector.items():
+            self.journal.message(
+                "field '{:}': {:} dof, [{:}, {:})".format(
+                    fieldName, fieldIndices.stop - fieldIndices.start, fieldIndices.start, fieldIndices.stop
+                ),
+                self.identification,
+                2,
+            )
+
+        with performancetiming.timeit("linear solver setup"):
+            self.linSolver.setModel(system.modelForLinearSolver, numbering)
+
+        presentVariableNames = list(numbering.idcsOfFieldsInDofVector.keys())
+
+        if numbering.idcsOfScalarVariablesInDofVector:
+            presentVariableNames += [
+                "scalar variables",
+            ]
+
+        self.convergenceTable = ConvergenceTable(presentVariableNames, self.linSolver.reportsSolveSummary)
+
+        self._U = system.locations.constructDofVector()
+        self._P = system.locations.constructDofVector()
+        self._dU = system.locations.constructDofVector()
+
+        self.readStateFromModel(self._U)
+
+        self.buildAndCheckMPCTransformation()
+
+    def onNewLocations(self):
+        """Build what is derived from the locations of the new discrete system: the vectors are wrapped with them, the
+        values kept, the linear solver is told that the sparsity pattern changes
+        (:meth:`~edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern`), and the system matrix assembly is built
+        with the CSR pattern the locations determine, with room for the entries the multi-point-constraint condensation
+        adds, so that it can be done in place: the assembly writes the matrix of the pattern it is built on. The
+        assembly of the previous locations is gone before the next one is built, never both at once.
+
+        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations`.
+        """
+
+        locations = self.system.locations
+
+        self._U = self._U.onLocations(locations)
+        self._dU = self._dU.onLocations(locations)
+        self._P = self._P.onLocations(locations)
+
+        # What the linear solver built for the old pattern is dropped before the new pattern is built, never both at
+        # once; what it holds of the model and the numbering stays.
+        self.linSolver.onNewMatrixPattern()
+        self._K = None
+        with performancetiming.timeit("system matrix pattern"):
+            self._K = self.createSystemMatrixAssembly(
+                self.mpcTransformation.condensedPatternFillIn if self.mpcTransformation is not None else None
+            )
 
     def beginStep(
         self,
@@ -566,6 +631,8 @@ class NIST(NonlinearSolverBase):
             The output managers.
         """
 
+        self._stepActions = step.actions
+
         # self.options already reflects every >>options block applied so far (see applyOptionsOverride).
         self.selectLinearSolverForStep()
 
@@ -573,10 +640,9 @@ class NIST(NonlinearSolverBase):
         convergenceCriterion.startStep(self.convergenceCriterion)
         self.convergenceCriterion = convergenceCriterion
 
-        # The equation system (DofManager, VIJ pattern, CSR pattern, system matrix assembly) is (re)built lazily in the
-        # first increment, and whenever the topology update reports a change of the mesh or of a constraint's DOF
-        # footprint.
-        self.forgetEquationSystem()
+        # The discrete system (numbering, locations, VIJ pattern, CSR pattern, system matrix assembly) is (re)built
+        # lazily in the first increment, and whenever the topology update reports a change (see Change).
+        self.forgetDiscreteSystem()
 
         if self.options["systemMatrixAssembly"] not in self.systemMatrixAssemblies:
             raise ValueError(
@@ -652,13 +718,12 @@ class NIST(NonlinearSolverBase):
         # Before the topology update, so that its messages head this increment's block.
         self.journal.printSeperationLine()
 
-        topologyUpdate = self.updateTopologyAndConnectivity(model, step, offerModelModifiers=not isRetry)
-        self._modelHasChanged = topologyUpdate.topologyChanged
-        self._connectivityHasChanged = topologyUpdate.meshDependentsRefreshed or topologyUpdate.connectivityChanged
+        self._change = self.updateTopologyAndConnectivity(model, step, offerModelModifiers=not isRetry)
 
     def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
-        """Solve the increment by Newton's method, rebuilding the equation system first if the topology
-        update changed the model, and re-equilibrating a changed model first if so configured; see
+        """Solve the increment by Newton's method, rebuilding the discrete system first if the topology
+        update changed anything (:class:`~edelweissfe.models.change.Change`), and re-equilibrating a changed mesh first
+        if so configured; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
 
         Parameters
@@ -683,8 +748,7 @@ class NIST(NonlinearSolverBase):
         maxIter = step.maxIter
         maxGrowingIter = step.maxGrowIter
         cutbackFactor = step.cutbackFactor
-        modelHasChanged = self._modelHasChanged
-        connectivityHasChanged = self._connectivityHasChanged
+        change = self._change
 
         # The header of this increment's block; all messages below are nested one level deeper.
         self.journal.message(
@@ -705,70 +769,12 @@ class NIST(NonlinearSolverBase):
                 self.identification,
             )
 
-        if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
-            with performancetiming.timeit("equation system rebuild"):
-                self.forgetEquationSystem()
-                # The model says what its equation system is made of: the numbering of the degrees of freedom, the
-                # elements to compute, how the solution passes between the model and the vectors below.
-                with performancetiming.timeit("dof manager"):
-                    self.equationSystemLayout = model.buildEquationSystem()
-                self.theDofManager = self.equationSystemLayout.dofManager
-                self.journal.message(
-                    "eq. system rebuilt: {:} dof".format(self.theDofManager.nDof),
-                    self.identification,
-                    2,
-                )
+        self.updateDiscreteSystem(model, change)
 
-                # Fields are laid out in contiguous slices: report the block structure per field.
-                for fieldName, fieldIndices in self.theDofManager.idcsOfFieldsInDofVector.items():
-                    self.journal.message(
-                        "field '{:}': {:} dof, [{:}, {:})".format(
-                            fieldName,
-                            fieldIndices.stop - fieldIndices.start,
-                            fieldIndices.start,
-                            fieldIndices.stop,
-                        ),
-                        self.identification,
-                        2,
-                    )
+        if not self.predictionSurvives(change):
+            self.prevTimeStep = None
 
-                # Re-pushed on every (re)build so the linear solver tracks the mesh across AMR.
-                with performancetiming.timeit("linear solver setup"):
-                    self.linSolver.setModel(self.equationSystemLayout.modelForLinearSolver, self.theDofManager)
-
-                presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
-
-                if self.theDofManager.idcsOfScalarVariablesInDofVector:
-                    presentVariableNames += [
-                        "scalar variables",
-                    ]
-
-                self.convergenceTable = ConvergenceTable(presentVariableNames, self.linSolver.reportsSolveSummary)
-
-                U = self.theDofManager.constructDofVector()
-                P = self.theDofManager.constructDofVector()
-                dU = self.theDofManager.constructDofVector()
-
-                self.readStateFromModel(U)
-
-                with performancetiming.timeit("mpc transformation build"):
-                    self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
-                with performancetiming.timeit("mpc dirichlet conflict check"):
-                    self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
-                # The CSR pattern with room for the entries the condensation adds, so that it can be done in place:
-                # the assembly writes the matrix of the pattern it is built on.
-                with performancetiming.timeit("system matrix pattern"):
-                    K = self.createSystemMatrixAssembly(
-                        self.systemMatrixAssemblies[self.options["systemMatrixAssembly"]],
-                        self.mpcTransformation.condensedPatternFillIn if self.mpcTransformation is not None else None,
-                    )
-
-                # The last accepted increments are vectors of the equation system they were solved in: this increment
-                # extrapolates them only if the rebuilt system numbers the degrees of freedom alike.
-                if not self.predictionSurvivesRebuild(modelHasChanged, connectivityHasChanged):
-                    self.prevTimeStep = None
-                self._U, self._dU, self._P, self._K = U, dU, P, K
-        # the equation system of this increment, just built or kept from the last one
+        # the discrete system of this increment, just built or kept from the last one
         U, dU, P, K = self._U, self._dU, self._P, self._K
 
         self.incrementStatus = {
@@ -783,7 +789,7 @@ class NIST(NonlinearSolverBase):
 
         self.tableHeaderWritten = False
 
-        if modelHasChanged and equilibrateAfterModelChange:
+        if change == Change.MESH and equilibrateAfterModelChange:
             # Settle the refined mesh at the LAST converged load: a time step with zero step-progress
             # and time increment holds all loads and yields a zero Dirichlet increment.
             equilibrationTimeStep = TimeStep(
@@ -875,25 +881,25 @@ class NIST(NonlinearSolverBase):
         self._iterationCounter = iterationCounter
 
     def readStateFromModel(self, U: DofVector):
-        """Read the state the next increment starts from out of the model, into the vectors of the equation system just
-        (re)built: here, the solution, through the model's layout of the equation system (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel`). A solver that
+        """Read the state the next increment starts from out of the model, into the vectors of the discrete system just
+        (re)built: here, the solution, through the discrete system (see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel`). A solver that
         integrates in time reads its velocity and acceleration as well.
 
         Parameters
         ----------
         U
-            The solution vector of the equation system, zero, overwritten.
+            The solution vector of the discrete system, zero, overwritten.
         """
 
-        self.equationSystemLayout.readStateFromModel(U)
+        self.system.readStateFromModel(U)
 
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
-        """Write the results of a converged increment to the model, through the model's layout of the equation system:
+        """Write the results of a converged increment to the model, through the discrete system:
         the incremental degrees of freedom are set to zero first, from where the next increment starts them (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`), then the
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.zeroIncrementalCoefficients`), then the
         solution, its increment and the force are written (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`), and the velocity
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`), and the velocity
         and the acceleration (see :meth:`writeVelocityAndAccelerationToModel`).
 
         Parameters
@@ -907,30 +913,38 @@ class NIST(NonlinearSolverBase):
             leave the model's as it is.
         """
 
-        self.equationSystemLayout.zeroIncrementalCoefficients(U)
-        self.equationSystemLayout.writeResultsToModel(U, dU, P)
+        self.system.zeroIncrementalCoefficients(U)
+        self.system.writeResultsToModel(U, dU, P)
         self.writeVelocityAndAccelerationToModel()
 
     def writeVelocityAndAccelerationToModel(self):
         """Write the velocity and the acceleration of a converged increment to the model, as part of
         :meth:`writeResultsToModel`. A quasi-static solver does not integrate in time: the state it accepts is at
         rest, with zero velocity and acceleration on every field (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel`),
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeZeroVelocityAndAccelerationToModel`),
         so a dynamic step that follows starts from rest. A solver that integrates in time writes its own.
         """
 
-        self.equationSystemLayout.writeZeroVelocityAndAccelerationToModel()
+        self.system.writeZeroVelocityAndAccelerationToModel()
 
-    def createSystemMatrixAssembly(
-        self, assemblyType: type, patternFillIn: Callable | None = None
-    ) -> SystemMatrixAssembly:
-        """The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), with
+    def systemMatrixAssemblyType(self) -> type:
+        """The type of the assembly of the system matrix: the one named by the option ``systemMatrixAssembly``, one of
+        :attr:`systemMatrixAssemblies`.
+
+        Returns
+        -------
+        type
+            The type of the assembly.
+        """
+
+        return self.systemMatrixAssemblies[self.options["systemMatrixAssembly"]]
+
+    def createSystemMatrixAssembly(self, patternFillIn: Callable | None = None) -> SystemMatrixAssembly:
+        """The assembly of the system matrix of the discrete system just built (:meth:`systemMatrixAssemblyType`), with
         its CSR pattern and :meth:`numberOfAssemblyWorkers` workers.
 
         Parameters
         ----------
-        assemblyType
-            The type of the assembly, one of :attr:`systemMatrixAssemblies`.
         patternFillIn
             The entries the pattern must have although no entity contributes them, see
             :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`.
@@ -941,13 +955,13 @@ class NIST(NonlinearSolverBase):
             The assembly.
         """
 
-        return assemblyType(self.theDofManager, self.numberOfAssemblyWorkers(), patternFillIn)
+        return self.systemMatrixAssemblyType()(self.system.locations, self.numberOfAssemblyWorkers(), patternFillIn)
 
     def forEachChunk(self, entities: list, work: Callable[[list], None]):
         """Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent
-        entities, other than the elements, that the model's equation system layout evaluates, e.g. the material points
+        entities, other than the elements, that the model's discrete system evaluates, e.g. the material points
         of a meshfree model (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`). Here, one chunk of
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`). Here, one chunk of
         all entities, in the calling thread, as the elements are computed.
 
         Parameters
@@ -972,27 +986,26 @@ class NIST(NonlinearSolverBase):
 
         return 1
 
-    def predictionSurvivesRebuild(self, modelHasChanged: bool, connectivityHasChanged: bool) -> bool:
-        """Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.
-        They are vectors of the equation system they were solved in, so they fit the rebuilt one only if it numbers the
-        degrees of freedom alike, which the digests of the two numberings tell
-        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`; the one of the last accepted
-        increments is :attr:`dofNumberingOfLastIncrement`):
+    def predictionSurvives(self, change: Change) -> bool:
+        """Whether this increment may extrapolate the last accepted increments, after the discrete system followed
+        the change. Called once per increment, right after :meth:`updateDiscreteSystem`, with the change the increment
+        was given. The last accepted increments are vectors of the numbering they were solved in:
 
-        * after a change of the topology (e.g., a mesh refinement), never;
-        * after a change of the connectivity alone (e.g., a contact search), only with
-          ``extrapolateAcrossConnectivityChange``, and only if the numbering is unchanged;
-        * at the first increment of a step that continues from a restart checkpoint -- resumed, or fallen back to --
-          only if the rebuilt system numbers the degrees of freedom as the checkpoint's last accepted increments are
-          numbered: e.g., the active cells of a material point model may have changed since. A prediction without the
-          digest of its numbering has nothing to be compared with, and is dropped.
+        * after a change of the mesh (e.g., a mesh refinement), they are never extrapolated;
+        * across any other change of the connectivity they are extrapolated only with the option
+          ``extrapolateAcrossConnectivityChange``;
+        * and only if the numbering of the discrete system numbers the degrees of freedom as the last accepted
+          increments are numbered, which the digests of the two numberings tell
+          (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`; the one of the last accepted increments is
+          :attr:`dofNumberingOfLastIncrement`): e.g., at the first increment of a step that continues from a restart
+          checkpoint -- resumed, or fallen back to -- the active cells of a material point model may have changed
+          since. A prediction without the digest of its numbering has nothing to be compared with, and is dropped.
+          New locations on the same numbering are the same numbering: the prediction survives them by construction.
 
         Parameters
         ----------
-        modelHasChanged
-            Whether the topology update changed the model.
-        connectivityHasChanged
-            Whether it changed the connectivity alone.
+        change
+            The change the increment was given.
 
         Returns
         -------
@@ -1000,12 +1013,11 @@ class NIST(NonlinearSolverBase):
             True if the prediction may extrapolate the last accepted increments.
         """
 
-        if self.prevTimeStep is None or modelHasChanged:
+        if change == Change.MESH:
             return False
-        if connectivityHasChanged and not self.options["extrapolateAcrossConnectivityChange"]:
+        if change >= Change.LOCATIONS and not self.options["extrapolateAcrossConnectivityChange"]:
             return False
-
-        return self.dofNumberingOfLastIncrement == self.theDofManager.dofNumberingDigest
+        return self.dofNumberingOfLastIncrement == self.system.numbering.digest
 
     @performancetiming.timeit("accept increment")
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
@@ -1031,13 +1043,13 @@ class NIST(NonlinearSolverBase):
         else:
             self.timeStepOfIncrementBeforeLast, self.dUOfIncrementBeforeLast = None, None
         # After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.
-        if self._modelHasChanged and not self.options["extrapolateAfterModelChange"]:
+        if self._change == Change.MESH and not self.options["extrapolateAfterModelChange"]:
             self.prevTimeStep = None
         else:
             self.prevTimeStep = timeStep
         # A copy: the next increment iterates on dU in place, and may fail.
         self.dUOfLastIncrement = dU.copy()
-        self.dofNumberingOfLastIncrement = self.theDofManager.dofNumberingDigest
+        self.dofNumberingOfLastIncrement = self.system.numbering.digest
         self.convergenceCriterion.acceptIncrement()
 
         if iterationCounter >= step.criticalIter:
@@ -1315,13 +1327,13 @@ class NIST(NonlinearSolverBase):
         """
 
         iterationCounter = 0
-        incrementResidualHistory = {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
+        incrementResidualHistory = {field: [] for field in self.system.numbering.idcsOfFieldsInDofVector}
 
-        R = self.theDofManager.constructDofVector()
-        F = self.theDofManager.constructDofVector()
-        FConstraints = self.theDofManager.constructDofVector()
-        PLoadsAndConstraints = self.theDofManager.constructDofVector()
-        U_np = self.theDofManager.constructDofVector()
+        R = self.system.locations.constructDofVector()
+        F = self.system.locations.constructDofVector()
+        FConstraints = self.system.locations.constructDofVector()
+        PLoadsAndConstraints = self.system.locations.constructDofVector()
+        U_np = self.system.locations.constructDofVector()
         ddU = None
 
         dirichlets = stepActions["dirichlet"].values()
@@ -1596,7 +1608,7 @@ class NIST(NonlinearSolverBase):
             stepActions, U_np, dU, PLoadsAndConstraints, K, timeStep
         )
         PLoadsAndConstraints, K = self.assembleConstraints(
-            model.constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
+            self.system.constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
         )
 
         # The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance
@@ -1915,7 +1927,7 @@ class NIST(NonlinearSolverBase):
     def assembleAdditionalTerms(
         self, dU: DofVector, R: DofVector, F: DofVector, K: SystemMatrixAssembly, timeStep: TimeStep
     ):
-        """Assemble terms of the equation system beyond the internal and external forces. Called
+        """Assemble terms of the discrete system beyond the internal and external forces. Called
         by :meth:`assembleResidualAndTangent` in every evaluation of the model, next to :meth:`computeElements`,
         :meth:`assembleLoadsAtIncrementEnd` and :meth:`assembleConstraints`: right after the right-hand side
         :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see
@@ -1991,9 +2003,9 @@ class NIST(NonlinearSolverBase):
         self, U_np: DofVector, dU: DofVector, P: DofVector, K: SystemMatrixAssembly, F: DofVector, timeStep: TimeStep
     ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
         """Assemble the internal forces of the model at a trial state, and their tangent: those of the elements of its
-        equation system, see :meth:`computeElements`. First, the model updates the material points that belong to no
+        discrete system, see :meth:`computeElements`. First, the model updates the material points that belong to no
         element, whose state the elements integrate (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`; nothing to do in a
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`; nothing to do in a
         finite element model).
 
         The one evaluation of the elements of the solvers that derive from NIST: in every Newton iteration and for every
@@ -2023,9 +2035,9 @@ class NIST(NonlinearSolverBase):
         """
 
         with performancetiming.timeit("material points"):
-            self.equationSystemLayout.updateMaterialPoints(dU, timeStep, self.forEachChunk)
+            self.system.updateMaterialPoints(dU, timeStep, self.forEachChunk)
 
-        return self.computeElements(self.equationSystemLayout.elements, U_np, dU, P, K, F, timeStep)
+        return self.computeElements(self.system.elements, U_np, dU, P, K, F, timeStep)
 
     @performancetiming.timeit("elements")
     def computeElements(
@@ -2042,8 +2054,8 @@ class NIST(NonlinearSolverBase):
         :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`. Is called by
         :meth:`assembleResidualAndTangent` in each iteration.
 
-        The elements are those of the model's equation system
-        (:attr:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements`): the finite elements, and
+        The elements are those of the model's discrete system
+        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elements`): the finite elements, and
         whatever else contributes like an element -- in a meshfree model, its cells and particles.
 
         Parameters
@@ -2099,16 +2111,15 @@ class NIST(NonlinearSolverBase):
         timeStep: TimeStep,
         FConstraints: DofVector = None,
     ) -> tuple[DofVector, SystemMatrixAssembly]:
-        """Loop over all constraints, and evaluate the active ones: each adds its residual contribution and the
-        tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.
-        A constraint that is switched off (see
-        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is not part of the equation
-        system and is skipped. Is called by solveIncrement() in each iteration.
+        """Evaluate the constraints of the discrete system: each adds its residual contribution and the tangent of
+        it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`. Is called by
+        solveIncrement() in each iteration.
 
         Parameters
         ----------
         constraints
-            The list of constraints.
+            The constraints of the discrete system
+            (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.constraints`).
         U_np
             The current solution vector.
         dU
@@ -2129,20 +2140,18 @@ class NIST(NonlinearSolverBase):
             - The modified system matrix.
         """
 
-        for constraint in constraints.values():
-            # a constraint that is switched off has no place in the equation system
-            if not constraint.active:
-                continue
+        locations = self.system.locations
 
+        for constraint in constraints:
             Kc = K[constraint]
             Pc = np.zeros(constraint.nDof)
 
             constraint.computeKernels(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
 
             # instead of P[constraint] += Pc, np.add.at allows for repeated indices
-            np.add.at(P, P.entitiesInDofVector[constraint], Pc)
+            np.add.at(P, locations[constraint], Pc)
             if FConstraints is not None:
-                np.add.at(FConstraints, FConstraints.entitiesInDofVector[constraint], np.abs(Pc))
+                np.add.at(FConstraints, locations[constraint], np.abs(Pc))
 
         # the block of the last constraint
         K.flush()

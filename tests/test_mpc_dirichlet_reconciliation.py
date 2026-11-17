@@ -14,6 +14,12 @@ class _DummySolver(NonlinearSolverBase):
         # one prescribed component per node: the positions of the nodes are those of the degrees of freedom
         return dirichlet.dofIndices, np.arange(len(dirichlet.dofIndices))
 
+    def onNewNumbering(self):
+        pass
+
+    def onNewLocations(self):
+        pass
+
     def solveIncrement(self, *args, **kwargs):
         pass
 

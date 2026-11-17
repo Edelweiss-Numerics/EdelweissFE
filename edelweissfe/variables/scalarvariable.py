@@ -39,7 +39,7 @@ class ScalarVariable:
         The name under which the model holds it (see :attr:`~edelweissfe.models.femodel.FEModel.scalarVariables`),
         the same in every run of the model: a restart checkpoint stores its value under this name, and the numbering
         of the degrees of freedom names it so
-        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`).
+        (:attr:`~edelweissfe.numerics.dofnumbering.DofNumbering.digest`).
     """
 
     def __init__(self, name: str):

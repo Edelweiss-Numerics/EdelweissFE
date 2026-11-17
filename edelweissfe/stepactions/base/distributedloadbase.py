@@ -33,7 +33,8 @@ from abc import abstractmethod
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.doflocations import DofLocations
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
 from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -82,10 +83,11 @@ class DistributedLoadBase(LoadBase):
         U_np: DofVector,
         dU: DofVector,
         timeStep: TimeStep,
-        dofManager: DofManager,
+        locations: DofLocations,
     ):
         """Let every element of the surface add the residual contribution of the load on its face, the negative of
         the external load, and its tangent; see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
+        Only the elements that are located act, as for a body load.
 
         Parameters
         ----------
@@ -99,8 +101,8 @@ class DistributedLoadBase(LoadBase):
             The global solution increment.
         timeStep
             The current time step.
-        dofManager
-            The DOF manager of the equation system.
+        locations
+            The locations of the entities in the discrete system, from which the load finds where it acts.
         """
 
         time = timeStep.totalTime
@@ -109,6 +111,9 @@ class DistributedLoadBase(LoadBase):
         load = self.getCurrentLoad(timeStep)
         for faceID, elementSet in self.surface.items():
             for el in elementSet:
+                if el not in locations:
+                    continue
+
                 Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
                 Pe = np.zeros(el.nDof)
 

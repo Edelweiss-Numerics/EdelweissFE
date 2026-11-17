@@ -415,7 +415,7 @@ class CoarseCorrection(Preconditioner):
     cycle spelled out: any :math:`P`, any coarse solve, but slower than the C++ cycle
     :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, whose smoother reads a compact single-precision copy
     of the matrix; both are kept on purpose (see the "two-level cycle: two ways" and "which form to use" sections of
-    ``doc/source/documentation/composedlinsolvers.rst``). For production runs, ``TwoLevel``.
+    ``doc/source/analysis/composedlinsolvers.rst``). For production runs, ``TwoLevel``.
 
     Parameters
     ----------
@@ -500,7 +500,7 @@ class Jacobi(Preconditioner):
 
     A smoother for learning and for small problems; for production runs the Chebyshev smoother of
     :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel` and :class:`~edelweissfe.linsolve.composition.amg.AMG`
-    (the "which form to use" section of ``doc/source/documentation/composedlinsolvers.rst``).
+    (the "which form to use" section of ``doc/source/analysis/composedlinsolvers.rst``).
 
     Parameters
     ----------

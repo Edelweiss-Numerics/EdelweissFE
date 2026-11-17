@@ -102,7 +102,7 @@ def _consistentMass(elType, referenceNodes, material, properties, elementPropert
     element.computeConsistentInertia(M)
     M = M.reshape(element.nDof, element.nDof)
 
-    # Node-major, then the element's own permutation -- the order the DofManager scatters with.
+    # Node-major, then the element's own permutation -- the order the locations scatter with.
     dofField = np.array(
         [
             (fieldName, component)

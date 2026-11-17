@@ -51,7 +51,7 @@ A penalty based unilateral constraint used for preventing the nodes of a node se
 
 This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if an AMR refinement
 adds nodes to the watched ``nSet``, the new nodes are picked up and protected from penetrating the
-boundary at the constraint's own next :meth:`updateConnectivity` tick -- no separate wiring needed.
+boundary when the topology update refreshes the mesh dependents -- no separate wiring needed.
 """
 
 
@@ -170,7 +170,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._nNodes = len(self._nodes)
         self._nDof = self.sizeField * self._nNodes
         self.indices_component = np.arange(self.component, self._nDof + self.component, self.sizeField)
-        self._fieldsOnNodes = [[self._field]] * self._nNodes
+        self._fields = [[self._field]] * self._nNodes
 
     def refresh(self, model: FEModel, change) -> bool:
         """Refresh the node list from the (possibly grown) watched ``nSet``."""
@@ -181,17 +181,13 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildFromNodes()
         return True
 
-    def updateConnectivity(self, model: FEModel) -> bool:
-        # refreshed by TopologyPipeline.refreshMeshDependents; nothing extra to do at this tick
-        return False
-
     @property
     def nodes(self) -> list:
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:

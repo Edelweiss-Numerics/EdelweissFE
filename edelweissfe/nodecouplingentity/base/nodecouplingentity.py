@@ -27,23 +27,55 @@
 #  ---------------------------------------------------------------------
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 
 import numpy as np
 
 from edelweissfe.points.node import Node
+from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
 class BaseNodeCouplingEntity(ABC):
     """
     This class represents the most basic entity which couples nodes (and their fields) in a numerical model.
-    In the context of finite element analysis, this entity is is the base class for finite elements.
+    It is the protocol of the location of everything that has one in a discrete system
+    (:class:`~edelweissfe.numerics.doflocations.DofLocations`): finite elements, constraints, and, in EdelweissMeshfree,
+    cells, cell elements and particles. The Python entities derive from this class; the compiled wrappers of Marmot's
+    elements, cells and particles (Cython extension types) cannot derive from a Python class, and implement the same
+    protocol without deriving: they declare every public member of this class themselves, as a test of each
+    repository checks.
 
-    The entity information is used for setting up the global system of equations.
-    Each entity is defined by a list of nodes it couples, and a list of fields per node, on which it actually operates.
+    The entity information is used for locating the entity in the discrete system.
+    Each entity is defined by a list of nodes it couples, and a list of fields per node, on which it actually operates;
+    an entity may additionally own scalar variables (e.g. the Lagrange multipliers of a constraint), which follow its
+    nodal degrees of freedom.
 
-    The reason for a common base class is that not only finite elements couple nodes, but also constraints, cells (MPM) or particles (SPH, RKPM).
-    Having a common base class allows for a unified treatment of these entities in the global system of equations.
+    The reason for a common base class is that not only finite elements couple nodes, but also constraints, cells (MPM)
+    or particles (SPH, RKPM). Having a common base class allows for a unified treatment of these entities in the
+    discrete system: the one protocol of the location of an entity (``nodes``, ``fields``, ``dofIndicesPermutation``,
+    ``scalarVariables``). What an entity computes is the business of its kind. The inertia and the damping, for
+    example, are reported by finite elements (:class:`~edelweissfe.elements.base.baseelement.BaseElement`), and which
+    entities a solver asks for them, at the nodes, is a fact of the discrete system
+    (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).
     """
+
+    #: Whether the connectivity of this entity has to be found anew again and again as the bodies move, because its
+    #: ``updateConnectivity`` searches, whether or not its nodes change with the search. A contact constraint searches
+    #: for the surface it touches and couples what it finds, the rigid-body surface contact finds its closest triangles
+    #: anew but keeps the nodes it couples, the nodes of a meshfree constraint follow its particles, and the kernel
+    #: functions of a particle reach other nodes as it moves. A solver that never updates the connectivity cannot
+    #: evaluate such a constraint (``NEST`` refuses it), and an explicit solver updates it only every
+    #: ``contact-update-frequency`` increments. The locations of an entity whose nodes change with the motion are made
+    #: anew with every change of the connectivity, and what is counted over the entities is counted anew for it, while
+    #: the entities with fixed nodes are counted once for a numbering. Declared True by every entity that searches in
+    #: this way; an entity with fixed nodes and nothing to search, or one that is only refreshed after a change of the
+    #: mesh (:class:`~edelweissfe.models.meshdependent.MeshDependent`), leaves it False.
+    connectivityChangesWithMotion: bool = False
+
+    #: The scalar variables this entity owns, whose degrees of freedom follow those of its nodes in the layout of its
+    #: residual and tangent. Empty for most entities; a constraint that needs Lagrange multipliers gets them assigned
+    #: (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables`).
+    scalarVariables: Sequence[ScalarVariable] = ()
 
     @property
     @abstractmethod
@@ -53,13 +85,13 @@ class BaseNodeCouplingEntity(ABC):
     @property
     @abstractmethod
     def nodes(self) -> list[Node]:
-        """The list of nodes this currently entity holds."""
+        """The list of nodes this entity currently holds."""
 
     @property
     @abstractmethod
     def nDof(self) -> int:
         """The total number of degrees of freedom this entity has.
-        Not that this information is redundent, as it results from the list of fields on nodes,
+        Note that this information is redundant, as it results from the list of fields on nodes,
         but we keep this redundant information for the sake of performance."""
 
     @property
@@ -70,38 +102,7 @@ class BaseNodeCouplingEntity(ABC):
     @property
     @abstractmethod
     def dofIndicesPermutation(self) -> np.ndarray | None:
-        """If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise,
+        """If the entity computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise,
         this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.
 
         For performance reasons, this is computed once and stored for later use."""
-
-    @property
-    @abstractmethod
-    def ensightType(self) -> str:
-        """The shape of the element in Ensight Gold notation.
-        Valid types are:
-        point
-        bar2
-        bar3
-        tria3
-        tria6
-        quad4
-        quad8
-        tetra4
-        tetra10
-        pyramid5
-        pyramid13
-        penta6
-        penta15
-        hexa8
-        hexa20
-        nsided
-        nfaced
-        """
-
-    @property
-    @abstractmethod
-    def visualizationNodes(self) -> list[Node]:
-        """The nodes for visualization. Commonly, these are the same as the nodes of the entity.
-        However, in some cases, the visualization nodes are different from the nodes of the entity, e.g., in case of mixed formulations.
-        """

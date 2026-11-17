@@ -32,7 +32,8 @@ from abc import abstractmethod
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.dofnumbering import DofNumbering
+from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.timesteppers.timestep import TimeStep
 
@@ -106,13 +107,13 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
         self.changeOverStep = 0.0
 
     @abstractmethod
-    def controlledDofIndices(self, dofManager: DofManager) -> np.ndarray:
-        """The indices of the controlled degrees of freedom in the dof vector of an equation system.
+    def controlledDofIndices(self, numbering: DofNumbering) -> np.ndarray:
+        """The indices of the controlled degrees of freedom in the dof vector of a discrete system.
 
         Parameters
         ----------
-        dofManager
-            The dof manager of the equation system.
+        numbering
+            The numbering of the degrees of freedom of the current discrete system.
 
         Returns
         -------
@@ -162,7 +163,7 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
         ddU_0: DofVector,
         ddU_f: DofVector,
         timeStep: TimeStep,
-        dofManager: DofManager,
+        numbering: DofNumbering,
         dLambda: float,
     ) -> float:
         """The correction of the load parameter that makes the corrected increment change the controlled quantity by the
@@ -179,8 +180,8 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
             The correction of the solution caused by the reference load alone.
         timeStep
             The increment being solved, whose size :math:`\\Delta p` is ``timeStep.stepProgressIncrement``.
-        dofManager
-            The dof manager of the current equation system.
+        numbering
+            The numbering of the degrees of freedom of the current discrete system.
         dLambda
             The current increment of the load parameter, which enters with the weight ``cLambda``.
 
@@ -190,7 +191,7 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
             The correction of the load parameter.
         """
 
-        idcs = self.controlledDofIndices(dofManager)
+        idcs = self.controlledDofIndices(numbering)
 
         dL = timeStep.stepProgressIncrement * self.changeOverStep
 

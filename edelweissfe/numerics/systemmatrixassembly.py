@@ -53,7 +53,7 @@ from edelweissfe.numerics.csrgeneratorv2 import (
     CSRGenerator,
     DirectCSRAssembler,
 )
-from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.doflocations import DofLocations
 from edelweissfe.numerics.parallelizationutilities import (
     forEachSliceInParallel,
     mapChunksInParallel,
@@ -294,7 +294,7 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
 
     One assembly per Newton iteration: :meth:`beginAssembly`, then every entity writes its block (``K[entity]``, or
     from a worker thread, ``K.blocksOfWorker(worker)[entity]``), then :meth:`assembledMatrix` returns the global
-    matrix. It is built per equation system, together with its CSR pattern, see
+    matrix. It is built per discrete system, together with its CSR pattern, see
     :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly`.
 
     ``K[entity]`` hands out the blocks of worker 0, for the entity loops in the calling thread.
@@ -467,7 +467,7 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
         """A copy of ``matrix`` on the sparsity pattern of the system matrix, the form :meth:`addMatrix` takes: a value
         array of its own, one value per entry of the pattern (zero where ``matrix`` has no entry), and the pattern
         arrays of the system matrix, shared, not copied. E.g., the mass a dynamic solver assembled through this
-        assembly (:meth:`assembledMatrix`, whose values the next assembly overwrites), or the mass of the equation
+        assembly (:meth:`assembledMatrix`, whose values the next assembly overwrites), or the mass of the discrete
         system before a rebuild, moved onto the pattern of the new one.
 
         The copy refuses to be changed structurally (see :class:`~edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix`):
@@ -621,8 +621,8 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
 
     Parameters
     ----------
-    dofManager
-        The DOF manager of the equation system: the global DOF list of every entity.
+    locations
+        The locations of the entities in the discrete system: the global DOF list of every entity.
     numberOfWorkers
         How many threads may write blocks at the same time.
     patternFillIn
@@ -631,10 +631,10 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
         :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`).
     """
 
-    def __init__(self, dofManager: DofManager, numberOfWorkers: int, patternFillIn: Callable | None = None):
+    def __init__(self, locations: DofLocations, numberOfWorkers: int, patternFillIn: Callable | None = None):
         super().__init__(numberOfWorkers)
 
-        idcsOfEntity = dofManager.idcsOfHigherOrderEntitiesInDofVector
+        idcsOfEntity = locations.ofEntity
 
         # The entities follow one another in V, I and J, so where each one starts is known before any of them is
         # located; each then fills only its own part of I and J, and they do so in chunks on the thread pool.
@@ -653,7 +653,7 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
         mapChunksInParallel(list(idcsOfEntity.items()), self._locateEntriesInSystem)
 
         #: The CSR pattern, derived from I and J by sort-and-sum, and the gather map.
-        self.csrGenerator = CSRGenerator(self.I, self.J, dofManager.nDof)
+        self.csrGenerator = CSRGenerator(self.I, self.J, locations.numbering.nDof)
         if patternFillIn is not None:
             self.csrGenerator.addToPattern(patternFillIn(self.csrGenerator.csrMatrix))
         #: The VIJ value array: the blocks of all entities, each in its slice.
@@ -728,7 +728,7 @@ class _DirectCSRBlocksOfWorker(_ScratchSystemMatrixBlocks):
     every entity, added to the CSR values when the block is committed.
 
     It holds what it needs of the assembly, not the assembly itself: a reference cycle would keep the whole assembly
-    alive until the cyclic garbage collector runs, also across a rebuild of the equation system.
+    alive until the cyclic garbage collector runs, also across a rebuild of the discrete system.
 
     Parameters
     ----------
@@ -775,21 +775,21 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
 
     Parameters
     ----------
-    dofManager
-        The DOF manager of the equation system: the global DOF list of every entity.
+    locations
+        The locations of the entities in the discrete system: the global DOF list of every entity.
     numberOfWorkers
         How many threads may write blocks at the same time; one scratch array each.
     patternFillIn
         As for :class:`VIJSystemMatrixAssembly`.
     """
 
-    def __init__(self, dofManager: DofManager, numberOfWorkers: int, patternFillIn: Callable | None = None):
+    def __init__(self, locations: DofLocations, numberOfWorkers: int, patternFillIn: Callable | None = None):
         super().__init__(numberOfWorkers)
 
-        dofsOfEntity = dofManager.idcsOfHigherOrderEntitiesInDofVector
+        dofsOfEntity = locations.ofEntity
         #: The scatter, for a compiled entity loop that scatters from its own threads.
         self.assembler = DirectCSRAssembler(
-            SystemMatrixEntities.ofEntities(dofsOfEntity), dofManager.nDof, numberOfWorkers, patternFillIn
+            SystemMatrixEntities.ofEntities(dofsOfEntity), locations.numbering.nDof, numberOfWorkers, patternFillIn
         )
         #: Where the values of the block of every entity begin, counted over all entities in their order, and in the
         #: last place the number of all values: the block of entity ``i`` has ``entryStart[i + 1] - entryStart[i]``

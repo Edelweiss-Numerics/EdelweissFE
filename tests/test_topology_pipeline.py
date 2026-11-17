@@ -581,7 +581,7 @@ def test_the_same_modifier_may_touch_an_element_in_successive_rounds():
 
 def test_an_empty_changeset_is_not_a_change():
     """A modifier may plan and then find nothing left to do. Counting that as a change would rebuild
-    the equation system for nothing, pay a topology fingerprint for nothing, and record a decision a
+    the discrete system for nothing, pay a topology fingerprint for nothing, and record a decision a
     restart would then faithfully replay to no effect."""
 
     class _NoOpModifier(_StubModifier):

@@ -37,7 +37,7 @@ modifier's :class:`~edelweissfe.models.modelchange.ModelChange` and snaps exactl
 created nodes on a tracked boundary onto a specified analytical surface (currently: a cylinder),
 leaving every pre-existing node untouched.
 
-See the ``surfaceSnap`` section of :doc:`/documentation/modelmodifiers` for the full narrative
+See the ``surfaceSnap`` section of :doc:`/analysis/modelmodifiers` for the full narrative
 (corner/midside modes, hanging-node and quality-safeguard behaviour, restart safety) and a runnable
 example.
 

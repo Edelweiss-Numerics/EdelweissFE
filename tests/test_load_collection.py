@@ -68,7 +68,7 @@ class _Load(LoadBase):
     def __init__(self, name: str):
         self.name = name
 
-    def assembleLoad(self, P, K, U_np, dU, timeStep, dofManager):
+    def assembleLoad(self, P, K, U_np, dU, timeStep, locations):
         pass
 
     def applyAtStepEnd(self, model, loadParameter: float | None = None):

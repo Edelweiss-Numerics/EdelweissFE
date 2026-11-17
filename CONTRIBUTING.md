@@ -153,7 +153,7 @@ If your changes depend on features or fixes in [Marmot](https://github.com/MAteR
 - [ ] `pre-commit run --all-files` passes cleanly.
 - [ ] Project builds cleanly via `pip install -e .` (`-v` to see the Marmot extensions being built).
 - [ ] All tests pass locally via `run_tests_edelweissfe ./testfiles/edelweiss-only/` (and `./testfiles/marmot/`).
-- [ ] New features, keywords, or options are documented in `doc/source/documentation/`.
+- [ ] New features, keywords, or options are documented in `doc/source/` (see [Documenting New Features](#documenting-new-features)).
 - [ ] New features or bug fixes include a regression test deck (`test.inp` + `U.ref`).
 
 ---
@@ -170,8 +170,21 @@ sphinx-build ./doc/source/ ./docs -b html
 
 ### Documenting New Features
 When adding new functionality:
-- **Subsystem documentation**: Add or update the corresponding topic page in `doc/source/documentation/*.rst` (e.g. `elements.rst`, `materials.rst`, `solvers.rst`, `linsolvers.rst`, `constraints.rst`, `contacttheory.rst`).
-- **Input language & keywords**: Update `doc/source/documentation/keywords.rst` and provide clear docstrings on keyword handlers registered with `InputSystemRegistry`.
+- **Subsystem documentation**: Add or update the corresponding topic page. The pages are grouped by what the reader does:
+  - `doc/source/model/` -- defining the model: mesh, generators, sets, sections, elements, materials, analytical fields,
+    constraints, rigid bodies.
+  - `doc/source/analysis/` -- running the analysis: steps, step actions, nonlinear and linear solvers, model modifiers,
+    parallelization.
+  - `doc/source/output/` -- output managers, field outputs, node field results, plotting.
+  - `doc/source/theory/` -- the theory behind a method (contact, adaptivity, the field-split AMG preconditioner); usage
+    belongs on the pages above, which link here.
+  - `doc/source/developer/` -- architecture and internals for extending EdelweissFE (input system, models, topology
+    pipeline, restart, numbering and locations of the degrees of freedom, assembly, API references).
+  - `doc/source/syntax.rst` and `doc/source/keywords.rst` -- input file syntax and the keyword reference.
+
+  Each directory is one captioned section of the sidebar; a new page is added to the matching `toctree` in
+  `doc/source/index.rst`.
+- **Input language & keywords**: Update `doc/source/keywords.rst` and provide clear docstrings on keyword handlers registered with `InputSystemRegistry`.
 - **CLI module documentation**: Ensure docstrings are descriptive; users can query module documentation using `edelweissfe --doc=<module>`.
 
 ---

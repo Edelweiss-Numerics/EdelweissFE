@@ -31,7 +31,7 @@
 """
 Constraints are defined globally,
 and may be used for introducing additional scalar
-equations into the global equation system.
+equations into the global discrete system.
 
 Example syntax:
 

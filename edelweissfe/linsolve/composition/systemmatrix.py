@@ -122,7 +122,7 @@ class SystemMatrix:
 
     @property
     def nnz(self) -> int:
-        """The stored entries of :math:`A` (a proxy for its sparsity pattern)."""
+        """The stored entries of :math:`A`."""
         return self.A.nnz
 
     def scaled(self, D: np.ndarray) -> "SystemMatrix":

@@ -135,15 +135,15 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self.indices_component = slice(self.component, self._nDof + self.component, self.sizeField)
 
-        self._fieldsOnNodes = [[self.theField]] * self._nNodes
+        self._fields = [[self.theField]] * self._nNodes
 
     @property
     def nodes(self) -> list:
         return self._nodes
 
     @property
-    def fieldsOnNodes(self) -> list:
-        return self._fieldsOnNodes
+    def fields(self) -> list:
+        return self._fields
 
     @property
     def nDof(self) -> int:
