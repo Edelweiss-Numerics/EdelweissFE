@@ -166,6 +166,73 @@ def test_creating_a_taken_number_raises():
             model.createElement(_StubElement(1))
 
 
+def _modelWithNodes(*labels: int) -> FEModel:
+    """A model carrying base mesh nodes, the node sets ``all`` and ``first`` (the lowest label), and the allocator
+    raised above the labels."""
+
+    from edelweissfe.points.node import Node
+    from edelweissfe.sets.nodeset import NodeSet
+
+    model = FEModel(3)
+    for label in labels:
+        model.nodes[label] = Node(label, np.zeros(3))
+    model.nodeSets["all"] = NodeSet("all", model.nodes.values())
+    model.nodeSets["first"] = NodeSet("first", [model.nodes[min(labels)]])
+    model.topology.adoptSetupNodeNumbers()
+    return model
+
+
+def test_remove_node_outside_a_topology_change_raises():
+    model = _modelWithNodes(1)
+    with pytest.raises(TopologyError, match="outside a topology change"):
+        model.removeNode(1)
+    assert 1 in model.nodes
+
+
+def test_removed_node_leaves_the_model_and_every_node_set():
+    model = _modelWithNodes(1, 2, 3)
+    allNodes = model.nodeSets["all"]
+    node = model.nodes[1]
+    with model.topology.changes():
+        model.removeNode(1)
+
+    assert 1 not in model.nodes
+    assert model.nodeSets["all"] is allNodes  # cleaned in place: references held by consumers stay valid
+    assert node not in allNodes and [n.label for n in allNodes] == [2, 3]
+    assert len(model.nodeSets["first"]) == 0
+
+
+def test_removed_node_label_is_never_reissued():
+    model = _modelWithNodes(1, 2, 3)
+    with model.topology.changes():
+        model.removeNode(3)
+        (label,) = model.topology.reserveNodeNumbers(1)
+
+    assert label == 4
+
+
+def test_a_node_used_by_an_element_cannot_be_removed():
+    model = _modelWithNodes(1, 2, 3)
+    element = _StubElement(1)
+    element.nodes = [model.nodes[2], model.nodes[3]]
+    model.elements[1] = element
+    with model.topology.changes():
+        with pytest.raises(TopologyError, match=r"node\(s\) \[2\] cannot be removed"):
+            model.removeNodes([1, 2])
+
+    # refused as a whole: nothing was removed
+    assert sorted(model.nodes) == [1, 2, 3] and len(model.nodeSets["all"]) == 3
+
+
+def test_removing_several_nodes_at_once():
+    model = _modelWithNodes(1, 2, 3, 4)
+    with model.topology.changes():
+        model.removeNodes([1, 3])
+
+    assert sorted(model.nodes) == [2, 4]
+    assert [n.label for n in model.nodeSets["all"]] == [2, 4]
+
+
 def test_windows_nest_without_closing_early():
     """A setup helper may open a window without knowing whether its caller already did; the inner
     scope must not close the outer one."""

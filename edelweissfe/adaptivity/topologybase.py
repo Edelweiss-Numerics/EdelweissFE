@@ -161,7 +161,7 @@ class TopologyBase(ABC):
         """Evaluate shape functions and their analytic gradient w.r.t. parametric coordinates."""
 
     @abstractmethod
-    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
+    def inverse_map(self, point, elementNodeCoords, itmax=30) -> np.ndarray:
         """Map a physical point into the reference domain."""
 
     @abstractmethod

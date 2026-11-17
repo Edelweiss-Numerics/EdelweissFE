@@ -12,39 +12,26 @@ import pytest
 
 pytest.importorskip("edelweissfe.elements.marmotelement.element")
 
-from edelweissfe.drivers.inputfiledrivensimulation import (  # noqa: E402
-    finiteElementSimulation,
+from _embeddingdecks import (  # noqa: E402
+    A_STEEL,
+    E_CONCRETE,
+    E_STEEL,
+    NU_CONCRETE,
+    NU_STEEL,
+    _line,
+    _marmotHas,
+    _run,
+    _strip,
 )
-from edelweissfe.utils.inputfileparser import parseInputFile  # noqa: E402
-
-
-def _marmotHas(elementType: str) -> bool:
-    from edelweissfe.elements.marmotelement.element import MarmotElementWrapper
-
-    try:
-        MarmotElementWrapper(elementType, 1)
-        return True
-    except NotImplementedError:
-        return False
-
 
 pytestmark = pytest.mark.skipif(
-    not all(_marmotHas(t) for t in ("T3D2", "T2D2CR", "B2D2", "B2D3", "B3D2")),
+    not all(_marmotHas(t) for t in ("T3D2", "T2D2CR", "B2D2", "B2D2CR", "B2D3", "B3D2")),
     reason="Marmot is built without the TrussElement / BeamElement modules",
 )
 
-E_STEEL, NU_STEEL, E_CONCRETE, NU_CONCRETE = 200000.0, 0.3, 30000.0, 0.2
-A_STEEL = 0.01
 G_STEEL = E_STEEL / (2 * (1 + NU_STEEL))
 #: the embedded cantilever with free rotations relative to the clamped one (test_embedded_cantilever_clamped...)
 FREE_ROTATION_SOFTENING = 1.1094
-
-
-def _run(tmp_path, deck: str, *results):
-    path = tmp_path / "test.inp"
-    path.write_text(deck)
-    model, fieldOutputController = finiteElementSimulation(parseInputFile(str(path)), suppressPlots=True)
-    return model, [fieldOutputController.fieldOutputs[r] for r in results]
 
 
 def _rebarsInStrip(nRebarElements=5, y=0.37):
@@ -111,47 +98,6 @@ embeddedElSet=rebars, hostElSet=gen_all
     )
     with pytest.raises(ValueError, match="outside of all host elements"):
         _run(tmp_path, deck, "RF")
-
-
-def _line(firstLabel: int, start, end, nElements: int, elType: str, quadratic: bool = None):
-    """*node and *element blocks of a straight line of 2-node (or 3-node: end, end, mid, the mid nodes labeled from
-    firstLabel + 50000) elements, and its first and last node labels."""
-    if quadratic is None:
-        quadratic = elType.endswith("3")
-    start, end = np.asarray(start, float), np.asarray(end, float)
-
-    def node(label, s):
-        return f"{label}, " + ", ".join(f"{c:.12g}" for c in start + (end - start) * s)
-
-    nodes = [node(firstLabel + i, i / nElements) for i in range(nElements + 1)]
-    if quadratic:
-        nodes += [node(firstLabel + 50000 + i, (i + 0.5) / nElements) for i in range(nElements)]
-    elements = "\n".join(
-        f"{firstLabel + i}, {firstLabel + i}, {firstLabel + i + 1}"
-        + (f", {firstLabel + 50000 + i}" if quadratic else "")
-        for i in range(nElements)
-    )
-    nodes = "\n".join(nodes)
-    return f"*node\n{nodes}\n\n*element, type={elType}\n{elements}\n", firstLabel, firstLabel + nElements
-
-
-def _strip(nX=8, nY=2, elType="CPE4", E=E_CONCRETE, lX=4.0, lY=1.0):
-    return f"""*material, name=linearelastic, id=concrete, provider=marmot
-{E}, {NU_CONCRETE}
-
-*material, name=linearelastic, id=steel, provider=marmot
-{E_STEEL}, {NU_STEEL}
-
-*modelGenerator, generator=planeRectQuad, name=gen
-l={lX}
-h={lY}
-nX={nX}
-nY={nY}
-elType={elType}
-
-*section, name=concreteSection, thickness=1.0, material=concrete, type=plane
-gen_all
-"""
 
 
 @pytest.mark.parametrize("rotations", ["free", "axis", "host"])
@@ -253,6 +199,67 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
         np.testing.assert_allclose(deflection, clamped, rtol=1e-5)
     else:  # free rotations: the root is clamped only by the tied displacements of the embedded nodes
         np.testing.assert_allclose(deflection / clamped, FREE_ROTATION_SOFTENING, rtol=1e-3)
+
+
+def _beamInStripDeck(elType: str, options: str) -> str:
+    """the strip with an embedded inclined beam of ``elType`` (2D), the constraint with ``options``, in tension"""
+    beam, first, last = _line(100001, (0.3, 0.2), (3.7, 0.8), 3, elType)
+    return (
+        _strip()
+        + f"""{beam}
+*elSet, elSet=beams, generate=True
+{first}, {last - 1}, 1
+
+*nSet, nSet=rebarRight
+{last}
+
+*section, name=beamSection, type=beam, profile=rectangle, b=0.1, h=0.1, material=steel
+beams
+
+*constraint, type=embeddedRegion, name=embedded
+embeddedElSet=beams, hostElSet=gen_all, {options}
+"""
+        + _UNIAXIAL_STEP.replace(
+            ">>perElement, name=rebarStrain, elSet=rebars, result=strain, quadraturePoint=0, saveHistory=True,\n", ""
+        )
+    )
+
+
+@pytest.mark.parametrize("rotations", ["axis", "host"])
+def test_embedded_corotational_beam_rejects_tied_rotations(tmp_path, rotations):
+    """the rotation ties are infinitesimal: a co-rotational beam (B2D2CR) may only be embedded with free rotations"""
+    with pytest.raises(ValueError, match="co-rotational beam .* cannot be embedded with rotations=" + rotations):
+        _run(tmp_path, _beamInStripDeck("B2D2CR", f"rotations={rotations}"), "RF")
+
+
+def test_embedded_corotational_beam_with_free_rotations(tmp_path):
+    """a co-rotational beam (B2D2CR) embedded with free rotations: no rotation is tied, and every beam node is at
+    the interpolation of its host"""
+    from edelweissfe.utils.embedding import HostElementLocator
+
+    model, _ = _run(tmp_path, _beamInStripDeck("B2D2CR", "rotations=free"))
+    constraint = model.multiPointConstraints["embedded"]
+    assert constraint._rotationRecords == [] and len(constraint._records) == 4
+    field = model.nodeFields["displacement"]
+    U = {node: np.asarray(field["U"][k]) for k, node in enumerate(field.nodes)}
+    assert max(np.abs(u).max() for u in U.values()) > 1e-3, "the strip must be loaded"
+    locator = HostElementLocator(list(model.elementSets["gen_all"]))
+    for el in model.elementSets["beams"]:
+        for node in el.nodes:
+            point = locator.locate(node.coordinates)
+            interpolated = sum(N * U[m] for N, m in zip(point.shapeFunctions(), point.element.nodes))
+            np.testing.assert_allclose(U[node], interpolated, rtol=0, atol=1e-12)
+
+
+def test_embedded_region_rejects_an_unknown_rotations_mode(tmp_path):
+    with pytest.raises(ValueError, match="unknown rotations mode 'clamped'"):
+        _run(tmp_path, _beamInStripDeck("B2D2", "rotations=clamped"), "RF")
+
+
+def test_embedded_region_rejects_tied_rotations_of_another_field(tmp_path):
+    """the rotation ties act on the host displacements: another constrained field with tied rotations is rejected"""
+    with pytest.raises(ValueError, match="needs field=displacement, not field=temperature"):
+        _run(tmp_path, _beamInStripDeck("B2D2", "rotations=axis, field=temperature"), "RF")
 
 
 def test_embedded_cantilever_clamped_in_stiff_block_3d(tmp_path):
@@ -445,6 +452,26 @@ embeddedElSet=bars, hostElSet=host
         point = locator.locate(node.coordinates)
         interpolated = sum(N * U[m] for N, m in zip(point.shapeFunctions(), point.element.nodes))
         np.testing.assert_allclose(U[node], interpolated, atol=1e-10 * scale)
+
+
+@pytest.mark.parametrize(
+    "changedElementSets, rebuilt",
+    [(set(), False), ({"otherSet"}, False), ({"host"}, True), ({"bars"}, True), ({"host", "bars"}, True)],
+)
+def test_embedded_region_refreshes_only_if_the_change_touches_its_element_sets(changedElementSets, rebuilt):
+    """R2-EMB-01: the records are rebuilt if and only if the model change touches the host or the embedded element
+    set (as hAdaptivity reports a refined host set in ``changedElementSets``)"""
+    from edelweissfe.constraints.embeddedregion import Constraint, EmbeddedRegionSchema
+    from edelweissfe.models.modelchange import ModelChange
+    from edelweissfe.models.modelchangeobserver import ModelChangeType
+
+    builds = []
+    constraint = Constraint.__new__(Constraint)
+    constraint._configuration = EmbeddedRegionSchema(embeddedElSet="bars", hostElSet="host")
+    constraint._build = builds.append
+    change = ModelChange(kind=ModelChangeType.REFINEMENT, changedElementSets=changedElementSets)
+    assert constraint.refresh("model", change) is rebuilt
+    assert builds == (["model"] if rebuilt else [])
 
 
 def test_embedded_region_explicit_dynamics(tmp_path):
