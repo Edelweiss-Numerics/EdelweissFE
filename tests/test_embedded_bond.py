@@ -578,3 +578,57 @@ rebars
     _, (RFUnsplit, _) = _run(tmp_path, deck(False), "RF", "RFrebar")
     # 2.6 times stiffer here
     assert abs(RFUnsplit.getLastResult()) > 1.5 * abs(RFSplit.getLastResult())
+
+
+@pytest.mark.skipif(
+    not all(_marmotHas(t) for t in ("T2D3", "EB2D3Q4")),
+    reason="Marmot is built without 3-node trusses or their bond elements",
+)
+def test_split_bar3_in_a_model_without_the_node_set_all():
+    """a model built in Python, without the node set 'all' the input file path creates: a T2D3 bar across two CPE4
+    hosts is split at their common edge, its old mid node (on that edge) is removed from the model and from every
+    node set, and no 'all' set is invented"""
+    from edelweissfe.config.elementlibrary import getElementClass
+    from edelweissfe.generators.embeddedbond import EmbeddedBondSchema, Generator
+    from edelweissfe.journal.journal import Journal
+    from edelweissfe.models.femodel import FEModel
+    from edelweissfe.points.node import Node
+    from edelweissfe.sets.elementset import ElementSet
+    from edelweissfe.sets.nodeset import NodeSet
+
+    model = FEModel(2)
+    coordinates = {1: (0, 0), 2: (1, 0), 3: (2, 0), 4: (2, 1), 5: (1, 1), 6: (0, 1)}
+    coordinates.update({101: (0.25, 0.5), 102: (1.75, 0.5), 103: (1.0, 0.5)})
+    for label, xy in coordinates.items():
+        model.nodes[label] = Node(label, np.array(xy, dtype=float))
+
+    def element(elType, number, labels):
+        el = getElementClass(elType, "marmot")(elType, number)
+        el.setNodes([model.nodes[n] for n in labels])
+        model.elements[number] = el
+        return el
+
+    hosts = [element("CPE4", 1, (1, 2, 5, 6)), element("CPE4", 2, (2, 3, 4, 5))]
+    bar = element("T2D3", 101, (101, 102, 103))
+    model.elementSets["hosts"] = ElementSet("hosts", hosts)
+    model.elementSets["bars"] = ElementSet("bars", [bar])
+    model.nodeSets["barNodes"] = NodeSet("barNodes", [model.nodes[n] for n in (101, 102, 103)])
+    model.materials["bond"] = {"name": "LinearElasticBondSlip", "properties": np.array([1.0, 1.0])}
+    oldMidNode = model.nodes[103]
+
+    with model.topology.changes():
+        model.topology.adoptSetupElementNumbers()
+        model.topology.adoptSetupNodeNumbers()
+        Generator(
+            "bond",
+            model,
+            Journal(verbose=False),
+            configuration=EmbeddedBondSchema(embeddedElSet="bars", hostElSet="hosts", material="bond", perimeter=1.0),
+        )
+
+    assert "all" not in model.nodeSets
+    assert 103 not in model.nodes and oldMidNode not in model.nodeSets["barNodes"]
+    newBars = list(model.elementSets["bars"])
+    assert len(newBars) == 2 and all(el.elType == "T2D3" for el in newBars)
+    assert len(model.elementSets["bond_bond"]) == 2
+    assert all(node.label in model.nodes for el in model.elements.values() for node in el.nodes)

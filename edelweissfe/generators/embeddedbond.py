@@ -228,7 +228,17 @@ class Generator(GeneratorBase):
         nDim = model.domainSize
 
         if configuration.splitBars:
-            barElements = [newBar for bar in barElements for newBar in remeshBarAtHostCrossings(bar, locator, model)]
+            remeshedBars = []
+            replacedMidNodes = []
+            for bar in barElements:
+                newBars = remeshBarAtHostCrossings(bar, locator, model)
+                remeshedBars += newBars
+                if newBars != [bar] and len(bar.nodes) == 3:
+                    replacedMidNodes.append(bar.nodes[2])
+            barElements = remeshedBars
+            # the mid node of a replaced bar3 is not part of its new bars; remove it unless another element uses it
+            usedNodes = {node for element in model.elements.values() for node in element.nodes}
+            model.removeNodes([node.label for node in replacedMidNodes if node not in usedNodes])
 
         bondElements = []
         properties = {}
@@ -282,7 +292,9 @@ class Generator(GeneratorBase):
 
 def remeshBarAtHostCrossings(bar, locator: HostElementLocator, model: FEModel) -> list:
     """Replace a bar element crossing host element boundaries by bar elements of the same type with nodes at the
-    crossings, in the model and in all element sets containing it.
+    crossings, in the model and in all element sets containing it. The new nodes are added to the node set ``all``,
+    if the model has one. The mid node of a replaced 3-node bar is left in the model; the caller removes it once all
+    bars are re-meshed, if no other element uses it.
 
     Returns
     -------
@@ -305,7 +317,8 @@ def remeshBarAtHostCrossings(bar, locator: HostElementLocator, model: FEModel) -
         (label,) = model.topology.reserveNodeNumbers(1)
         node = Node(label, barPoint(barShape, coordinates, eta))
         model.createNode(node)
-        model.nodeSets["all"].add(node)  # the fields are bundled for the nodes of 'all' (exists after the mesh)
+        if "all" in model.nodeSets:  # the fields are bundled for the nodes of 'all'
+            model.nodeSets["all"].add(node)
         return node
 
     endNodes = [bar.nodes[0]] + [newNode(eta) for eta in breakPoints[1:-1]] + [bar.nodes[1]]
@@ -328,14 +341,5 @@ def remeshBarAtHostCrossings(bar, locator: HostElementLocator, model: FEModel) -
                 members += newBars if el is bar else [el]
             elementSet.replaceMembers(members)
     model.removeElement(bar.elNumber)
-
-    if barShape == "bar3":
-        # the mid node of the original bar is not part of the new bars
-        midNode = bar.nodes[2]
-        if not any(midNode in el.nodes for el in model.elements.values()):
-            del model.nodes[midNode.label]
-            for nodeSet in model.nodeSets.values():
-                if midNode in nodeSet:
-                    nodeSet.replaceMembers([n for n in nodeSet if n is not midNode])
 
     return newBars
