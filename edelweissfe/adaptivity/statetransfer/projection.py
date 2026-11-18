@@ -54,13 +54,13 @@ def _monomialBasis(refCoords, degree):
 
 class PolynomialProjection(StateTransferStrategy):
     """Reconstruct a tensor-product polynomial from the parent's quadrature-point values (in the
-    parent reference cube) by least squares, then resample it at the child quadrature points.
+    parent reference cube or square) by least squares, then resample it at the child quadrature points.
 
     The polynomial degree is chosen so the basis is at most as large as the number of parent
-    quadrature points -- ``degree = round(nQpParent ** (1/3)) - 1`` (trilinear for 8 points,
-    triquadratic for 27), capped so the fit is never underdetermined -- and the least-squares solve
-    tolerates rank deficiency gracefully. Unlike :class:`~edelweissfe.adaptivity.statetransfer.nearestquadraturepoint.NearestQuadraturePointCopy`
-    this is smooth across octants, but it may produce an *inadmissible* internal state (e.g. a
+    quadrature points -- ``degree = round(nQpParent ** (1/dim)) - 1`` (trilinear for 8 points,
+    triquadratic for 27; in 2D bilinear for 4, biquadratic for 9), capped so the fit is never
+    underdetermined -- and the least-squares solve tolerates rank deficiency gracefully. Unlike :class:`~edelweissfe.adaptivity.statetransfer.nearestquadraturepoint.NearestQuadraturePointCopy`
+    this is smooth across children, but it may produce an *inadmissible* internal state (e.g. a
     stress off the yield surface), so it is best applied per state variable to genuinely
     smooth fields via :class:`~edelweissfe.adaptivity.statetransfer.perstatevar.PerStateVarStateTransfer`.
     """
