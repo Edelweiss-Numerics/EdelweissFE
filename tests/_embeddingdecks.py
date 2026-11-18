@@ -71,3 +71,43 @@ elType={elType}
 *section, name=concreteSection, thickness=1.0, material=concrete, type=plane
 gen_all
 """
+
+
+def _barsInStrip(nBarElements=5, y=0.37):
+    """a horizontal line of T2D2 bars ``rebars`` at height ``y`` across the strip of :func:`_strip`, its truss section,
+    and the node set ``rebarRight`` of its right end"""
+    bar, first, last = _line(100001, (0.0, y), (4.0, y), nBarElements, "T2D2")
+    return f"""{bar}
+*elSet, elSet=rebars, generate=True
+{first}, {last - 1}, 1
+
+*nSet, nSet=rebarRight
+{last}
+
+*section, name=rebarSection, area={A_STEEL}, material=steel, type=truss
+rebars
+"""
+
+
+#: the field output of the bar strains in :data:`_UNIAXIAL_STEP`; ``.replace`` it away for decks without it
+_REBAR_STRAIN_OUTPUT = (
+    ">>perElement, name=rebarStrain, elSet=rebars, result=strain, quadraturePoint=0, saveHistory=True,\n"
+)
+
+#: uniaxial tension of the strip of :func:`_strip` with the bars of :func:`_barsInStrip`, to the strain 1e-3
+_UNIAXIAL_STEP = f"""*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=RF, nSet=gen_right, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
+>>perNode, name=RFrebar, nSet=rebarRight, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
+{_REBAR_STRAIN_OUTPUT}
+*step, solver=theSolver
+maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0
+>>dirichlet, name=corner, nSet=gen_leftBottom, field=displacement, 2=0
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.004
+"""
+
+#: uniaxial tension of the reinforced plane strain strip at the strain 1e-3: concrete + steel
+REACTION_PERFECT_BOND = (E_CONCRETE / (1 - NU_CONCRETE**2) * 1.0 + E_STEEL * A_STEEL) * 1e-3

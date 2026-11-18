@@ -13,11 +13,15 @@ import pytest
 pytest.importorskip("edelweissfe.elements.marmotelement.element")
 
 from _embeddingdecks import (  # noqa: E402
+    _REBAR_STRAIN_OUTPUT,
+    _UNIAXIAL_STEP,
     A_STEEL,
     E_CONCRETE,
     E_STEEL,
     NU_CONCRETE,
     NU_STEEL,
+    REACTION_PERFECT_BOND,
+    _barsInStrip,
     _line,
     _marmotHas,
     _run,
@@ -34,46 +38,13 @@ G_STEEL = E_STEEL / (2 * (1 + NU_STEEL))
 FREE_ROTATION_SOFTENING = 1.1094
 
 
-def _rebarsInStrip(nRebarElements=5, y=0.37):
-    bar, first, last = _line(100001, (0.0, y), (4.0, y), nRebarElements, "T2D2")
-    return f"""{bar}
-*elSet, elSet=rebars, generate=True
-{first}, {last - 1}, 1
-
-*nSet, nSet=rebarRight
-{last}
-
-*section, name=rebarSection, area={A_STEEL}, material=steel, type=truss
-rebars
-"""
-
-
-_UNIAXIAL_STEP = """*job, name=job, domain=2d
-*solver, solver=NIST, name=theSolver
-
-*fieldOutput
->>perNode, name=RF, nSet=gen_right, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
->>perNode, name=RFrebar, nSet=rebarRight, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
->>perElement, name=rebarStrain, elSet=rebars, result=strain, quadraturePoint=0, saveHistory=True,
-
-*step, solver=theSolver
-maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
->>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0
->>dirichlet, name=corner, nSet=gen_leftBottom, field=displacement, 2=0
->>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.004
-"""
-
-#: uniaxial tension of the reinforced plane strain strip at the strain 1e-3: concrete + steel
-REACTION_PERFECT_BOND = (E_CONCRETE / (1 - NU_CONCRETE**2) * 1.0 + E_STEEL * A_STEEL) * 1e-3
-
-
 @pytest.mark.parametrize("hostType", ["CPE4", "CPE8R"])
 def test_embedded_region_uniaxial_tension(tmp_path, hostType):
     """perfect bond: the non-matching rebar follows the host strain, the reaction is concrete + steel (linear and
     quadratic hosts)"""
     deck = (
         _strip(elType=hostType)
-        + _rebarsInStrip()
+        + _barsInStrip()
         + """
 *constraint, type=embeddedRegion, name=embedded
 embeddedElSet=rebars, hostElSet=gen_all
@@ -89,7 +60,7 @@ embeddedElSet=rebars, hostElSet=gen_all
 def test_embedded_region_rejects_unembedded_nodes(tmp_path):
     deck = (
         _strip()
-        + _rebarsInStrip().replace("100001, 0, 0.37", "100001, -0.5, 0.37")
+        + _barsInStrip().replace("100001, 0, 0.37", "100001, -0.5, 0.37")
         + """
 *constraint, type=embeddedRegion, name=embedded
 embeddedElSet=rebars, hostElSet=gen_all
@@ -219,9 +190,7 @@ beams
 *constraint, type=embeddedRegion, name=embedded
 embeddedElSet=beams, hostElSet=gen_all, {options}
 """
-        + _UNIAXIAL_STEP.replace(
-            ">>perElement, name=rebarStrain, elSet=rebars, result=strain, quadraturePoint=0, saveHistory=True,\n", ""
-        )
+        + _UNIAXIAL_STEP.replace(_REBAR_STRAIN_OUTPUT, "")
     )
 
 
