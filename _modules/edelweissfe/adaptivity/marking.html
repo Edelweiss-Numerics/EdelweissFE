@@ -188,6 +188,7 @@
     <span class="n">hex20_shape</span><span class="p">,</span>
     <span class="n">hex20_shape_grad</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.adaptivity.hex20topology</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hex20Topology</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.fields.nodefield</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeField</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">ElementFieldOutput</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -322,6 +323,16 @@
 <span class="sd">        ----------</span>
 <span class="sd">        model</span>
 <span class="sd">            The FEModel.</span>
+<span class="sd">        """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkTopology</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">topology</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Raise if this marker cannot mark elements of the refineable element family ``topology``, so that an</span>
+<span class="sd">        adaptivity mechanism rejects the combination at setup. Every family is supported by default.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        topology</span>
+<span class="sd">            The :class:`~edelweissfe.adaptivity.topologybase.TopologyBase` of the refineable elements.</span>
 <span class="sd">        """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">isReady</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -1100,6 +1111,17 @@
                 <span class="sa">f</span><span class="s2">"RecoveryErrorMarker: unknown entry=</span><span class="si">{</span><span class="n">entry</span><span class="si">!r}</span><span class="s2">; a node field holds the entries </span><span class="si">{</span><span class="n">NodeField</span><span class="o">.</span><span class="n">ENTRIES</span><span class="si">}</span><span class="s2">."</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">entry</span> <span class="o">=</span> <span class="n">entry</span>
+
+<div class="viewcode-block" id="RecoveryErrorMarker.checkTopology">
+<a class="viewcode-back" href="../../../theory/adaptivity.html#edelweissfe.adaptivity.marking.RecoveryErrorMarker.checkTopology">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkTopology</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">topology</span><span class="p">):</span>
+        <span class="c1"># the recovery patches and the 2x2x2 sampling points are those of the HEX20</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">topology</span><span class="p">,</span> <span class="n">Hex20Topology</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"hAdaptivity recoveryError marker on nodeField </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">nodeFieldName</span><span class="si">!r}</span><span class="s2">: supports HEX20 elements "</span>
+                <span class="sa">f</span><span class="s2">"(3D models) only, not the </span><span class="si">{</span><span class="n">topology</span><span class="o">.</span><span class="n">n_nodes</span><span class="si">}</span><span class="s2">-node elements of a </span><span class="si">{</span><span class="n">topology</span><span class="o">.</span><span class="n">dim</span><span class="si">}</span><span class="s2">D model"</span>
+            <span class="p">)</span></div>
+
 
 <div class="viewcode-block" id="RecoveryErrorMarker.mark">
 <a class="viewcode-back" href="../../../theory/adaptivity.html#edelweissfe.adaptivity.marking.RecoveryErrorMarker.mark">[docs]</a>

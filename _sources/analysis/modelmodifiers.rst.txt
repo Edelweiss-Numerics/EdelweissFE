@@ -53,42 +53,70 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
   modifiers running to a fixed point, a per-mutation callback fires mid-pipeline and hands the
   consumer a state that no longer exists by the time the solve begins. See :doc:`/developer/topologypipeline`.
 
-``hAdaptivity`` - Hanging-node h-adaptivity for HEX20
------------------------------------------------------
+``hAdaptivity`` - Hanging-node h-adaptivity for HEX20 and QUAD8
+---------------------------------------------------------------
 
 Module ``edelweissfe.modelmodifiers.adaptivity.hadaptivity``
 
 .. automodule:: edelweissfe.modelmodifiers.adaptivity.hadaptivity
     :members: __doc__
 
-Dynamic adaptive :math:`h`-refinement of 20-node serendipity hexahedra (``GC3D20`` / ``GC3D20R``)
-in the small-strain, multifield (displacement + nonlocal damage) regime. Each increment the
+Dynamic adaptive :math:`h`-refinement of 20-node serendipity hexahedra (e.g. ``C3D20R``, ``GC3D20R``)
+in 3D models and of 8-node serendipity quadrilaterals (e.g. ``CPS8R``, ``CPE8R``, ``GCPS8R``,
+``GCPE8R``) in 2D models, single-field or multifield (displacement + nonlocal damage). Each increment the
 modifier evaluates one or more **markers** (see below), subdivides every marked
-element into ``splitFactor**3`` children (default ``splitFactor=2``, i.e. eight octree children;
-``splitFactor=3`` gives a 3x3x3 split into 27, and so on -- honouring curved edges via the parent
-isoparametric map), enforces a one-level face-balance, transfers the converged nodal values (parent isoparametric
+element into ``splitFactor**dim`` children (default ``splitFactor=2``, i.e. eight octree children in 3D
+and four quadtree children in 2D; ``splitFactor=3`` gives a 3x3x3 split into 27, in 2D a 3x3 split into 9,
+and so on -- honouring curved edges via the parent isoparametric map), enforces a one-level face-balance, transfers the converged nodal values (parent isoparametric
 interpolation) and quadrature-point history (via a pluggable state-transfer strategy, see
 ``edelweissfe.adaptivity.statetransfer``) to the children, and couples the resulting
 non-conforming interface with an exact hanging-node multi-point constraint. Element/node sets, sections and element-based surfaces are propagated to
 the children so material assignment and surface loads stay consistent.
+
+**2D models (QUAD8).** The element family follows from the model's dimension
+(``*job, domain=2d`` or ``domain=3d``): 8-node quadrilaterals in the Abaqus/Marmot CPS8 node order
+in 2D, 20-node hexahedra in the C3D20 node order in 3D. The input is the same, e.g. a quadtree
+refinement of the top row of a plate::
+
+    *modelGenerator, generator=planeRectQuad, name=plate
+    nX=3
+    nY=3
+    l=1
+    h=1
+    elType=CPS8R
+
+    *modelModifier, type=hAdaptivity, name=amr
+    >>marker, type=nodeSet, nSet=plate_top, initialOnly=True
+    maxLevel=1
+
+    *job, name=quad8amr, domain=2d
+
+The machinery below -- the exact lattice, root entities, 2:1 balance, hanging nodes on the coarse
+trace, the transfer of sets, surfaces and state, the restart replay -- is the same in 2D. There, the
+codimension-one entities of an element are its edges: 2:1 balance acts across edges, a hanging node
+always hangs on a coarse 3-node edge, and a root mesh has vertices and edges but no faces. Children
+carry the parent's section, including the plane section's ``thickness``. The ``recoveryError`` marker
+supports HEX20 only and is rejected at setup in a 2D model. An axisymmetric model
+(``domain=axisymmetric``) takes the same path with its 8-node elements, but this is not tested.
 
 A child is assigned its section exactly like an element of the initial mesh: parameters set by
 ``>>materialParameterFromField`` (e.g. a random strength field) are evaluated at the child's own
 center. The analytical field is a function of position only, so a refined region samples the same
 field realization more finely -- just as a mesh that was refined from the start would.
 
-The octree mirror only ever tracks the refineable 20-node elements: a model that also contains
-elements of a different kind (e.g. lower-order contact-facet elements bonded to the mesh) is left
-untouched by construction, since anything without exactly 20 nodes is skipped automatically. To
-restrict refinement explicitly (rather than relying on the node-count heuristic), or to refine only
-part of a purely 20-node mesh, set ``refineElSet`` (falls back to ``elSet`` if given) to the element
-set that should become the octree mirror. Marking (see below) is likewise restricted to the octree
+The octree mirror only ever tracks the refineable elements: by default every element with the node
+count of the family (20 in 3D, 8 in 2D). Elements of a different kind (e.g. lower-order contact-facet
+elements bonded to the mesh) are left untouched. To restrict refinement explicitly (rather than relying
+on the node count), or to refine only part of the mesh, set ``refineElSet`` (falls back to ``elSet`` if
+given) to the element set that should become the octree mirror; a set that holds elements of another
+node count is rejected at setup. Marking (see below) is likewise restricted to the octree
 mirror's own elements by default -- there is nothing to gain from evaluating the marking expression
 on an element that can never be refined anyway, and most non-solid element types don't expose most
 quadrature-point results in the first place.
 
 The non-conforming 2:1 interface is coupled kinematically rather than by mortar: octree refinement
-is non-conforming but *nested*, the QUAD8 face-trace (and 3-node quadratic edge) spaces are
+is non-conforming but *nested*, the QUAD8 face-trace (and 3-node quadratic edge) spaces of a HEX20, and
+the 3-node edge trace of a QUAD8, are
 invariant under the axis-aligned affine sub-maps of a uniform subdivision (of *any* factor, not only
 bisection), so pinning each hanging
 (slave) node to the coarse serendipity trace, :math:`u_s = \sum_a N_a(\xi_s)\, u_{m_a}`, is exact.
@@ -97,7 +125,7 @@ single record per hanging node covers displacement and nonlocal damage alike. Th
 (``*constraint, type=hangingnode``) is documented under :doc:`/model/constraints`.
 
 **Vocabulary.** A *root element* is an element of the mesh before refinement; every refined element
-lies inside exactly one. The reference cube of a root carries an integer *reference lattice*, fine
+lies inside exactly one. The reference cube (in 2D: square) of a root carries an integer *reference lattice*, fine
 enough that every node a subdivision can create sits on a lattice point, and every element covers an
 exact *reference box* of it. A *root entity* is a vertex, edge or face of the root mesh, named by the
 labels of its corner nodes. A node's *key* is the lowest-dimensional root entity containing it plus its
@@ -142,7 +170,9 @@ conforming -- the finer nodes on that edge hang on the coarsest element's edge, 
 chains that are resolved exactly and verified -- so this affects mesh grading and local accuracy (an
 abrupt size jump along the edge), not correctness. With ``maxLevel=1`` (the default) no two-level jump
 can occur at all. Edge or vertex balancing (as p4est's edge/full balance) is not implemented; it would
-refine additional elements and change the results of multi-level runs.
+refine additional elements and change the results of multi-level runs. In 2D the faces are the edges:
+every edge-adjacent pair is balanced, and only elements that touch at a vertex may differ by two or
+more levels.
 
 **Invariants, checked after every adaptation.** A violation raises an error naming the offending nodes
 instead of producing a silently non-conforming mesh:

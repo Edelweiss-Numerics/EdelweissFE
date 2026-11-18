@@ -109,6 +109,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.adaptivity.marking.RecoveryErrorMarker"><code class="docutils literal notranslate"><span class="pre">RecoveryErrorMarker</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.adaptivity.marking.RecoveryErrorMarker.schema"><code class="docutils literal notranslate"><span class="pre">RecoveryErrorMarker.schema</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.adaptivity.marking.RecoveryErrorMarker.fromOptions"><code class="docutils literal notranslate"><span class="pre">RecoveryErrorMarker.fromOptions()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.adaptivity.marking.RecoveryErrorMarker.checkTopology"><code class="docutils literal notranslate"><span class="pre">RecoveryErrorMarker.checkTopology()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.adaptivity.marking.RecoveryErrorMarker.mark"><code class="docutils literal notranslate"><span class="pre">RecoveryErrorMarker.mark()</span></code></a></li>
 </ul>
 </li>
@@ -464,7 +465,7 @@ would leave a conforming band’s immediate surroundings coarse, e.g. <code clas
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">refineElSet</span></code></td>
 <td><p>str, default=None</p></td>
-<td><p>Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh that also contains contact-facet elements. Elements outside this set never become octree roots and are left untouched by refinement. Defaults to ‘elSet’ if given, otherwise to every 20-node (HEX20-family) element in the model.</p></td>
+<td><p>Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh that also contains contact-facet elements. Elements outside this set never become octree roots and are left untouched by refinement. Defaults to ‘elSet’ if given, otherwise to every 20-node (HEX20-family) element of a 3D model, or every 8-node (QUAD8-family) element of a 2D model.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">maxLevel</span></code></td>
 <td><p>int, default=1</p></td>
@@ -476,7 +477,7 @@ would leave a conforming band’s immediate surroundings coarse, e.g. <code clas
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">splitFactor</span></code></td>
 <td><p>int, default=2</p></td>
-<td><p>Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact for any factor.</p></td>
+<td><p>Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children, in 2D quadtree bisection into 4; 3 = 3x3x3 = 27 children, in 2D 3x3 = 9, etc.). The hanging-node coupling stays exact for any factor.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elementType</span></code></td>
 <td><p>str, default=None</p></td>
@@ -802,6 +803,18 @@ and it is applied <em>after</em> the <code class="docutils literal notranslate">
 removed (the adaptivity mechanism uses <code class="docutils literal notranslate"><span class="pre">type</span></code> to look the class up before calling this).
 The options are validated and coerced against <a class="reference internal" href="#edelweissfe.adaptivity.marking.RecoveryErrorMarker.schema" title="edelweissfe.adaptivity.marking.RecoveryErrorMarker.schema"><code class="xref py py-attr docutils literal notranslate"><span class="pre">schema</span></code></a> via
 <a class="reference internal" href="../developer/inputsystem.html#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>, then mapped onto the constructor.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.adaptivity.marking.RecoveryErrorMarker.checkTopology">
+<span class="sig-name descname"><span class="pre">checkTopology</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">topology</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/adaptivity/marking.html#RecoveryErrorMarker.checkTopology"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.adaptivity.marking.RecoveryErrorMarker.checkTopology" title="Link to this definition"></a></dt>
+<dd><p>Raise if this marker cannot mark elements of the refineable element family <code class="docutils literal notranslate"><span class="pre">topology</span></code>, so that an
+adaptivity mechanism rejects the combination at setup. Every family is supported by default.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>topology</strong> – The <code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyBase</span></code> of the refineable elements.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py method">

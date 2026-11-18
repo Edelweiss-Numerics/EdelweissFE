@@ -71,7 +71,7 @@
 <li class="toctree-l1"><a class="reference internal" href="solvers.html">Solvers</a></li>
 <li class="toctree-l1"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Model modifiers</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#hadaptivity-hanging-node-h-adaptivity-for-hex20"><code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code> - Hanging-node h-adaptivity for HEX20</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#hadaptivity-hanging-node-h-adaptivity-for-hex20-and-quad8"><code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code> - Hanging-node h-adaptivity for HEX20 and QUAD8</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.adaptivity.rootentities.RootEntityTable"><code class="docutils literal notranslate"><span class="pre">RootEntityTable</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.adaptivity.rootentities.RootEntityTable.add_root"><code class="docutils literal notranslate"><span class="pre">RootEntityTable.add_root()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.adaptivity.rootentities.RootEntityTable.key"><code class="docutils literal notranslate"><span class="pre">RootEntityTable.key()</span></code></a></li>
@@ -240,35 +240,62 @@ modifiers running to a fixed point, a per-mutation callback fires mid-pipeline a
 consumer a state that no longer exists by the time the solve begins. See <a class="reference internal" href="../developer/topologypipeline.html"><span class="doc">The topology pipeline: how a model changes itself</span></a>.</p>
 </li>
 </ul>
-<section id="hadaptivity-hanging-node-h-adaptivity-for-hex20">
-<h2><code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code> - Hanging-node h-adaptivity for HEX20<a class="headerlink" href="#hadaptivity-hanging-node-h-adaptivity-for-hex20" title="Link to this heading"></a></h2>
+<section id="hadaptivity-hanging-node-h-adaptivity-for-hex20-and-quad8">
+<h2><code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code> - Hanging-node h-adaptivity for HEX20 and QUAD8<a class="headerlink" href="#hadaptivity-hanging-node-h-adaptivity-for-hex20-and-quad8" title="Link to this heading"></a></h2>
 <p>Module <code class="docutils literal notranslate"><span class="pre">edelweissfe.modelmodifiers.adaptivity.hadaptivity</span></code></p>
-<p id="module-edelweissfe.modelmodifiers.adaptivity.hadaptivity">Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.</p>
-<p>Dynamic adaptive <span class="math notranslate nohighlight">\(h\)</span>-refinement of 20-node serendipity hexahedra (<code class="docutils literal notranslate"><span class="pre">GC3D20</span></code> / <code class="docutils literal notranslate"><span class="pre">GC3D20R</span></code>)
-in the small-strain, multifield (displacement + nonlocal damage) regime. Each increment the
+<p id="module-edelweissfe.modelmodifiers.adaptivity.hadaptivity">Dynamic h-adaptivity model modifier for hanging-node AMR of HEX20 (3D) and QUAD8 (2D) elements.</p>
+<p>Dynamic adaptive <span class="math notranslate nohighlight">\(h\)</span>-refinement of 20-node serendipity hexahedra (e.g. <code class="docutils literal notranslate"><span class="pre">C3D20R</span></code>, <code class="docutils literal notranslate"><span class="pre">GC3D20R</span></code>)
+in 3D models and of 8-node serendipity quadrilaterals (e.g. <code class="docutils literal notranslate"><span class="pre">CPS8R</span></code>, <code class="docutils literal notranslate"><span class="pre">CPE8R</span></code>, <code class="docutils literal notranslate"><span class="pre">GCPS8R</span></code>,
+<code class="docutils literal notranslate"><span class="pre">GCPE8R</span></code>) in 2D models, single-field or multifield (displacement + nonlocal damage). Each increment the
 modifier evaluates one or more <strong>markers</strong> (see below), subdivides every marked
-element into <code class="docutils literal notranslate"><span class="pre">splitFactor**3</span></code> children (default <code class="docutils literal notranslate"><span class="pre">splitFactor=2</span></code>, i.e. eight octree children;
-<code class="docutils literal notranslate"><span class="pre">splitFactor=3</span></code> gives a 3x3x3 split into 27, and so on – honouring curved edges via the parent
-isoparametric map), enforces a one-level face-balance, transfers the converged nodal values (parent isoparametric
+element into <code class="docutils literal notranslate"><span class="pre">splitFactor**dim</span></code> children (default <code class="docutils literal notranslate"><span class="pre">splitFactor=2</span></code>, i.e. eight octree children in 3D
+and four quadtree children in 2D; <code class="docutils literal notranslate"><span class="pre">splitFactor=3</span></code> gives a 3x3x3 split into 27, in 2D a 3x3 split into 9,
+and so on – honouring curved edges via the parent isoparametric map), enforces a one-level face-balance, transfers the converged nodal values (parent isoparametric
 interpolation) and quadrature-point history (via a pluggable state-transfer strategy, see
 <code class="docutils literal notranslate"><span class="pre">edelweissfe.adaptivity.statetransfer</span></code>) to the children, and couples the resulting
 non-conforming interface with an exact hanging-node multi-point constraint. Element/node sets, sections and element-based surfaces are propagated to
 the children so material assignment and surface loads stay consistent.</p>
+<p><strong>2D models (QUAD8).</strong> The element family follows from the model’s dimension
+(<code class="docutils literal notranslate"><span class="pre">*job,</span> <span class="pre">domain=2d</span></code> or <code class="docutils literal notranslate"><span class="pre">domain=3d</span></code>): 8-node quadrilaterals in the Abaqus/Marmot CPS8 node order
+in 2D, 20-node hexahedra in the C3D20 node order in 3D. The input is the same, e.g. a quadtree
+refinement of the top row of a plate:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">*</span><span class="n">modelGenerator</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="n">planeRectQuad</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">plate</span>
+<span class="n">nX</span><span class="o">=</span><span class="mi">3</span>
+<span class="n">nY</span><span class="o">=</span><span class="mi">3</span>
+<span class="n">l</span><span class="o">=</span><span class="mi">1</span>
+<span class="n">h</span><span class="o">=</span><span class="mi">1</span>
+<span class="n">elType</span><span class="o">=</span><span class="n">CPS8R</span>
+
+<span class="o">*</span><span class="n">modelModifier</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">hAdaptivity</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">amr</span>
+<span class="o">&gt;&gt;</span><span class="n">marker</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">nodeSet</span><span class="p">,</span> <span class="n">nSet</span><span class="o">=</span><span class="n">plate_top</span><span class="p">,</span> <span class="n">initialOnly</span><span class="o">=</span><span class="kc">True</span>
+<span class="n">maxLevel</span><span class="o">=</span><span class="mi">1</span>
+
+<span class="o">*</span><span class="n">job</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">quad8amr</span><span class="p">,</span> <span class="n">domain</span><span class="o">=</span><span class="mi">2</span><span class="n">d</span>
+</pre></div>
+</div>
+<p>The machinery below – the exact lattice, root entities, 2:1 balance, hanging nodes on the coarse
+trace, the transfer of sets, surfaces and state, the restart replay – is the same in 2D. There, the
+codimension-one entities of an element are its edges: 2:1 balance acts across edges, a hanging node
+always hangs on a coarse 3-node edge, and a root mesh has vertices and edges but no faces. Children
+carry the parent’s section, including the plane section’s <code class="docutils literal notranslate"><span class="pre">thickness</span></code>. The <code class="docutils literal notranslate"><span class="pre">recoveryError</span></code> marker
+supports HEX20 only and is rejected at setup in a 2D model. An axisymmetric model
+(<code class="docutils literal notranslate"><span class="pre">domain=axisymmetric</span></code>) takes the same path with its 8-node elements, but this is not tested.</p>
 <p>A child is assigned its section exactly like an element of the initial mesh: parameters set by
 <code class="docutils literal notranslate"><span class="pre">&gt;&gt;materialParameterFromField</span></code> (e.g. a random strength field) are evaluated at the child’s own
 center. The analytical field is a function of position only, so a refined region samples the same
 field realization more finely – just as a mesh that was refined from the start would.</p>
-<p>The octree mirror only ever tracks the refineable 20-node elements: a model that also contains
-elements of a different kind (e.g. lower-order contact-facet elements bonded to the mesh) is left
-untouched by construction, since anything without exactly 20 nodes is skipped automatically. To
-restrict refinement explicitly (rather than relying on the node-count heuristic), or to refine only
-part of a purely 20-node mesh, set <code class="docutils literal notranslate"><span class="pre">refineElSet</span></code> (falls back to <code class="docutils literal notranslate"><span class="pre">elSet</span></code> if given) to the element
-set that should become the octree mirror. Marking (see below) is likewise restricted to the octree
+<p>The octree mirror only ever tracks the refineable elements: by default every element with the node
+count of the family (20 in 3D, 8 in 2D). Elements of a different kind (e.g. lower-order contact-facet
+elements bonded to the mesh) are left untouched. To restrict refinement explicitly (rather than relying
+on the node count), or to refine only part of the mesh, set <code class="docutils literal notranslate"><span class="pre">refineElSet</span></code> (falls back to <code class="docutils literal notranslate"><span class="pre">elSet</span></code> if
+given) to the element set that should become the octree mirror; a set that holds elements of another
+node count is rejected at setup. Marking (see below) is likewise restricted to the octree
 mirror’s own elements by default – there is nothing to gain from evaluating the marking expression
 on an element that can never be refined anyway, and most non-solid element types don’t expose most
 quadrature-point results in the first place.</p>
 <p>The non-conforming 2:1 interface is coupled kinematically rather than by mortar: octree refinement
-is non-conforming but <em>nested</em>, the QUAD8 face-trace (and 3-node quadratic edge) spaces are
+is non-conforming but <em>nested</em>, the QUAD8 face-trace (and 3-node quadratic edge) spaces of a HEX20, and
+the 3-node edge trace of a QUAD8, are
 invariant under the axis-aligned affine sub-maps of a uniform subdivision (of <em>any</em> factor, not only
 bisection), so pinning each hanging
 (slave) node to the coarse serendipity trace, <span class="math notranslate nohighlight">\(u_s = \sum_a N_a(\xi_s)\, u_{m_a}\)</span>, is exact.
@@ -276,7 +303,7 @@ The same field-independent weights apply to every field on the node (equal-order
 single record per hanging node covers displacement and nonlocal damage alike. The constraint itself
 (<code class="docutils literal notranslate"><span class="pre">*constraint,</span> <span class="pre">type=hangingnode</span></code>) is documented under <a class="reference internal" href="../model/constraints.html"><span class="doc">Constraints</span></a>.</p>
 <p><strong>Vocabulary.</strong> A <em>root element</em> is an element of the mesh before refinement; every refined element
-lies inside exactly one. The reference cube of a root carries an integer <em>reference lattice</em>, fine
+lies inside exactly one. The reference cube (in 2D: square) of a root carries an integer <em>reference lattice</em>, fine
 enough that every node a subdivision can create sits on a lattice point, and every element covers an
 exact <em>reference box</em> of it. A <em>root entity</em> is a vertex, edge or face of the root mesh, named by the
 labels of its corner nodes. A node’s <em>key</em> is the lowest-dimensional root entity containing it plus its
@@ -318,7 +345,9 @@ conforming – the finer nodes on that edge hang on the coarsest element’s edg
 chains that are resolved exactly and verified – so this affects mesh grading and local accuracy (an
 abrupt size jump along the edge), not correctness. With <code class="docutils literal notranslate"><span class="pre">maxLevel=1</span></code> (the default) no two-level jump
 can occur at all. Edge or vertex balancing (as p4est’s edge/full balance) is not implemented; it would
-refine additional elements and change the results of multi-level runs.</p>
+refine additional elements and change the results of multi-level runs. In 2D the faces are the edges:
+every edge-adjacent pair is balanced, and only elements that touch at a vertex may differ by two or
+more levels.</p>
 <p><strong>Invariants, checked after every adaptation.</strong> A violation raises an error naming the offending nodes
 instead of producing a silently non-conforming mesh:</p>
 <ul class="simple">
@@ -350,7 +379,7 @@ same slave (it is registered first in model order; a dropped hanging-node record
 <td><p>Register a root element by its node labels (in the topology's local node order).</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.adaptivity.rootentities.RootEntityTable.key" title="edelweissfe.adaptivity.rootentities.RootEntityTable.key"><code class="xref py py-obj docutils literal notranslate"><span class="pre">key</span></code></a>(rootEid, point)</p></td>
-<td><p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">NodeKey</span></code> of a lattice point (three integers in [0, 2M]) of root <code class="docutils literal notranslate"><span class="pre">rootEid</span></code>.</p></td>
+<td><p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">NodeKey</span></code> of a lattice point (one integer in [0, 2M] per axis) of root <code class="docutils literal notranslate"><span class="pre">rootEid</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.adaptivity.rootentities.RootEntityTable.local_point" title="edelweissfe.adaptivity.rootentities.RootEntityTable.local_point"><code class="xref py py-obj docutils literal notranslate"><span class="pre">local_point</span></code></a>(rootEid, key)</p></td>
 <td><p>The lattice point, in root element <code class="docutils literal notranslate"><span class="pre">rootEid</span></code>, of a key whose entity lies in that root's closure (see <a class="reference internal" href="#edelweissfe.adaptivity.rootentities.RootEntityTable.roots_sharing" title="edelweissfe.adaptivity.rootentities.RootEntityTable.roots_sharing"><code class="xref py py-meth docutils literal notranslate"><span class="pre">roots_sharing()</span></code></a>).</p></td>
@@ -387,7 +416,7 @@ named by their corners, and for a face owned by more than two roots (a non-manif
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.adaptivity.rootentities.RootEntityTable.key">
 <span class="sig-name descname"><span class="pre">key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rootEid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/adaptivity/rootentities.html#RootEntityTable.key"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.adaptivity.rootentities.RootEntityTable.key" title="Link to this definition"></a></dt>
-<dd><p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">NodeKey</span></code> of a lattice point (three integers in [0, 2M]) of root <code class="docutils literal notranslate"><span class="pre">rootEid</span></code>.</p>
+<dd><p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">NodeKey</span></code> of a lattice point (one integer in [0, 2M] per axis) of root <code class="docutils literal notranslate"><span class="pre">rootEid</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>rootEid</strong> (<em>int</em>)</p>
@@ -469,7 +498,8 @@ canonical frame – identical from either root sharing the face.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.adaptivity.refinement.AdaptiveMesh">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.adaptivity.refinement.</span></span><span class="sig-name descname"><span class="pre">AdaptiveMesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">splitFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topology</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reserve_labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/adaptivity/refinement.html#AdaptiveMesh"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.adaptivity.refinement.AdaptiveMesh" title="Link to this definition"></a></dt>
-<dd><p>Octree hierarchy of HEX20 elements: refinement, 2:1 balancing and hanging-node classification.</p>
+<dd><p>Octree (in 2D: quadtree) hierarchy of HEX20 or QUAD8 elements: refinement, 2:1 balancing and
+hanging-node classification.</p>
 <p>Every decision about how elements and nodes relate – which nodes coincide, which node lies on
 which face or edge, which elements share a face, which nodes hang and with which weights, which new
 nodes join a node set – is taken topologically and in exact integer arithmetic, never from physical
@@ -481,7 +511,7 @@ without collapsed elements. <a class="reference internal" href="#edelweissfe.ada
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>splitFactor</strong> (<em>int</em>) – <code class="docutils literal notranslate"><span class="pre">n</span></code>: a refined element is split into <code class="docutils literal notranslate"><span class="pre">n</span></code> parts per axis, i.e. <code class="docutils literal notranslate"><span class="pre">n**3</span></code> children.</p></li>
+<li><p><strong>splitFactor</strong> (<em>int</em>) – <code class="docutils literal notranslate"><span class="pre">n</span></code>: a refined element is split into <code class="docutils literal notranslate"><span class="pre">n</span></code> parts per axis, i.e. <code class="docutils literal notranslate"><span class="pre">n**dim</span></code> children.</p></li>
 <li><p><strong>topology</strong> – The element <code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyBase</span></code> (default: HEX20).</p></li>
 <li><p><strong>reserve_labels</strong> – The model’s node-label allocator, see <code class="xref py py-class docutils literal notranslate"><span class="pre">NodeRegistry</span></code>.</p></li>
 </ul>
@@ -491,7 +521,7 @@ without collapsed elements. <a class="reference internal" href="#edelweissfe.ada
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.adaptivity.refinement.AdaptiveMesh.add_root" title="edelweissfe.adaptivity.refinement.AdaptiveMesh.add_root"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_root</span></code></a>(coords, labels[, componentId])</p></td>
-<td><p>Add a root (level-0) element: its 20 node coordinates and node labels, in C3D20 order.</p></td>
+<td><p>Add a root (level-0) element: its node coordinates and node labels, in the topology's (C3D20 or CPS8) order.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.adaptivity.refinement.AdaptiveMesh.balance_2to1" title="edelweissfe.adaptivity.refinement.AdaptiveMesh.balance_2to1"><code class="xref py py-obj docutils literal notranslate"><span class="pre">balance_2to1</span></code></a>()</p></td>
 <td><p>Refine coarser elements until no face-adjacent active pair differs by more than one level.</p></td>
@@ -512,14 +542,15 @@ without collapsed elements. <a class="reference internal" href="#edelweissfe.ada
 <td><p>The lattice points, in the element's root, of the element's own nodes (slot order).</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.adaptivity.refinement.AdaptiveMesh.refine" title="edelweissfe.adaptivity.refinement.AdaptiveMesh.refine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refine</span></code></a>(eid)</p></td>
-<td><p>Split an active element into <code class="docutils literal notranslate"><span class="pre">splitFactor**3</span></code> children; deactivate it and keep element sets, surfaces and node sets consistent.</p></td>
+<td><p>Split an active element into <code class="docutils literal notranslate"><span class="pre">splitFactor**dim</span></code> children; deactivate it and keep element sets, surfaces and node sets consistent.</p></td>
 </tr>
 </tbody>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.adaptivity.refinement.AdaptiveMesh.add_root">
 <span class="sig-name descname"><span class="pre">add_root</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">componentId</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/adaptivity/refinement.html#AdaptiveMesh.add_root"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.adaptivity.refinement.AdaptiveMesh.add_root" title="Link to this definition"></a></dt>
-<dd><p>Add a root (level-0) element: its 20 node coordinates and node labels, in C3D20 order.</p>
+<dd><p>Add a root (level-0) element: its node coordinates and node labels, in the topology’s (C3D20
+or CPS8) order.</p>
 <p>The labels are the model’s own, and each must have been registered with
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">NodeRegistry.seed()</span></code>. <code class="docutils literal notranslate"><span class="pre">componentId</span></code> is the connected body the element belongs to: node
 identities are kept per body, so two bodies sharing a flush interface are never welded together.</p>
@@ -635,9 +666,9 @@ in slot order. Computed once: an element’s reference box never changes.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.adaptivity.refinement.AdaptiveMesh.refine">
 <span class="sig-name descname"><span class="pre">refine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">eid</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/adaptivity/refinement.html#AdaptiveMesh.refine"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.adaptivity.refinement.AdaptiveMesh.refine" title="Link to this definition"></a></dt>
-<dd><p>Split an active element into <code class="docutils literal notranslate"><span class="pre">splitFactor**3</span></code> children; deactivate it and keep element sets,
+<dd><p>Split an active element into <code class="docutils literal notranslate"><span class="pre">splitFactor**dim</span></code> children; deactivate it and keep element sets,
 surfaces and node sets consistent.</p>
-<p>Children are returned in subdivision order, <code class="docutils literal notranslate"><span class="pre">ix</span> <span class="pre">*</span> <span class="pre">n</span> <span class="pre">*</span> <span class="pre">n</span> <span class="pre">+</span> <span class="pre">iy</span> <span class="pre">*</span> <span class="pre">n</span> <span class="pre">+</span> <span class="pre">iz</span></code>
+<p>Children are returned in subdivision order, <code class="docutils literal notranslate"><span class="pre">ix</span> <span class="pre">*</span> <span class="pre">n</span> <span class="pre">*</span> <span class="pre">n</span> <span class="pre">+</span> <span class="pre">iy</span> <span class="pre">*</span> <span class="pre">n</span> <span class="pre">+</span> <span class="pre">iz</span></code> (2D: <code class="docutils literal notranslate"><span class="pre">ix</span> <span class="pre">*</span> <span class="pre">n</span> <span class="pre">+</span> <span class="pre">iy</span></code>)
 (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">subdivision_children_param()</span></code>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
@@ -679,7 +710,7 @@ a <em>predictive</em> <code class="docutils literal notranslate"><span class="pr
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">refineElSet</span></code></td>
 <td><p>str, default=None</p></td>
-<td><p>Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh that also contains contact-facet elements. Elements outside this set never become octree roots and are left untouched by refinement. Defaults to ‘elSet’ if given, otherwise to every 20-node (HEX20-family) element in the model.</p></td>
+<td><p>Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh that also contains contact-facet elements. Elements outside this set never become octree roots and are left untouched by refinement. Defaults to ‘elSet’ if given, otherwise to every 20-node (HEX20-family) element of a 3D model, or every 8-node (QUAD8-family) element of a 2D model.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">maxLevel</span></code></td>
 <td><p>int, default=1</p></td>
@@ -691,7 +722,7 @@ a <em>predictive</em> <code class="docutils literal notranslate"><span class="pr
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">splitFactor</span></code></td>
 <td><p>int, default=2</p></td>
-<td><p>Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact for any factor.</p></td>
+<td><p>Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children, in 2D quadtree bisection into 4; 3 = 3x3x3 = 27 children, in 2D 3x3 = 9, etc.). The hanging-node coupling stays exact for any factor.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elementType</span></code></td>
 <td><p>str, default=None</p></td>
