@@ -18,7 +18,7 @@
         nSet                  string              name of nSet to be created
 
 
-    nSet    definition of an element set
+    nSet    definition of a node set
         nSet                  string              name
         generate              boolean             set True to generate from data
                                                   line 1: start-node, end-node,
@@ -1046,7 +1046,7 @@ that could drift out of sync with the object it is supposed to identify.
 
 The ``>>options`` keyword's own grammar is validated **dynamically**, not against a statically
 pre-declared list of every solver's and output manager's option names: at parse time, before
-``name`` has even been resolved, the parser's dedicated ``isDynamicOptionsKeyword`` branch (see
+``name`` has even been resolved, the parser's dedicated ``isStepDynamicOptions`` branch (see
 ``utils/inputfileparser.py::parseModuleKeywordLine``) only enforces that ``name`` itself is present
 -- every other ``key=value`` pair is accepted unvalidated and handed on raw. Real validation happens
 once ``name`` resolves to a concrete object, against *that object's own* ``type(target).schema``

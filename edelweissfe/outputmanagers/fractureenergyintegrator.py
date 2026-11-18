@@ -47,7 +47,7 @@ A simple integrator to compute the fracture energy by integrating a load-displac
 .. code-block:: edelweiss
     :caption: Example:
 
-    *output, type=fractureenergyintegrator, jobName=myJob, name=gfi
+    *output, type=fractureenergyintegrator, name=gfi
         forceFieldOutput=RF, displacementFieldOutput=U, fractureArea='100.0*1.0'
 """
 

@@ -404,7 +404,7 @@ The geometric error of a flat facet chording a curved face scales with the chord
 The midside triangulation halves the chords, reducing the sagitta -- i.e. the artificial gap
 error -- by a factor of 4. This is not an academic refinement: on a cylindrical-arc interface
 where the sagitta of the corner chords is of the order of the physical interference, the corner
-reduction underestimates the total contact force by ~40 % on the identical mesh (regression test
+reduction underestimates the total contact force considerably on the identical mesh (regression test
 ``NodeToDeformableSurfaceContactCurvedHexa20`` and its manual variant ``test_corner.inp``).
 
 All face tables (corner and midside) are verified numerically against the mesh generators' actual
@@ -1127,7 +1127,7 @@ key physical invariants:
   explained by Poisson contraction of the shaft (``...PullOut``).
 * **Curved interfaces** (``...CurvedHexa20``): midside vs corner triangulation on an identical
   curved hexa20 mesh; the corner reduction's chord sagitta acts as artificial gap and
-  underestimates the total contact force by ~42 % in the committed configuration.
+  underestimates the total contact force considerably in the committed configuration.
 * **Augmented Lagrange**: at a 10x reduced penalty, the AL solution is closer to a stiff
   pure-penalty reference than a pure penalty at the same reduced value; one-step force-transfer
   and clamping of the Uzawa update are unit-checked.
