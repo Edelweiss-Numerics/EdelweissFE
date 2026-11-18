@@ -153,6 +153,81 @@ which, unlike a constant load, has a solution past a limit point. As for any inc
 before it, and the controller's ``finishIncrement`` is called once it has converged. The load parameter it reaches is
 committed with its state, and the next increment starts from it.
 
+.. _strength-reduction:
+
+Strength reduction
+~~~~~~~~~~~~~~~~~~
+
+In a strength reduction analysis the loads are held and the strength of the material is reduced until the structure
+fails; the reduction factor :math:`\eta` at failure is its factor of safety. Prescribed in time, the reduction ends
+with a diverging Newton iteration at the limit point. Under arc length control the ``changematerialproperty`` actions
+of a step follow the load parameter instead of the step time, so the reduction factor becomes an unknown of every
+increment, and the path is followed through and beyond the limit point; the factor may also decrease again.
+
+With the material properties :math:`\boldsymbol{p}(\lambda)`, equilibrium is
+
+.. math::
+
+    \boldsymbol{R}(\boldsymbol{u}, \lambda) = \boldsymbol{f}_\mathrm{ext}
+    - \boldsymbol{f}_\mathrm{int}(\boldsymbol{u}, \boldsymbol{p}(\lambda)) = \boldsymbol{0},
+
+and every Newton iteration solves the linearized system for two right-hand sides, as for loads scaled by the load
+parameter,
+
+.. math::
+
+    \boldsymbol{K} \, \delta\boldsymbol{u}_0 = \boldsymbol{R}, \qquad
+    \boldsymbol{K} \, \delta\boldsymbol{u}_f = \boldsymbol{f}_\mathrm{ref}
+    - \frac{\partial \boldsymbol{f}_\mathrm{int}}{\partial \lambda}.
+
+The derivative of the internal forces is a forward difference: the elements are evaluated a second time, with the
+driven properties set at :math:`\lambda + h`, :math:`h` being the class attribute ``loadParameterPerturbation``
+(:math:`10^{-6}`). The residual itself is exact, so the difference quotient affects the rate of convergence only. The driven properties are
+set at the load parameter of every state the solver evaluates, also at the trial states of a line search. A reference
+load and driven properties can act in the same step.
+
+The loads are applied in the steps before and held. The strength reduction is a step with an arc length controller
+and one ``changematerialproperty`` per reduced property, in which the argument ``t`` of ``f(t)`` is the load
+parameter, starting from zero:
+
+.. code-block:: edelweiss
+
+    *step, solver=theSolver
+    maxInc=5e-2, startInc=5e-2, minInc=1e-6, maxNumInc=1000, maxIter=25, stepLength=1
+    >>options, name=theSolver, arcLengthController=tipDeflection, stopCondition='fieldOutputs["tipDeflection"] > 0.25'
+    >>indirectcontrol, name=tipDeflection, dof1='model.nodeSets["gen_rightTop"][0].fields["displacement"]', cVector1='0, -1', dof2='model.nodeSets["gen_leftBottom"][0].fields["displacement"]', cVector2='0, 0', L=0.5, absolute=False, cLambda=0.05
+    >>changematerialproperty, name=reduceYieldStress, material=steel, index=2, relative=True, f(t)='1/(1+t)'
+
+- With ``relative=True``, ``f(t)`` is a factor on the value every element has at the start of the step, so a property
+  that varies from element to element (``materialParameterFromField``) keeps its variation. ``f(t)='1/(1+t)'`` gives
+  the reduction factor :math:`\eta = 1 + \lambda`.
+- A parameter that is not proportional to :math:`1/\eta` gets its own ``f(t)``, e.g. a friction parameter derived from
+  :math:`\tan\varphi / \eta`. For associated flow, the dilation parameter is reduced together with the friction
+  parameter.
+- As long as no point yields, the internal forces do not depend on the strength, and the displacements do not respond
+  to the load parameter: a controller equation in the displacements alone is singular. The weight ``cLambda`` of the
+  load parameter in the controlled quantity of the indirect displacement control, :math:`\boldsymbol{c} \cdot
+  \boldsymbol{u} + c_\lambda \lambda`, resolves this: in the elastic phase the load parameter advances by
+  :math:`L / c_\lambda` over the step, and the equation turns into a displacement control once the displacements grow.
+  ``cLambda`` has to be small enough for the controlled quantity to keep growing where the load parameter decreases
+  after a maximum.
+- ``L`` times ``maxInc`` is the increment of the controlled quantity and sets how finely the maximum of the reduction
+  factor is resolved.
+
+The material has to check its yield condition also for a strain increment of zero. In a strength reduction the
+strain increment is exactly zero at every point until the first one yields, so a material that returns the old stress
+and the elastic tangent for a zero increment never notices the shrunken yield surface: no point yields, and the
+forward difference finds no sensitivity either. The von Mises material of EdelweissFE checks it; materials of other
+providers may not.
+
+The regression case ``testfiles/edelweiss-only/StrengthReductionCantilever`` reduces the yield stress of a perfectly
+plastic cantilever under a constant uniform load until a plastic hinge forms at the clamp, and follows the plateau of
+the reduction factor:
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/StrengthReductionCantilever/test.inp
+   :language: edelweiss
+   :caption: ``testfiles/edelweiss-only/StrengthReductionCantilever/test.inp``
+
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------
 
