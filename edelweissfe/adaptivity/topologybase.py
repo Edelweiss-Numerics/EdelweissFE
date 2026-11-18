@@ -37,6 +37,7 @@ itself. :class:`~edelweissfe.adaptivity.hex20topology.Hex20Topology` is the refe
 
 from abc import ABC, abstractmethod
 from functools import cached_property
+from itertools import product
 
 import numpy as np
 
@@ -48,6 +49,16 @@ class TopologyBase(ABC):
     refinement decides everything with: where an element's own nodes sit on the reference lattice,
     which of them are corners, and which faces and edges of the element contain a given lattice point.
     """
+
+    @cached_property
+    def dim(self) -> int:
+        """The spatial dimension of the reference element (3 for HEX20, 2 for QUAD8)."""
+        return int(np.asarray(self.reference_node_param()).shape[1])
+
+    @cached_property
+    def n_nodes(self) -> int:
+        """The number of nodes of the element (20 for HEX20, 8 for QUAD8)."""
+        return len(self.reference_node_param())
 
     @cached_property
     def reference_node_lattice(self) -> np.ndarray:
@@ -63,9 +74,13 @@ class TopologyBase(ABC):
     @cached_property
     def _fixedCoordinatesOfEntities(self) -> list:
         """Every face and edge as ``(kind, node slots, ((axis, value), ...))``: the lattice coordinates
-        that are the same for all of its nodes. A point lies on the entity iff it shares all of them."""
+        that are the same for all of its nodes. A point lies on the entity iff it shares all of them.
+
+        In 2D the faces are the edges, in the other slot order (``[a, b, m]`` instead of ``[a, m, b]``),
+        so only the edges are listed: a point on the boundary lies on an ``"edge"`` of a 2D element."""
         entities = []
-        for kind, collection in (("face", self.faces), ("edge", self.edges)):
+        kinds = (("face", self.faces), ("edge", self.edges)) if self.dim == 3 else (("edge", self.edges),)
+        for kind, collection in kinds:
             for entity in collection:
                 rows = self.reference_node_lattice[list(entity)]
                 fixed = tuple((k, int(rows[0, k])) for k in range(rows.shape[1]) if np.all(rows[:, k] == rows[0, k]))
@@ -73,7 +88,7 @@ class TopologyBase(ABC):
         return entities
 
     def entities_containing(self, point, extent: int) -> list:
-        """The faces and edges (as node-slot tuples) of an element that contain a lattice point.
+        """The faces and edges (as node-slot tuples; in 2D the edges) of an element that contain a lattice point.
 
         Parameters
         ----------
@@ -93,12 +108,13 @@ class TopologyBase(ABC):
         ``(kind, entity)``: ``("vertex", corner slot)``, ``("edge", node slots)``, ``("face", node
         slots)`` or ``("interior", None)``. See :meth:`entities_containing` for the arguments."""
         onBoundary = sum(1 for v in point if v == 0 or v == extent)
-        if onBoundary == 3:
+        if onBoundary == self.dim:
             doubled = tuple(2 * v // extent for v in point)
             return "vertex", next(s for s in self.corner_slots if tuple(self.reference_node_lattice[s]) == doubled)
         if onBoundary == 0:
             return "interior", None
-        wanted = "edge" if onBoundary == 2 else "face"
+        # named by the entity's own dimension: in 2D, a point on one boundary line lies on an edge
+        wanted = "edge" if self.dim - onBoundary == 1 else "face"
         return wanted, next(
             entity
             for kind, entity, fixed in self._fixedCoordinatesOfEntities
@@ -108,7 +124,8 @@ class TopologyBase(ABC):
     @property
     @abstractmethod
     def faces(self) -> list:
-        """List of faces, each defined by a list of local node indices."""
+        """List of faces, each defined by a list of local node indices: the codimension-one boundary
+        entities (in 2D, the edges)."""
 
     @property
     @abstractmethod
@@ -128,14 +145,6 @@ class TopologyBase(ABC):
         Refinement needs this to recognise, in exact arithmetic, that a child node has landed on a
         node the parent already owns -- so it reuses that node instead of minting a second one at
         the same place."""
-
-    @abstractmethod
-    def subdivision_children_param(self, n: int) -> list:
-        """Parametric coordinates (in the parent domain) of the nodes of each child element."""
-
-    @abstractmethod
-    def face_child_indices(self, face_index: int, n: int) -> list:
-        """The child indices that tile a given face."""
 
     @abstractmethod
     def shape_functions(self, *params) -> np.ndarray:
@@ -160,10 +169,60 @@ class TopologyBase(ABC):
     def shape_functions_and_grad(self, *params) -> tuple:
         """Evaluate shape functions and their analytic gradient w.r.t. parametric coordinates."""
 
-    @abstractmethod
-    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
-        """Map a physical point into the reference domain."""
+    def subdivision_children_param(self, n: int) -> list:
+        """Parametric coordinates (in the parent's reference domain) of the nodes of each of the ``n**dim``
+        children of an ``n``-per-axis split, in subdivision order (``ix * n * n + iy * n + iz``, in 2D
+        ``ix * n + iy``: x outer). Child ``(i, j, ...)`` is the reference element scaled by ``1 / n`` and
+        moved to cell ``(i, j, ...)``, so its nodes are in the topology's own local order."""
+        reference = np.asarray(self.reference_node_param(), dtype=float)
+        return [(2 * np.asarray(position) + reference + 1) / n - 1 for position in product(range(n), repeat=self.dim)]
 
-    @abstractmethod
+    def face_child_indices(self, face_index: int, n: int) -> list:
+        """The child indices (in :meth:`subdivision_children_param` order) that tile a given face (in 2D:
+        edge) of an ``n``-per-axis split: the children on that face's side of the split. Each covers the
+        face with its same local face, and hence the same faceID."""
+        rows = self.reference_node_lattice[list(self.faces[face_index])]
+        axis = next(k for k in range(self.dim) if np.all(rows[:, k] == rows[0, k]))
+        side = n - 1 if rows[0, axis] == 2 else 0
+        return [index for index, position in enumerate(product(range(n), repeat=self.dim)) if position[axis] == side]
+
+    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
+        """Map a physical point into the reference domain of an element, by Newton's method from the element
+        center; the result is clipped to ``[-1.2, 1.2]`` per axis if it does not converge.
+
+        Parameters
+        ----------
+        point
+            The physical coordinates of the point.
+        elementNodeCoords
+            The element's node coordinates, in local order.
+        tol
+            The tolerance of the physical residual.
+        itmax
+            The maximum number of Newton iterations.
+        """
+        coords = np.asarray(elementNodeCoords, dtype=float)
+        xi = np.zeros(self.dim)
+        for _ in range(itmax):
+            N, dN = self.shape_functions_and_grad(*xi)
+            residual = N @ coords - point
+            if float(np.linalg.norm(residual)) < tol:
+                return xi
+            jacobian = coords.T @ dN  # jacobian[i, k] = dx_i / dxi_k
+            try:
+                dxi = np.linalg.solve(jacobian, residual)
+            except np.linalg.LinAlgError:
+                break
+            xi -= dxi
+            if float(np.linalg.norm(dxi)) < 1e-10:
+                break
+        return np.clip(xi, -1.2, 1.2)
+
     def subdivide(self, parent_coords: np.ndarray, n: int) -> list:
-        """Subdivide one parent element into children."""
+        """The physical node coordinates of the children of an ``n``-per-axis split of one parent element,
+        in :meth:`subdivision_children_param` order: the parent's isoparametric map of each child's nodes."""
+        parent_coords = np.asarray(parent_coords, dtype=float)
+        return [
+            np.array([self.shape_functions(*p) @ parent_coords for p in childParam])
+            for childParam in self.subdivision_children_param(n)
+        ]
