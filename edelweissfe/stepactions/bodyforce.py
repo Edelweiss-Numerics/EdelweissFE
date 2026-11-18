@@ -112,7 +112,8 @@ class StepAction(BodyLoadBase):
     elSet
         The element set the body force is applied to.
     forceVector
-        The force vector, with one entry per spatial dimension.
+        The force vector, with one entry per spatial dimension; for elements transporting scalar fields (e.g. the
+        heat conduction elements) the volumetric source, with one entry per field.
     model
         The model tree.
     journal
@@ -143,7 +144,9 @@ class StepAction(BodyLoadBase):
         self._journal = journal
         self._model = model
 
-        if len(forceVector) < model.domainSize:
+        # A force has one entry per spatial dimension, a volumetric source (e.g. the heat source of a heat conduction
+        # element) one per transported field; the element checks the size it needs, see the Marmot element wrapper.
+        if len(forceVector) < 1:
             raise Exception("BodyForce {:}: force vector has wrong dimension!".format(self._name))
 
         self._forceAtStepStart = 0.0

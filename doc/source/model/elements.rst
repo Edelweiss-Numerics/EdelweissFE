@@ -14,6 +14,30 @@ Relevant module: ``edelweissfe.elements.marmotelement.element``
 .. autoclass:: edelweissfe.elements.marmotelement.element.MarmotElementWrapper
    :members:
 
+Heat conduction elements
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Marmot's transport elements ``DC2D3T``, ``DC2D4T``, ``DC2D8T`` (plane, ``type=plane`` section with a thickness),
+``DCAX4T``, ``DCAX8T`` (axisymmetric, ``domain=axisymmetric``, :math:`r = x`; a plane section, whose thickness they do
+not use) and ``DC3D4T``, ``DC3D8T``, ``DC3D20T`` (solid) carry the scalar field ``temperature`` and take a transport
+material such as ``HeatConduction``. They integrate transient heat conduction with the backward Euler method over the
+time increment of the step; a material with zero heat capacity gives steady state conduction. Loads:
+
+- ``distributedload`` of ``type=heat flux`` (``magnitude=q``, into the body), ``type=heat film``
+  (``magnitude='h, T_inf'``, convection) and ``type=heat radiation`` (``magnitude='c, T_inf, T_0'``,
+  :math:`c = \varepsilon\sigma`, :math:`T_0` the absolute zero of the temperature scale). The amplitude scales all
+  values: use ``f(t)='1'`` to apply them at once.
+- ``bodyforce`` with ``forceVector`` the volumetric heat source.
+- The initial temperature is set with ``setfield`` on a ``perNode`` field output of the result ``U`` in the first step.
+
+A zero time increment (such as the one a step begins with) lets no heat flow. The heat flow at prescribed temperatures
+is the result ``P`` of the field ``temperature``, in W (through the thickness of plane elements, over the full ring of
+axisymmetric ones).
+
+.. literalinclude:: ../../../testfiles/marmot/HeatTransientDC2D4T/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/HeatTransientDC2D4T/test.inp``
+
 Provider ``marmotsingleqpelement``
 ----------------------------------
 
