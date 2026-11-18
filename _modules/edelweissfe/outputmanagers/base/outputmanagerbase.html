@@ -1,0 +1,441 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.outputmanagers.base.outputmanagerbase &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.outputmanagers.base.outputmanagerbase</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.outputmanagers.base.outputmanagerbase</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.checkpointedstate</span><span class="w"> </span><span class="kn">import</span> <span class="n">packState</span><span class="p">,</span> <span class="n">unpackState</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldOutputController</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.plotter</span><span class="w"> </span><span class="kn">import</span> <span class="n">Plotter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptionSchemaProvider</span>
+
+
+<div class="viewcode-block" id="OutputManagerBase">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">OutputManagerBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""This is the abstract base class for all output managers.</span>
+<span class="sd">    User defined output managers must implement the abstract methods.</span>
+
+<span class="sd">    Deriving from :class:`~edelweissfe.utils.schema.OptionSchemaProvider` means every output</span>
+<span class="sd">    manager -- including one supplied by a third-party package via an entry point -- exposes a</span>
+<span class="sd">    ``schema`` class attribute, so the registry can hand its option schema to the caller alongside</span>
+<span class="sd">    the class itself. Subclasses that do not define their own option schema simply inherit the</span>
+<span class="sd">    default of ``None``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name</span>
+<span class="sd">        The name of this output manager.</span>
+<span class="sd">    definitionLines</span>
+<span class="sd">        The dictionary containing the definition of the output manager.</span>
+<span class="sd">    model</span>
+<span class="sd">        A dictionary containing the model tree.</span>
+<span class="sd">    fieldOutputController</span>
+<span class="sd">        The field output contoller instance.</span>
+<span class="sd">    journal</span>
+<span class="sd">        The journal instance for logging.</span>
+<span class="sd">    plotter</span>
+<span class="sd">        The plotter instance for plotting.</span>
+<span class="sd">    """</span>
+
+    <span class="n">identification</span> <span class="o">=</span> <span class="s2">"OutputManagerBase"</span>
+
+    <span class="c1">#: The name of this output manager, from its ``*output, name=...`` line; unique within a job.</span>
+    <span class="c1">#: Set by every concrete output manager's constructor.</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+
+    <span class="c1">#: Whether this output manager writes restart checkpoints. A solver that changes the model at</span>
+    <span class="c1">#: the end of an increment (e.g. a topology check) finalizes such a manager after that change,</span>
+    <span class="c1">#: so that the checkpoint holds the state the next increment starts from.</span>
+    <span class="n">writesRestartCheckpoints</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1">#: The state this output manager carries from one increment to the next, by attribute name and</span>
+    <span class="c1">#: type; see :mod:`~edelweissfe.utils.checkpointedstate`. Every output manager declares it -- an</span>
+    <span class="c1">#: empty mapping if it carries none -- or overrides :meth:`getRestartData` and</span>
+    <span class="c1">#: :meth:`setRestartData`. Undeclared, it cannot be checkpointed.</span>
+    <span class="n">checkpointedState</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">definitionLines</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
+        <span class="n">fieldOutputController</span><span class="p">:</span> <span class="n">FieldOutputController</span><span class="p">,</span>
+        <span class="n">journal</span><span class="p">:</span> <span class="n">Journal</span><span class="p">,</span>
+        <span class="n">plotter</span><span class="p">:</span> <span class="n">Plotter</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">pass</span>
+
+<div class="viewcode-block" id="OutputManagerBase.applyOptionsOverride">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.applyOptionsOverride">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyOptionsOverride</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldValues</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply a partial override of this output manager's own ``schema`` fields.</span>
+
+<span class="sd">        The counterpart, on the output manager side, of the name-based ``&gt;&gt;options`` override</span>
+<span class="sd">        mechanism (``stepactions/options.py``): once that mechanism has resolved an ``&gt;&gt;options,</span>
+<span class="sd">        name=X, ...`` block to this output manager instance and validated the present keys against</span>
+<span class="sd">        ``type(self).schema`` via :func:`~edelweissfe.utils.schema.coercePresentOptions`, it calls</span>
+<span class="sd">        this method with the result to actually apply them.</span>
+
+<span class="sd">        Concrete output managers vary in how (or whether) they store overridable runtime options --</span>
+<span class="sd">        unlike a solver's uniform ``self.options`` dict, there is no single shared storage shape to</span>
+<span class="sd">        update generically here, so a subclass that wants ``&gt;&gt;options`` support overrides this with</span>
+<span class="sd">        its own named fields (ordinary polymorphism, not attribute probing -- see</span>
+<span class="sd">        :class:`OutputManager` in ``ensight.py`` for the one concrete case that needs this today).</span>
+
+<span class="sd">        The default here raises rather than silently doing nothing: without an override, a</span>
+<span class="sd">        ``&gt;&gt;options, name=X, someField=...`` block against ``X`` would otherwise validate cleanly</span>
+<span class="sd">        against ``type(X).schema`` (``stepactions/options.py``) and then apply no change at all --</span>
+<span class="sd">        indistinguishable, from the ``.inp`` author's side, from success.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fieldValues</span>
+<span class="sd">            Maps schema field name to its new, already-coerced value.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            If ``fieldValues`` is non-empty and the subclass has not overridden this method.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">fieldValues</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not support '&gt;&gt;options' overrides for "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">fieldValues</span><span class="p">)</span><span class="si">}</span><span class="s2"> -- applyOptionsOverride is not implemented for this output manager."</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.initializeJob">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeJob">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initializeJob</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Initalize the output manager at the beginning of a step.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.initializeStep">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeStep">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initializeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Initalize the output manager at the beginning of a step.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            A dictionary containing the step definition.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.finalizeIncrement">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeIncrement">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finalizeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Finalize the output at the end of a time increment.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The initial solution vector.</span>
+<span class="sd">        P</span>
+<span class="sd">            The initial reaction vector.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Keyword arguments.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.finalizeFailedIncrement">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeFailedIncrement">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finalizeFailedIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Finalize the output at the end of a time increment.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Keyword arguments.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.finalizeStep">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeStep">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finalizeStep</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Finalize the output the end of a step."""</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.finalizeJob">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeJob">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finalizeJob</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Finalize the output at the end of a job.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The final solution vector.</span>
+<span class="sd">        P</span>
+<span class="sd">            The final reaction vector.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.latestCheckpoint">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">latestCheckpoint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The latest restart checkpoint this output manager wrote that is still on disk and that no</span>
+<span class="sd">        fallback has used yet, for a step to fall back to (see</span>
+<span class="sd">        :meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`). Only an output</span>
+<span class="sd">        manager that :attr:`writesRestartCheckpoints` has any.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str | None</span>
+<span class="sd">            The file name of the checkpoint, or None if there is none.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.dropLatestCheckpoint">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.dropLatestCheckpoint">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dropLatestCheckpoint</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Offer the latest checkpoint (see :meth:`latestCheckpoint`) no more: a step has fallen back</span>
+<span class="sd">        to it, or found that it holds the state its failed increment started from. Every checkpoint</span>
+<span class="sd">        serves one fallback at most."""</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.getRestartData">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getRestartData</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The state this output manager carries from one increment to the next; by default the</span>
+<span class="sd">        attributes declared in :attr:`checkpointedState`. Overridden where the state is not a plain</span>
+<span class="sd">        attribute.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, numpy.ndarray]</span>
+<span class="sd">            A flat mapping of array name to array.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">packState</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OutputManagerBase.setRestartData">
+<a class="viewcode-back" href="../../../../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.setRestartData">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setRestartData</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Restore the state :meth:`getRestartData` returned.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data</span>
+<span class="sd">            The mapping of arrays.</span>
+<span class="sd">        """</span>
+
+        <span class="n">unpackState</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

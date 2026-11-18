@@ -144,7 +144,7 @@
              
   <section id="input-file-syntax">
 <h1>Input file syntax<a class="headerlink" href="#input-file-syntax" title="Link to this heading"></a></h1>
-<p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.utils.inputfileparser.py</span></code></p>
+<p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.utils.inputfileparser</span></code></p>
 <p>EdelweissFE uses an input file syntax similar to Abaqus, using human readable input files.
 The general syntax makes use of <code class="docutils literal notranslate"><span class="pre">*keywords</span></code>, possibly with <code class="docutils literal notranslate"><span class="pre">option=values</span></code> in the same line and
 supplemented by data lines.
@@ -160,12 +160,17 @@ data, data, data, data
 
 <span class="k">*another_keyword</span>,<span class="nv"> option1</span><span class="ow">=</span><span class="m">value</span>,<span class="nv"> option2</span><span class="ow">=</span><span class="m">another_value</span>
 data, data, data, data
+&gt;&gt;subkeyword,<span class="nv"> option1</span><span class="ow">=</span><span class="m">value</span>,<span class="nv"> option2</span><span class="ow">=</span><span class="m">another_value</span>
+&gt;&gt;subkeyword,<span class="nv"> option1</span><span class="ow">=</span><span class="m">other_value</span>
 </pre></div>
 </div>
+<p>Some keywords contain <code class="docutils literal notranslate"><span class="pre">&gt;&gt;subkeyword</span></code> lines, e.g. the step actions of a <code class="docutils literal notranslate"><span class="pre">*step</span></code>, the field outputs of a
+<code class="docutils literal notranslate"><span class="pre">*fieldOutput</span></code> or the result and configuration blocks of an <code class="docutils literal notranslate"><span class="pre">*output</span></code>. A <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code> line belongs to the keyword above it and carries its
+own options; most subkeywords may be repeated.</p>
 <p>See <a class="reference internal" href="developer/inputsystem.html"><span class="doc">The input system: how .inp grammar is defined</span></a> for how a keyword’s grammar is declared and how to add a new one.</p>
-<p>The available input syntax is defined in <code class="docutils literal notranslate"><span class="pre">fe/utils/inputfileparser.py</span></code>,
-and available keywords can be printed using</p>
-<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span>python edelweiss.py --keywords
+<p>Each keyword declares its options in its own module in <code class="docutils literal notranslate"><span class="pre">edelweissfe/keywords/</span></code>. All keywords and their options can be
+printed using</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">edelweissfe --keywords</span>
 </pre></div>
 </div>
 <p id="module-edelweissfe.utils.inputfileparser">Inputfileparser for inputfiles employing an Abaqus-like syntax.</p>

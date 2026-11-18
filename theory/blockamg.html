@@ -221,8 +221,7 @@ field, a screened-Poisson (Helmholtz) operator for a gradient-enhanced damage fi
 <p>The field-split preconditioner buys reach, not necessarily speed.
 On the reference models AMGCL’s smoothed aggregation converges, but not tightly, on the
 non-symmetric (contact-condensed) displacement block, so the outer Krylov solve needs
-many iterations – with the former defaults typically <span class="math notranslate nohighlight">\(O(100)\)</span>; with the current
-defaults (see <a class="reference internal" href="fieldsplitmeasurements.html#measured-defaults"><span class="std std-ref">Why the defaults are what they are</span></a>), mostly 5–50. The hardest damage-onset
+many iterations – with the defaults (see <a class="reference internal" href="fieldsplitmeasurements.html#measured-defaults"><span class="std std-ref">Why the defaults are what they are</span></a>) mostly 5–50. The hardest damage-onset
 solves stop at its cap of 100 iterations
 (<code class="docutils literal notranslate"><span class="pre">maxIterations</span></code>), return their iterate, and the hierarchies are rebuilt for
 the next solve. The cap is a deliberate budget: a solve that needs more is taken as a sign that the
@@ -284,7 +283,7 @@ Left unset, that option is automatic: it prunes for a linear solver that factori
 the stored zeros gone) and does not reuse a preconditioner, and leaves the matrix alone for the others
 (<a class="reference internal" href="../developer/linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix" title="edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix"><code class="xref py py-attr docutils literal notranslate"><span class="pre">needsPrunedSystemMatrix</span></code></a>): a tree of Krylov solvers and AMG gets
 the same iterations with and without the stored zeros, so pruning would only cost it a copy of the matrix and a
-pass over it in every Newton iteration (0.8 s of a 1 s call on a model with 376 million stored nonzeros), and a Krylov
+pass over it in every Newton iteration (on a large model, most of the time of the call), and a Krylov
 solve that reuses its preconditioner (<code class="docutils literal notranslate"><span class="pre">RebuildPolicy(reusePreconditioner=True)</span></code>) must not have its pattern changed
 anew in every iteration. An explicit
 <code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span> <span class="pre">=</span> <span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">false</span></code> in the nonlinear solver’s own configuration overrides the choice.
@@ -1191,10 +1190,9 @@ displacement field without node coordinates (see below) keeps the hierarchy on t
 once at <code class="docutils literal notranslate"><span class="pre">info</span></code>. The field’s tree, the default one or one given to <code class="docutils literal notranslate"><span class="pre">TwoLevel(amgclTree=...)</span></code>, configures the smoother,
 the aggregation and the hierarchy below.</p>
 <p>Switch it off on a model whose solves converge in a few outer iterations with the hierarchy on the translations: the
-coarse level saves little there, and its setup is larger wherever its coarse operator is – up to 1.2 times that of
-the hierarchy on the translations on the larger models of <a class="reference internal" href="fieldsplitmeasurements.html#measured-rigid-body-coarse-level"><span class="std std-ref">The rigid-body coarse level</span></a>. On the edge breakout, where the translations need 22
-and 23 outer iterations, the coarse level saves 2 and 1, at a setup of 0.94 and 0.99 times theirs and a solve time,
-setup included, of 0.92 and 0.95 – a wash. The data line <code class="docutils literal notranslate"><span class="pre">rigidBodyModesPerAggregate=false</span></code> of <code class="docutils literal notranslate"><span class="pre">type=blockamg</span></code>
+coarse level saves little there, and its setup is larger wherever its coarse operator is (see
+<a class="reference internal" href="fieldsplitmeasurements.html#measured-rigid-body-coarse-level"><span class="std std-ref">The rigid-body coarse level</span></a>). On the edge breakout, where the translations need 22 and 23 outer
+iterations, the coarse level saves 2 and 1, at about the same setup and solve time – a wash. The data line <code class="docutils literal notranslate"><span class="pre">rigidBodyModesPerAggregate=false</span></code> of <code class="docutils literal notranslate"><span class="pre">type=blockamg</span></code>
 switches it off; its options are those of a <code class="docutils literal notranslate"><span class="pre">custom</span></code> script (see <a class="reference internal" href="../analysis/composedlinsolversreference.html#blockamg-rigid-body-coarse-level-configuration"><span class="std std-ref">its arguments</span></a>).</p>
 <p>The modes are built from the node coordinates of the reference configuration, as the model holds them, which
 the coarse level reads from the model: after adaptive refinement those of the new model, under a <code class="docutils literal notranslate"><span class="pre">SchurComplement</span></code> those
@@ -1325,9 +1323,8 @@ itself: the Schur complement sits under the outer Krylov solve, <code class="doc
 iteration <span class="math notranslate nohighlight">\(z \leftarrow z + M^{-1} (r - \tilde S z)\)</span> with the one-sweep preconditioner <span class="math notranslate nohighlight">\(M^{-1}\)</span>,
 which on bar systems was found a good balance between AMG cycles and outer iterations; <code class="docutils literal notranslate"><span class="pre">sweeps</span> <span class="pre">=</span> <span class="pre">1</span></code> is
 cheaper per iteration and needs more of them.</p>
-<p><strong>The direct solver.</strong> <code class="docutils literal notranslate"><span class="pre">condensedBlockSolve=DirectSolver(package)</span></code> takes any registered direct solver package; <code class="docutils literal notranslate"><span class="pre">superlu</span></code>
-and <code class="docutils literal notranslate"><span class="pre">pardiso</span></code> factorize once for several right-hand sides, the others (<code class="docutils literal notranslate"><span class="pre">klu</span></code>, <code class="docutils literal notranslate"><span class="pre">mumps</span></code>, <code class="docutils literal notranslate"><span class="pre">petsclu</span></code>,
-<code class="docutils literal notranslate"><span class="pre">umfpack</span></code>, <code class="docutils literal notranslate"><span class="pre">panuapardiso</span></code>) factorize again for every one, which makes them a poor choice here. Every outer
+<p><strong>The direct solver.</strong> <code class="docutils literal notranslate"><span class="pre">condensedBlockSolve=DirectSolver(package)</span></code> takes any registered direct solver package; every package
+factorizes once and then solves for as many right-hand sides as needed by back substitution. Every outer
 iteration solves with <span class="math notranslate nohighlight">\(A_{bb}\)</span>, so the cost of a back substitution counts most:
 for the block-tridiagonal chains of bars, <code class="docutils literal notranslate"><span class="pre">superlu</span></code> (the default) is the cheaper one (with <code class="docutils literal notranslate"><span class="pre">blockFactors</span> <span class="pre">=</span>
 <span class="pre">&quot;both&quot;</span></code>, twice per iteration). A large compact zone (a
@@ -1489,14 +1486,12 @@ solver (<a class="reference internal" href="../analysis/composedlinsolvers.html#
 <li><p>Reach for the field-split preconditioner (<code class="docutils literal notranslate"><span class="pre">type=blockamg</span></code>) when a direct factorization no longer fits in memory, or when the
 factorization dominates the run. Below that, measure against <code class="docutils literal notranslate"><span class="pre">pardiso</span></code> rather than assuming.</p></li>
 <li><p>Run the first characterisation at <code class="docutils literal notranslate"><span class="pre">verbosity=info</span></code> and read the job’s performance table.
-Outer iteration counts up to the low hundreds were the expected regime at the former defaults; with
-the current ones, mostly 5–50, with the hardest damage-onset solves reaching the cap; counts
+Outer iteration counts are mostly 5–50, with the hardest damage-onset solves reaching the cap; counts
 triggering the warning threshold, or cap hits, repeatedly point at the preconditioner, not the
 tolerance.</p></li>
 <li><p>Set <code class="docutils literal notranslate"><span class="pre">OMP_NUM_THREADS</span></code> for the AMGCL kernels as usual (see <a class="reference internal" href="../analysis/parallelization.html"><span class="doc">Parallelization</span></a>). Results are
-reproducible at a fixed thread count up to last-bit summation order; across thread counts the
-hierarchies differ slightly (see <a class="reference internal" href="#blockamg-chebyshev"><span class="std std-ref">Near-null-space and the Chebyshev smoother</span></a>), and lowering the
-power-iteration setting of the vector-field default makes that difference large.</p></li>
+reproducible at a fixed thread count up to last-bit summation order; the spectral radius estimate of the
+smoothers is the same at any thread count (see <a class="reference internal" href="#blockamg-chebyshev"><span class="std std-ref">Near-null-space and the Chebyshev smoother</span></a>).</p></li>
 <li><p>Reach for the knobs in roughly this order: the tree of a field whose hierarchy is clearly the weak one (a
 <code class="docutils literal notranslate"><span class="pre">custom</span></code> script), then <code class="docutils literal notranslate"><span class="pre">sweeps</span></code>/<code class="docutils literal notranslate"><span class="pre">symmetric</span></code> for the sweep itself, then the tolerance.</p></li>
 <li><p>The corner-node two-level cycle is on for a quadratic 3D displacement field by default, the rigid-body coarse level

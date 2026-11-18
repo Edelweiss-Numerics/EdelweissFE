@@ -198,7 +198,7 @@ concrete step type.</p>
 <td><p>Continue the step from its latest restart checkpoint, after an increment failed and could not be cut back any further, and cut the increment back from there.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep" title="edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">latestCheckpointOfStep</span></code></a>(restartWriter)</p></td>
-<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code>), if it belongs to this step.</p></td>
+<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code></a>), if it belongs to this step.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.solve" title="edelweissfe.steps.base.stepbase.StepBase.solve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solve</span></code></a>([resumeFrom])</p></td>
 <td><p>Solve this step, increment by increment.</p></td>
@@ -256,7 +256,7 @@ change cannot be undone).</p>
 <dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep">
 <span class="sig-name descname"><span class="pre">latestCheckpointOfStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartWriter</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepBase.latestCheckpointOfStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep" title="Link to this definition"></a></dt>
 <dd><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code>),
+<a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code></a>),
 if it belongs to this step. The writer’s checkpoints are offered newest first, so once one
 belongs to an earlier step, all that remain do.</p>
 <dl class="field-list simple">
@@ -419,7 +419,7 @@ with adaptive refinement can fall back only to checkpoints written after its las
 <td><p>Continue the step from its latest restart checkpoint, after an increment failed and could not be cut back any further, and cut the increment back from there.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">latestCheckpointOfStep</span></code>(restartWriter)</p></td>
-<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code>), if it belongs to this step.</p></td>
+<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code></a>), if it belongs to this step.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.adaptivestep.AdaptiveStep.schema" title="edelweissfe.steps.adaptivestep.AdaptiveStep.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this step; all step types share the same incrementation options.</p></td>
@@ -468,7 +468,7 @@ advances (see <a class="reference internal" href="../developer/utils.html#edelwe
 <td><p>Continue the step from its latest restart checkpoint, after an increment failed and could not be cut back any further, and cut the increment back from there.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">latestCheckpointOfStep</span></code>(restartWriter)</p></td>
-<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code>), if it belongs to this step.</p></td>
+<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code></a>), if it belongs to this step.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.schema" title="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this step, per OptionSchemaProvider.</p></td>

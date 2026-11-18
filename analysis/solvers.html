@@ -450,21 +450,10 @@
 <dt class="sig sig-object py" id="edelweissfe.config.solvers.getSolverByName">
 <span class="sig-prename descclassname"><span class="pre">edelweissfe.config.solvers.</span></span><span class="sig-name descname"><span class="pre">getSolverByName</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/config/solvers.html#getSolverByName"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.config.solvers.getSolverByName" title="Link to this definition"></a></dt>
 <dd><p>Get the class type of the requested solver.</p>
-<p>Resolved through the registry (<code class="docutils literal notranslate"><span class="pre">solver</span></code> category) rather than through a hand-maintained
-table private to this module. Such a table could only ever list solvers living <em>inside</em> this
-package, so an external package – EdelweissMeshfree, a plugin – had no way to contribute one;
-going through the registry means a built-in, an entry point and an in-process
-<code class="xref py py-func docutils literal notranslate"><span class="pre">register()</span></code> call are all equally reachable here. An unknown
-name now raises <code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryLookupError</span></code> naming the available
-solvers, instead of a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>.</p>
-<p><strong>Solver names are now case-insensitive, deliberately.</strong> This resolver was the one
-case-<em>sensitive</em> registry in the codebase: it indexed a table with CamelCase keys and then read
-the class off the module under the <em>same</em> string, so the name doubled as the class
-attribute name and e.g. <code class="docutils literal notranslate"><span class="pre">&quot;nist&quot;</span></code> failed twice over, while 12 of the 13 legacy <code class="docutils literal notranslate"><span class="pre">config/*.py</span></code>
-registries already casefolded the name at the resolver. That audit amends rule (c) to sanction
-this: a name must not resolve differently depending on which front-end it arrived through, and
-the registry is reached by callers with no <code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser in the loop. The change is strictly
-more permissive, so no existing input file changes meaning.</p>
+<p>Resolved through the registry (<code class="docutils literal notranslate"><span class="pre">solver</span></code> category), so a solver contributed by another package
+(an entry point, or an in-process <a class="reference internal" href="../developer/inputsystem.html#edelweissfe.config.registry.register" title="edelweissfe.config.registry.register"><code class="xref py py-func docutils literal notranslate"><span class="pre">register()</span></code></a> call) is found
+like a built-in one. An unknown name raises
+<a class="reference internal" href="../developer/inputsystem.html#edelweissfe.config.registry.RegistryLookupError" title="edelweissfe.config.registry.RegistryLookupError"><code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryLookupError</span></code></a> naming the available solvers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – The name of the solver to load (case insensitive).</p>
@@ -1019,7 +1008,7 @@ if so configured; see
 <li><p><strong>step</strong> – The step to be solved.</p></li>
 <li><p><strong>model</strong> (<a class="reference internal" href="../developer/models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
 <li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="../output/fieldoutput.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output controller.</p></li>
-<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>OutputManagerBase</em><em>]</em>) – The output managers.</p></li>
+<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase"><em>OutputManagerBase</em></a><em>]</em>) – The output managers.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1980,11 +1969,11 @@ cannot switch abruptly either, as a tangent of materials switching between loadi
 <td><p>Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Under arc length control (NISTPArcLength with a controller), the re-equilibration is an arc length increment of size zero: the controlled quantity is held where the last accepted increment left it, and the load parameter is solved for, and with it the loads and the prescribed displacements it scales. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design).</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">linsolver</span></code></td>
-<td><p>str, default=’pardiso’</p></td>
+<td><p>str, default=’pardiso if built, else superlu’</p></td>
 <td><p>The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. pardiso, superlu, blockamg).</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span></code></td>
-<td><p>bool, default=None</p></td>
+<td><p>bool, default=’auto’</p></td>
 <td><p>Compact explicitly stored zeros out of the multi-point-constraint-condensed system matrix before solving. Pruning removes whichever entries happen to be exactly zero on this particular iteration, so the pattern changes on almost every Newton iteration – which defeats any linear solver that relies on a stable pattern across iterations (e.g. blockamg reusing a per-field AMG hierarchy built for the old one). Left unset (the default), the choice is automatic: pruned if the linear solver in force reports that it needs it (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which a direct factorization does – PARDISO’s reordering is sensitive to the extra structural entries on these path-dependent condensed systems, and keeping them has been observed to drift from the converged reference path – and a Krylov solver with an AMG preconditioner does not: it gives the same iterations with and without the stored zeros, and pruning costs it a copy of the matrix and a pass over it in every Newton iteration. An explicit True/False here always wins over the automatic choice; turn pruning off for a direct solver only after verifying the load path against a reference run.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code></td>
@@ -2028,11 +2017,11 @@ cannot switch abruptly either, as a tangent of materials switching between loadi
 <td><p>legacy criterion: I, the iteration from which on the flux residual is checked against fluxResidualToleranceAlternative instead of fluxResidualTolerance.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">zeroFluxThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its residual could be compared with, so its flux residual counts as converged; needs minimumIterations &gt;= 1, and refuses a smaller one. Off if not set.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">zeroIncrementThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is no increment to relate its correction to, and its correction counts as converged. Off if not set.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">minimumIterations</span></code></td>
@@ -2414,11 +2403,11 @@ cannot switch abruptly either, as a tangent of materials switching between loadi
 <td><p>Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Under arc length control (NISTPArcLength with a controller), the re-equilibration is an arc length increment of size zero: the controlled quantity is held where the last accepted increment left it, and the load parameter is solved for, and with it the loads and the prescribed displacements it scales. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design).</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">linsolver</span></code></td>
-<td><p>str, default=’pardiso’</p></td>
+<td><p>str, default=’pardiso if built, else superlu’</p></td>
 <td><p>The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. pardiso, superlu, blockamg).</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span></code></td>
-<td><p>bool, default=None</p></td>
+<td><p>bool, default=’auto’</p></td>
 <td><p>Compact explicitly stored zeros out of the multi-point-constraint-condensed system matrix before solving. Pruning removes whichever entries happen to be exactly zero on this particular iteration, so the pattern changes on almost every Newton iteration – which defeats any linear solver that relies on a stable pattern across iterations (e.g. blockamg reusing a per-field AMG hierarchy built for the old one). Left unset (the default), the choice is automatic: pruned if the linear solver in force reports that it needs it (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which a direct factorization does – PARDISO’s reordering is sensitive to the extra structural entries on these path-dependent condensed systems, and keeping them has been observed to drift from the converged reference path – and a Krylov solver with an AMG preconditioner does not: it gives the same iterations with and without the stored zeros, and pruning costs it a copy of the matrix and a pass over it in every Newton iteration. An explicit True/False here always wins over the automatic choice; turn pruning off for a direct solver only after verifying the load path against a reference run.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code></td>
@@ -2462,11 +2451,11 @@ cannot switch abruptly either, as a tangent of materials switching between loadi
 <td><p>legacy criterion: I, the iteration from which on the flux residual is checked against fluxResidualToleranceAlternative instead of fluxResidualTolerance.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">zeroFluxThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its residual could be compared with, so its flux residual counts as converged; needs minimumIterations &gt;= 1, and refuses a smaller one. Off if not set.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">zeroIncrementThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is no increment to relate its correction to, and its correction counts as converged. Off if not set.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">minimumIterations</span></code></td>
@@ -3056,7 +3045,7 @@ parameter instead.</p>
 <li><p><strong>step</strong> – The step to be solved.</p></li>
 <li><p><strong>model</strong> (<a class="reference internal" href="../developer/models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
 <li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="../output/fieldoutput.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output controller.</p></li>
-<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>OutputManagerBase</em><em>]</em>) – The output managers.</p></li>
+<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase"><em>OutputManagerBase</em></a><em>]</em>) – The output managers.</p></li>
 </ul>
 </dd>
 </dl>
@@ -3439,11 +3428,11 @@ arguments alike.</p>
 <td><p>Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Under arc length control (NISTPArcLength with a controller), the re-equilibration is an arc length increment of size zero: the controlled quantity is held where the last accepted increment left it, and the load parameter is solved for, and with it the loads and the prescribed displacements it scales. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design).</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">linsolver</span></code></td>
-<td><p>str, default=’pardiso’</p></td>
+<td><p>str, default=’pardiso if built, else superlu’</p></td>
 <td><p>The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. pardiso, superlu, blockamg).</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span></code></td>
-<td><p>bool, default=None</p></td>
+<td><p>bool, default=’auto’</p></td>
 <td><p>Compact explicitly stored zeros out of the multi-point-constraint-condensed system matrix before solving. Pruning removes whichever entries happen to be exactly zero on this particular iteration, so the pattern changes on almost every Newton iteration – which defeats any linear solver that relies on a stable pattern across iterations (e.g. blockamg reusing a per-field AMG hierarchy built for the old one). Left unset (the default), the choice is automatic: pruned if the linear solver in force reports that it needs it (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which a direct factorization does – PARDISO’s reordering is sensitive to the extra structural entries on these path-dependent condensed systems, and keeping them has been observed to drift from the converged reference path – and a Krylov solver with an AMG preconditioner does not: it gives the same iterations with and without the stored zeros, and pruning costs it a copy of the matrix and a pass over it in every Newton iteration. An explicit True/False here always wins over the automatic choice; turn pruning off for a direct solver only after verifying the load path against a reference run.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code></td>
@@ -3487,11 +3476,11 @@ arguments alike.</p>
 <td><p>legacy criterion: I, the iteration from which on the flux residual is checked against fluxResidualToleranceAlternative instead of fluxResidualTolerance.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">zeroFluxThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its residual could be compared with, so its flux residual counts as converged; needs minimumIterations &gt;= 1, and refuses a smaller one. Off if not set.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">zeroIncrementThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is no increment to relate its correction to, and its correction counts as converged. Off if not set.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">minimumIterations</span></code></td>
@@ -3592,7 +3581,11 @@ whatever the load parameter.</p>
 </div>
 <p>From Python, without an input file, the controller is a step action built through its typed constructor, and the
 option is a constructor argument of the solver:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">stepActions</span><span class="p">[</span><span class="s2">"indirectcontrol"</span><span class="p">][</span><span class="s2">"opening"</span><span class="p">]</span> <span class="o">=</span> <span class="n">IndirectControl</span><span class="p">(</span><span class="s2">"opening"</span><span class="p">,</span> <span class="n">dof1</span><span class="p">,</span> <span class="n">dof2</span><span class="p">,</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="mf">0.01</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.indirectcontrol</span><span class="w"> </span><span class="kn">import</span> <span class="n">StepAction</span> <span class="k">as</span> <span class="n">IndirectControl</span>
+
+<span class="n">stepActions</span><span class="p">[</span><span class="s2">"indirectcontrol"</span><span class="p">][</span><span class="s2">"opening"</span><span class="p">]</span> <span class="o">=</span> <span class="n">IndirectControl</span><span class="p">(</span>
+    <span class="s2">"opening"</span><span class="p">,</span> <span class="n">dof1</span><span class="p">,</span> <span class="n">dof2</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span> <span class="mf">0.01</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">journal</span>
+<span class="p">)</span>
 <span class="n">solver</span> <span class="o">=</span> <span class="n">NISTPArcLength</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="n">arcLengthController</span><span class="o">=</span><span class="s2">"opening"</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -4507,7 +4500,7 @@ left, which is what carries the kinematic state across steps.</p>
 <li><p><strong>step</strong> – The step to be solved.</p></li>
 <li><p><strong>model</strong> (<a class="reference internal" href="../developer/models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
 <li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="../output/fieldoutput.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output controller.</p></li>
-<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>OutputManagerBase</em><em>]</em>) – The output managers.</p></li>
+<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase"><em>OutputManagerBase</em></a><em>]</em>) – The output managers.</p></li>
 </ul>
 </dd>
 </dl>
@@ -4775,11 +4768,11 @@ the module documentation.</p>
 <td><p>Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Under arc length control (NISTPArcLength with a controller), the re-equilibration is an arc length increment of size zero: the controlled quantity is held where the last accepted increment left it, and the load parameter is solved for, and with it the loads and the prescribed displacements it scales. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design).</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">linsolver</span></code></td>
-<td><p>str, default=’pardiso’</p></td>
+<td><p>str, default=’pardiso if built, else superlu’</p></td>
 <td><p>The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. pardiso, superlu, blockamg).</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span></code></td>
-<td><p>bool, default=None</p></td>
+<td><p>bool, default=’auto’</p></td>
 <td><p>Compact explicitly stored zeros out of the multi-point-constraint-condensed system matrix before solving. Pruning removes whichever entries happen to be exactly zero on this particular iteration, so the pattern changes on almost every Newton iteration – which defeats any linear solver that relies on a stable pattern across iterations (e.g. blockamg reusing a per-field AMG hierarchy built for the old one). Left unset (the default), the choice is automatic: pruned if the linear solver in force reports that it needs it (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which a direct factorization does – PARDISO’s reordering is sensitive to the extra structural entries on these path-dependent condensed systems, and keeping them has been observed to drift from the converged reference path – and a Krylov solver with an AMG preconditioner does not: it gives the same iterations with and without the stored zeros, and pruning costs it a copy of the matrix and a pass over it in every Newton iteration. An explicit True/False here always wins over the automatic choice; turn pruning off for a direct solver only after verifying the load path against a reference run.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code></td>
@@ -4823,11 +4816,11 @@ the module documentation.</p>
 <td><p>legacy criterion: I, the iteration from which on the flux residual is checked against fluxResidualToleranceAlternative instead of fluxResidualTolerance.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">zeroFluxThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its residual could be compared with, so its flux residual counts as converged; needs minimumIterations &gt;= 1, and refuses a smaller one. Off if not set.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">zeroIncrementThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is no increment to relate its correction to, and its correction counts as converged. Off if not set.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">minimumIterations</span></code></td>
@@ -5235,11 +5228,11 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 <td><p>Whether to insert one constant-load, zero-time re-equilibration increment immediately after an adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is first settled to equilibrium at the last converged load level (no load advance, no Dirichlet increment, zero time increment) so the subsequent load-advancing increment starts from an equilibrated state. Intended for softening problems where remeshing near the process zone otherwise couples the load advance with the warm-start settling transient in one solve. Under arc length control (NISTPArcLength with a controller), the re-equilibration is an arc length increment of size zero: the controlled quantity is held where the last accepted increment left it, and the load parameter is solved for, and with it the loads and the prescribed displacements it scales. Note: the equilibration solve integrates materials with dT=0, which suits rate-independent models; rate-dependent materials see no time advance during it (by design).</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">linsolver</span></code></td>
-<td><p>str, default=’pardiso’</p></td>
+<td><p>str, default=’pardiso if built, else superlu’</p></td>
 <td><p>The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. pardiso, superlu, blockamg).</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span></code></td>
-<td><p>bool, default=None</p></td>
+<td><p>bool, default=’auto’</p></td>
 <td><p>Compact explicitly stored zeros out of the multi-point-constraint-condensed system matrix before solving. Pruning removes whichever entries happen to be exactly zero on this particular iteration, so the pattern changes on almost every Newton iteration – which defeats any linear solver that relies on a stable pattern across iterations (e.g. blockamg reusing a per-field AMG hierarchy built for the old one). Left unset (the default), the choice is automatic: pruned if the linear solver in force reports that it needs it (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which a direct factorization does – PARDISO’s reordering is sensitive to the extra structural entries on these path-dependent condensed systems, and keeping them has been observed to drift from the converged reference path – and a Krylov solver with an AMG preconditioner does not: it gives the same iterations with and without the stored zeros, and pruning costs it a copy of the matrix and a pass over it in every Newton iteration. An explicit True/False here always wins over the automatic choice; turn pruning off for a direct solver only after verifying the load path against a reference run.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code></td>
@@ -5283,11 +5276,11 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 <td><p>legacy criterion: I, the iteration from which on the flux residual is checked against fluxResidualToleranceAlternative instead of fluxResidualTolerance.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">zeroFluxThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its residual could be compared with, so its flux residual counts as converged; needs minimumIterations &gt;= 1, and refuses a smaller one. Off if not set.</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">zeroIncrementThreshold</span></code></td>
-<td><p>float, default=None</p></td>
+<td><p>float, default=’off’</p></td>
 <td><p>legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is no increment to relate its correction to, and its correction counts as converged. Off if not set.</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">minimumIterations</span></code></td>
@@ -6549,7 +6542,7 @@ solver, it gives the entities that integrate their own inertia no inertia
 <li><p><strong>step</strong> – The step to be solved.</p></li>
 <li><p><strong>model</strong> (<a class="reference internal" href="../developer/models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
 <li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="../output/fieldoutput.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output controller.</p></li>
-<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>OutputManagerBase</em><em>]</em>) – The output managers.</p></li>
+<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase"><em>OutputManagerBase</em></a><em>]</em>) – The output managers.</p></li>
 </ul>
 </dd>
 </dl>
@@ -6751,7 +6744,7 @@ indirection.</p>
 <td><p>The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. pardiso, superlu, blockamg).</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span></code></td>
-<td><p>bool, default=None</p></td>
+<td><p>bool, default=’auto’</p></td>
 <td><p>Compact explicitly stored zeros out of the multi-point-constraint-condensed system matrix before solving. See NISTSchema for the trade-off; unset (the default) decides automatically from the linear solver in force.</p></td>
 </tr>
 </tbody>
@@ -7099,7 +7092,7 @@ whatever else contributes like an element – in a meshfree model, its cells and
 <td><p>The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. pardiso, superlu, blockamg).</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span></code></td>
-<td><p>bool, default=None</p></td>
+<td><p>bool, default=’auto’</p></td>
 <td><p>Compact explicitly stored zeros out of the multi-point-constraint-condensed system matrix before solving. See NISTSchema for the trade-off; unset (the default) decides automatically from the linear solver in force.</p></td>
 </tr>
 </tbody>
@@ -7498,7 +7491,7 @@ system is built by the first <a class="reference internal" href="#edelweissfe.so
 <li><p><strong>step</strong> – The step to be solved.</p></li>
 <li><p><strong>model</strong> (<a class="reference internal" href="../developer/models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
 <li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="../output/fieldoutput.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output controller.</p></li>
-<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>OutputManagerBase</em><em>]</em>) – The output managers.</p></li>
+<li><p><strong>outputmanagers</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><a class="reference internal" href="../developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase"><em>OutputManagerBase</em></a><em>]</em>) – The output managers.</p></li>
 </ul>
 </dd>
 </dl>

@@ -392,7 +392,7 @@ linearized system <code class="docutils literal notranslate"><span class="pre">K
 <p>The counterpart, on the solver side, of the name-based <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> override mechanism
 (<code class="docutils literal notranslate"><span class="pre">stepactions/options.py</span></code>): once that mechanism has resolved an <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options,</span> <span class="pre">name=X,</span> <span class="pre">...</span></code>
 block to this solver instance and validated the present keys against <code class="docutils literal notranslate"><span class="pre">type(self).schema</span></code>
-via <code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code>, it calls this method with the
+via <a class="reference internal" href="inputsystem.html#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a>, it calls this method with the
 result to actually apply them.</p>
 <p><code class="docutils literal notranslate"><span class="pre">fieldValues</span></code> is keyed by <em>schema field name</em> (e.g. <code class="docutils literal notranslate"><span class="pre">rungeKuttaStages</span></code>), while
 <code class="docutils literal notranslate"><span class="pre">self.options</span></code> – read throughout a step – is keyed by the

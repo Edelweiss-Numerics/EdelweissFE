@@ -286,7 +286,8 @@ system (<code class="docutils literal notranslate"><span class="pre">forgetDiscr
 copy (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector.onLocations" title="edelweissfe.numerics.dofvector.DofVector.onLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onLocations()</span></code></a>); the linear solver learns of a new pattern
 (<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern" title="edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewMatrixPattern()</span></code></a>) and drops what it built for the old one, a
 hierarchy or a factorization; the system matrix assembly is built with the pattern the locations determine, and,
-in <code class="docutils literal notranslate"><span class="pre">NID</span></code>, the mass is copied onto it. <code class="docutils literal notranslate"><span class="pre">NED</span></code> has no system matrix, and wraps its vectors only.</p>
+in <code class="docutils literal notranslate"><span class="pre">NID</span></code>, the mass is copied onto it, unless entities integrate their own inertia (<code class="docutils literal notranslate"><span class="pre">inertia=nodes</span></code>): then the
+mass and damping are assembled anew. <code class="docutils literal notranslate"><span class="pre">NED</span></code> has no system matrix, and wraps its vectors only.</p>
 </dd>
 </dl>
 <p>Nothing sized by the numbering is touched by new locations: the lumped mass of <code class="docutils literal notranslate"><span class="pre">NED</span></code> is a function of the elements
@@ -456,7 +457,8 @@ solved degree of freedom by degree of freedom, so it holds no system matrix and 
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NID</span></code>, <code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code></p></td>
 <td><p>tangent plus the mass (on the tangent’s pattern) and the damping</p></td>
 <td><p>once per Newton iteration</p></td>
-<td><p>as <code class="docutils literal notranslate"><span class="pre">NIST</span></code>; new locations keep the mass and damping, which the first increment on a new numbering assembles</p></td>
+<td><p>as <code class="docutils literal notranslate"><span class="pre">NIST</span></code>; new locations keep the mass and damping, which the first increment on a new numbering assembles;
+with entities that integrate their own inertia (<code class="docutils literal notranslate"><span class="pre">inertia=nodes</span></code>), they are assembled anew for every increment</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NEST</span></code>, <code class="docutils literal notranslate"><span class="pre">NESTParallel</span></code></p></td>
 <td><p>tangent, <code class="docutils literal notranslate"><span class="pre">vij</span></code></p></td>

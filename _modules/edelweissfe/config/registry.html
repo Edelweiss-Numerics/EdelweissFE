@@ -1,0 +1,932 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.config.registry &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.config.registry</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.config.registry</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="sd">"""Lazy registry mapping ``(category, name)`` to the object that implements it.</span>
+
+<span class="sd">Used both by the ``.inp`` parser (to resolve a keyword/type name to its implementing class) and</span>
+<span class="sd">directly by third-party packages (EdelweissMeshfree, plugins) that need the same objects without</span>
+<span class="sd">going through the parser.</span>
+
+<span class="sd">Four properties are load-bearing; the first three are each covered by a dedicated test in</span>
+<span class="sd">``tests/test_registry.py``:</span>
+
+<span class="sd">1. **Zero eager imports.** Importing this module must not import any element, material, solver,</span>
+<span class="sd">   or output-manager module -- it only ever imports :mod:`importlib` and</span>
+<span class="sd">   :mod:`importlib.metadata`. Resolving a name (importing the module that actually implements it)</span>
+<span class="sd">   happens exclusively inside :func:`lookup`, on first use of that particular ``(category,</span>
+<span class="sd">   name)`` pair.</span>
+<span class="sd">2. **Built-ins work with a stale editable install.** Entry points declared in a package's</span>
+<span class="sd">   ``pyproject.toml`` only materialize in ``importlib.metadata`` after ``pip install -e .`` is</span>
+<span class="sd">   re-run, so EdelweissFE's own modules are additionally listed in the static ``_BUILTINS`` table</span>
+<span class="sd">   below as plain ``"module.path:AttrName"`` strings, requiring no metadata regeneration. Entry</span>
+<span class="sd">   points are layered *on top* of that table for third-party discovery.</span>
+<span class="sd">3. **Thread-safe memoization.** ``lookup()`` caches the resolved object in ``_resolved`` so a</span>
+<span class="sd">   given ``(category, name)`` is only imported once. Under free-threading (``PYTHON_GIL=0``),</span>
+<span class="sd">   multiple threads can call ``lookup()`` for the same key concurrently; see the docstring of</span>
+<span class="sd">   :func:`lookup` for the chosen strategy.</span>
+<span class="sd">4. **Names are case-insensitive.** Both ``category`` and ``name`` are casefolded on the way in</span>
+<span class="sd">   (:func:`lookup`, :func:`register`) and stored casefolded in ``_BUILTINS``, so a name resolves</span>
+<span class="sd">   the same way whether it arrives through the ``.inp`` parser or directly from an external</span>
+<span class="sd">   package. Casefolded keys widen the chance of two callers claiming the same name, which is why</span>
+<span class="sd">   every way of claiming a name raises :class:`RegistryConflictError` instead of silently</span>
+<span class="sd">   overwriting -- see that class.</span>
+
+<span class="sd">Built-in coverage</span>
+<span class="sd">------------------</span>
+<span class="sd">The ``_BUILTINS`` table below covers these categories:</span>
+
+<span class="sd">``outputmanager`` (10), ``section`` (3), ``constraint`` (12), ``stepaction`` (13),</span>
+<span class="sd">``generator`` (11), ``analyticalfield`` (3), ``solver`` (7), ``step`` (2), ``modelmodifier`` (2),</span>
+<span class="sd">``statetransferstrategy`` (3), ``element`` (42), ``material`` (7), ``linsolver`` (10).</span>
+
+<span class="sd">``keyword`` is the single source the ``.inp`` parser consults for every top-level keyword</span>
+<span class="sd">(``element``, ``node``, ``nSet``, ``elSet``, ``surface``, ``job``, ``section``, ``elementProperty``,</span>
+<span class="sd">``material``, ``advancedmaterial``, ``fieldOutput``, ``analyticalField``, ``solver``, ``step``,</span>
+<span class="sd">``output``, ``updateConfiguration``, ``modelGenerator``, ``constraint``, ``modelModifier``,</span>
+<span class="sd">``configurePlots``, ``exportPlots``, ``include``), each mapped to a</span>
+<span class="sd">:class:`edelweissfe.keywords.base.keywordbase.KeywordBase` subclass.</span>
+
+<span class="sd">``element`` and ``material`` are keyed by *element type* / *material name* and cover exactly the</span>
+<span class="sd">``provider=edelweiss`` namespace of ``config/elementlibrary.py`` and ``config/materiallibrary.py``.</span>
+<span class="sd">The ``provider`` axis itself is not part of this registry: it selects a namespace rather than a</span>
+<span class="sd">variant of one lookup, and only ``edelweiss`` addresses anything by name -- ``marmot`` and</span>
+<span class="sd">``marmotsingleqpelement`` ignore the name and return a single wrapper class, ``marmotmaterial``</span>
+<span class="sd">returns ``None``. Those branches stay an explicit table in their own module.</span>
+
+<span class="sd">``linsolver`` is covered by a uniform ``createSolver(opts) -&gt; Callable[[A, b], x]`` factory per</span>
+<span class="sd">solver (see the ``linsolver`` block below), since not every linear solver reduces to a plain</span>
+<span class="sd">class/callable a dotted string can point at.</span>
+
+<span class="sd">What is outside the registry:</span>
+
+<span class="sd">- The ``provider`` axis of ``config/elementlibrary.py``/``config/materiallibrary.py`` (see above).</span>
+<span class="sd">- ``config/solvers.py``'s ``solverLibrary``, ``config/outputmanagers.py``, ``config/sections.py``</span>
+<span class="sd">  and ``config/analyticalfields.py``, which exist purely as Sphinx rendering targets and resolve</span>
+<span class="sd">  nothing themselves.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">importlib.metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">entry_points</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.misc</span><span class="w"> </span><span class="kn">import</span> <span class="n">findSimilarString</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">schemaOf</span>
+
+<span class="n">ENTRY_POINT_GROUP</span> <span class="o">=</span> <span class="s2">"edelweissfe.plugins"</span>
+<span class="sd">"""Entry-point group name third-party packages register EdelweissFE-discoverable implementations</span>
+<span class="sd">under: in a plugin's ``pyproject.toml``, the table ``[project.entry-points."edelweissfe.plugins"]``</span>
+<span class="sd">with entries such as ``"outputmanager.myoutputmanager" = "mypackage.mymodule:MyOutputManager"``."""</span>
+
+
+<div class="viewcode-block" id="RegistryLookupError">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.config.registry.RegistryLookupError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RegistryLookupError</span><span class="p">(</span><span class="ne">LookupError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised by :func:`lookup` when no implementation is registered for a requested name.</span>
+
+<span class="sd">    Unlike a bare ``findSimilarString`` call (which raises a plain ``Exception`` with the message</span>
+<span class="sd">    "You tried to find a string similar to ... in an empty list." when the candidate list happens</span>
+<span class="sd">    to be empty), this always produces a message naming the category and, whenever at least one</span>
+<span class="sd">    name is registered for it, a "did you mean" suggestion.</span>
+<span class="sd">    """</span></div>
+
+
+
+<div class="viewcode-block" id="RegistryConflictError">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.config.registry.RegistryConflictError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RegistryConflictError</span><span class="p">(</span><span class="n">RegistryLookupError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised when two different implementations claim the same ``(category, name)``.</span>
+
+<span class="sd">    A :class:`RegistryLookupError` subclass, so a caller guarding a name resolution with</span>
+<span class="sd">    ``except RegistryLookupError`` also catches a conflict rather than letting it escape as an</span>
+<span class="sd">    unrelated exception type. Re-registering the identical object under the same name is not a</span>
+<span class="sd">    conflict (identity is compared before raising) and is idempotent.</span>
+<span class="sd">    """</span></div>
+
+
+
+<span class="c1">#: Static built-in table: ``(category, name)`` (both stored casefolded) -&gt; ``"module.path:Attr"``,</span>
+<span class="c1">#: resolved lazily by :func:`lookup`.</span>
+<span class="n">_BUILTINS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_addBuiltins</span><span class="p">(</span><span class="n">category</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">attrName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">moduleNames</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">packageDotted</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Populate ``_BUILTINS`` for a category following the uniform "one module per name, fixed</span>
+<span class="sd">    attribute name" convention used by most ``edelweissfe`` subpackages.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    category</span>
+<span class="sd">        The registry category these entries belong to (e.g. ``"outputmanager"``).</span>
+<span class="sd">    attrName</span>
+<span class="sd">        The attribute name to look up in each resolved module (e.g. ``"OutputManager"``).</span>
+<span class="sd">    moduleNames</span>
+<span class="sd">        The submodule names (without package prefix), one per registrable name.</span>
+<span class="sd">    packageDotted</span>
+<span class="sd">        The dotted package path the submodules live in (e.g. ``"edelweissfe.outputmanagers"``).</span>
+<span class="sd">    """</span>
+    <span class="k">for</span> <span class="n">moduleName</span> <span class="ow">in</span> <span class="n">moduleNames</span><span class="p">:</span>
+        <span class="n">_BUILTINS</span><span class="p">[(</span><span class="n">category</span><span class="p">,</span> <span class="n">moduleName</span><span class="o">.</span><span class="n">casefold</span><span class="p">())]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">packageDotted</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">moduleName</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">attrName</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="n">_addBuiltins</span><span class="p">(</span>
+    <span class="s2">"outputmanager"</span><span class="p">,</span>
+    <span class="s2">"OutputManager"</span><span class="p">,</span>
+    <span class="p">[</span>
+        <span class="s2">"computetimemonitor"</span><span class="p">,</span>
+        <span class="s2">"conditionalstop"</span><span class="p">,</span>
+        <span class="s2">"ensight"</span><span class="p">,</span>
+        <span class="s2">"fractureenergyintegrator"</span><span class="p">,</span>
+        <span class="s2">"meshdatatofile"</span><span class="p">,</span>
+        <span class="s2">"meshplot"</span><span class="p">,</span>
+        <span class="s2">"monitor"</span><span class="p">,</span>
+        <span class="s2">"plotalongpath"</span><span class="p">,</span>
+        <span class="s2">"restart"</span><span class="p">,</span>
+        <span class="s2">"statusfile"</span><span class="p">,</span>
+        <span class="s2">"timemonitor"</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="s2">"edelweissfe.outputmanagers"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_addBuiltins</span><span class="p">(</span>
+    <span class="s2">"section"</span><span class="p">,</span>
+    <span class="s2">"Section"</span><span class="p">,</span>
+    <span class="p">[</span><span class="s2">"plane"</span><span class="p">,</span> <span class="s2">"planerandomthickness"</span><span class="p">,</span> <span class="s2">"solid"</span><span class="p">,</span> <span class="s2">"truss"</span><span class="p">],</span>
+    <span class="s2">"edelweissfe.sections"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_addBuiltins</span><span class="p">(</span>
+    <span class="s2">"constraint"</span><span class="p">,</span>
+    <span class="s2">"Constraint"</span><span class="p">,</span>
+    <span class="p">[</span>
+        <span class="s2">"amrtransparencyprobe"</span><span class="p">,</span>
+        <span class="s2">"directionalspringpenalty"</span><span class="p">,</span>
+        <span class="s2">"equalvaluelagrangian"</span><span class="p">,</span>
+        <span class="s2">"equalvaluepenalty"</span><span class="p">,</span>
+        <span class="s2">"hangingnode"</span><span class="p">,</span>
+        <span class="s2">"linearizedrigidbody"</span><span class="p">,</span>
+        <span class="s2">"linearizedrigidbodympc"</span><span class="p">,</span>
+        <span class="s2">"nodetodeformablesurfacepenalty"</span><span class="p">,</span>
+        <span class="s2">"nodetodiscreterigidbodypenalty"</span><span class="p">,</span>
+        <span class="s2">"nodetorigidsurfacepenalty"</span><span class="p">,</span>
+        <span class="s2">"penaltyindirectcontrol"</span><span class="p">,</span>
+        <span class="s2">"rigidbody"</span><span class="p">,</span>
+        <span class="s2">"surfacetodeformablesurfacepenalty"</span><span class="p">,</span>
+        <span class="s2">"surfacetodiscreterigidbodypenalty"</span><span class="p">,</span>
+        <span class="s2">"tie"</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="s2">"edelweissfe.constraints"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_addBuiltins</span><span class="p">(</span>
+    <span class="s2">"stepaction"</span><span class="p">,</span>
+    <span class="s2">"StepAction"</span><span class="p">,</span>
+    <span class="p">[</span>
+        <span class="s2">"bodyforce"</span><span class="p">,</span>
+        <span class="s2">"changematerialproperty"</span><span class="p">,</span>
+        <span class="s2">"dirichlet"</span><span class="p">,</span>
+        <span class="s2">"distributedload"</span><span class="p">,</span>
+        <span class="s2">"geostatic"</span><span class="p">,</span>
+        <span class="s2">"indirectcontractioncontrol"</span><span class="p">,</span>
+        <span class="s2">"indirectcontrol"</span><span class="p">,</span>
+        <span class="s2">"initializematerial"</span><span class="p">,</span>
+        <span class="s2">"modelupdate"</span><span class="p">,</span>
+        <span class="s2">"nodeforces"</span><span class="p">,</span>
+        <span class="s2">"options"</span><span class="p">,</span>
+        <span class="s2">"setfield"</span><span class="p">,</span>
+        <span class="s2">"setinitialconditions"</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="s2">"edelweissfe.stepactions"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_addBuiltins</span><span class="p">(</span>
+    <span class="s2">"generator"</span><span class="p">,</span>
+    <span class="s2">"Generator"</span><span class="p">,</span>
+    <span class="p">[</span>
+        <span class="s2">"boxgen"</span><span class="p">,</span>
+        <span class="s2">"cubit"</span><span class="p">,</span>
+        <span class="s2">"cuboidlatticegenerator"</span><span class="p">,</span>
+        <span class="s2">"cylindergenerator"</span><span class="p">,</span>
+        <span class="s2">"discreterigidbodygenerator"</span><span class="p">,</span>
+        <span class="s2">"executepythoncode"</span><span class="p">,</span>
+        <span class="s2">"findclosestnode"</span><span class="p">,</span>
+        <span class="s2">"microstructuregenerator"</span><span class="p">,</span>
+        <span class="s2">"pipegen"</span><span class="p">,</span>
+        <span class="s2">"planerectquad"</span><span class="p">,</span>
+        <span class="s2">"surfaceelementgenerator"</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="s2">"edelweissfe.generators"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">_addBuiltins</span><span class="p">(</span>
+    <span class="s2">"analyticalfield"</span><span class="p">,</span>
+    <span class="s2">"AnalyticalField"</span><span class="p">,</span>
+    <span class="p">[</span><span class="s2">"fromvtk"</span><span class="p">,</span> <span class="s2">"randomscalar"</span><span class="p">,</span> <span class="s2">"scalarexpression"</span><span class="p">],</span>
+    <span class="s2">"edelweissfe.analyticalfields"</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># solver / step / modelmodifier / statetransferstrategy: not "one module per name", so each entry</span>
+<span class="c1"># names its ``&lt;module&gt;:&lt;class&gt;`` (e.g. ``NID`` is ``NonlinearImplicitDynamic``).</span>
+<span class="k">for</span> <span class="n">_solverName</span><span class="p">,</span> <span class="n">_target</span> <span class="ow">in</span> <span class="p">{</span>
+    <span class="s2">"NIST"</span><span class="p">:</span> <span class="s2">"nonlinearimplicitstatic:NIST"</span><span class="p">,</span>
+    <span class="s2">"NEST"</span><span class="p">:</span> <span class="s2">"nonlinearexplicitstatic:NEST"</span><span class="p">,</span>
+    <span class="s2">"NED"</span><span class="p">:</span> <span class="s2">"nonlinearexplicitdynamic:NED"</span><span class="p">,</span>
+    <span class="s2">"NID"</span><span class="p">:</span> <span class="s2">"nonlinearimplicitdynamic:NonlinearImplicitDynamic"</span><span class="p">,</span>
+    <span class="s2">"NIDParallel"</span><span class="p">:</span> <span class="s2">"nonlinearimplicitdynamicparallel:NIDParallel"</span><span class="p">,</span>
+    <span class="s2">"NISTParallel"</span><span class="p">:</span> <span class="s2">"nonlinearimplicitstaticparallel:NISTParallel"</span><span class="p">,</span>
+    <span class="s2">"NESTParallel"</span><span class="p">:</span> <span class="s2">"nonlinearexplicitstaticparallel:NESTParallel"</span><span class="p">,</span>
+    <span class="s2">"NEDParallel"</span><span class="p">:</span> <span class="s2">"nonlinearexplicitdynamicparallel:NEDParallel"</span><span class="p">,</span>
+    <span class="s2">"NISTPArcLength"</span><span class="p">:</span> <span class="s2">"nonlinearimplicitstaticparallelarclength:NISTPArcLength"</span><span class="p">,</span>
+<span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"solver"</span><span class="p">,</span> <span class="n">_solverName</span><span class="o">.</span><span class="n">casefold</span><span class="p">())]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"edelweissfe.solvers.</span><span class="si">{</span><span class="n">_target</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"step"</span><span class="p">,</span> <span class="s2">"adaptive"</span><span class="p">)]</span> <span class="o">=</span> <span class="s2">"edelweissfe.steps.adaptivestep:AdaptiveStep"</span>
+<span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"step"</span><span class="p">,</span> <span class="s2">"adaptiveforexplicitsimulations"</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">"edelweissfe.steps.adaptivestepforexplicitsimulations:AdaptiveStepForExplicitSimulations"</span>
+<span class="p">)</span>
+
+<span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"modelmodifier"</span><span class="p">,</span> <span class="s2">"hadaptivity"</span><span class="p">)]</span> <span class="o">=</span> <span class="s2">"edelweissfe.modelmodifiers.adaptivity.hadaptivity:ModelModifier"</span>
+<span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"modelmodifier"</span><span class="p">,</span> <span class="s2">"surfacesnap"</span><span class="p">)]</span> <span class="o">=</span> <span class="s2">"edelweissfe.modelmodifiers.geometry.surfacesnap:ModelModifier"</span>
+
+<span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"statetransferstrategy"</span><span class="p">,</span> <span class="s2">"nearestqp"</span><span class="p">)]</span> <span class="o">=</span> <span class="s2">"edelweissfe.adaptivity.statetransfer:NearestQuadraturePointCopy"</span>
+<span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"statetransferstrategy"</span><span class="p">,</span> <span class="s2">"projection"</span><span class="p">)]</span> <span class="o">=</span> <span class="s2">"edelweissfe.adaptivity.statetransfer:PolynomialProjection"</span>
+<span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"statetransferstrategy"</span><span class="p">,</span> <span class="s2">"virgin"</span><span class="p">)]</span> <span class="o">=</span> <span class="s2">"edelweissfe.adaptivity.statetransfer:VirginState"</span>
+
+<span class="c1"># AMR refinement markers, resolved by a ``&gt;&gt;marker, type=&lt;name&gt;`` block.</span>
+<span class="k">for</span> <span class="n">_markerName</span><span class="p">,</span> <span class="n">_markerClass</span> <span class="ow">in</span> <span class="p">{</span>
+    <span class="s2">"fieldOutput"</span><span class="p">:</span> <span class="s2">"FieldOutputMarker"</span><span class="p">,</span>
+    <span class="s2">"elementSet"</span><span class="p">:</span> <span class="s2">"ElementSetMarker"</span><span class="p">,</span>
+    <span class="s2">"nodeSet"</span><span class="p">:</span> <span class="s2">"NodeSetMarker"</span><span class="p">,</span>
+    <span class="s2">"surface"</span><span class="p">:</span> <span class="s2">"SurfaceMarker"</span><span class="p">,</span>
+    <span class="s2">"recoveryError"</span><span class="p">:</span> <span class="s2">"RecoveryErrorMarker"</span><span class="p">,</span>
+<span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"marker"</span><span class="p">,</span> <span class="n">_markerName</span><span class="o">.</span><span class="n">casefold</span><span class="p">())]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"edelweissfe.adaptivity.marking:</span><span class="si">{</span><span class="n">_markerClass</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="c1"># The element category is keyed by element *type*; many types share one formulation class. The types</span>
+<span class="c1"># are literals, not imported from `elements.library`, so that this module imports nothing (property 1).</span>
+<span class="k">for</span> <span class="n">_elementTypeName</span> <span class="ow">in</span> <span class="p">[</span>
+    <span class="s2">"CPE4"</span><span class="p">,</span>
+    <span class="s2">"CPE4R"</span><span class="p">,</span>
+    <span class="s2">"CPE4E"</span><span class="p">,</span>
+    <span class="s2">"CPE4N"</span><span class="p">,</span>
+    <span class="s2">"CPE8"</span><span class="p">,</span>
+    <span class="s2">"CPE8R"</span><span class="p">,</span>
+    <span class="s2">"CPE8N"</span><span class="p">,</span>
+    <span class="s2">"CPS4"</span><span class="p">,</span>
+    <span class="s2">"CPS4R"</span><span class="p">,</span>
+    <span class="s2">"CPS4E"</span><span class="p">,</span>
+    <span class="s2">"CPS4N"</span><span class="p">,</span>
+    <span class="s2">"CPS8"</span><span class="p">,</span>
+    <span class="s2">"CPS8R"</span><span class="p">,</span>
+    <span class="s2">"CPS8N"</span><span class="p">,</span>
+    <span class="s2">"C3D8"</span><span class="p">,</span>
+    <span class="s2">"C3D8R"</span><span class="p">,</span>
+    <span class="s2">"C3D8E"</span><span class="p">,</span>
+    <span class="s2">"C3D8N"</span><span class="p">,</span>
+    <span class="s2">"C3D20"</span><span class="p">,</span>
+    <span class="s2">"C3D20R"</span><span class="p">,</span>
+    <span class="s2">"C3D20N"</span><span class="p">,</span>
+<span class="p">]:</span>
+    <span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"element"</span><span class="p">,</span> <span class="n">_elementTypeName</span><span class="o">.</span><span class="n">casefold</span><span class="p">())]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">"edelweissfe.elements.displacementelement.element:DisplacementElement"</span>
+    <span class="p">)</span>
+
+<span class="k">for</span> <span class="n">_elementTypeName</span> <span class="ow">in</span> <span class="p">[</span>
+    <span class="s2">"CPE4TL"</span><span class="p">,</span>
+    <span class="s2">"CPE4RTL"</span><span class="p">,</span>
+    <span class="s2">"CPE4ETL"</span><span class="p">,</span>
+    <span class="s2">"CPE4NTL"</span><span class="p">,</span>
+    <span class="s2">"CPE8TL"</span><span class="p">,</span>
+    <span class="s2">"CPE8RTL"</span><span class="p">,</span>
+    <span class="s2">"CPE8NTL"</span><span class="p">,</span>
+    <span class="s2">"CPS4TL"</span><span class="p">,</span>
+    <span class="s2">"CPS4RTL"</span><span class="p">,</span>
+    <span class="s2">"CPS4ETL"</span><span class="p">,</span>
+    <span class="s2">"CPS4NTL"</span><span class="p">,</span>
+    <span class="s2">"CPS8TL"</span><span class="p">,</span>
+    <span class="s2">"CPS8RTL"</span><span class="p">,</span>
+    <span class="s2">"CPS8NTL"</span><span class="p">,</span>
+    <span class="s2">"C3D8TL"</span><span class="p">,</span>
+    <span class="s2">"C3D8RTL"</span><span class="p">,</span>
+    <span class="s2">"C3D8ETL"</span><span class="p">,</span>
+    <span class="s2">"C3D8NTL"</span><span class="p">,</span>
+    <span class="s2">"C3D20TL"</span><span class="p">,</span>
+    <span class="s2">"C3D20RTL"</span><span class="p">,</span>
+    <span class="s2">"C3D20NTL"</span><span class="p">,</span>
+<span class="p">]:</span>
+    <span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"element"</span><span class="p">,</span> <span class="n">_elementTypeName</span><span class="o">.</span><span class="n">casefold</span><span class="p">())]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">"edelweissfe.elements.displacementtlelement.element:DisplacementTLElement"</span>
+    <span class="p">)</span>
+
+<span class="c1"># The `provider=edelweiss` materials, one module and one class name per material.</span>
+<span class="k">for</span> <span class="n">_materialName</span><span class="p">,</span> <span class="n">_materialDotted</span> <span class="ow">in</span> <span class="p">{</span>
+    <span class="s2">"linearelastic"</span><span class="p">:</span> <span class="s2">"edelweissfe.materials.linearelastic.linearelastic:LinearElasticMaterial"</span><span class="p">,</span>
+    <span class="s2">"vonmises"</span><span class="p">:</span> <span class="s2">"edelweissfe.materials.vonmises.vonmises:VonMisesMaterial"</span><span class="p">,</span>
+    <span class="s2">"neohooke"</span><span class="p">:</span> <span class="s2">"edelweissfe.materials.neohooke.neohooke:NeoHookeanMaterial"</span><span class="p">,</span>
+    <span class="s2">"neohookeplastic"</span><span class="p">:</span> <span class="s2">"edelweissfe.materials.neohookeplastic.neohookeplastic:NeoHookeanPlasticMaterial"</span><span class="p">,</span>
+    <span class="s2">"hyperelasticadvanced"</span><span class="p">:</span> <span class="p">(</span>
+        <span class="s2">"edelweissfe.materials.hyperelasticadvanced.hyperelasticadvanced:HyperelasticAdvancedMaterial"</span>
+    <span class="p">),</span>
+    <span class="s2">"hyperelasticadvancedi2extended"</span><span class="p">:</span> <span class="p">(</span>
+        <span class="s2">"edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended"</span>
+        <span class="s2">":HyperelasticAdvancedI2ExtendedMaterial"</span>
+    <span class="p">),</span>
+    <span class="s2">"hyperplasticadvanced"</span><span class="p">:</span> <span class="p">(</span>
+        <span class="s2">"edelweissfe.materials.hyperplasticadvanced.hyperplasticadvanced:HyperplasticAdvancedMaterial"</span>
+    <span class="p">),</span>
+<span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"material"</span><span class="p">,</span> <span class="n">_materialName</span><span class="p">)]</span> <span class="o">=</span> <span class="n">_materialDotted</span>
+
+<span class="c1"># The linsolver category: the types of *linearSolver (and of a *solver's linsolver=), each a class with the schema</span>
+<span class="c1"># of its data lines and the composed solver they define; see edelweissfe/linsolve/types.py and</span>
+<span class="c1"># doc/source/analysis/linsolvers.rst.</span>
+<span class="k">for</span> <span class="n">_linsolverName</span><span class="p">,</span> <span class="n">_linsolverClass</span> <span class="ow">in</span> <span class="p">{</span>
+    <span class="s2">"superlu"</span><span class="p">:</span> <span class="s2">"SuperLU"</span><span class="p">,</span>
+    <span class="s2">"umfpack"</span><span class="p">:</span> <span class="s2">"UMFPACK"</span><span class="p">,</span>
+    <span class="s2">"pardiso"</span><span class="p">:</span> <span class="s2">"Pardiso"</span><span class="p">,</span>
+    <span class="s2">"panuapardiso"</span><span class="p">:</span> <span class="s2">"PanuaPardiso"</span><span class="p">,</span>
+    <span class="s2">"klu"</span><span class="p">:</span> <span class="s2">"KLU"</span><span class="p">,</span>
+    <span class="s2">"petsclu"</span><span class="p">:</span> <span class="s2">"PetscLU"</span><span class="p">,</span>
+    <span class="s2">"mumps"</span><span class="p">:</span> <span class="s2">"Mumps"</span><span class="p">,</span>
+    <span class="s2">"blockamg"</span><span class="p">:</span> <span class="s2">"BlockAMG"</span><span class="p">,</span>
+    <span class="s2">"custom"</span><span class="p">:</span> <span class="s2">"Custom"</span><span class="p">,</span>
+<span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"linsolver"</span><span class="p">,</span> <span class="n">_linsolverName</span><span class="p">)]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"edelweissfe.linsolve.types:</span><span class="si">{</span><span class="n">_linsolverClass</span><span class="si">}</span><span class="s2">"</span>
+
+<span class="c1"># The directsolver category: the sparse direct solver libraries a DirectSolver leaf of a composed solver applies</span>
+<span class="c1"># (edelweissfe.linsolve.base.DirectSolverBackend), one linsolve/&lt;name&gt; subpackage each.</span>
+<span class="k">for</span> <span class="n">_directSolverName</span><span class="p">,</span> <span class="n">_directSolverClass</span> <span class="ow">in</span> <span class="p">{</span>
+    <span class="s2">"superlu"</span><span class="p">:</span> <span class="s2">"SuperLUBackend"</span><span class="p">,</span>
+    <span class="s2">"umfpack"</span><span class="p">:</span> <span class="s2">"UMFPACKBackend"</span><span class="p">,</span>
+    <span class="s2">"pardiso"</span><span class="p">:</span> <span class="s2">"PardisoBackend"</span><span class="p">,</span>
+    <span class="s2">"panuapardiso"</span><span class="p">:</span> <span class="s2">"PanuaPardisoBackend"</span><span class="p">,</span>
+    <span class="s2">"klu"</span><span class="p">:</span> <span class="s2">"KLUBackend"</span><span class="p">,</span>
+    <span class="s2">"petsclu"</span><span class="p">:</span> <span class="s2">"PetscLUBackend"</span><span class="p">,</span>
+    <span class="s2">"mumps"</span><span class="p">:</span> <span class="s2">"MumpsBackend"</span><span class="p">,</span>
+<span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"directsolver"</span><span class="p">,</span> <span class="n">_directSolverName</span><span class="p">)]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"edelweissfe.linsolve.</span><span class="si">{</span><span class="n">_directSolverName</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">_directSolverClass</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="c1"># The "keyword" category: each top-level keyword is its own module with its own class name.</span>
+<span class="k">for</span> <span class="n">_keywordName</span><span class="p">,</span> <span class="n">_keywordDotted</span> <span class="ow">in</span> <span class="p">{</span>
+    <span class="s2">"element"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.element:ElementKeyword"</span><span class="p">,</span>
+    <span class="s2">"elSet"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.elset:ElSetKeyword"</span><span class="p">,</span>
+    <span class="s2">"node"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.node:NodeKeyword"</span><span class="p">,</span>
+    <span class="s2">"nSet"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.nset:NSetKeyword"</span><span class="p">,</span>
+    <span class="s2">"surface"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.surface:SurfaceKeyword"</span><span class="p">,</span>
+    <span class="s2">"job"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.job:JobKeyword"</span><span class="p">,</span>
+    <span class="s2">"restart"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.restart:RestartKeyword"</span><span class="p">,</span>
+    <span class="s2">"section"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.section:SectionKeyword"</span><span class="p">,</span>
+    <span class="s2">"elementProperty"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.elementproperty:ElementPropertyKeyword"</span><span class="p">,</span>
+    <span class="s2">"material"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.material:MaterialKeyword"</span><span class="p">,</span>
+    <span class="s2">"advancedmaterial"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.advancedmaterial:AdvancedMaterialKeyword"</span><span class="p">,</span>
+    <span class="s2">"fieldOutput"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.fieldoutput:FieldOutputKeyword"</span><span class="p">,</span>
+    <span class="s2">"analyticalField"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.analyticalfield:AnalyticalFieldKeyword"</span><span class="p">,</span>
+    <span class="s2">"solver"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.solver:SolverKeyword"</span><span class="p">,</span>
+    <span class="s2">"linearSolver"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.linearsolver:LinearSolverKeyword"</span><span class="p">,</span>
+    <span class="s2">"step"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.step:StepKeyword"</span><span class="p">,</span>
+    <span class="s2">"output"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.output:OutputKeyword"</span><span class="p">,</span>
+    <span class="s2">"updateConfiguration"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.updateconfiguration:UpdateConfigurationKeyword"</span><span class="p">,</span>
+    <span class="s2">"modelGenerator"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.modelgenerator:ModelGeneratorKeyword"</span><span class="p">,</span>
+    <span class="s2">"constraint"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.constraint:ConstraintKeyword"</span><span class="p">,</span>
+    <span class="s2">"modelModifier"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.modelmodifier:ModelModifierKeyword"</span><span class="p">,</span>
+    <span class="s2">"configurePlots"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.configureplots:ConfigurePlotsKeyword"</span><span class="p">,</span>
+    <span class="s2">"exportPlots"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.exportplots:ExportPlotsKeyword"</span><span class="p">,</span>
+    <span class="s2">"include"</span><span class="p">:</span> <span class="s2">"edelweissfe.keywords.include:IncludeKeyword"</span><span class="p">,</span>
+<span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">_BUILTINS</span><span class="p">[(</span><span class="s2">"keyword"</span><span class="p">,</span> <span class="n">_keywordName</span><span class="o">.</span><span class="n">casefold</span><span class="p">())]</span> <span class="o">=</span> <span class="n">_keywordDotted</span>
+
+
+<span class="c1">#: Resolved-object memo cache: ``(category, name)`` (casefolded) -&gt; ``(target, schema)``. Guarded</span>
+<span class="c1">#: by ``_lock`` (see :func:`lookup`).</span>
+<span class="n">_resolved</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="c1">#: Serializes resolve-and-store of ``_resolved``: resolving may import modules, whose side effects</span>
+<span class="c1">#: must not race under PYTHON_GIL=0.</span>
+<span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+<span class="c1">#: Explicit :func:`register` calls: ``(category, name)`` -&gt; ``(target, schema)``. Separate from</span>
+<span class="c1">#: ``_resolved`` so that collision detection does not depend on lookup order.</span>
+<span class="n">_registered</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="c1">#: Whether :func:`_auditEntryPoints` has already run in this process.</span>
+<span class="n">_entryPointsAudited</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolveDottedString</span><span class="p">(</span><span class="n">dotted</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Import ``module.path:AttrName`` and return the attribute.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dotted</span>
+<span class="sd">        A string of the form ``"module.path:AttrName"``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Any</span>
+<span class="sd">        ``getattr(importlib.import_module(modulePath), attrName)``.</span>
+<span class="sd">    """</span>
+    <span class="n">modulePath</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">attrName</span> <span class="o">=</span> <span class="n">dotted</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">":"</span><span class="p">)</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="n">modulePath</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">attrName</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_entryPointDottedString</span><span class="p">(</span><span class="n">category</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Look up a third-party-registered dotted string via ``importlib.metadata`` entry points.</span>
+
+<span class="sd">    Entry points are (re-)queried on every call rather than cached at import time or behind a</span>
+<span class="sd">    one-shot "have we merged yet" flag: ``importlib.metadata.entry_points`` is cheap relative to</span>
+<span class="sd">    actually importing an implementation module, and re-querying keeps the registry correct if a</span>
+<span class="sd">    package is installed into the running environment mid-process (e.g. in a test that patches</span>
+<span class="sd">    ``entry_points``) without needing an explicit cache-invalidation API.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    category</span>
+<span class="sd">        The registry category.</span>
+<span class="sd">    name</span>
+<span class="sd">        The name within that category.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str | None</span>
+<span class="sd">        The dotted string registered by a third party, or ``None`` if none matches.</span>
+<span class="sd">    """</span>
+    <span class="n">wantedName</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="p">{</span><span class="n">ep</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">ep</span> <span class="ow">in</span> <span class="n">entry_points</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">ENTRY_POINT_GROUP</span><span class="p">)</span> <span class="k">if</span> <span class="n">ep</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span> <span class="o">==</span> <span class="n">wantedName</span><span class="p">}</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">matches</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c1"># `entry_points()` has no defined ordering, so several matches are an error, not "first wins".</span>
+        <span class="k">raise</span> <span class="n">RegistryConflictError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Several packages claim the '</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s2">' name '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">' via '</span><span class="si">{</span><span class="n">ENTRY_POINT_GROUP</span><span class="si">}</span><span class="s2">' entry "</span>
+            <span class="sa">f</span><span class="s2">"points: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">matches</span><span class="p">))</span><span class="si">}</span><span class="s2">. Uninstall one, or have the packages agree on "</span>
+            <span class="s2">"distinct names -- which of them would win is not defined."</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">matches</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="k">if</span> <span class="n">matches</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_entryPointsShadowingBuiltins</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Find entry points claiming a name the built-in table already owns.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, tuple[str, str]]</span>
+<span class="sd">        ``"category.name"`` -&gt; ``(builtinDotted, entryPointDotted)`` for every colliding name.</span>
+<span class="sd">    """</span>
+    <span class="n">shadowed</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">ep</span> <span class="ow">in</span> <span class="n">entry_points</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">ENTRY_POINT_GROUP</span><span class="p">):</span>
+        <span class="n">category</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">name</span> <span class="o">=</span> <span class="n">ep</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span><span class="o">.</span><span class="n">rpartition</span><span class="p">(</span><span class="s2">"."</span><span class="p">)</span>
+        <span class="n">builtinDotted</span> <span class="o">=</span> <span class="n">_BUILTINS</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="n">category</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">builtinDotted</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">builtinDotted</span> <span class="o">!=</span> <span class="n">ep</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+            <span class="n">shadowed</span><span class="p">[</span><span class="n">ep</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">builtinDotted</span><span class="p">,</span> <span class="n">ep</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">shadowed</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_auditEntryPoints</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Raise if any installed entry point shadows a built-in name.</span>
+
+<span class="sd">    :func:`lookup` consults the built-in table *before* entry points, so a third party claiming a</span>
+<span class="sd">    built-in name would otherwise be silently ignored -- its implementation never loaded, with no</span>
+<span class="sd">    diagnostic anywhere. That is the mirror image of the :func:`register` hazard and just as quiet.</span>
+
+<span class="sd">    Run once per process, from the first :func:`lookup` that misses the memo cache, rather than per</span>
+<span class="sd">    lookup: the environment does not normally change mid-run, and the audit costs one</span>
+<span class="sd">    :func:`~importlib.metadata.entry_points` query (a few milliseconds) that would otherwise be</span>
+<span class="sd">    repeated for every distinct name resolved. The consequence is that the audit reflects the</span>
+<span class="sd">    environment as of the first lookup; a test that patches ``entry_points`` afterwards still gets</span>
+<span class="sd">    correct *per-name* resolution (which re-queries every time, see</span>
+<span class="sd">    :func:`_entryPointDottedString`), just no re-audit.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RegistryConflictError</span>
+<span class="sd">        If an entry point claims a name owned by the built-in table.</span>
+<span class="sd">    """</span>
+    <span class="k">global</span> <span class="n">_entryPointsAudited</span>
+
+    <span class="k">if</span> <span class="n">_entryPointsAudited</span><span class="p">:</span>
+        <span class="k">return</span>
+
+    <span class="n">shadowed</span> <span class="o">=</span> <span class="n">_entryPointsShadowingBuiltins</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">shadowed</span><span class="p">:</span>
+        <span class="c1"># _entryPointsAudited stays False: a conflict keeps raising until the environment is fixed.</span>
+        <span class="n">details</span> <span class="o">=</span> <span class="s2">"; "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">epName</span><span class="si">}</span><span class="s2">' is built in as '</span><span class="si">{</span><span class="n">builtinDotted</span><span class="si">}</span><span class="s2">' but an entry point claims it as "</span> <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">entryPointDotted</span><span class="si">}</span><span class="s2">'"</span>
+            <span class="k">for</span> <span class="n">epName</span><span class="p">,</span> <span class="p">(</span><span class="n">builtinDotted</span><span class="p">,</span> <span class="n">entryPointDotted</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">shadowed</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="p">)</span>
+        <span class="k">raise</span> <span class="n">RegistryConflictError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Installed '</span><span class="si">{</span><span class="n">ENTRY_POINT_GROUP</span><span class="si">}</span><span class="s2">' entry points claim built-in names, which would be "</span>
+            <span class="sa">f</span><span class="s2">"silently ignored because built-ins resolve first: </span><span class="si">{</span><span class="n">details</span><span class="si">}</span><span class="s2">. Rename the entry "</span>
+            <span class="s2">"point(s)."</span>
+        <span class="p">)</span>
+
+    <span class="n">_entryPointsAudited</span> <span class="o">=</span> <span class="kc">True</span>
+
+
+<div class="viewcode-block" id="availableNames">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.config.registry.availableNames">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">availableNames</span><span class="p">(</span><span class="n">category</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""List the names known for ``category`` across both the built-in table and entry points.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    category</span>
+<span class="sd">        The registry category.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[str]</span>
+<span class="sd">        Sorted, de-duplicated list of registered names (original casing where available).</span>
+<span class="sd">    """</span>
+    <span class="n">casefoldedCategory</span> <span class="o">=</span> <span class="n">category</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="n">builtinName</span> <span class="k">for</span> <span class="p">(</span><span class="n">cat</span><span class="p">,</span> <span class="n">builtinName</span><span class="p">)</span> <span class="ow">in</span> <span class="n">_BUILTINS</span> <span class="k">if</span> <span class="n">cat</span> <span class="o">==</span> <span class="n">casefoldedCategory</span><span class="p">}</span>
+    <span class="n">names</span> <span class="o">|=</span> <span class="p">{</span><span class="n">registeredName</span> <span class="k">for</span> <span class="p">(</span><span class="n">cat</span><span class="p">,</span> <span class="n">registeredName</span><span class="p">)</span> <span class="ow">in</span> <span class="n">_registered</span> <span class="k">if</span> <span class="n">cat</span> <span class="o">==</span> <span class="n">casefoldedCategory</span><span class="p">}</span>
+    <span class="n">prefix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">casefoldedCategory</span><span class="si">}</span><span class="s2">."</span>
+    <span class="k">for</span> <span class="n">ep</span> <span class="ow">in</span> <span class="n">entry_points</span><span class="p">(</span><span class="n">group</span><span class="o">=</span><span class="n">ENTRY_POINT_GROUP</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">ep</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">):</span>
+            <span class="n">names</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">ep</span><span class="o">.</span><span class="n">name</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span> <span class="p">:])</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">names</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="isRegistered">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.config.registry.isRegistered">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">isRegistered</span><span class="p">(</span><span class="n">category</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Report whether ``(category, name)`` resolves, *without* importing its implementation.</span>
+
+<span class="sd">    :func:`lookup` is the wrong tool for a caller that only wants to validate a name -- it imports</span>
+<span class="sd">    the implementing module as a side effect, so merely asking "is 'dirichlet' a step action?" would</span>
+<span class="sd">    pull in every module ever asked about. This is the predicate for those callers; it consults the</span>
+<span class="sd">    same three sources in the same order, but compares strings only.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    category</span>
+<span class="sd">        The registry category.</span>
+<span class="sd">    name</span>
+<span class="sd">        The name within that category.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        Whether an implementation is registered, by any of the three mechanisms.</span>
+<span class="sd">    """</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">category</span><span class="o">.</span><span class="n">casefold</span><span class="p">(),</span> <span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+
+    <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_resolved</span> <span class="ow">or</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_BUILTINS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">return</span> <span class="n">_entryPointDottedString</span><span class="p">(</span><span class="o">*</span><span class="n">key</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="register">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.config.registry.register">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="n">category</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">schema</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">override</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Manually register an implementation, bypassing both the built-in table and entry points.</span>
+
+<span class="sd">    This is the seam a plugin (or a test) uses to register an object it already holds a reference</span>
+<span class="sd">    to -- e.g. a synthetic implementation created in-process -- without needing an installed</span>
+<span class="sd">    entry point. It writes directly into the resolved-object memo cache, so a subsequent</span>
+<span class="sd">    :func:`lookup` for the same ``(category, name)`` returns ``target`` (and ``schema``)</span>
+<span class="sd">    immediately, without any import.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    category</span>
+<span class="sd">        The registry category (e.g. ``"outputmanager"``).</span>
+<span class="sd">    name</span>
+<span class="sd">        The name to register ``target`` under.</span>
+<span class="sd">    target</span>
+<span class="sd">        The class (or factory callable) implementing ``name``.</span>
+<span class="sd">    schema</span>
+<span class="sd">        The option schema dataclass associated with ``target``, if any. Usually unnecessary for</span>
+<span class="sd">        a class that derives from :class:`edelweissfe.utils.schema.OptionSchemaProvider` and</span>
+<span class="sd">        declares its own ``schema`` attribute -- :func:`lookup` picks that up by itself. Pass it</span>
+<span class="sd">        explicitly only when ``target`` cannot declare it, e.g. a factory callable or a</span>
+<span class="sd">        dynamically-created class in a test.</span>
+<span class="sd">    override</span>
+<span class="sd">        Replace an existing claim on ``name`` instead of raising. Deliberately explicit: silently</span>
+<span class="sd">        replacing an implementation is how a built-in could stop existing with no diagnostic, so</span>
+<span class="sd">        deliberate replacement has to say so.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RegistryConflictError</span>
+<span class="sd">        If ``name`` is already claimed in ``category`` -- by the built-in table, or by an earlier</span>
+<span class="sd">        :func:`register` call with a *different* target -- and ``override`` is not set.</span>
+<span class="sd">    """</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">category</span><span class="o">.</span><span class="n">casefold</span><span class="p">(),</span> <span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+
+    <span class="k">with</span> <span class="n">_lock</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">override</span><span class="p">:</span>
+            <span class="n">previous</span> <span class="o">=</span> <span class="n">_registered</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">previous</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">target</span> <span class="ow">or</span> <span class="n">previous</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">schema</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">RegistryConflictError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"The '</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s2">' name '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">' is already registered to </span><span class="si">{</span><span class="n">previous</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">!r}</span><span class="s2">; "</span>
+                    <span class="sa">f</span><span class="s2">"refusing to replace it with </span><span class="si">{</span><span class="n">target</span><span class="si">!r}</span><span class="s2">. Pass override=True to replace it "</span>
+                    <span class="s2">"deliberately."</span>
+                <span class="p">)</span>
+
+            <span class="c1"># Checked against the table of strings, so the built-in is not imported.</span>
+            <span class="n">builtinDotted</span> <span class="o">=</span> <span class="n">_BUILTINS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">builtinDotted</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">previous</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">RegistryConflictError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">' is a built-in '</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s2">' implementation ('</span><span class="si">{</span><span class="n">builtinDotted</span><span class="si">}</span><span class="s2">'); "</span>
+                    <span class="sa">f</span><span class="s2">"registering </span><span class="si">{</span><span class="n">target</span><span class="si">!r}</span><span class="s2"> under that name would make the built-in unreachable. "</span>
+                    <span class="s2">"Choose a different name, or pass override=True to shadow it deliberately."</span>
+                <span class="p">)</span>
+
+            <span class="c1"># A name memoized by an earlier lookup() is in _resolved only, not in _registered.</span>
+            <span class="n">resolvedEntry</span> <span class="o">=</span> <span class="n">_resolved</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">resolvedDiffersFromTarget</span> <span class="o">=</span> <span class="n">resolvedEntry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+                <span class="n">resolvedEntry</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">target</span> <span class="ow">or</span> <span class="n">resolvedEntry</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">schema</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">resolvedDiffersFromTarget</span> <span class="ow">and</span> <span class="n">previous</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">RegistryConflictError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">' in category '</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s2">' was already resolved to </span><span class="si">{</span><span class="n">resolvedEntry</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">!r}</span><span class="s2"> "</span>
+                    <span class="sa">f</span><span class="s2">"(via lookup); refusing to overwrite it with </span><span class="si">{</span><span class="n">target</span><span class="si">!r}</span><span class="s2">. Pass override=True to "</span>
+                    <span class="s2">"replace it deliberately."</span>
+                <span class="p">)</span>
+
+        <span class="n">_registered</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">schema</span><span class="p">)</span>
+        <span class="n">_resolved</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">schema</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="lookup">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.config.registry.lookup">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">lookup</span><span class="p">(</span><span class="n">category</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Resolve ``(category, name)`` to its implementing object (and option schema, if any).</span>
+
+<span class="sd">    Resolution order: the in-process memo cache, then the built-in static table, then</span>
+<span class="sd">    ``importlib.metadata`` entry points. The result of a successful resolution is memoized, so a</span>
+<span class="sd">    given ``(category, name)`` is imported at most once per process.</span>
+
+<span class="sd">    Thread-safety: guarded by :data:`_lock` using double-checked locking -- the cache is read</span>
+<span class="sd">    without the lock first (the common case, once warm), and only threads that observe a miss</span>
+<span class="sd">    contend for the lock, inside which the check is repeated before doing any work. See the</span>
+<span class="sd">    docstring on :data:`_lock` for why a full mutex was chosen over a lock-free scheme.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    category</span>
+<span class="sd">        The registry category (e.g. ``"outputmanager"``, ``"stepaction"``).</span>
+<span class="sd">    name</span>
+<span class="sd">        The name within that category (e.g. ``"ensight"``, ``"dirichlet"``).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[Any, type | None]</span>
+<span class="sd">        ``(target, schema)``. Along the dotted-string paths (built-in table and entry points) the</span>
+<span class="sd">        schema is obtained from the resolved target itself via</span>
+<span class="sd">        :func:`edelweissfe.utils.schema.schemaOf` -- i.e. the target declares it as a class</span>
+<span class="sd">        attribute by deriving from</span>
+<span class="sd">        :class:`edelweissfe.utils.schema.OptionSchemaProvider`. It is ``None`` for targets that</span>
+<span class="sd">        declare no schema, and structurally always will be for the categories whose targets are</span>
+<span class="sd">        plain functions rather than classes (see</span>
+<span class="sd">        :func:`~edelweissfe.utils.schema.schemaOf`). :func:`register` may instead supply a schema</span>
+<span class="sd">        explicitly, which takes precedence because it writes straight into the memo cache.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RegistryLookupError</span>
+<span class="sd">        If no implementation is registered for ``(category, name)``.</span>
+<span class="sd">    RegistryConflictError</span>
+<span class="sd">        If two implementations claim ``(category, name)`` -- two entry points, or an entry point</span>
+<span class="sd">        against a built-in (see :func:`_auditEntryPoints`).</span>
+<span class="sd">    """</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">category</span><span class="o">.</span><span class="n">casefold</span><span class="p">(),</span> <span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+
+    <span class="n">cached</span> <span class="o">=</span> <span class="n">_resolved</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cached</span>
+
+    <span class="k">with</span> <span class="n">_lock</span><span class="p">:</span>
+        <span class="n">cached</span> <span class="o">=</span> <span class="n">_resolved</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">cached</span>
+
+        <span class="n">_auditEntryPoints</span><span class="p">()</span>
+
+        <span class="n">dotted</span> <span class="o">=</span> <span class="n">_BUILTINS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dotted</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dotted</span> <span class="o">=</span> <span class="n">_entryPointDottedString</span><span class="p">(</span><span class="o">*</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dotted</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">known</span> <span class="o">=</span> <span class="n">availableNames</span><span class="p">(</span><span class="n">category</span><span class="p">)</span>
+            <span class="n">hint</span> <span class="o">=</span> <span class="s2">""</span>
+            <span class="k">if</span> <span class="n">known</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">similar</span> <span class="o">=</span> <span class="n">findSimilarString</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">known</span><span class="p">)</span>
+                    <span class="n">hint</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">" Did you mean '</span><span class="si">{</span><span class="n">similar</span><span class="si">}</span><span class="s2">'?"</span>
+                <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                    <span class="k">pass</span>
+                <span class="n">message</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"No '</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s2">' implementation registered under the name '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">'. "</span>
+                    <span class="sa">f</span><span class="s2">"Available: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">known</span><span class="p">)</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">hint</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">message</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"No '</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s2">' implementation registered under the name '</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">' "</span> <span class="s2">"(no names known)."</span>
+            <span class="k">raise</span> <span class="n">RegistryLookupError</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+
+        <span class="n">target</span> <span class="o">=</span> <span class="n">_resolveDottedString</span><span class="p">(</span><span class="n">dotted</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">schemaOf</span><span class="p">(</span><span class="n">target</span><span class="p">))</span>
+        <span class="n">_resolved</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span>
+        <span class="k">return</span> <span class="n">result</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

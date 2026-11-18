@@ -206,10 +206,13 @@ L4: from parsed text to a Python call
 There are two shapes of L4 adapter in the codebase, depending on whether construction needs
 anything beyond "validate options, call the constructor":
 
-**The generic adapter** -- used for output managers, sections, analytical fields, generators, and
-similar -- lives centrally in ``edelweissfe/helpers/inputfilehelpers.py``. It does exactly three
-things per block: look the type up in the registry, validate/coerce the parsed options against the
-schema it got back, and call the constructor:
+**The generic adapter** -- used for output managers, sections, analytical fields and similar -- does
+exactly three things per block: look the type up in the registry, validate/coerce the parsed options
+against the schema it got back, and call the constructor. The one for output managers lives in
+``edelweissfe/helpers/inputfilehelpers.py``, those for sections and analytical fields in
+``edelweissfe/generators/abqmodelconstructor.py``; generators are built by
+:meth:`~edelweissfe.generators.base.generatorbase.GeneratorBase.fromGeneratorDefinition`. For output
+managers:
 
 .. code-block:: python
 
@@ -424,3 +427,30 @@ Quick reference
      - :class:`edelweissfe.keywords.base.keywordbase.KeywordBase`
    * - Render a schema's option table in the docs
      - the ``.. pprint:: category:name`` directive (``doc/source/conf.py``)
+
+API reference
+-------------
+
+``schema`` - Option schemas
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: edelweissfe.utils.schema
+   :members:
+
+``registry`` - Names to implementations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: edelweissfe.config.registry
+   :members:
+
+``KeywordBase`` - Top-level keywords
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: edelweissfe.keywords.base.keywordbase
+   :members:
+
+``OutputManagerBase`` - Output managers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: edelweissfe.outputmanagers.base.outputmanagerbase
+   :members:

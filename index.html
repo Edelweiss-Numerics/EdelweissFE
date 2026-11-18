@@ -140,7 +140,7 @@
   <section id="welcome-to-edelweissfe">
 <h1>Welcome to EdelweissFE<a class="headerlink" href="#welcome-to-edelweissfe" title="Link to this heading"></a></h1>
 <p>EdelweissFE is a light-weight, platform-independent, parallel finite element framework.
-By default, it makes use of the <a class="reference external" href="https://github.com/MAteRialMOdelingToolbox/Marmot/">Marmot</a> library for finite element and constitutive model formulations.</p>
+It has its own elements and materials, and optionally makes use of the <a class="reference external" href="https://github.com/MAteRialMOdelingToolbox/Marmot/">Marmot</a> library for further finite element and constitutive model formulations.</p>
 <p>EdelweissFE aims to be…</p>
 <blockquote>
 <div><ul class="simple">
@@ -149,7 +149,7 @@ By default, it makes use of the <a class="reference external" href="https://gith
 <li><p>… a learning platform for learning the finite element method,</p></li>
 <li><p>… a very flexible tool for implementing and employing special techniques (e.g., the indirect displacement control technique),
 which are often more difficult and time consuming to implement in mature, MPI-parallelized codes,</p></li>
-<li><p>… an efficient tool for nonlinear simulations up to medium sized problems (~ <span class="math notranslate nohighlight">\(10^5\)</span> degrees of freedom).</p></li>
+<li><p>… an efficient tool for nonlinear simulations up to medium sized problems (~ <span class="math notranslate nohighlight">\(10^6\)</span> degrees of freedom).</p></li>
 </ul>
 </div></blockquote>
 <p>EdelweissFE does not want to …</p>
@@ -181,9 +181,10 @@ Usually, EdelweissFE is used for developing and debugging constitutive models un
 <section id="execute-a-simulation">
 <h2>Execute a simulation<a class="headerlink" href="#execute-a-simulation" title="Link to this heading"></a></h2>
 <p>Run a simulation simply by calling</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python edelweiss.py inputfile.inp</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">PYTHON_GIL=0 edelweissfe inputfile.inp</span>
 </pre></div>
 </div>
+<p>See <a class="reference internal" href="analysis/parallelization.html"><span class="doc">Parallelization</span></a> for the number of threads.</p>
 </section>
 <section id="example-input-file">
 <h2>Example input file<a class="headerlink" href="#example-input-file" title="Link to this heading"></a></h2>
@@ -237,7 +238,7 @@ all
 </pre></div>
 </div>
 </div>
-<p>More example files can be found in the <code class="docutils literal notranslate"><span class="pre">testfiles</span></code> folder!</p>
+<p>More input files can be found in the <code class="docutils literal notranslate"><span class="pre">examples</span></code> and <code class="docutils literal notranslate"><span class="pre">testfiles</span></code> folders.</p>
 </section>
 </section>
 <section id="indices-and-tables">

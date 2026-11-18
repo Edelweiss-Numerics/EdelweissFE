@@ -174,8 +174,8 @@ or was resumed.</p></li>
 writing one never leaves a truncated checkpoint behind. Each carries a serial number, by which the
 restart writer finds the oldest one to replace – not by file times, which copying changes.</p>
 <p>Whatever cannot keep the rule refuses to resume, with a <a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.RestartError" title="edelweissfe.utils.exceptions.RestartError"><code class="xref py py-class docutils literal notranslate"><span class="pre">RestartError</span></code></a>:
-a solver that does not checkpoint its state (the default of
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">readRestart()</span></code>), and a
+a solver that does not declare the state it checkpoints
+(<a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.getRestartData" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> raises then), and a
 checkpoint of another format version (every checkpoint carries one, and a run reads its own only),
 and a resume past a <code class="docutils literal notranslate"><span class="pre">modelupdate</span></code> – it executes an arbitrary expression whose effect no checkpoint
 records, so a run is resumed only from checkpoints written in steps before the first one.</p>

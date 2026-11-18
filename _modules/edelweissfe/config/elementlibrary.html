@@ -166,8 +166,9 @@
 
 <span class="c1"># @author: Matthias Neuner</span>
 <span class="sd">"""</span>
-<span class="sd">EdelweissFE currently supports finite element implementations provided by the Marmot library.</span>
-<span class="sd">In future, elements by other providers or elements directly implemented in EdelweissFE may be added here.</span>
+<span class="sd">Elements are selected by ``type`` and ``provider``: the provider ``edelweiss`` holds the elements</span>
+<span class="sd">implemented in EdelweissFE, the providers ``marmot`` and ``marmotsingleqpelement`` those of the Marmot</span>
+<span class="sd">library. Without ``provider``, ``marmot`` is assumed.</span>
 
 <span class="sd">.. code-block:: edelweiss</span>
 <span class="sd">    :caption: Example:</span>

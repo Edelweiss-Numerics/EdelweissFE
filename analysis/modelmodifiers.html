@@ -207,8 +207,8 @@ which decides and may read solution state, and
 decision out and may not. <strong>See</strong> <a class="reference internal" href="../developer/topologypipeline.html"><span class="doc">The topology pipeline: how a model changes itself</span></a> <strong>for the full contract, why it is split
 that way, and what a new modifier must implement</strong>; this page covers the individual modifiers.</p>
 <p><strong>Topological containers have stable identity.</strong> <a class="reference internal" href="../model/sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><code class="xref py py-class docutils literal notranslate"><span class="pre">NodeSet</span></code></a>,
-<a class="reference internal" href="../model/sets.html#edelweissfe.sets.elementset.ElementSet" title="edelweissfe.sets.elementset.ElementSet"><code class="xref py py-class docutils literal notranslate"><span class="pre">ElementSet</span></code></a>, <code class="xref py py-class docutils literal notranslate">
-<span class="pre">EntityBasedSurface</span></code> and <a class="reference internal" href="../developer/fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><code class="xref py py-class docutils literal notranslate"><span class="pre">NodeField</span></code></a> are created once and
+<a class="reference internal" href="../model/sets.html#edelweissfe.sets.elementset.ElementSet" title="edelweissfe.sets.elementset.ElementSet"><code class="xref py py-class docutils literal notranslate"><span class="pre">ElementSet</span></code></a>,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">EntityBasedSurface</span></code> and <a class="reference internal" href="../developer/fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><code class="xref py py-class docutils literal notranslate"><span class="pre">NodeField</span></code></a> are created once and
 mutated in place (<code class="docutils literal notranslate"><span class="pre">replaceMembers</span></code>/<code class="docutils literal notranslate"><span class="pre">replaceData</span></code>/<code class="docutils literal notranslate"><span class="pre">resize</span></code>) by a mesh-mutating modifier –
 they are never replaced with a new object under the same name. A component that simply caches one
 of these, e.g. <code class="docutils literal notranslate"><span class="pre">self._nodes</span> <span class="pre">=</span> <span class="pre">model.nodeSets[&quot;mySet&quot;]</span></code> in <code class="docutils literal notranslate"><span class="pre">__init__</span></code> and later iterates
@@ -222,15 +222,14 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
 <ul>
 <li><p><strong>Lazy version check</strong> – each mutable container carries a <code class="docutils literal notranslate"><span class="pre">_version</span></code> counter, bumped on every
 in-place mutation. A component compares its own last-seen version against the container’s current
-one at its own per-increment entry point (e.g. <code class="docutils literal notranslate"><span class="pre">StepActionBase._checkSetChanged</span></code>,
-<code class="docutils literal notranslate"><span class="pre">ConstraintBase._checkSetChanged</span></code>) and recomputes the derived array only on a mismatch –
+one at its own per-increment entry point (e.g. <code class="docutils literal notranslate"><span class="pre">StepActionBase._checkSetChanged</span></code>) and recomputes the derived array only on a mismatch –
 see <a class="reference internal" href="stepactions.html#module-edelweissfe.stepactions.dirichlet" title="edelweissfe.stepactions.dirichlet"><code class="xref py py-mod docutils literal notranslate"><span class="pre">dirichlet</span></code></a>, <a class="reference internal" href="stepactions.html#module-edelweissfe.stepactions.nodeforces" title="edelweissfe.stepactions.nodeforces"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nodeforces</span></code></a> and
 <a class="reference internal" href="../output/fieldoutput.html#edelweissfe.utils.fieldoutput.ElementFieldOutput" title="edelweissfe.utils.fieldoutput.ElementFieldOutput"><code class="xref py py-class docutils literal notranslate"><span class="pre">ElementFieldOutput</span></code></a> for examples. This needs no
 registration and therefore has no observer lifecycle to leak.</p></li>
 <li><p><strong>Registered mesh dependent</strong> – for derived <em>geometry</em> that must be regenerated before the next
 discrete system rebuild (facet-based contact and tie; see below), a component registers itself via
 <a class="reference internal" href="../developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent" title="edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent"><code class="xref py py-meth docutils literal notranslate"><span class="pre">registerMeshDependent()</span></code></a> and implements
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">refresh()</span></code>. Once per increment, after every
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.meshdependent.MeshDependent.refresh" title="edelweissfe.models.meshdependent.MeshDependent.refresh"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refresh()</span></code></a>. Once per increment, after every
 modifier has settled, <a class="reference internal" href="../developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshMeshDependents()</span></code></a> hands it
 the <em>net</em> change since it last looked – added/removed nodes and elements, the parent -&gt; children
 map, the per-face child tiling, and which node/element sets or surfaces were touched (with
@@ -1036,10 +1035,10 @@ all
 <p>On the increment in which the mesh is mutated the solver already rebuilds the discrete system and
 starts from a zero predictor. The <em>following</em> increment, however, extrapolates from that increment’s
 solution increment, which conflates the load advance with the one-off warm-start/remesh settling
-transient – a questionable predictor when refining into a softening zone. The <code class="docutils literal notranslate"><span class="pre">NISTSolver</span></code> option
-<code class="docutils literal notranslate"><span class="pre">extrapolateAfterModelChange</span></code> (default <code class="docutils literal notranslate"><span class="pre">True</span></code>, i.e. previous behaviour) can be set <code class="docutils literal notranslate"><span class="pre">False</span></code> to
-also start the increment after a refinement from a zero predictor:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;</span><span class="n">options</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="n">NISTSolver</span><span class="p">,</span> <span class="n">extrapolation</span><span class="o">=</span><span class="n">linear</span><span class="p">,</span> <span class="n">extrapolateAfterModelChange</span><span class="o">=</span><span class="kc">False</span>
+transient – a questionable predictor when refining into a softening zone. The <code class="docutils literal notranslate"><span class="pre">NIST</span></code> solver option
+<code class="docutils literal notranslate"><span class="pre">extrapolateAfterModelChange</span></code> (default <code class="docutils literal notranslate"><span class="pre">True</span></code>) can be set <code class="docutils literal notranslate"><span class="pre">False</span></code> to also start the increment after a
+refinement from a zero predictor:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;</span><span class="n">options</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">theSolver</span><span class="p">,</span> <span class="n">extrapolation</span><span class="o">=</span><span class="n">linear</span><span class="p">,</span> <span class="n">extrapolateAfterModelChange</span><span class="o">=</span><span class="kc">False</span>
 </pre></div>
 </div>
 <p>This changes only the Newton starting guess, not the converged solution.</p>
@@ -1049,11 +1048,11 @@ also start the increment after a refinement from a zero predictor:</p>
 <p>By default the increment in which the mesh is refined advances the load <em>and</em> settles the
 warm-started refined mesh in a single solve. Near a softening process zone – exactly where
 refinement is triggered – coupling the load advance with the one-off warm-start settling transient
-can prevent recovery. The <code class="docutils literal notranslate"><span class="pre">NISTSolver</span></code> option <code class="docutils literal notranslate"><span class="pre">equilibrateAfterModelChange</span></code> (default <code class="docutils literal notranslate"><span class="pre">False</span></code>)
+can prevent recovery. The <code class="docutils literal notranslate"><span class="pre">NIST</span></code> solver option <code class="docutils literal notranslate"><span class="pre">equilibrateAfterModelChange</span></code> (default <code class="docutils literal notranslate"><span class="pre">False</span></code>)
 inserts, immediately after a refinement, one constant-load, zero-time re-equilibration increment
 (no load advance, zero Dirichlet increment) that settles the refined mesh to equilibrium at the last
 converged load <em>before</em> the load is advanced:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;</span><span class="n">options</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="n">NISTSolver</span><span class="p">,</span> <span class="n">equilibrateAfterModelChange</span><span class="o">=</span><span class="kc">True</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&gt;&gt;</span><span class="n">options</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">theSolver</span><span class="p">,</span> <span class="n">equilibrateAfterModelChange</span><span class="o">=</span><span class="kc">True</span>
 </pre></div>
 </div>
 <p>On a path-independent material this is non-destructive (it changes only the increment sequence, not
@@ -1104,20 +1103,17 @@ acceleration re-solve above, which is always on unless switched off.</p>
 <h2>Compatibility with facet-based contact and tie<a class="headerlink" href="#compatibility-with-facet-based-contact-and-tie" title="Link to this heading"></a></h2>
 <p>Refining a solid whose surface feeds a facet-based contact or <a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.tie" title="edelweissfe.constraints.tie"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tie</span></code></a>
 constraint works out of the box: the modifier keeps the relevant <code class="docutils literal notranslate"><span class="pre">*surface</span></code> definition in sync
-with the refined child faces, and the constraint – a <code class="xref py py-class docutils literal notranslate">
-<span class="pre">MeshDependent</span></code> – regenerates its facets from it. <code class="xref py py-mod docutils literal notranslate">
-<span class="pre">nodetodeformablesurfacepenalty</span></code> notices via <a class="reference internal" href="../developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.changesSince" title="edelweissfe.models.topologypipeline.TopologyPipeline.changesSince"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changesSince()</span></code></a>
-at its own next connectivity update (a pull, since that tick already runs before the discrete
-system is rebuilt); a tie has no such early tick of its own (its only hook is called <em>from inside</em>
-that rebuild, too late to safely swap in new facet elements), so it reconciles via the model’s push
-notification instead. Either way, no separate wiring is needed. A model with both solid elements to
+with the refined child faces, and the constraint – a
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.meshdependent.MeshDependent" title="edelweissfe.models.meshdependent.MeshDependent"><code class="xref py py-class docutils literal notranslate"><span class="pre">MeshDependent</span></code></a> – regenerates its facets from it: both
+<a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.nodetodeformablesurfacepenalty" title="edelweissfe.constraints.nodetodeformablesurfacepenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nodetodeformablesurfacepenalty</span></code></a> and <a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.tie" title="edelweissfe.constraints.tie"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tie</span></code></a>
+register with the topology pipeline, which refreshes them
+(<a class="reference internal" href="../developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshMeshDependents()</span></code></a>) after the refinement and before
+the discrete system is rebuilt. No separate wiring is needed. A model with both solid elements to
 be refined and pre-existing contact-facet elements should restrict the octree mirror explicitly with
 <code class="docutils literal notranslate"><span class="pre">refineElSet</span></code> (see above), since a facet element is never itself 20-node but need not be excluded
 by name:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">*</span><span class="n">modelModifier</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">hAdaptivity</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">amr</span>
-<span class="n">result</span><span class="o">=</span><span class="n">stress</span>
-<span class="n">expression</span><span class="o">=</span><span class="s1">'x &gt; 300.0'</span>
-<span class="n">reducer</span><span class="o">=</span><span class="n">absmax</span>
+<span class="o">&gt;&gt;</span><span class="n">marker</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">fieldOutput</span><span class="p">,</span> <span class="n">fieldOutput</span><span class="o">=</span><span class="n">stressForAMR</span><span class="p">,</span> <span class="n">operator</span><span class="o">=</span><span class="s1">'&gt;'</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">300.0</span>
 <span class="n">maxLevel</span><span class="o">=</span><span class="mi">1</span>
 <span class="n">refineElSet</span><span class="o">=</span><span class="n">lower_all</span>
 </pre></div>
@@ -1272,7 +1268,7 @@ upper_all
 <a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.nodetodiscreterigidbodypenalty" title="edelweissfe.constraints.nodetodiscreterigidbodypenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nodetodiscreterigidbodypenalty</span></code></a>) are likewise <code class="docutils literal notranslate"><span class="pre">MeshDependent</span></code>, but
 lighter still: their master geometry is rigid (an analytic plane, or a triangulated rigid body), so
 refinement only ever grows their watched slave <code class="docutils literal notranslate"><span class="pre">nSet</span></code> – no facet regeneration, no per-slave
-history, just a refreshed node list at the next <code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code> tick.</p>
+history, just a node list refreshed by the topology pipeline after the refinement, as above.</p>
 <div class="literal-block-wrapper docutils container" id="id8">
 <div class="code-block-caption"><span class="caption-text">Example (the block is refined mid-run while its face already rests against an
 analytic rigid wall): <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/AMR_RigidContactRefine/test.inp</span></code></span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
@@ -1349,7 +1345,7 @@ AMR h-refines elements attached to that boundary, the new nodes it creates do NO
 geometric fidelity toward the true curve – <code class="docutils literal notranslate"><span class="pre">Hex20Topology.subdivide</span></code> evaluates the PARENT
 element’s own (possibly already-flat) isoparametric map, so a straight parent edge only ever
 produces more straight sub-edges. This purely reactive model modifier reacts to an AMR
-modifier’s <code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> and snaps exactly the newly
+modifier’s <a class="reference internal" href="../developer/models.html#edelweissfe.models.modelchange.ModelChange" title="edelweissfe.models.modelchange.ModelChange"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code></a> and snaps exactly the newly
 created nodes on a tracked boundary onto a specified analytical surface (currently: a cylinder),
 leaving every pre-existing node untouched.</p>
 <p>See the <code class="docutils literal notranslate"><span class="pre">surfaceSnap</span></code> section of <a class="reference internal" href="#"><span class="doc">Model modifiers</span></a> for the full narrative
@@ -1366,7 +1362,7 @@ sets independent of whether any node’s coordinates actually moved this round: 
 legitimately snap nothing (every candidate is a hanging-node collision, or the quality safeguard
 vetoed all of them) while still discovering real new wall-face membership – or resolving an
 earlier round’s pending one – that matters later. Touching either tracked set marks
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> non-empty (via <code class="docutils literal notranslate"><span class="pre">changedNodeSets</span></code>) even when
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.modelchange.ModelChange" title="edelweissfe.models.modelchange.ModelChange"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code></a> non-empty (via <code class="docutils literal notranslate"><span class="pre">changedNodeSets</span></code>) even when
 <code class="docutils literal notranslate"><span class="pre">movedNodes</span></code> is empty, so that round is always recorded and always replays – no state is ever
 silently lost across a restart.</p>
 <p><strong>Retrying what a round could not snap.</strong> A candidate that could not be snapped this round –
@@ -1380,7 +1376,7 @@ a polygon of flat facets. <code class="docutils literal notranslate"><span class
 the <em>parent</em> element’s own isoparametric map when it creates new nodes, so a flat parent facet only
 ever produces more flat sub-facets: refinement makes the polygon finer-grained, never rounder.
 <code class="docutils literal notranslate"><span class="pre">surfaceSnap</span></code> is a purely reactive model modifier (<code class="docutils literal notranslate"><span class="pre">initiatesTopologyChanges</span> <span class="pre">=</span> <span class="pre">False</span></code>) that
-watches <code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code>’s own <code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> and, for every
+watches <code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code>’s own <a class="reference internal" href="../developer/models.html#edelweissfe.models.modelchange.ModelChange" title="edelweissfe.models.modelchange.ModelChange"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code></a> and, for every
 newly-created node that lands on a tracked boundary, projects it exactly onto a specified
 analytical surface – currently a cylinder (<code class="docutils literal notranslate"><span class="pre">originX/Y/Z</span></code> + <code class="docutils literal notranslate"><span class="pre">axisX/Y/Z</span></code> + <code class="docutils literal notranslate"><span class="pre">radius</span></code>). Every
 pre-existing node is left untouched: the <code class="docutils literal notranslate"><span class="pre">nodeSet</span></code> option names a node set whose members must
@@ -1411,7 +1407,7 @@ refined, and a quality veto can clear once local geometry changes.</p>
 node coordinates are cached at the moment each element is created, and never re-read from the live
 model afterward. Without correcting that cache too, a LATER refinement of an element <code class="docutils literal notranslate"><span class="pre">surfaceSnap</span></code>
 already snapped would silently subdivide from the stale, pre-snap geometry. <code class="docutils literal notranslate"><span class="pre">surfaceSnap</span></code> calls
-<code class="docutils literal notranslate"><span class="pre">HAdaptivityModelModifier.syncNodeCoordinates</span></code> on every <code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code> instance in the model right
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">syncNodeCoordinates()</span></code> on every <code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code> instance in the model right
 after writing <code class="docutils literal notranslate"><span class="pre">model.nodes</span></code>, closing this gap.</p>
 <table class="docutils align-default" id="id9">
 <caption><span class="caption-text">Options:</span><a class="headerlink" href="#id9" title="Link to this table"></a></caption>
@@ -1629,8 +1625,8 @@ modifier-private <a class="reference internal" href="../model/sets.html#edelweis
 <em>replaying</em> this modifier’s own recorded decisions – the same mechanism described below for
 <code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code>, not a parallel one. Because a round can legitimately discover new boundary-face
 membership (or resolve an earlier round’s pending node) while moving zero node coordinates,
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> carries a dedicated <code class="docutils literal notranslate"><span class="pre">movedNodes</span></code> field and
-<code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChangeType</span></code> a <code class="docutils literal notranslate"><span class="pre">GEOMETRY_CHANGE</span></code> kind, so that
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.modelchange.ModelChange" title="edelweissfe.models.modelchange.ModelChange"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code></a> carries a dedicated <code class="docutils literal notranslate"><span class="pre">movedNodes</span></code> field and
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.modelchangeobserver.ModelChangeType" title="edelweissfe.models.modelchangeobserver.ModelChangeType"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChangeType</span></code></a> a <code class="docutils literal notranslate"><span class="pre">GEOMETRY_CHANGE</span></code> kind, so that
 a coordinate-only (or even a zero-coordinate, node-set-only) mutation is never mistaken for an
 empty, unrecorded one.</p>
 </section>
@@ -1732,7 +1728,7 @@ topology history (replay).</p></li>
 <dd class="field-even"><p>The changeset this mutation produced.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>ModelChange</p>
+<dd class="field-odd"><p><a class="reference internal" href="../developer/models.html#edelweissfe.models.modelchange.ModelChange" title="edelweissfe.models.modelchange.ModelChange">ModelChange</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -1813,7 +1809,7 @@ of re-deciding from state that may not be identical.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>model</strong> (<a class="reference internal" href="../developer/models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The FEModel object. Read only – do not mutate it here.</p></li>
-<li><p><strong>change</strong> – The net <code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> since this modifier last
+<li><p><strong>change</strong> – The net <a class="reference internal" href="../developer/models.html#edelweissfe.models.modelchange.ModelChange" title="edelweissfe.models.modelchange.ModelChange"><code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code></a> since this modifier last
 planned within the current topology update, or <code class="docutils literal notranslate"><span class="pre">None</span></code> on the first round. <strong>Return
 ``None`` when it does not touch this modifier’s domain</strong> – that is what lets the
 pipeline reach a fixed point instead of looping (see

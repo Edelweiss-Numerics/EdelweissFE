@@ -1,0 +1,449 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.models.modelchange &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.models.modelchange</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.models.modelchange</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="sd">"""The structured changeset describing *what* changed in a model mutation, as opposed to the bare</span>
+<span class="sd">:class:`~edelweissfe.models.modelchangeobserver.ModelChangeType` marker. A modifier (e.g. AMR)</span>
+<span class="sd">populates one from the delta it already computes; :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.recordChange`</span>
+<span class="sd">records it, bumping ``model.topology.version``.</span>
+
+<span class="sd">A pull-based consumer instead compares its own last-seen version against ``model.topology.version``</span>
+<span class="sd">at its own next tick and, on a mismatch, reconciles from ``model.topology.changesSince(lastSeenVersion)`` --</span>
+<span class="sd">a single :class:`ModelChange`, coalesced across every mutation it missed. Cheap ``touches...()``</span>
+<span class="sd">queries let it early-out when the change doesn't concern it, and ``parentToChildren``/``faceMap``</span>
+<span class="sd">let it patch only what changed instead of rebuilding from scratch.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">bisect</span><span class="w"> </span><span class="kn">import</span> <span class="n">bisect_right</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.modelchangeobserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelChangeType</span>
+
+
+<div class="viewcode-block" id="TopologyRecord">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.modelchange.TopologyRecord">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TopologyRecord</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One applied model-modifier decision, as recorded in</span>
+<span class="sd">    :attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.history`.</span>
+
+<span class="sd">    This is the authoritative record of how the model's topology came to be what it is -- not a</span>
+<span class="sd">    debugging aid kept alongside one. A restart replays these through the modifier's own</span>
+<span class="sd">    :meth:`~edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply`, which is the</span>
+<span class="sd">    same code path the live run used, so there is no second implementation to drift from it.</span>
+<span class="sd">    """</span>
+
+    <span class="n">modifier</span><span class="p">:</span> <span class="nb">str</span>  <span class="c1">#: name of the model modifier that made this decision</span>
+    <span class="n">roundNumber</span><span class="p">:</span> <span class="nb">int</span>  <span class="c1">#: which round of the topology update it was applied in</span>
+    <span class="n">time</span><span class="p">:</span> <span class="nb">float</span>  <span class="c1">#: model time at which it was applied</span>
+    <span class="n">plan</span><span class="p">:</span> <span class="nb">dict</span>  <span class="c1">#: the decision, encoded by the modifier (see ModelModifierBase.encodePlan)</span>
+    <span class="n">fingerprint</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>  <span class="c1">#: model.topology.fingerprint() immediately after applying it</span>
+    <span class="c1">#: summary fields, for the log and for forensics only -- never used to reconstruct anything</span>
+    <span class="n">nElementsAdded</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">nElementsRemoved</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">nNodesAdded</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+
+<div class="viewcode-block" id="ModelChange">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.modelchange.ModelChange">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ModelChange</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One model mutation (or, from :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changesSince`,</span>
+<span class="sd">    several coalesced into one net change)."""</span>
+
+    <span class="n">kind</span><span class="p">:</span> <span class="n">ModelChangeType</span>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">addedNodes</span><span class="p">:</span> <span class="nb">set</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+    <span class="n">removedNodes</span><span class="p">:</span> <span class="nb">set</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+    <span class="n">addedElements</span><span class="p">:</span> <span class="nb">set</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+    <span class="n">removedElements</span><span class="p">:</span> <span class="nb">set</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+    <span class="n">parentToChildren</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>  <span class="c1">#: element label -&gt; [child element labels]</span>
+    <span class="n">faceMap</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>  <span class="c1">#: (element label, faceID) -&gt; [(child label, faceID)]</span>
+    <span class="n">changedNodeSets</span><span class="p">:</span> <span class="nb">set</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+    <span class="n">changedElementSets</span><span class="p">:</span> <span class="nb">set</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+    <span class="n">changedSurfaces</span><span class="p">:</span> <span class="nb">set</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+    <span class="c1">#: Existing (neither added nor removed) node labels whose coordinates changed, e.g. by a geometry-snap</span>
+    <span class="c1">#: modifier. A moved node is not new.</span>
+    <span class="n">movedNodes</span><span class="p">:</span> <span class="nb">set</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">set</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">geometryChanged</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""True if any node or element was added, removed, or moved."""</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">addedNodes</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">removedNodes</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">addedElements</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">removedElements</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">movedNodes</span>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isEmpty</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""True if this changeset records no mutation at all -- every collection is empty.</span>
+
+<span class="sd">        A modifier can legitimately plan and then find nothing left to do, and returning an empty</span>
+<span class="sd">        changeset is how it says so. ``kind`` is deliberately not consulted: it is always set, and a</span>
+<span class="sd">        label alone is not a change.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="ow">not</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">addedNodes</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">removedNodes</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">addedElements</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">removedElements</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">parentToChildren</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">faceMap</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">changedNodeSets</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">changedElementSets</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">changedSurfaces</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">movedNodes</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">touchesSurface</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">changedSurfaces</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">touchesNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">changedNodeSets</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">touchesElementSet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">changedElementSets</span>
+
+<div class="viewcode-block" id="ModelChange.childFacesOf">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.modelchange.ModelChange.childFacesOf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">childFacesOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">elLabel</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">faceID</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The child ``(elementLabel, faceID)`` pairs tiling the given parent face, or ``[]`` if</span>
+<span class="sd">        that element/face wasn't refined by this change."""</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">faceMap</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="n">elLabel</span><span class="p">,</span> <span class="n">faceID</span><span class="p">),</span> <span class="p">[]))</span></div>
+
+
+<div class="viewcode-block" id="ModelChange.mergedWith">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.modelchange.ModelChange.mergedWith">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mergedWith</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">"ModelChange"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"ModelChange"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Coalesce this (older) change with ``other`` (applied immediately after) into the single</span>
+<span class="sd">        net change a consumer that missed both would need. Element/node labels are never reused, so</span>
+<span class="sd">        a label added by ``self`` and removed again by ``other`` existed only within the window and</span>
+<span class="sd">        is dropped from both the added and the removed set, rather than surfacing as a phantom</span>
+<span class="sd">        create-then-delete.</span>
+
+<span class="sd">        Every entry of ``self.parentToChildren`` / ``self.faceMap`` is resolved through ``other``'s</span>
+<span class="sd">        (a child that ``other`` refined further is replaced by *its* children), and ``other``'s own</span>
+<span class="sd">        entries are added for parents ``self`` did not already list. This is :func:`coalesce` of</span>
+<span class="sd">        the two; folding a longer history pairwise gives the same result as coalescing it at once,</span>
+<span class="sd">        only in quadratic instead of linear time.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">coalesce</span><span class="p">([</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">])</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_composeSubstitutions</span><span class="p">(</span><span class="n">maps</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compose a chronological list of substitution maps (``parentToChildren`` or ``faceMap``,</span>
+<span class="sd">    one per change) into the single net map.</span>
+
+<span class="sd">    The net map is, by definition, the pairwise fold: map ``k`` is merged into the net map of maps</span>
+<span class="sd">    ``0 .. k-1`` by replacing every value item that map ``k`` has as a key with map ``k``'s value</span>
+<span class="sd">    for it (an item it doesn't have stays itself), and by then appending map ``k``'s keys that are</span>
+<span class="sd">    not keys already, in map ``k``'s order. Folding like that re-walks every list accumulated so far</span>
+<span class="sd">    for every new map -- quadratic in the history, 368 s for the 372 changes of a long AMR run.</span>
+
+<span class="sd">    Here every item is resolved exactly once instead. An item that appears in the value of map</span>
+<span class="sd">    ``k`` is only ever substituted by maps ``k+1, k+2, ...``: by the *first* later map that has it</span>
+<span class="sd">    as a key, whose value items are in turn resolved by the maps after *that* one. So, walking the</span>
+<span class="sd">    maps from the newest to the oldest, the fully resolved value of every key of map ``k`` is the</span>
+<span class="sd">    concatenation of the already resolved values its items have at their next occurrence as a key</span>
+<span class="sd">    (or the item itself, if no later map has it). The cost is linear in the size of the result.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    maps</span>
+<span class="sd">        The per-change maps, oldest first; each maps a key to a list of items, and an item may be</span>
+<span class="sd">        a key of a later map.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        The net map: every key of any map, in order of first appearance, with its fully resolved</span>
+<span class="sd">        value list (a new list, not one of the input lists).</span>
+<span class="sd">    """</span>
+    <span class="c1"># for every key: the indices of the maps it is a key in, ascending (usually one, but repeats are honored)</span>
+    <span class="n">occurrences</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">substitution</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">maps</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">substitution</span><span class="p">:</span>
+            <span class="n">occurrences</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+
+    <span class="c1"># resolved[k][key]: map k's value for key, with every item resolved through maps k+1, ...</span>
+    <span class="n">resolved</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">maps</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">maps</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+        <span class="n">resolvedHere</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">items</span> <span class="ow">in</span> <span class="n">maps</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+                <span class="n">itemOccurrences</span> <span class="o">=</span> <span class="n">occurrences</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+                <span class="n">nextOccurrence</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">if</span> <span class="n">itemOccurrences</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">i</span> <span class="o">=</span> <span class="n">bisect_right</span><span class="p">(</span><span class="n">itemOccurrences</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">itemOccurrences</span><span class="p">):</span>
+                        <span class="n">nextOccurrence</span> <span class="o">=</span> <span class="n">itemOccurrences</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">nextOccurrence</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">value</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">value</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">resolved</span><span class="p">[</span><span class="n">nextOccurrence</span><span class="p">][</span><span class="n">item</span><span class="p">])</span>
+            <span class="n">resolvedHere</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+        <span class="n">resolved</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">resolvedHere</span>
+
+    <span class="c1"># a key keeps the value of the map it first appears in; a later map listing it again only</span>
+    <span class="c1"># substitutes it where it appears as an item, which the resolution above already did</span>
+    <span class="n">net</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">substitution</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">maps</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">substitution</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">net</span><span class="p">:</span>
+                <span class="n">net</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">resolved</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="n">key</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">net</span>
+
+
+<div class="viewcode-block" id="coalesce">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.modelchange.coalesce">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">coalesce</span><span class="p">(</span><span class="n">changes</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ModelChange</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Fold a chronological list of changes into the single net :class:`ModelChange` a consumer</span>
+<span class="sd">    that missed all of them would need (see :meth:`ModelChange.mergedWith`). ``None`` for an empty</span>
+<span class="sd">    list, and the change itself for a single one.</span>
+
+<span class="sd">    Linear in the total size of the history: a resume coalesces every change recorded since the</span>
+<span class="sd">    start of the run, so a pairwise fold, which re-walks the whole accumulated change per change,</span>
+<span class="sd">    would be quadratic in it.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">changes</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">changes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">changes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">first</span> <span class="o">=</span> <span class="n">changes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">addedNodes</span><span class="p">,</span> <span class="n">removedNodes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">addedNodes</span><span class="p">),</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">removedNodes</span><span class="p">)</span>
+    <span class="n">addedElements</span><span class="p">,</span> <span class="n">removedElements</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">addedElements</span><span class="p">),</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">removedElements</span><span class="p">)</span>
+    <span class="n">changedNodeSets</span><span class="p">,</span> <span class="n">changedElementSets</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">changedNodeSets</span><span class="p">),</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">changedElementSets</span><span class="p">)</span>
+    <span class="n">changedSurfaces</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">changedSurfaces</span><span class="p">)</span>
+    <span class="n">movedNodes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">movedNodes</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">change</span> <span class="ow">in</span> <span class="n">changes</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="c1"># labels added within the window and removed again existed only within it; "added" means</span>
+        <span class="c1"># added by any EARLIER change, hence intersected before this change's additions join in</span>
+        <span class="n">transientNodes</span> <span class="o">=</span> <span class="n">addedNodes</span> <span class="o">&amp;</span> <span class="n">change</span><span class="o">.</span><span class="n">removedNodes</span>
+        <span class="n">transientElements</span> <span class="o">=</span> <span class="n">addedElements</span> <span class="o">&amp;</span> <span class="n">change</span><span class="o">.</span><span class="n">removedElements</span>
+        <span class="n">addedNodes</span> <span class="o">|=</span> <span class="n">change</span><span class="o">.</span><span class="n">addedNodes</span>
+        <span class="n">addedNodes</span> <span class="o">-=</span> <span class="n">transientNodes</span>
+        <span class="n">removedNodes</span> <span class="o">|=</span> <span class="n">change</span><span class="o">.</span><span class="n">removedNodes</span>
+        <span class="n">removedNodes</span> <span class="o">-=</span> <span class="n">transientNodes</span>
+        <span class="n">addedElements</span> <span class="o">|=</span> <span class="n">change</span><span class="o">.</span><span class="n">addedElements</span>
+        <span class="n">addedElements</span> <span class="o">-=</span> <span class="n">transientElements</span>
+        <span class="n">removedElements</span> <span class="o">|=</span> <span class="n">change</span><span class="o">.</span><span class="n">removedElements</span>
+        <span class="n">removedElements</span> <span class="o">-=</span> <span class="n">transientElements</span>
+        <span class="n">changedNodeSets</span> <span class="o">|=</span> <span class="n">change</span><span class="o">.</span><span class="n">changedNodeSets</span>
+        <span class="n">changedElementSets</span> <span class="o">|=</span> <span class="n">change</span><span class="o">.</span><span class="n">changedElementSets</span>
+        <span class="n">changedSurfaces</span> <span class="o">|=</span> <span class="n">change</span><span class="o">.</span><span class="n">changedSurfaces</span>
+        <span class="n">movedNodes</span> <span class="o">|=</span> <span class="n">change</span><span class="o">.</span><span class="n">movedNodes</span>
+        <span class="n">movedNodes</span> <span class="o">-=</span> <span class="n">transientNodes</span>
+    <span class="c1"># movedNodes holds only existing nodes: drop those net-added or net-removed within the window.</span>
+    <span class="n">movedNodes</span> <span class="o">-=</span> <span class="n">addedNodes</span> <span class="o">|</span> <span class="n">removedNodes</span>
+
+    <span class="n">last</span> <span class="o">=</span> <span class="n">changes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">ModelChange</span><span class="p">(</span>
+        <span class="n">kind</span><span class="o">=</span><span class="n">last</span><span class="o">.</span><span class="n">kind</span><span class="p">,</span>
+        <span class="n">version</span><span class="o">=</span><span class="n">last</span><span class="o">.</span><span class="n">version</span><span class="p">,</span>
+        <span class="n">addedNodes</span><span class="o">=</span><span class="n">addedNodes</span><span class="p">,</span>
+        <span class="n">removedNodes</span><span class="o">=</span><span class="n">removedNodes</span><span class="p">,</span>
+        <span class="n">addedElements</span><span class="o">=</span><span class="n">addedElements</span><span class="p">,</span>
+        <span class="n">removedElements</span><span class="o">=</span><span class="n">removedElements</span><span class="p">,</span>
+        <span class="n">parentToChildren</span><span class="o">=</span><span class="n">_composeSubstitutions</span><span class="p">([</span><span class="n">change</span><span class="o">.</span><span class="n">parentToChildren</span> <span class="k">for</span> <span class="n">change</span> <span class="ow">in</span> <span class="n">changes</span><span class="p">]),</span>
+        <span class="n">faceMap</span><span class="o">=</span><span class="n">_composeSubstitutions</span><span class="p">([</span><span class="n">change</span><span class="o">.</span><span class="n">faceMap</span> <span class="k">for</span> <span class="n">change</span> <span class="ow">in</span> <span class="n">changes</span><span class="p">]),</span>
+        <span class="n">changedNodeSets</span><span class="o">=</span><span class="n">changedNodeSets</span><span class="p">,</span>
+        <span class="n">changedElementSets</span><span class="o">=</span><span class="n">changedElementSets</span><span class="p">,</span>
+        <span class="n">changedSurfaces</span><span class="o">=</span><span class="n">changedSurfaces</span><span class="p">,</span>
+        <span class="n">movedNodes</span><span class="o">=</span><span class="n">movedNodes</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

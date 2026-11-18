@@ -214,7 +214,7 @@
 <span class="sd">    Only three step actions declare one at all (``dirichlet``, ``distributedload``,</span>
 <span class="sd">    ``nodeforces``) -- every other step action either has no update path (a re-declaration must</span>
 <span class="sd">    restate every required argument again) or -- ``options`` -- validates dynamically and never</span>
-<span class="sd">    reaches this function at all (see the ``isDynamicOptionsKeyword`` branch of</span>
+<span class="sd">    reaches this function at all (see the ``isStepDynamicOptions`` branch of</span>
 <span class="sd">    :func:`parseModuleKeywordLine`). A small explicit table, not a registry category: these</span>
 <span class="sd">    ``Update&lt;Name&gt;Schema`` classes are documentation/parser-validation companions the step action's</span>
 <span class="sd">    own constructor never references (see e.g. ``stepactions/dirichlet.py``'s own docstring), so</span>

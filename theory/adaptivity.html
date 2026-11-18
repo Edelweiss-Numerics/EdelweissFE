@@ -317,7 +317,7 @@ it,</p>
 = \frac{\sum_{K \ni a} V_K\, \nabla\bar e^{h}\big|_K(\mathbf x_a)}
        {\sum_{K \ni a} V_K},\]</div>
 <p>and <span class="math notranslate nohighlight">\(\nabla\bar e^{*}\)</span> elsewhere is the shape-function interpolation of these nodal values.
-Cheap and robust; the default. See <code class="xref py py-func docutils literal notranslate"><span class="pre">_recover_averaging()</span></code>.</p>
+Cheap and robust; the default. See <code class="xref py py-func docutils literal notranslate"><span class="pre">_recoverAveraging()</span></code>.</p>
 <p><strong>Superconvergent patch recovery</strong> (<code class="docutils literal notranslate"><span class="pre">recovery='spr'</span></code>, Zienkiewicz–Zhu 1992). For each corner
 (vertex) node <span class="math notranslate nohighlight">\(a\)</span> a <em>patch</em> <span class="math notranslate nohighlight">\(\omega_a\)</span> is formed from the elements sharing it, and a
 complete polynomial of order <span class="math notranslate nohighlight">\(p\)</span> (matching the element order) is fitted to the FE gradient
@@ -336,7 +336,7 @@ term <span class="math notranslate nohighlight">\(\mathbf a_0\)</span>). Edge-<s
 averaging the fits of the two corner patches at each end of the edge, evaluated at the midside
 location. Boundary patches with too few sampling points for a full quadratic fall back to a linear
 fit, and, failing that, to the plain mean. See
-<code class="xref py py-func docutils literal notranslate"><span class="pre">_recover_spr()</span></code>.</p>
+<code class="xref py py-func docutils literal notranslate"><span class="pre">_recoverSpr()</span></code>.</p>
 <p>SPR is the sharper choice for the serendipity hexahedron and typically has near-unit <em>effectivity</em>
 (estimated / true error <span class="math notranslate nohighlight">\(\approx 1\)</span>), at the cost of a small least-squares solve per patch.</p>
 <div class="admonition note">
@@ -367,8 +367,8 @@ marked element is split once, into <span class="math notranslate nohighlight">\(
 refine the worst ones”, which is precisely <a class="reference internal" href="#equation-doerfler">(4)</a>. A single-level split with
 <code class="docutils literal notranslate"><span class="pre">splitFactor=3</span></code> (a <span class="math notranslate nohighlight">\(3\times3\times3 = 27\)</span>-child subdivision, exactly hanging-node coupled)
 delivers a three-fold local resolution increase in one step, often all that is affordable.</p>
-<p><strong>Why the budget cap matters with a direct solver.</strong> EdelweissFE assembles a single sparse system
-and factorises it with a direct solver (PARDISO). Each refinement changes the sparsity pattern,
+<p><strong>Why the budget cap matters with a direct solver.</strong> EdelweissFE assembles a single sparse system;
+with a direct linear solver such as PARDISO, it factorises it. Each refinement changes the sparsity pattern,
 forcing a fresh symbolic factorisation, and direct-solve cost grows super-linearly in the number of
 unknowns. <code class="docutils literal notranslate"><span class="pre">maxRefinedFraction</span></code> bounds how many elements a single pass may add, keeping the
 per-increment factorisation cost predictable.</p>
@@ -655,7 +655,7 @@ the refineable elements, so it never leaks onto elements outside <code class="do
 <p><code class="docutils literal notranslate"><span class="pre">options</span></code> is the <code class="docutils literal notranslate"><span class="pre">&gt;&gt;marker</span></code> block’s option mapping with the <code class="docutils literal notranslate"><span class="pre">type</span></code> dispatch key already
 removed (the adaptivity mechanism uses <code class="docutils literal notranslate"><span class="pre">type</span></code> to look the class up before calling this).
 The options are validated and coerced against <a class="reference internal" href="#edelweissfe.adaptivity.marking.FieldOutputMarker.schema" title="edelweissfe.adaptivity.marking.FieldOutputMarker.schema"><code class="xref py py-attr docutils literal notranslate"><span class="pre">schema</span></code></a> via
-<code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code>, then mapped onto the constructor.</p>
+<a class="reference internal" href="../developer/inputsystem.html#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>, then mapped onto the constructor.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -801,7 +801,7 @@ and it is applied <em>after</em> the <code class="docutils literal notranslate">
 <p><code class="docutils literal notranslate"><span class="pre">options</span></code> is the <code class="docutils literal notranslate"><span class="pre">&gt;&gt;marker</span></code> block’s option mapping with the <code class="docutils literal notranslate"><span class="pre">type</span></code> dispatch key already
 removed (the adaptivity mechanism uses <code class="docutils literal notranslate"><span class="pre">type</span></code> to look the class up before calling this).
 The options are validated and coerced against <a class="reference internal" href="#edelweissfe.adaptivity.marking.RecoveryErrorMarker.schema" title="edelweissfe.adaptivity.marking.RecoveryErrorMarker.schema"><code class="xref py py-attr docutils literal notranslate"><span class="pre">schema</span></code></a> via
-<code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code>, then mapped onto the constructor.</p>
+<a class="reference internal" href="../developer/inputsystem.html#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>, then mapped onto the constructor.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -830,12 +830,12 @@ The options are validated and coerced against <a class="reference internal" href
 <p>Per increment the marker gathers, for every eligible 20-node element, its node coordinates and
 nonlocal-field values plus a compact global node index, then evaluates the indicator
 <a class="reference internal" href="#equation-indicator">(2)</a> for the whole element set at once in
-<code class="xref py py-func docutils literal notranslate"><span class="pre">_recovery_indicators()</span></code>: all per-element <span class="math notranslate nohighlight">\(3\times3\)</span>
+<code class="xref py py-func docutils literal notranslate"><span class="pre">_recoveryIndicators()</span></code>: all per-element <span class="math notranslate nohighlight">\(3\times3\)</span>
 Jacobians, gradients and the nodal-averaging accumulation are batched into single <code class="docutils literal notranslate"><span class="pre">numpy</span></code> calls
 (<code class="docutils literal notranslate"><span class="pre">einsum</span></code> and a stacked <code class="docutils literal notranslate"><span class="pre">linalg.inv</span></code>), so there is no Python-level per-element loop for the
 default path. The recovery step is delegated to
-<code class="xref py py-func docutils literal notranslate"><span class="pre">_recover_averaging()</span></code> or
-<code class="xref py py-func docutils literal notranslate"><span class="pre">_recover_spr()</span></code>, and the Dörfler selection <a class="reference internal" href="#equation-doerfler">(4)</a> and
+<code class="xref py py-func docutils literal notranslate"><span class="pre">_recoverAveraging()</span></code> or
+<code class="xref py py-func docutils literal notranslate"><span class="pre">_recoverSpr()</span></code>, and the Dörfler selection <a class="reference internal" href="#equation-doerfler">(4)</a> and
 budget cap are applied to the resulting ranking.</p>
 </section>
 <section id="limitations-and-extensions">

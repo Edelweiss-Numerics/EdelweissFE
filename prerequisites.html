@@ -139,9 +139,10 @@
              
   <section id="prerequisites">
 <h1>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h1>
-<p>EdelweissFE requires a conda installation (e.g. <a class="reference external" href="https://conda-forge.org/download/">Miniforge</a>) and
-<a class="reference external" href="https://conda.github.io/conda-lock/">conda-lock</a>. The complete environment, including the free-threaded Python
-interpreter, is declared in <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> in the repository root and pinned by <code class="docutils literal notranslate"><span class="pre">conda-lock.yml</span></code>:</p>
+<p>EdelweissFE requires a conda installation (e.g. <a class="reference external" href="https://conda-forge.org/download/">Miniforge</a>). The complete
+environment, including the free-threaded Python interpreter, is declared in <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> in the repository root,
+pinned by <code class="docutils literal notranslate"><span class="pre">conda-lock.yml</span></code>, and published as the conda package <code class="docutils literal notranslate"><span class="pre">edelweissfe-dev</span></code>; changing it needs
+<a class="reference external" href="https://conda.github.io/conda-lock/">conda-lock</a>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># EdelweissFE development environment: free-threaded Python, everything from conda packages.</span>
 <span class="c1"># This file declares it; conda-lock.yml pins it exactly for every platform. After changing this file,</span>
 <span class="c1"># re-lock (see doc/source/installation.rst) and commit both files together.</span>

@@ -1,0 +1,1098 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.utils.schema &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.utils.schema</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.utils.schema</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="sd">"""Primitives describing a module's input options.</span>
+
+<span class="sd">A "schema" here is an ordinary, immutable (``frozen=True``) :mod:`dataclasses` class that a</span>
+<span class="sd">module owns for itself: it declares which options that module accepts, their Python types,</span>
+<span class="sd">whether they are required, and a human-readable description -- everything the Sphinx</span>
+<span class="sd">``pprint`` documentation renderer needs, without a parallel dict living somewhere else and</span>
+<span class="sd">without mutating any other module's state.</span>
+
+<span class="sd">This module has **no** dependency on :mod:`edelweissfe.config.registry` or any concrete</span>
+<span class="sd">element/material/solver module: it is pure, stdlib-only infrastructure that every module's own</span>
+<span class="sd">constructor and the ``.inp`` parser both depend on.</span>
+
+<span class="sd">Case-insensitivity and string-to-type coercion belong to the ``.inp`` parser, not to the schema</span>
+<span class="sd">objects themselves -- a schema instance is always exact-case and precisely typed. The coercion</span>
+<span class="sd">helpers in this module (:func:`coerceValue`, :func:`resolveCaseInsensitiveOptions`,</span>
+<span class="sd">:func:`buildSchemaFromOptions`, :func:`coercePresentOptions`) are utilities the parser calls, not</span>
+<span class="sd">something a schema class does to itself. :func:`coercePresentOptions` is the partial-application</span>
+<span class="sd">sibling of :func:`buildSchemaFromOptions`, for *overriding* a subset of an already-constructed</span>
+<span class="sd">instance's fields (via ``dataclasses.replace``) rather than building a fresh, fully-defaulted one.</span>
+
+<span class="sd">A value destined for a ``bool`` field goes through :func:`edelweissfe.utils.misc.asBool`</span>
+<span class="sd">(tolerant of a real ``bool``, otherwise ``strtobool``-parsed); any other value is passed through</span>
+<span class="sd">unchanged if it is already an instance of the target type, otherwise coerced via ``dtype(value)``.</span>
+<span class="sd">Do not call ``strtobool`` directly on a value that may already be a ``bool`` -- it unconditionally</span>
+<span class="sd">calls ``.lower()`` and raises ``AttributeError`` on a real ``bool``; always go through</span>
+<span class="sd">:func:`edelweissfe.utils.misc.asBool` instead.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">ClassVar</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.misc</span><span class="w"> </span><span class="kn">import</span> <span class="n">asBool</span><span class="p">,</span> <span class="n">findSimilarString</span>
+
+<span class="c1">#: Sentinel re-exported for callers that need to distinguish "no default given" from "default is</span>
+<span class="c1">#: None" when calling :func:`schemaField` -- identical to :data:`dataclasses.MISSING`.</span>
+<span class="n">MISSING</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">MISSING</span>
+
+<span class="n">_METADATA_KEY</span> <span class="o">=</span> <span class="s2">"edelweissfe.schema"</span>
+
+
+<div class="viewcode-block" id="SchemaFieldMeta">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.SchemaFieldMeta">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SchemaFieldMeta</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Documentation-oriented metadata attached to a single field of a schema dataclass.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    description</span>
+<span class="sd">        Human-readable description of the option, used verbatim by the Sphinx documentation</span>
+<span class="sd">        generator.</span>
+<span class="sd">    dtype</span>
+<span class="sd">        The Python type the option's value must have once coerced (e.g. ``int``, ``float``,</span>
+<span class="sd">        ``str``, ``bool``).</span>
+<span class="sd">    required</span>
+<span class="sd">        Whether the option must be supplied by the caller. This is tracked explicitly (rather</span>
+<span class="sd">        than being re-derived from "does the dataclass field have a default") so that</span>
+<span class="sd">        documentation generation does not need to inspect :data:`dataclasses.MISSING` sentinels</span>
+<span class="sd">        directly.</span>
+<span class="sd">    optionName</span>
+<span class="sd">        The name this option carries in the input file, when that differs from the dataclass field</span>
+<span class="sd">        name. ``None`` means they are identical, which is the common case.</span>
+
+<span class="sd">        This exists because the input language admits option names that are not valid Python</span>
+<span class="sd">        identifiers and therefore cannot be dataclass field names at all -- ``f(x)`` (the</span>
+<span class="sd">        result-transforming expression accepted by several output managers) and ``f_export(x)`` are</span>
+<span class="sd">        the real cases. Rather than renaming user-facing options, which would break every existing</span>
+<span class="sd">        ``.inp`` file, a field may declare the spelling it answers to.</span>
+<span class="sd">    subSchema</span>
+<span class="sd">        For a field representing a *sub-keyword block* rather than a scalar option: the schema</span>
+<span class="sd">        dataclass describing one such block. ``None`` (the common case) marks an ordinary scalar</span>
+<span class="sd">        option. See :func:`subKeywordField`.</span>
+<span class="sd">    isDataline</span>
+<span class="sd">        Marks this field as the keyword's dataline payload rather than a ``key=value`` scalar</span>
+<span class="sd">        option or a ``&gt;&gt;`` sub-keyword block. See :func:`datalineField`.</span>
+<span class="sd">    optionsOverrideOnly</span>
+<span class="sd">        Marks a scalar field that exists solely so a later ``&gt;&gt;options, name=X, ...`` block has</span>
+<span class="sd">        something to validate against and override (via</span>
+<span class="sd">        :func:`~edelweissfe.utils.schema.coercePresentOptions`/``applyOptionsOverride``), and is</span>
+<span class="sd">        **not** part of the keyword's own line/``&gt;&gt;``-block grammar -- e.g. ensight's</span>
+<span class="sd">        ``intermediateSaveInterval``/``minDTForOutput``, which a ``&gt;&gt;configuration`` block or the</span>
+<span class="sd">        keyword line never sets directly. This affects rendering only:</span>
+<span class="sd">        :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`'s module-section renderer</span>
+<span class="sd">        skips such fields, but :func:`optionNames`/:func:`scalarOptionNames` (and therefore</span>
+<span class="sd">        :func:`buildSchemaFromOptions`/:func:`coercePresentOptions`) still include them, since they</span>
+<span class="sd">        remain reachable through a later ``&gt;&gt;options`` override (validated dynamically against this</span>
+<span class="sd">        very schema once ``name`` resolves to this instance -- see ``stepactions/options.py``).</span>
+<span class="sd">    structuralOnly</span>
+<span class="sd">        The mirror image of ``optionsOverrideOnly``: marks a field that documents a *structural*</span>
+<span class="sd">        argument -- one naming an existing model object (an element/node set, a material, a</span>
+<span class="sd">        surface, the step action's own ``name``) -- which an adapter such as</span>
+<span class="sd">        :meth:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition`</span>
+<span class="sd">        resolves and pops from the raw definition *before* the remaining options ever reach</span>
+<span class="sd">        :func:`buildSchemaFromOptions`. Such a field is never actually present in the mapping</span>
+<span class="sd">        :func:`buildSchemaFromOptions`/:func:`coercePresentOptions` validate, so it is excluded</span>
+<span class="sd">        from :func:`optionNames` (and therefore from :func:`scalarOptionNames`,</span>
+<span class="sd">        :func:`resolveCaseInsensitiveOptions`'s valid-key set, and the missing-required check) --</span>
+<span class="sd">        the opposite exclusion from ``optionsOverrideOnly``, which stays *in* those but is excluded</span>
+<span class="sd">        from rendering. A ``structuralOnly`` field is still fully rendered by</span>
+<span class="sd">        :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` (in its required/optional</span>
+<span class="sd">        arguments section, ordered like any other field), so a schema can document a structural</span>
+<span class="sd">        argument's name/description/required-ness without the adapter code that pops it changing</span>
+<span class="sd">        at all.</span>
+<span class="sd">    updateOnly</span>
+<span class="sd">        Marks a scalar field that belongs only to a keyword's ``update&lt;keyword&gt;`` partial</span>
+<span class="sd">        re-declaration grammar, not to the base keyword's own line grammar -- e.g.</span>
+<span class="sd">        ``distributedload``'s ``delta``, which only ``updatedistributedload`` declares.</span>
+<span class="sd">        Affects rendering only, exactly like ``optionsOverrideOnly``: excluded from the *base*</span>
+<span class="sd">        keyword's :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface` block, but left in</span>
+<span class="sd">        :func:`optionNames`/:func:`scalarOptionNames` since the field is a real, validated part of</span>
+<span class="sd">        the (single, shared) runtime schema either way.</span>
+<span class="sd">    documentedDefault</span>
+<span class="sd">        Overrides the default value shown by :func:`~edelweissfe.utils.schemasurface.renderSchemaSurface`</span>
+<span class="sd">        for an optional field, when it differs from the dataclass field's own (runtime) default --</span>
+<span class="sd">        mirroring ``edelweissfe.utils.inputlanguage.OptionalKeywordArg.documentedDefault``. One</span>
+<span class="sd">        example is ``bodyforce.delta``, whose documented default is ``0`` while the field's actual</span>
+<span class="sd">        runtime default is ``None`` (the sentinel :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`</span>
+<span class="sd">        needs to tell "not given" apart from a real value). :data:`MISSING` (the default) means "no</span>
+<span class="sd">        override -- render the field's own default", which is the common case.</span>
+<span class="sd">    """</span>
+
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="nb">type</span>
+    <span class="n">required</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">optionName</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">subSchema</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">isDataline</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">optionsOverrideOnly</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">structuralOnly</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">updateOnly</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># A default_factory, not `= MISSING`: dataclasses treats a MISSING default as "no default", which would</span>
+    <span class="c1"># break the field order ("non-default argument follows default argument").</span>
+    <span class="n">documentedDefault</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">MISSING</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="schemaField">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.schemaField">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">schemaField</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span>
+    <span class="n">default</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">MISSING</span><span class="p">,</span>
+    <span class="n">default_factory</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">MISSING</span><span class="p">,</span>
+    <span class="n">required</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">optionName</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">subSchema</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">optionsOverrideOnly</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">structuralOnly</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">updateOnly</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">documentedDefault</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">MISSING</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">Field</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Declare one field of an option schema dataclass.</span>
+
+<span class="sd">    This is a thin wrapper around :func:`dataclasses.field` that attaches a</span>
+<span class="sd">    :class:`SchemaFieldMeta` under a well-known metadata key, instead of maintaining a parallel</span>
+<span class="sd">    dict of descriptions next to the dataclass. Use it as the value of a field in a class</span>
+<span class="sd">    decorated with ``@dataclasses.dataclass(frozen=True)``:</span>
+
+<span class="sd">    .. code-block:: python</span>
+
+<span class="sd">        @dataclass(frozen=True)</span>
+<span class="sd">        class EnsightConfigurationSchema:</span>
+<span class="sd">            overwrite: bool = schemaField(description="Overwrite existing output.", dtype=bool, default=False)</span>
+<span class="sd">            intermediate_save_interval: int = schemaField(</span>
+<span class="sd">                description="Save an intermediate .case every N increments.", dtype=int, default=10</span>
+<span class="sd">            )</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    description</span>
+<span class="sd">        Human-readable description of the option.</span>
+<span class="sd">    dtype</span>
+<span class="sd">        The Python type the option's value must have.</span>
+<span class="sd">    default</span>
+<span class="sd">        The default value, if the option is optional. Mutually exclusive with ``default_factory``.</span>
+<span class="sd">    default_factory</span>
+<span class="sd">        A zero-argument callable producing the default value, for mutable/composite defaults.</span>
+<span class="sd">        Mutually exclusive with ``default``.</span>
+<span class="sd">    required</span>
+<span class="sd">        Explicitly override whether the option is required. If not given (``None``), it is</span>
+<span class="sd">        inferred as ``True`` exactly when neither ``default`` nor ``default_factory`` was</span>
+<span class="sd">        supplied.</span>
+<span class="sd">    optionName</span>
+<span class="sd">        The name this option is spelled with in the input file, if it cannot be the field name --</span>
+<span class="sd">        e.g. ``optionName="f(x)"`` on a field called ``f_x``. See :class:`SchemaFieldMeta`.</span>
+<span class="sd">    subSchema</span>
+<span class="sd">        Marks this field as a repeatable sub-keyword block described by the given schema. Prefer</span>
+<span class="sd">        :func:`subKeywordField`, which sets the remaining arguments consistently.</span>
+<span class="sd">    optionsOverrideOnly</span>
+<span class="sd">        Marks this field as reachable only through a later ``&gt;&gt;options`` override, not through the</span>
+<span class="sd">        keyword's own line/``&gt;&gt;``-block grammar -- see :class:`SchemaFieldMeta`. Affects rendering</span>
+<span class="sd">        only.</span>
+<span class="sd">    structuralOnly</span>
+<span class="sd">        Marks this field as documenting a structural argument that the adapter resolves and pops</span>
+<span class="sd">        before the schema is built, so it is never actually validated by</span>
+<span class="sd">        :func:`buildSchemaFromOptions` -- see :class:`SchemaFieldMeta`. Affects</span>
+<span class="sd">        :func:`optionNames`/construction-time validation only; rendering is unaffected (the field</span>
+<span class="sd">        still appears in its required/optional arguments section).</span>
+<span class="sd">    updateOnly</span>
+<span class="sd">        Marks this field as belonging only to a keyword's ``update&lt;keyword&gt;`` grammar, not its base</span>
+<span class="sd">        keyword's own line grammar -- see :class:`SchemaFieldMeta`. Affects rendering of the base</span>
+<span class="sd">        keyword only.</span>
+<span class="sd">    documentedDefault</span>
+<span class="sd">        Overrides the default value shown in the rendered grammar surface for this field, when it</span>
+<span class="sd">        differs from ``default`` -- see :class:`SchemaFieldMeta`. Affects rendering only; the</span>
+<span class="sd">        dataclass field's real, runtime default is still ``default``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dataclasses.Field</span>
+<span class="sd">        A field descriptor suitable as a dataclass class-body value.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">default</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">MISSING</span> <span class="ow">and</span> <span class="n">default_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">MISSING</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Specify at most one of 'default' or 'default_factory', not both."</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">required</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="n">default</span> <span class="ow">is</span> <span class="n">MISSING</span> <span class="ow">and</span> <span class="n">default_factory</span> <span class="ow">is</span> <span class="n">MISSING</span>
+
+    <span class="n">meta</span> <span class="o">=</span> <span class="n">SchemaFieldMeta</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="n">required</span><span class="p">,</span>
+        <span class="n">optionName</span><span class="o">=</span><span class="n">optionName</span><span class="p">,</span>
+        <span class="n">subSchema</span><span class="o">=</span><span class="n">subSchema</span><span class="p">,</span>
+        <span class="n">optionsOverrideOnly</span><span class="o">=</span><span class="n">optionsOverrideOnly</span><span class="p">,</span>
+        <span class="n">structuralOnly</span><span class="o">=</span><span class="n">structuralOnly</span><span class="p">,</span>
+        <span class="n">updateOnly</span><span class="o">=</span><span class="n">updateOnly</span><span class="p">,</span>
+        <span class="n">documentedDefault</span><span class="o">=</span><span class="n">documentedDefault</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">fieldKwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"metadata"</span><span class="p">:</span> <span class="p">{</span><span class="n">_METADATA_KEY</span><span class="p">:</span> <span class="n">meta</span><span class="p">}}</span>
+    <span class="k">if</span> <span class="n">default</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">MISSING</span><span class="p">:</span>
+        <span class="n">fieldKwargs</span><span class="p">[</span><span class="s2">"default"</span><span class="p">]</span> <span class="o">=</span> <span class="n">default</span>
+    <span class="k">if</span> <span class="n">default_factory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">MISSING</span><span class="p">:</span>
+        <span class="n">fieldKwargs</span><span class="p">[</span><span class="s2">"default_factory"</span><span class="p">]</span> <span class="o">=</span> <span class="n">default_factory</span>
+
+    <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="o">**</span><span class="n">fieldKwargs</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="subKeywordField">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.subKeywordField">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">subKeywordField</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">schema</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span>
+    <span class="n">optionName</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">required</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">Field</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Declare one field of a schema as a repeatable *sub-keyword block*.</span>
+
+<span class="sd">    Several keywords of the input language are not flat lists of options but carry nested,</span>
+<span class="sd">    repeatable blocks introduced by the module-level keyword identifier ``&gt;&gt;``. ``*output,</span>
+<span class="sd">    type=ensight`` is the first such case to be ported::</span>
+
+<span class="sd">        *output, type=ensight, name=myExport</span>
+<span class="sd">        &gt;&gt;perNode,    fieldOutput=Displacement</span>
+<span class="sd">        &gt;&gt;perElement, fieldOutput=Stress</span>
+<span class="sd">        &gt;&gt;configuration, overwrite=yes</span>
+
+<span class="sd">    Each block has its own option set, so the natural representation is a schema per block kind</span>
+<span class="sd">    plus, on the enclosing schema, one field per kind holding a **tuple** of block instances. The</span>
+<span class="sd">    tuple (rather than a single instance) is what makes repetition representable, and it is</span>
+<span class="sd">    immutable, so it does not compromise the enclosing dataclass's ``frozen=True``.</span>
+
+<span class="sd">    The field defaults to the empty tuple, i.e. "no block of this kind was given". A block kind</span>
+<span class="sd">    that must appear at least once can say so via ``required=True``.</span>
+
+<span class="sd">    This mechanism is generic, not special-cased for ensight: any module (``sections/``,</span>
+<span class="sd">    ``stepactions/``, ``utils/fieldoutput.py``, ``modelmodifiers/adaptivity/hadaptivity.py``, ...)</span>
+<span class="sd">    that needs repeatable ``&gt;&gt;`` sub-keyword blocks uses it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    description</span>
+<span class="sd">        Human-readable description of the block kind.</span>
+<span class="sd">    schema</span>
+<span class="sd">        The schema dataclass describing the options of a single block.</span>
+<span class="sd">    optionName</span>
+<span class="sd">        The name the sub-keyword is spelled with in the input file, if it differs from the field</span>
+<span class="sd">        name -- e.g. a field ``configurations`` answering to ``&gt;&gt;configuration``.</span>
+<span class="sd">    required</span>
+<span class="sd">        Whether at least one block of this kind must be supplied.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dataclasses.Field</span>
+<span class="sd">        A field descriptor suitable as a dataclass class-body value.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">tuple</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="p">(),</span>
+        <span class="n">required</span><span class="o">=</span><span class="n">required</span><span class="p">,</span>
+        <span class="n">optionName</span><span class="o">=</span><span class="n">optionName</span><span class="p">,</span>
+        <span class="n">subSchema</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="datalineField">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.datalineField">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">datalineField</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">description</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">required</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">Field</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Declare one field of a schema as this keyword's *dataline payload*.</span>
+
+<span class="sd">    A ``.inp`` keyword block carries, below its own ``key=value`` line, a body of raw dataline</span>
+<span class="sd">    strings (element connectivity, node coordinates, an elSet's ranges, a material's property</span>
+<span class="sd">    rows, `&gt;&gt;`-less option lines, raw Python source, ...). :func:`schemaField` and</span>
+<span class="sd">    :func:`subKeywordField` both model *typed, named* pieces of grammar; a dataline field is</span>
+<span class="sd">    neither -- its shape varies per keyword and is not a flat option mapping nor a repeatable</span>
+<span class="sd">    named block. This field records only **presence, documentation, and required-ness** -- never a</span>
+<span class="sd">    column or table description -- and the owning class is responsible for turning the raw</span>
+<span class="sd">    ``list[str]``/``list[Mapping[str, Any]]`` datalines into whatever it stores here, via its own</span>
+<span class="sd">    ``fromDatalines`` classmethod (see :class:`DatalineAggregatingSchema`, the general, uniform way</span>
+<span class="sd">    any keyword consumes datalines).</span>
+
+<span class="sd">    A datalineField is excluded from :func:`optionNames`/:func:`scalarOptionNames`</span>
+<span class="sd">    (and therefore from :func:`buildSchemaFromOptions`'s ``key=value`` validation and</span>
+<span class="sd">    missing-required check): it is never reachable as a scalar option on the keyword's own line,</span>
+<span class="sd">    and its required-ness is the owning class's concern (raise from ``fromDatalines`` if the</span>
+<span class="sd">    datalines are empty), not something ``buildSchemaFromOptions`` can check -- it is never handed</span>
+<span class="sd">    dataline content in the first place.</span>
+
+<span class="sd">    The declared dataclass field always defaults to ``None`` regardless of ``required``, since a</span>
+<span class="sd">    schema instance must remain constructible with no arguments at all (mirroring every other</span>
+<span class="sd">    field kind here) -- "required" documents an invariant the *owning class* enforces while</span>
+<span class="sd">    interpreting datalines, not a constructor-level default.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    description</span>
+<span class="sd">        Human-readable description of what the datalines contain.</span>
+<span class="sd">    required</span>
+<span class="sd">        Whether at least one dataline must be supplied. Purely documentation/validation metadata</span>
+<span class="sd">        for the owning class to consult -- see above.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dataclasses.Field</span>
+<span class="sd">        A field descriptor suitable as a dataclass class-body value.</span>
+<span class="sd">    """</span>
+    <span class="n">meta</span> <span class="o">=</span> <span class="n">SchemaFieldMeta</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">list</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="n">required</span><span class="p">,</span> <span class="n">isDataline</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="n">_METADATA_KEY</span><span class="p">:</span> <span class="n">meta</span><span class="p">})</span></div>
+
+
+
+<div class="viewcode-block" id="fieldSchemaMeta">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.fieldSchemaMeta">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">:</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">Field</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SchemaFieldMeta</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Retrieve the :class:`SchemaFieldMeta` attached to a dataclass field by :func:`schemaField`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    field</span>
+<span class="sd">        A field of a schema dataclass, as returned by ``dataclasses.fields(schemaCls)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    SchemaFieldMeta</span>
+<span class="sd">        The metadata describing this field.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    KeyError</span>
+<span class="sd">        If the field was declared without :func:`schemaField` (i.e. it carries no schema</span>
+<span class="sd">        metadata).</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">field</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="n">_METADATA_KEY</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Field '</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">' was not declared with schemaField(...) and therefore carries "</span> <span class="s2">"no SchemaFieldMeta."</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="schemaFields">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.schemaFields">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">schemaFields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">SchemaFieldMeta</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Collect the :class:`SchemaFieldMeta` of every field of a schema dataclass.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass whose fields were declared via :func:`schemaField`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, SchemaFieldMeta]</span>
+<span class="sd">        Mapping of field name to its schema metadata, in declaration order.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="p">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)}</span></div>
+
+
+
+<div class="viewcode-block" id="optionNames">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.optionNames">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">optionNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">Field</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Map each of a schema's input-file option names to the field that implements it.</span>
+
+<span class="sd">    The option name is the field name unless the field declared an explicit</span>
+<span class="sd">    :attr:`SchemaFieldMeta.optionName` -- see there for why that indirection exists (input-file</span>
+<span class="sd">    options such as ``f(x)`` are not valid Python identifiers).</span>
+
+<span class="sd">    A field declared via :func:`datalineField` is excluded: it is filled by the owning class's own</span>
+<span class="sd">    dataline interpretation, not by a ``key=value``/`` &gt;&gt;`` name the parser resolves here -- see</span>
+<span class="sd">    that function's docstring. A field declared with ``structuralOnly=True`` is excluded too: it</span>
+<span class="sd">    documents a structural argument the adapter already resolves and pops before the schema is</span>
+<span class="sd">    built, so it is never actually present in the mapping this function's callers validate -- see</span>
+<span class="sd">    :class:`SchemaFieldMeta`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass whose fields were declared via :func:`schemaField`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, dataclasses.Field]</span>
+<span class="sd">        Mapping of user-facing option name to its field, in declaration order.</span>
+<span class="sd">    """</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="p">(</span><span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">optionName</span> <span class="ow">or</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">):</span> <span class="n">field</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">isDataline</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">structuralOnly</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="scalarOptionNames">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.scalarOptionNames">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">scalarOptionNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">Field</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Like :func:`optionNames`, but restricted to ordinary scalar options.</span>
+
+<span class="sd">    Fields declared via :func:`subKeywordField` are excluded: they are filled from nested ``&gt;&gt;``</span>
+<span class="sd">    blocks, not from the keyword's own option assignments, and must therefore not be reachable as</span>
+<span class="sd">    a plain ``name=value`` pair (writing ``perNode=1`` on an ensight dataline is an error, not a</span>
+<span class="sd">    way to populate the ``perNode`` blocks).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass whose fields were declared via :func:`schemaField`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, dataclasses.Field]</span>
+<span class="sd">        Mapping of user-facing option name to its field, in declaration order.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">optionName</span><span class="p">:</span> <span class="n">field</span>
+        <span class="k">for</span> <span class="n">optionName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">optionNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">subSchema</span> <span class="ow">is</span> <span class="kc">None</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="subKeywordFieldNames">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.subKeywordFieldNames">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">subKeywordFieldNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">Field</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""The inverse of :func:`scalarOptionNames`: only the sub-keyword block fields.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass whose fields were declared via :func:`schemaField`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, dataclasses.Field]</span>
+<span class="sd">        Mapping of user-facing sub-keyword name to its field, in declaration order.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">optionName</span><span class="p">:</span> <span class="n">field</span>
+        <span class="k">for</span> <span class="n">optionName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">optionNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">subSchema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="datalineFieldMeta">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.datalineFieldMeta">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">datalineFieldMeta</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SchemaFieldMeta</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the :class:`SchemaFieldMeta` of ``schemaCls``'s dataline field, if it declares one.</span>
+
+<span class="sd">    A schema declares at most one :func:`datalineField` -- a keyword has exactly one dataline</span>
+<span class="sd">    payload, however that payload is structured once parsed.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass, possibly declaring one field via :func:`datalineField`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    SchemaFieldMeta | None</span>
+<span class="sd">        The dataline field's metadata, or ``None`` if ``schemaCls`` declares no dataline field.</span>
+<span class="sd">    """</span>
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">):</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">meta</span><span class="o">.</span><span class="n">isDataline</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">meta</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="OptionSchemaProvider">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.OptionSchemaProvider">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">OptionSchemaProvider</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Mixin declaring that a class owns an option schema, exposed as the class attribute</span>
+<span class="sd">    :attr:`schema`.</span>
+
+<span class="sd">    This is the convention by which a schema reaches the registry along the *dotted-string*</span>
+<span class="sd">    resolution paths -- the built-in table and, crucially, third-party ``importlib.metadata`` entry</span>
+<span class="sd">    points. ``registry.register(..., schema=...)`` can pass a schema explicitly, but nothing can</span>
+<span class="sd">    pass an argument alongside a dotted string in a ``pyproject.toml``; without this convention the</span>
+<span class="sd">    registry would be schema-blind for exactly the external caller it exists to serve. Keeping the</span>
+<span class="sd">    schema on the class also keeps it next to the constructor it describes, so the two cannot</span>
+<span class="sd">    drift apart or be registered inconsistently.</span>
+
+<span class="sd">    Deriving from this mixin is what makes a class's schema discoverable; the default of ``None``</span>
+<span class="sd">    means "this class declares no schema", which lets a base class adopt the mixin independently</span>
+<span class="sd">    of whether its subclasses declare one.</span>
+
+<span class="sd">    The declared default is also why :func:`schemaOf` needs no ``getattr``/``hasattr`` probing</span>
+<span class="sd">    (which this codebase's conventions forbid): the attribute is guaranteed to exist on every</span>
+<span class="sd">    subclass, so a plain attribute access suffices.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: The schema dataclass describing the options this class accepts, or ``None`` if it does</span>
+    <span class="c1">#: not declare one (yet). Overridden as a plain class attribute by concrete subclasses.</span>
+    <span class="n">schema</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="DatalineAggregatingSchema">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.DatalineAggregatingSchema">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DatalineAggregatingSchema</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Base for a schema that is built from *all* datalines of one keyword block at once.</span>
+
+<span class="sd">    This is the general, uniform mechanism by which any keyword turns its raw dataline payload</span>
+<span class="sd">    (element connectivity, node coordinates, elSet ranges, surface faces, material property rows,</span>
+<span class="sd">    ``&gt;&gt;``-less option datalines, raw Python source, ...) into typed data. :func:`datalineField`</span>
+<span class="sd">    marks *that a keyword has* a dataline payload (presence + doc + required, on the enclosing</span>
+<span class="sd">    schema); :meth:`fromDatalines` is where the owning class actually *interprets* that payload,</span>
+<span class="sd">    however it is shaped for that particular keyword.</span>
+
+<span class="sd">    The ordinary adapter treats each dataline as an independent module instance: it builds one</span>
+<span class="sd">    schema per dataline and calls the constructor once per dataline. That default is exactly</span>
+<span class="sd">    right for a keyword whose datalines are a flat, uniform ``key=value`` mapping repeated per</span>
+<span class="sd">    instance. ``DatalineAggregatingSchema`` is for the opposite shape: a single instance built from</span>
+<span class="sd">    *all* datalines of the block *at once*, aggregating a *heterogeneous list of jobs*, one per</span>
+<span class="sd">    dataline, with the kind of job selected by an option value on the line itself (``meshplot``'s</span>
+<span class="sd">    ``create=perNode|perElement|xyData|meshOnly``, plus its orthogonal ``saveFigure``). Neither a</span>
+<span class="sd">    flat schema nor :func:`subKeywordField` expresses that: the jobs are not sub-keyword blocks and</span>
+<span class="sd">    they do not share one option set.</span>
+
+<span class="sd">    A schema of this kind takes responsibility for its own dataline interpretation in</span>
+<span class="sd">    :meth:`fromDatalines`, and the adapter dispatches on this base class (a type check, like</span>
+<span class="sd">    :func:`schemaOf`, not attribute probing).</span>
+
+<span class="sd">    Prefer a flat schema (with a plain :func:`datalineField`) or :func:`subKeywordField` when a</span>
+<span class="sd">    keyword's datalines really are independent, uniformly-shaped instances; reach for this base</span>
+<span class="sd">    only for the aggregate-into-one-instance shape described above.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="DatalineAggregatingSchema.fromDatalines">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromDatalines</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">datalines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build one schema instance from *all* datalines of this keyword block, in file order.</span>
+
+<span class="sd">        The one, uniform seam by which any keyword of this shape turns its raw dataline payload</span>
+<span class="sd">        into typed data -- see the class docstring. What ``datalines`` contains is whatever the</span>
+<span class="sd">        ``.inp`` parser produces for this keyword's block: a per-line mapping of raw (string)</span>
+<span class="sd">        option name to value, for a ``key=value``-shaped payload (as here, for ``meshplot``), or a</span>
+<span class="sd">        list of raw strings for a payload that is not `key=value` shaped at all (e.g. raw Python</span>
+<span class="sd">        source, connectivity rows) -- a future subclass with that shape overrides this with the</span>
+<span class="sd">        signature it actually needs.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        datalines</span>
+<span class="sd">            One mapping of raw (string) option name to value per dataline of the keyword block.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Any</span>
+<span class="sd">            An instance of the schema.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If a dataline is not interpretable, with a message naming the offending option.</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>  <span class="c1"># pragma: no cover -- subclass responsibility</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="schemaOf">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.schemaOf">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">schemaOf</span><span class="p">(</span><span class="n">target</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the schema declared by ``target``, or ``None`` if it declares none.</span>
+
+<span class="sd">    Used by :func:`edelweissfe.config.registry.lookup` to attach a schema to an object it resolved</span>
+<span class="sd">    from a dotted string.</span>
+
+<span class="sd">    ``None`` is returned for anything that is not a class deriving from</span>
+<span class="sd">    :class:`OptionSchemaProvider`. That covers a registry target that is a plain module-level</span>
+<span class="sd">    *function* rather than a class (e.g. ``executePythonCode``'s ``Generator``, whose datalines are</span>
+<span class="sd">    raw code rather than a flat option mapping, so it declares ``schema = None``) --</span>
+<span class="sd">    dispatching on the type here rather than probing for an attribute is what keeps that case an</span>
+<span class="sd">    explicit, documented ``None`` instead of an ``AttributeError`` at lookup time.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    target</span>
+<span class="sd">        Any object resolved by the registry -- a class, a factory function, anything.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    type | None</span>
+<span class="sd">        The schema dataclass, or ``None``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="nb">type</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">OptionSchemaProvider</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">target</span><span class="o">.</span><span class="n">schema</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="coerceValue">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.coerceValue">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">coerceValue</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">dtype</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Coerce a single value to ``dtype``, tolerating a value that is already correctly typed.</span>
+
+<span class="sd">    Mirrors ``edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs``: for ``dtype is</span>
+<span class="sd">    bool`` this delegates to :func:`edelweissfe.utils.misc.asBool` (which passes a real ``bool``</span>
+<span class="sd">    through unchanged and otherwise parses a truth-string via ``strtobool``). Do not call</span>
+<span class="sd">    ``strtobool`` directly on a value that may already be a ``bool``: it unconditionally calls</span>
+<span class="sd">    ``.lower()`` and raises ``AttributeError`` on a real ``bool``.</span>
+
+<span class="sd">    For every other ``dtype``, a value that is already an instance of ``dtype`` is returned</span>
+<span class="sd">    unchanged; otherwise ``dtype(value)`` is attempted.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    value</span>
+<span class="sd">        The value to coerce (typically a string from an ``.inp`` file, or an already-correct</span>
+<span class="sd">        Python value from a programmatic caller).</span>
+<span class="sd">    dtype</span>
+<span class="sd">        The target type.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Any</span>
+<span class="sd">        The coerced value.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``value`` cannot be converted to ``dtype``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">asBool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">value</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">dtype</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Cannot convert </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2"> to </span><span class="si">{</span><span class="n">dtype</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span></div>
+
+
+
+<div class="viewcode-block" id="resolveCaseInsensitiveOptions">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.resolveCaseInsensitiveOptions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">resolveCaseInsensitiveOptions</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Map possibly-mis-cased option keys onto a schema dataclass's exact-case field names.</span>
+
+<span class="sd">    The schema class itself (``schemaCls``) is always exact-case, but an ``.inp`` file (or a</span>
+<span class="sd">    careless caller) may spell an option key in any case. This utility performs the case-fold</span>
+<span class="sd">    lookup once, so schema instances never need to.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        The schema dataclass whose field names are the valid option keys.</span>
+<span class="sd">    options</span>
+<span class="sd">        A mapping of (possibly mis-cased) option names to raw values.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, Any]</span>
+<span class="sd">        The same values, keyed by the schema's exact-case field names.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a key in ``options`` does not case-insensitively match any field of ``schemaCls``.</span>
+<span class="sd">    """</span>
+    <span class="n">scalarNames</span> <span class="o">=</span> <span class="n">scalarOptionNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span>
+    <span class="n">fieldNamesByFold</span> <span class="o">=</span> <span class="p">{</span><span class="n">optionName</span><span class="o">.</span><span class="n">casefold</span><span class="p">():</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">optionName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">scalarNames</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">subKeywordNamesByFold</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">():</span> <span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">subKeywordFieldNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)}</span>
+
+    <span class="n">resolved</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">options</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">exactName</span> <span class="o">=</span> <span class="n">fieldNamesByFold</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">exactName</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">availableNames</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">scalarNames</span><span class="p">)</span>
+            <span class="c1"># A sub-keyword misused as a scalar option gets its own remedy, not a "did you mean".</span>
+            <span class="n">subKeywordName</span> <span class="o">=</span> <span class="n">subKeywordNamesByFold</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">subKeywordName</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">' is a sub-keyword of </span><span class="si">{</span><span class="n">schemaCls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, not an option: write it on "</span>
+                    <span class="sa">f</span><span class="s2">"its own line as '&gt;&gt;</span><span class="si">{</span><span class="n">subKeywordName</span><span class="si">}</span><span class="s2">, ...' rather than as '</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">=...'."</span>
+                <span class="p">)</span>
+            <span class="n">hint</span> <span class="o">=</span> <span class="s2">""</span>
+            <span class="k">if</span> <span class="n">availableNames</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">similar</span> <span class="o">=</span> <span class="n">findSimilarString</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">availableNames</span><span class="p">)</span>
+                    <span class="n">hint</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">" Did you mean '</span><span class="si">{</span><span class="n">similar</span><span class="si">}</span><span class="s2">'?"</span>
+                <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+                    <span class="k">pass</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">' is not a valid option for </span><span class="si">{</span><span class="n">schemaCls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">. "</span>
+                <span class="sa">f</span><span class="s2">"Available options: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">availableNames</span><span class="p">)</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">hint</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">resolved</span><span class="p">[</span><span class="n">exactName</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">return</span> <span class="n">resolved</span></div>
+
+
+
+<div class="viewcode-block" id="buildSchemaFromOptions">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.buildSchemaFromOptions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">buildSchemaFromOptions</span><span class="p">(</span>
+    <span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span>
+    <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">subKeywordOptions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Build an instance of a schema dataclass from a (possibly mis-cased, string-valued) mapping.</span>
+
+<span class="sd">    Resolves case-insensitive keys (:func:`resolveCaseInsensitiveOptions`), coerces each present</span>
+<span class="sd">    value to its field's declared ``dtype`` (:func:`coerceValue`), and lets the dataclass</span>
+<span class="sd">    constructor fill in defaults for any field that was not present in ``options``, expressed as an</span>
+<span class="sd">    ordinary Python default value.</span>
+
+<span class="sd">    An option whose value is ``None`` is treated as **not supplied**, so the field's default</span>
+<span class="sd">    applies, decided here once rather than in each adapter. The ``.inp`` parser represents "the</span>
+<span class="sd">    user did not specify this optional argument" as a key present with the value ``None`` (see e.g.</span>
+<span class="sd">    ``inputfilehelpers.py``'s ``definition["name"] is not None`` test), and coercing that ``None``</span>
+<span class="sd">    would be actively harmful rather than merely useless: for a ``str``-typed option,</span>
+<span class="sd">    ``coerceValue(None, str)`` yields the *string* ``"None"``, which is truthy, so "the user said</span>
+<span class="sd">    nothing" would silently become a real value -- an export filename literally called ``None``,</span>
+<span class="sd">    for instance.</span>
+
+<span class="sd">    Key *names* are still validated before values are examined, so a misspelled option raises even</span>
+<span class="sd">    if its value happens to be ``None``, and a required field given ``None`` is reported as missing</span>
+<span class="sd">    rather than being coerced into nonsense.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass whose fields were declared via :func:`schemaField`.</span>
+<span class="sd">    options</span>
+<span class="sd">        A mapping of (possibly mis-cased) option names to raw (typically string) values.</span>
+<span class="sd">    subKeywordOptions</span>
+<span class="sd">        For a schema with :func:`subKeywordField` fields: a mapping of sub-keyword name to the list</span>
+<span class="sd">        of option mappings for the blocks of that kind, in file order -- exactly the shape the</span>
+<span class="sd">        ``.inp`` parser produces as ``moduleOptions``. Each block is built recursively into its own</span>
+<span class="sd">        sub-schema instance. Sub-keyword names are matched case-insensitively, like every other</span>
+<span class="sd">        name in the input language; the parser stores them as the user wrote them.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Any</span>
+<span class="sd">        An instance of ``schemaCls``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``options`` contains an unknown key, a value that cannot be coerced, or omits a</span>
+<span class="sd">        required field; or if ``subKeywordOptions`` names a sub-keyword the schema does not declare.</span>
+<span class="sd">    """</span>
+    <span class="n">fieldsByName</span> <span class="o">=</span> <span class="p">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">field</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)}</span>
+    <span class="n">resolvedOptions</span> <span class="o">=</span> <span class="n">resolveCaseInsensitiveOptions</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+
+    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">rawValue</span> <span class="ow">in</span> <span class="n">resolvedOptions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">rawValue</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">fieldsByName</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">coerceValue</span><span class="p">(</span><span class="n">rawValue</span><span class="p">,</span> <span class="n">meta</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+    <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_buildSubKeywords</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">,</span> <span class="n">subKeywordOptions</span> <span class="ow">or</span> <span class="p">{}))</span>
+
+    <span class="c1"># Reported by input-file option name, the spelling the user types (e.g. `f(x)`, not `f_x`). A required</span>
+    <span class="c1"># sub-keyword is in `kwargs` only if at least one block was supplied, so this also enforces that.</span>
+    <span class="n">missingRequired</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">optionName</span>
+        <span class="k">for</span> <span class="n">optionName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">optionNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">required</span> <span class="ow">and</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">missingRequired</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Missing required option(s) for </span><span class="si">{</span><span class="n">schemaCls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">missingRequired</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">schemaCls</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="coercePresentOptions">
+<a class="viewcode-back" href="../../../developer/inputsystem.html#edelweissfe.utils.schema.coercePresentOptions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">coercePresentOptions</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Validate and coerce only the keys actually present in ``options`` against ``schemaCls``,</span>
+<span class="sd">    without requiring or defaulting anything absent.</span>
+
+<span class="sd">    This is the partial-application sibling of :func:`buildSchemaFromOptions`, for overriding a</span>
+<span class="sd">    handful of fields of an *already-constructed* instance of ``schemaCls`` (via</span>
+<span class="sd">    ``dataclasses.replace(existingInstance, **coercePresentOptions(type(existingInstance).schema,</span>
+<span class="sd">    rawOptions))``) rather than building a fresh instance from scratch. There is no missing-required</span>
+<span class="sd">    check here -- an override is by definition partial, so "required at construction" does not mean</span>
+<span class="sd">    "must be restated on every override" -- and no field of ``schemaCls`` gets a default value</span>
+<span class="sd">    inserted for a key that was not given.</span>
+
+<span class="sd">    An option whose value is ``None`` is still treated as **not supplied** (see</span>
+<span class="sd">    :func:`buildSchemaFromOptions`), for the identical reason: a ``None``-valued key is how the</span>
+<span class="sd">    ``.inp`` parser spells "the user did not write this option", and coercing it would manufacture a</span>
+<span class="sd">    value out of "nothing was said".</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass whose fields were declared via :func:`schemaField`.</span>
+<span class="sd">    options</span>
+<span class="sd">        A mapping of (possibly mis-cased) option names to raw (typically string) values -- typically</span>
+<span class="sd">        a small subset of ``schemaCls``'s fields, not all of them.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, Any]</span>
+<span class="sd">        Maps each *present*, non-``None`` option to its coerced value, keyed by the schema's</span>
+<span class="sd">        exact-case field name. Safe to splat into ``dataclasses.replace``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``options`` contains a key that is not a valid (scalar) option of ``schemaCls``, or a</span>
+<span class="sd">        value that cannot be coerced to its field's declared ``dtype``.</span>
+<span class="sd">    """</span>
+    <span class="n">fieldsByName</span> <span class="o">=</span> <span class="p">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">field</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)}</span>
+    <span class="n">resolvedOptions</span> <span class="o">=</span> <span class="n">resolveCaseInsensitiveOptions</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+
+    <span class="n">coerced</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">rawValue</span> <span class="ow">in</span> <span class="n">resolvedOptions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">rawValue</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">fieldsByName</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+        <span class="n">coerced</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">coerceValue</span><span class="p">(</span><span class="n">rawValue</span><span class="p">,</span> <span class="n">meta</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">coerced</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_buildSubKeywords</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span> <span class="n">subKeywordOptions</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Build the sub-keyword block tuples of ``schemaCls`` from raw per-block option mappings.</span>
+
+<span class="sd">    Returns only the fields for which at least one block was supplied, so that an absent block kind</span>
+<span class="sd">    falls back to the field's own default (the empty tuple) and is reported as missing if the field</span>
+<span class="sd">    was declared ``required=True``.</span>
+<span class="sd">    """</span>
+    <span class="n">subKeywordFields</span> <span class="o">=</span> <span class="n">subKeywordFieldNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">subKeywordOptions</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="n">fieldsByFold</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">():</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">subKeywordFields</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+
+    <span class="n">built</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">givenName</span><span class="p">,</span> <span class="n">blocks</span> <span class="ow">in</span> <span class="n">subKeywordOptions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="n">fieldsByFold</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">givenName</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">available</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">subKeywordFields</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">givenName</span><span class="si">}</span><span class="s2">' is not a valid sub-keyword for </span><span class="si">{</span><span class="n">schemaCls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">. "</span>
+                <span class="sa">f</span><span class="s2">"Available sub-keywords: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">available</span><span class="p">)</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">available</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">'none'</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="n">canonicalName</span><span class="p">,</span> <span class="n">field</span> <span class="o">=</span> <span class="n">match</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">blocks</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">subSchema</span> <span class="o">=</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">subSchema</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">built</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="n">subSchema</span><span class="p">,</span> <span class="n">block</span><span class="p">)</span> <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"In sub-keyword '</span><span class="si">{</span><span class="n">canonicalName</span><span class="si">}</span><span class="s2">': "</span> <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+    <span class="k">return</span> <span class="n">built</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

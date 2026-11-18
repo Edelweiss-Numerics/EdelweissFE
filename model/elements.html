@@ -278,8 +278,9 @@
   <section id="elements">
 <h1>Elements<a class="headerlink" href="#elements" title="Link to this heading"></a></h1>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.config.elementlibrary</span></code></p>
-<p id="module-edelweissfe.config.elementlibrary">EdelweissFE currently supports finite element implementations provided by the Marmot library.
-In future, elements by other providers or elements directly implemented in EdelweissFE may be added here.</p>
+<p id="module-edelweissfe.config.elementlibrary">Elements are selected by <code class="docutils literal notranslate"><span class="pre">type</span></code> and <code class="docutils literal notranslate"><span class="pre">provider</span></code>: the provider <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code> holds the elements
+implemented in EdelweissFE, the providers <code class="docutils literal notranslate"><span class="pre">marmot</span></code> and <code class="docutils literal notranslate"><span class="pre">marmotsingleqpelement</span></code> those of the Marmot
+library. Without <code class="docutils literal notranslate"><span class="pre">provider</span></code>, <code class="docutils literal notranslate"><span class="pre">marmot</span></code> is assumed.</p>
 <div class="literal-block-wrapper docutils container" id="id2">
 <div class="code-block-caption"><span class="caption-text">Example:</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*element</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">C3D8</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">marmot</span>
@@ -312,7 +313,7 @@ element type, which lets a third party contribute an element type through an ent
 <dd class="field-odd"><p>type</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>edelweissfe.config.registry.RegistryLookupError</strong> – If <code class="docutils literal notranslate"><span class="pre">provider</span></code> is <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code> and no element is registered under <code class="docutils literal notranslate"><span class="pre">elType</span></code>.</p>
+<dd class="field-even"><p><a class="reference internal" href="../developer/inputsystem.html#edelweissfe.config.registry.RegistryLookupError" title="edelweissfe.config.registry.RegistryLookupError"><strong>edelweissfe.config.registry.RegistryLookupError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">provider</span></code> is <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code> and no element is registered under <code class="docutils literal notranslate"><span class="pre">elType</span></code>.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2202,7 +2203,7 @@ all
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This element is only compatible with the material provider <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code>!</p>
+<p>This element is compatible with the material providers <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code> and <code class="docutils literal notranslate"><span class="pre">marmothypoelastic</span></code>.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -2511,7 +2512,7 @@ because there both buffers are zero anyway.</p>
 
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>This element is only compatible with the material provider <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code>!</p>
+<p>This element is compatible with the material providers <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code> and <code class="docutils literal notranslate"><span class="pre">marmothypoelastic</span></code>.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>

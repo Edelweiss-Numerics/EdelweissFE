@@ -512,7 +512,7 @@ the corner-to-corner segment. The midside-quad split has no degenerate members.<
 The midside triangulation halves the chords, reducing the sagitta – i.e. the artificial gap
 error – by a factor of 4. This is not an academic refinement: on a cylindrical-arc interface
 where the sagitta of the corner chords is of the order of the physical interference, the corner
-reduction underestimates the total contact force by ~40 % on the identical mesh (regression test
+reduction underestimates the total contact force considerably on the identical mesh (regression test
 <code class="docutils literal notranslate"><span class="pre">NodeToDeformableSurfaceContactCurvedHexa20</span></code> and its manual variant <code class="docutils literal notranslate"><span class="pre">test_corner.inp</span></code>).</p>
 <p>All face tables (corner and midside) are verified numerically against the mesh generators’ actual
 node construction: face-plane membership, outward cross-product normals, non-degeneracy, exact
@@ -1180,7 +1180,7 @@ force approaches <span class="math notranslate nohighlight">\(\mu\)</span> times
 explained by Poisson contraction of the shaft (<code class="docutils literal notranslate"><span class="pre">...PullOut</span></code>).</p></li>
 <li><p><strong>Curved interfaces</strong> (<code class="docutils literal notranslate"><span class="pre">...CurvedHexa20</span></code>): midside vs corner triangulation on an identical
 curved hexa20 mesh; the corner reduction’s chord sagitta acts as artificial gap and
-underestimates the total contact force by ~42 % in the committed configuration.</p></li>
+underestimates the total contact force considerably in the committed configuration.</p></li>
 <li><p><strong>Augmented Lagrange</strong>: at a 10x reduced penalty, the AL solution is closer to a stiff
 pure-penalty reference than a pure penalty at the same reduced value; one-step force-transfer
 and clamping of the Uzawa update are unit-checked.</p></li>

@@ -330,19 +330,18 @@ included, 0.61 of its time on the elastic tunnel system and 0.84 to 0.95 on the 
 testfile deck run with <code class="docutils literal notranslate"><span class="pre">verbosity=info</span></code> shows the same: each linear solve reaches its tolerance in some 20
 outer iterations, and Newton converges in two; with the coarse level switched off, every solve stops at the
 iteration cap with a relative residual of about 1e-2, and Newton needs five.</p>
-<p>Live, from the start of each run on the same workstation, one run at a time and each capped at 10 minutes, the
-hierarchy on the translations against the rigid-body coarse level for the displacement field:</p>
+<p>Live, from the start of each run, one run at a time with the same time limit, the hierarchy on the translations
+against the rigid-body coarse level for the displacement field:</p>
 <ul class="simple">
 <li><p>the L-shaped concrete panel (<code class="docutils literal notranslate"><span class="pre">examples/WinklerL</span></code>, quadratic elements, damage): with the rigid-body coarse level
-the run completed in 581 s, while the translations had covered 88% of the load path when stopped at 600 s;
+the run completed within the limit, while the translations had not reached the end of the load path;
 24.7 against 28.3 outer iterations per solve, at most 61 against one solve at the cap of 100. The
 load-displacement curves agree to 2e-4 of the peak load.</p></li>
-<li><p>a coarser tunnel segment with embedded bars with bond-slip (0.28 M unknowns, <code class="docutils literal notranslate"><span class="pre">SchurComplement</span></code>, the rigid-body
-coarse level on the displacement field of the remaining nodes), run to its end: 46 against 65 s of computation,
-13 against 21 Newton iterations and linear solves, and 9.1 against 14.7 outer iterations per solve. The final
-load agrees to 2e-4.</p></li>
-<li><p>the damage cylinder (0.84 M unknowns, implicit dynamics): simulated time 0.215 against 0.185 in the same time,
-and 7.9 against 12.6 outer iterations per solve. The load agrees to 3e-4 at the same simulated times.</p></li>
+<li><p>a coarser tunnel segment with embedded bars with bond-slip (<code class="docutils literal notranslate"><span class="pre">SchurComplement</span></code>, the rigid-body coarse level on the
+displacement field of the remaining nodes), run to its end: less computation time, 13 against 21 Newton
+iterations and linear solves, and 9.1 against 14.7 outer iterations per solve. The final load agrees to 2e-4.</p></li>
+<li><p>the damage cylinder (implicit dynamics): further in simulated time within the same limit, and 7.9 against 12.6
+outer iterations per solve. The load agrees to 3e-4 at the same simulated times.</p></li>
 </ul>
 </section>
 <section id="the-corner-node-two-level-cycle-with-scaled-weights-and-a-composed-coarse-solve">
@@ -447,7 +446,8 @@ contact anchor model with many multi-point-constraint slaves):</p>
 iteration.</p></li>
 <li><p><strong>One high-degree post-smoothing sweep</strong> (<code class="docutils literal notranslate"><span class="pre">npre</span> <span class="pre">=</span> <span class="pre">0</span></code>, <code class="docutils literal notranslate"><span class="pre">npost</span> <span class="pre">=</span> <span class="pre">1</span></code>, Chebyshev degree 16, instead
 of a symmetric V(1,1) cycle at degree 5) and <strong>smoothed aggregation’s own spectral-radius estimate</strong>
-for its prolongation smoother (<code class="docutils literal notranslate"><span class="pre">estimate_spectral_radius</span></code>, 20 power iterations) cut outer
+for its prolongation smoother (measured with 20 power iterations, since replaced by the Arnoldi estimate of
+<a class="reference internal" href="#measured-power-iterations"><span class="std std-ref">The spectral radius estimate of the Chebyshev smoother</span></a>) cut outer
 iterations for the same number of preconditioner applications.</p></li>
 <li><p><strong>The translations of the equilibrated block</strong> as a block hierarchy’s near-null-space
 (<code class="docutils literal notranslate"><span class="pre">nearNullspace</span></code>, the default on a block backend), instead of AMGCL’s identity blocks, which are <span class="math notranslate nohighlight">\(D\)</span>-weighted

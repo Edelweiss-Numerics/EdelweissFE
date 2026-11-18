@@ -44,7 +44,8 @@ One increment, three phases
 
 Phase 1 is :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`, phase 2 is
 :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents`. The solver calls both, in that
-order, before every solve, and then asks the model for the change of the connectivity
+order, before every solve (``NED`` at the start of a step and then after every ``topology-check-frequency``-th
+increment), and then asks the model for the change of the connectivity
 (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). What comes out is one
 :class:`~edelweissfe.models.change.Change`: ``MESH`` if phase 1 changed the mesh or a mesh-dependent consumer caught up
 in phase 2 (it refreshes only when the topology version advanced, i.e. when nodes or elements did change), else what
@@ -122,8 +123,8 @@ update, meaning "evaluate freshly".
 
 **Say so if your modifier is purely reactive.** A modifier that can only act in response to another
 one's mutation -- the implicit surface-facet retiling is the only current example -- sets
-``initiatesTopologyChanges = False``. A solver that never runs the topology update (the explicit
-ones) then still accepts a model carrying it, while still refusing one whose modifiers would
+``initiatesTopologyChanges = False``. A solver that never runs the topology update (``NEST``, ``NESTParallel``) then
+still accepts a model carrying it, while still refusing one whose modifiers would
 silently never run.
 
 
@@ -170,9 +171,9 @@ through :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.replayHisto
 ``apply``. ``plan`` is never called during a replay.
 
 The fingerprint is not decoration. Recorded per decision, it is what lets a resumed run prove it
-rebuilt the mesh it was checkpointed with. It is not free either: it walks the whole mesh, measured
-at 0.188 s on 64k elements / 69k nodes, and a live run pays that once per *applied* decision -- not
-per iteration, but often enough to notice on a large model.
+rebuilt the mesh it was checkpointed with. It is not free either: it walks the whole mesh, and a
+live run pays that once per *applied* decision -- not per iteration, but often enough to notice on
+a large model.
 
 A replay pays it **once**: the recorded digests are carried forward into the replayed history, and
 the mesh is checked against the last one after the whole history has been applied. Checking every
@@ -253,8 +254,7 @@ design.
 
 **Tier 1 -- a set-changed self-check.** A component that pre-sizes a *derived* array to a
 container's size needs to notice a resize, since the array does not grow on its own. It compares the
-container's version counter at its own point of use (``ConstraintBase._checkSetChanged``,
-``StepActionBase._checkSetChanged``). This has **no timing dependency at all** -- it checks when it
+container's version counter at its own point of use (e.g. ``StepActionBase._checkSetChanged``). This has **no timing dependency at all** -- it checks when it
 uses the data -- which makes it correct on a replay for free.
 
 **Tier 2 --** :class:`~edelweissfe.models.meshdependent.MeshDependent`. For cached *geometry*:

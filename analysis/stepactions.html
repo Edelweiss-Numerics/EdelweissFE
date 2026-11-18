@@ -80,6 +80,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#setfield-set-a-field-to-a-prescribed-value"><code class="docutils literal notranslate"><span class="pre">setfield</span></code> - Set a field to a prescribed value</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#setinitialconditions-set-initial-conditions-to-elements"><code class="docutils literal notranslate"><span class="pre">setinitialconditions</span></code> - Set initial conditions to elements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#changematerialproperty-change-a-material-property-during-a-step"><code class="docutils literal notranslate"><span class="pre">changematerialproperty</span></code> - Change a material property during a step</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#options-change-the-options-of-a-solver-or-an-output-manager"><code class="docutils literal notranslate"><span class="pre">options</span></code> - Change the options of a solver or an output manager</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#implementing-your-own-step-actions">Implementing your own step actions</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase"><code class="docutils literal notranslate"><span class="pre">StepActionBase</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition"><code class="docutils literal notranslate"><span class="pre">StepActionBase.fromStepActionDefinition()</span></code></a></li>
@@ -227,13 +228,13 @@ by specifying their <code class="docutils literal notranslate"><span class="pre"
 <td><p>Define an amplitude in the step progress interval [0…1]</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">delta</span></code></td>
-<td><p>str, default=None</p></td>
+<td><p>str, default=0</p></td>
 <td><p>In subsequent steps only: define the updated force vector incrementally</p></td>
 </tr>
 </tbody>
 </table>
 <div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/BodyForce3D/test.inp</span></code></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/BodyForce3D/test.inp</span></code></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*include</span>,<span class="nv"> input</span><span class="ow">=</span><span class="m">mesh.inp</span>
 
 <span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">linearelastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">le</span>
@@ -1013,6 +1014,19 @@ all
 &gt;&gt;distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">p_top</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">pressure</span>
 </pre></div>
 </div>
+</div>
+</section>
+<section id="options-change-the-options-of-a-solver-or-an-output-manager">
+<h2><code class="docutils literal notranslate"><span class="pre">options</span></code> - Change the options of a solver or an output manager<a class="headerlink" href="#options-change-the-options-of-a-solver-or-an-output-manager" title="Link to this heading"></a></h2>
+<p>Changes options of a <code class="docutils literal notranslate"><span class="pre">*solver</span></code> or an <code class="docutils literal notranslate"><span class="pre">*output</span></code> from this step on. <code class="docutils literal notranslate"><span class="pre">name</span></code> is the name of that solver or output
+manager; all other options are options of it, validated against its own options (see <a class="reference internal" href="solvers.html"><span class="doc">Solvers</span></a> and
+<a class="reference internal" href="../output/outputmanagers.html"><span class="doc">Outputmanagers</span></a>). Only the options given are changed.</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*solver</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>
+
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">100</span>
+&gt;&gt;options,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">linear</span>
+</pre></div>
 </div>
 </section>
 <section id="implementing-your-own-step-actions">

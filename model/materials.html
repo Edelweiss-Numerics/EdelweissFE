@@ -61,6 +61,7 @@
 <li class="toctree-l1"><a class="reference internal" href="elements.html">Elements</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Materials</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#provider-marmotmaterial">Provider <code class="docutils literal notranslate"><span class="pre">marmotmaterial</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#provider-marmothypoelastic">Provider <code class="docutils literal notranslate"><span class="pre">marmothypoelastic</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#provider-edelweiss-materials">Provider <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code> (Materials)</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#linear-elastic-material">Linear elastic material</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial"><code class="docutils literal notranslate"><span class="pre">LinearElasticMaterial</span></code></a></li>
@@ -175,83 +176,73 @@
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.config.materiallibrary</span></code></p>
 <p>Materials are defined in EdelweissFE using the <code class="docutils literal notranslate"><span class="pre">*material</span></code> or <code class="docutils literal notranslate"><span class="pre">*advancedmaterial</span></code> keyword.
 Arguments for the <code class="docutils literal notranslate"><span class="pre">*material</span></code> keyword are</p>
-<table class="docutils align-default" id="id4" style="width: 100%">
-<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*material</span></code> : definition of a material</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
-<colgroup>
-<col style="width: 27.8%" />
-<col style="width: 27.8%" />
-<col style="width: 44.4%" />
-</colgroup>
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text">material</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type</p></th>
+<th class="head"><p>Type / Default</p></th>
 <th class="head"><p>Description</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">id</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
-<td><p>A unique ID, which is used for referencing the material in EdelweissFE.</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>name of material</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
-<td><p>The name of of the material.</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">id</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>id of material</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">datalines</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">numpy</span> <span class="pre">float</span> <span class="pre">array</span></code></p></td>
-<td><p>The material properties as a float vector, multiline possible.</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">provider</span></code></td>
+<td><p>str, default=’marmotmaterial’</p></td>
+<td><p>material provider</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">provider</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
-<td><p>(optional) The material provider.</p></td>
+<tr class="row-odd"><td><p>data lines</p></td>
+<td><p>required</p></td>
+<td><p>material properties</p></td>
 </tr>
 </tbody>
 </table>
 <p>The material properties for materials using the <code class="docutils literal notranslate"><span class="pre">*material</span></code> keyword are assigned as seen here:</p>
 <div class="literal-block-wrapper docutils container" id="id5">
 <div class="code-block-caption"><span class="caption-text">Use different non-advanced materials. Example:</span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
-<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">neohookeplastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">Mat1</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweissmaterial</span>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">neohookeplastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">Mat1</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweiss</span>
 1, 91304.34783, 100000., 260, 70, 320, 9
 </pre></div>
 </div>
 </div>
 <p>Arguments for the <code class="docutils literal notranslate"><span class="pre">*advancedmaterial</span></code> keyword are</p>
-<table class="docutils align-default" id="id6" style="width: 100%">
-<caption><span class="caption-text"><code class="docutils literal notranslate"><span class="pre">*advancedmaterial</span></code> : definition of a material</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
-<colgroup>
-<col style="width: 27.8%" />
-<col style="width: 27.8%" />
-<col style="width: 44.4%" />
-</colgroup>
+<table class="docutils align-default" id="id6">
+<caption><span class="caption-text">advancedmaterial</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type</p></th>
+<th class="head"><p>Type / Default</p></th>
 <th class="head"><p>Description</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">id</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
-<td><p>A unique ID, which is used for referencing the material in EdelweissFE.</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>name of material</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
-<td><p>The name of of the material.</p></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">id</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>id of material</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">datalines</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
-<td><p>The material properties as a vector of strings, multiline possible.</p></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">provider</span></code></td>
+<td><p>str, default=’marmotmaterial’</p></td>
+<td><p>material provider</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">provider</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code></p></td>
-<td><p>(optional) The material provider.</p></td>
+<tr class="row-odd"><td><p>data lines</p></td>
+<td><p>required</p></td>
+<td><p>material properties</p></td>
 </tr>
 </tbody>
 </table>
 <p>The material properties for materials using the <code class="docutils literal notranslate"><span class="pre">*advancedmaterial</span></code> keyword are assigned as seen here:</p>
 <div class="literal-block-wrapper docutils container" id="id7">
 <div class="code-block-caption"><span class="caption-text">Use different advanced materials. Example:</span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
-<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*advancedmaterial</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">hyperplasticadvanced</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">hyperplasticadvanced</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweissmaterial</span>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*advancedmaterial</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">hyperplasticadvanced</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">hyperplasticadvanced</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweiss</span>
 <span class="nv">psi_e</span><span class="ow">=</span><span class="s">'mu/2 * (I1/J**(2/3) - 3) + K/8 * (J**2 + 1/J**2 - 2)'</span>
 <span class="nv">mu</span><span class="ow">=</span><span class="m">91304.34783</span>,<span class="nv"> K</span><span class="ow">=</span><span class="m">100000.</span>,<span class="nv"> fy0</span><span class="ow">=</span><span class="m">260</span>,<span class="nv"> HLin</span><span class="ow">=</span><span class="m">70</span>,<span class="nv"> dfy</span><span class="ow">=</span><span class="m">320</span>,<span class="nv"> delta</span><span class="ow">=</span><span class="m">9</span>
 <span class="nv">a</span><span class="ow">=</span><span class="s">'2,3,4'</span>
@@ -262,6 +253,18 @@ Arguments for the <code class="docutils literal notranslate"><span class="pre">*
 <section id="provider-marmotmaterial">
 <h2>Provider <code class="docutils literal notranslate"><span class="pre">marmotmaterial</span></code><a class="headerlink" href="#provider-marmotmaterial" title="Link to this heading"></a></h2>
 <p>Relevant module: <a class="reference external" href="https://github.com/MAteRialMOdelingToolbox/Marmot/">Marmot</a>.</p>
+<p>The material is created by the Marmot element itself, from the material name and the properties; it is therefore only
+used with Marmot elements (element provider <code class="docutils literal notranslate"><span class="pre">marmot</span></code>).</p>
+</section>
+<section id="provider-marmothypoelastic">
+<h2>Provider <code class="docutils literal notranslate"><span class="pre">marmothypoelastic</span></code><a class="headerlink" href="#provider-marmothypoelastic" title="Link to this heading"></a></h2>
+<p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.materials.marmot.marmothypoelastic</span></code></p>
+<p>A hypoelastic Marmot material (e.g. <code class="docutils literal notranslate"><span class="pre">LinearElastic</span></code>), named as Marmot registers it, used by an EdelweissFE element,
+e.g. the displacement elements of the provider <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code>. Requires EdelweissFE to be built with Marmot.</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LinearElastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">myMaterial</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">marmothypoelastic</span>
+1.8e4, 0.22
+</pre></div>
+</div>
 </section>
 <section id="provider-edelweiss-materials">
 <span id="id1"></span><h2>Provider <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code> (Materials)<a class="headerlink" href="#provider-edelweiss-materials" title="Link to this heading"></a></h2>
@@ -320,6 +323,7 @@ This material needs the following material properties in the correct order</p>
 <ol class="arabic simple">
 <li><p><strong>E</strong>       - Elasticity module (Young’s modulus).</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{\nu}\)</span>       - Poisson’s ratio.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\rho\)</span>      - (Optional) Density, needed for dynamic analyses.</p></li>
 </ol>
 <p>For the 2D plane strain and 3D material the following law in voigt notation is used</p>
 <div class="math notranslate nohighlight">
@@ -510,6 +514,7 @@ This material needs the following material properties in the correct order</p>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{H_{lin}}\)</span>      - Linear plastic hardening parameter.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{\Delta f_y}\)</span>   - Multiplicator for nonlinear isotropic hardening.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{\delta}\)</span>       - Exponent for nonlinear isotropic hardening.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\rho\)</span>      - (Optional) Density, needed for dynamic analyses.</p></li>
 </ol>
 <p>The law used for nonlinear isotropic hardening in this material is <span class="math notranslate nohighlight">\(f_y(\kappa)=f_{y0}+H_{lin}\kappa+\Delta f_{y} e^{-\delta\kappa}\)</span>
 with <span class="math notranslate nohighlight">\(\kappa\)</span> as the hardening parameter.
@@ -652,6 +657,7 @@ updated by the material.</p>
 <li><p><strong>formulation</strong> - Selects the energy density function: 1 for <span class="math notranslate nohighlight">\(W_a\)</span>, 2 for <span class="math notranslate nohighlight">\(W_b\)</span>, 3 for <span class="math notranslate nohighlight">\(W_c\)</span> (see below).</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mu\)</span>       - Shear modulus.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\kappa\)</span>    - Bulk modulus.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\rho\)</span>      - (Optional) Density, needed for dynamic analyses.</p></li>
 </ol>
 <p>This material bases on a energy density function <span class="math notranslate nohighlight">\(W(I_1, J)\)</span>, where <span class="math notranslate nohighlight">\(I_1=\text{trace}(\mathbf{b})\)</span> is the first
 and <span class="math notranslate nohighlight">\(J=\det(\mathbf{F})\)</span> is the second invariant of the left Cauchy-Green tensor <span class="math notranslate nohighlight">\(\mathbf{b}=\mathbf{FF}^\text{T}\)</span>
@@ -802,11 +808,12 @@ updated by the material.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">K</span></code>        - Bulk modulus.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">psi_e</span></code>    - Energy density function.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">a</span></code>        - (Optional) your own parameters in <code class="docutils literal notranslate"><span class="pre">psi_e</span></code> (assignment with commas and quotation mark: <code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">=</span> <span class="pre">'1.,2.,3'</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">density</span></code>  - (Optional) Density, needed for dynamic analyses.</p></li>
 </ol>
 <p>The right Cauchy-Green tensor is defined as <span class="math notranslate nohighlight">\(\mathbf{C}=\mathbf{F}^\text{T}\mathbf{F}\)</span>. These materials use the Kirchhoff stress and its corresponding tangent modulus.</p>
 <p><strong>Hyperelastic advanced material</strong></p>
 <p>This material class allows the user to input their own energy density function, as seen for the Neo-Hookean materials in the last section.
-This can be achieved by using the extra input parameter W=’f(C)’ in the input file. This material needs <span class="math notranslate nohighlight">\(\kappa\)</span> and <span class="math notranslate nohighlight">\(\mu\)</span> as input data.
+This can be achieved by giving the energy density function as the parameter <code class="docutils literal notranslate"><span class="pre">psi_e</span></code> in the input file. This material needs <span class="math notranslate nohighlight">\(\kappa\)</span> and <span class="math notranslate nohighlight">\(\mu\)</span> as input data.
 The energy density function must be a function of the form</p>
 <div class="math notranslate nohighlight">
 \[W(\mu, \kappa, \mathbf{C}, \mathbf{a}) = W(\mu, \kappa, I_1, J, \mathbf{a})\]</div>
@@ -820,7 +827,7 @@ parameter in the function in the input file.</p>
 <p><strong>Hyperelastic advanced I2 extended material</strong></p>
 <p>This material class allows the user to input their own energy density function. Compared to the <code class="docutils literal notranslate"><span class="pre">HyperelasticAdvancedMaterial</span></code>, this material allows
 the second invariant <span class="math notranslate nohighlight">\(I_2\)</span> and <span class="math notranslate nohighlight">\(\mathbf{C}\)</span> itself to be used in the energy density function.
-This can be achieved by using the extra input parameter W=’f(C)’ in the input file. This material needs <span class="math notranslate nohighlight">\(\kappa\)</span> and <span class="math notranslate nohighlight">\(\mu\)</span> as input data.
+This can be achieved by giving the energy density function as the parameter <code class="docutils literal notranslate"><span class="pre">psi_e</span></code> in the input file. This material needs <span class="math notranslate nohighlight">\(\kappa\)</span> and <span class="math notranslate nohighlight">\(\mu\)</span> as input data.
 The energy density function must be a function of the form</p>
 <div class="math notranslate nohighlight">
 \[W(\mu, \kappa, \mathbf{C}, \mathbf{a}) = W(\mu, \kappa, \mathbf{C}, I_1, I_2, J, \mathbf{a})\]</div>
@@ -1004,6 +1011,7 @@ This material needs the following material properties in the correct order:</p>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{H_{lin}}\)</span>      - Linear plastic hardening parameter.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{\Delta f_y}\)</span>   - Multiplicator for nonlinear isotropic hardening.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{\delta}\)</span>       - Exponent for nonlinear isotropic hardening.</p></li>
+<li><p><span class="math notranslate nohighlight">\(\rho\)</span>      - (Optional) Density, needed for dynamic analyses.</p></li>
 </ol>
 <p>These three material formulations solve for the residual:</p>
 <div class="math notranslate nohighlight">
@@ -1118,7 +1126,7 @@ updated by the material.</p>
 <section id="advanced-hyperelastic-plastic-material">
 <h3>Advanced hyperelastic-plastic material<a class="headerlink" href="#advanced-hyperelastic-plastic-material" title="Link to this heading"></a></h3>
 <p>This material class allows the user to input their own energy density function.
-This can be achieved by using the extra input parameter W=’f(C)’ in the input file. This material needs the following material properties in the correct order
+This can be achieved by giving the energy density function as the parameter <code class="docutils literal notranslate"><span class="pre">psi_e</span></code> in the input file. This material needs the following material properties in the correct order
 The algorithm from the section <a class="reference internal" href="#elastic-plastic-neo-hookean-w-i1-j-pence-gou-a-materials"><span class="std std-ref">Elastic-plastic Neo-Hookean W(I1, J) Pence-Gou [a] materials</span></a> is used.
 For this material, only the elastic part is differentiated by using automatic differentiation, the plastic part still uses analytical derivatives.
 This material needs the following parameters as input data using keywords:</p>

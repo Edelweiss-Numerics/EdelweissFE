@@ -104,6 +104,49 @@
 <li class="toctree-l2"><a class="reference internal" href="#documentation-and-the-grammar-surface-come-from-the-same-schema">Documentation and the grammar surface come from the same schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#worked-example-adding-a-new-output-manager">Worked example: adding a new output manager</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#quick-reference">Quick reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#api-reference">API reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.utils.schema"><code class="docutils literal notranslate"><span class="pre">schema</span></code> - Option schemas</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.DatalineAggregatingSchema"><code class="docutils literal notranslate"><span class="pre">DatalineAggregatingSchema</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider"><code class="docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta"><code class="docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions"><code class="docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions"><code class="docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.coerceValue"><code class="docutils literal notranslate"><span class="pre">coerceValue()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.datalineField"><code class="docutils literal notranslate"><span class="pre">datalineField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.datalineFieldMeta"><code class="docutils literal notranslate"><span class="pre">datalineFieldMeta()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.fieldSchemaMeta"><code class="docutils literal notranslate"><span class="pre">fieldSchemaMeta()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.optionNames"><code class="docutils literal notranslate"><span class="pre">optionNames()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.resolveCaseInsensitiveOptions"><code class="docutils literal notranslate"><span class="pre">resolveCaseInsensitiveOptions()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.scalarOptionNames"><code class="docutils literal notranslate"><span class="pre">scalarOptionNames()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.schemaField"><code class="docutils literal notranslate"><span class="pre">schemaField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.schemaFields"><code class="docutils literal notranslate"><span class="pre">schemaFields()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.schemaOf"><code class="docutils literal notranslate"><span class="pre">schemaOf()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField"><code class="docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.subKeywordFieldNames"><code class="docutils literal notranslate"><span class="pre">subKeywordFieldNames()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.schema.MISSING"><code class="docutils literal notranslate"><span class="pre">MISSING</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.config.registry"><code class="docutils literal notranslate"><span class="pre">registry</span></code> - Names to implementations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#built-in-coverage">Built-in coverage</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.config.registry.RegistryConflictError"><code class="docutils literal notranslate"><span class="pre">RegistryConflictError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.config.registry.RegistryLookupError"><code class="docutils literal notranslate"><span class="pre">RegistryLookupError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.config.registry.availableNames"><code class="docutils literal notranslate"><span class="pre">availableNames()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.config.registry.isRegistered"><code class="docutils literal notranslate"><span class="pre">isRegistered()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.config.registry.lookup"><code class="docutils literal notranslate"><span class="pre">lookup()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.config.registry.register"><code class="docutils literal notranslate"><span class="pre">register()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.config.registry.ENTRY_POINT_GROUP"><code class="docutils literal notranslate"><span class="pre">ENTRY_POINT_GROUP</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.keywords.base.keywordbase"><code class="docutils literal notranslate"><span class="pre">KeywordBase</span></code> - Top-level keywords</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.keywords.base.keywordbase.KeywordBase"><code class="docutils literal notranslate"><span class="pre">KeywordBase</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.outputmanagers.base.outputmanagerbase"><code class="docutils literal notranslate"><span class="pre">OutputManagerBase</span></code> - Output managers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase"><code class="docutils literal notranslate"><span class="pre">OutputManagerBase</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
@@ -219,7 +262,7 @@ all follow immediately.</p>
 </section>
 <section id="l2-declaring-a-schema">
 <h2>L2: declaring a schema<a class="headerlink" href="#l2-declaring-a-schema" title="Link to this heading"></a></h2>
-<p>Schemas are built with three field-declaring helpers from <code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.utils.schema</span></code>, used as
+<p>Schemas are built with three field-declaring helpers from <a class="reference internal" href="#module-edelweissfe.utils.schema" title="edelweissfe.utils.schema"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.utils.schema</span></code></a>, used as
 ordinary dataclass field values:</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">schemaField(description=...,</span> <span class="pre">dtype=...,</span> <span class="pre">default=...)</span></code></dt><dd><p>An ordinary <code class="docutils literal notranslate"><span class="pre">key=value</span></code> option on the keyword’s own line.</p>
@@ -230,7 +273,7 @@ block instances (possibly empty), since a block kind may be repeated or omitted.
 <dt><code class="docutils literal notranslate"><span class="pre">datalineField(description=...)</span></code></dt><dd><p>Marks “this keyword also has a body of raw datalines below its option line” (element
 connectivity, node coordinates, material property rows, …). It records only presence and
 documentation – interpreting the actual lines is the owning class’s job (see
-<code class="xref py py-class docutils literal notranslate"><span class="pre">DatalineAggregatingSchema</span></code> below).</p>
+<a class="reference internal" href="#edelweissfe.utils.schema.DatalineAggregatingSchema" title="edelweissfe.utils.schema.DatalineAggregatingSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">DatalineAggregatingSchema</span></code></a> below).</p>
 </dd>
 </dl>
 <p>A minimal example, <code class="docutils literal notranslate"><span class="pre">*nSet</span></code>:</p>
@@ -278,7 +321,7 @@ against</em>, never the schema’s own field type:</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">structuralOnly=True</span></code></dt><dd><p>This option names an existing model object (a node/element set, a material, a surface) that an
 L4 adapter resolves and pops <em>before</em> the rest of the definition reaches the schema. It is
-never actually seen by <code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code> – it exists on
+never actually seen by <a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a> – it exists on
 the schema purely so the option is documented in the rendered grammar. See <code class="docutils literal notranslate"><span class="pre">dirichlet</span></code>’s
 <code class="docutils literal notranslate"><span class="pre">nSet</span></code> above: the adapter turns the string <code class="docutils literal notranslate"><span class="pre">&quot;bottom&quot;</span></code> into <code class="docutils literal notranslate"><span class="pre">model.nodeSets[&quot;bottom&quot;]</span></code>
 itself, and by the time <code class="docutils literal notranslate"><span class="pre">buildSchemaFromOptions</span></code> runs, <code class="docutils literal notranslate"><span class="pre">nSet</span></code> is already gone from the
@@ -300,12 +343,12 @@ changing behavior). You will almost never need this.</p>
 </section>
 <section id="interpreting-datalines">
 <h3>Interpreting datalines<a class="headerlink" href="#interpreting-datalines" title="Link to this heading"></a></h3>
-<p>A <code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code> only says <em>that</em> a keyword has a dataline body;
+<p>A <a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code></a> only says <em>that</em> a keyword has a dataline body;
 something still has to turn those raw lines into data. The default L4 adapter treats each dataline
 as one independent instance sharing the flat option schema – correct for most keywords. When a
 keyword’s datalines are genuinely heterogeneous (each line picking its own “kind”, like
 <code class="docutils literal notranslate"><span class="pre">meshplot</span></code>’s <code class="docutils literal notranslate"><span class="pre">create=perNode|perElement|xyData</span></code>), the schema instead derives from
-<code class="xref py py-class docutils literal notranslate"><span class="pre">DatalineAggregatingSchema</span></code> and implements
+<a class="reference internal" href="#edelweissfe.utils.schema.DatalineAggregatingSchema" title="edelweissfe.utils.schema.DatalineAggregatingSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">DatalineAggregatingSchema</span></code></a> and implements
 <code class="docutils literal notranslate"><span class="pre">fromDatalines(cls,</span> <span class="pre">datalines)</span></code>, building <em>one</em> instance from <em>all</em> datalines of the block at
 once. Prefer the default (a plain flat schema); reach for <code class="docutils literal notranslate"><span class="pre">DatalineAggregatingSchema</span></code> only for
 that aggregate shape.</p>
@@ -313,7 +356,7 @@ that aggregate shape.</p>
 </section>
 <section id="l3-the-registry">
 <h2>L3: the registry<a class="headerlink" href="#l3-the-registry" title="Link to this heading"></a></h2>
-<p><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.config.registry</span></code> maps <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> to a class, lazily. Categories are
+<p><a class="reference internal" href="#module-edelweissfe.config.registry" title="edelweissfe.config.registry"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.config.registry</span></code></a> maps <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> to a class, lazily. Categories are
 things like <code class="docutils literal notranslate"><span class="pre">&quot;outputmanager&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;stepaction&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;constraint&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;material&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;keyword&quot;</span></code>.
 Two things matter in practice:</p>
 <ul class="simple">
@@ -329,7 +372,7 @@ strings (<code class="docutils literal notranslate"><span class="pre">&quot;edel
 </pre></div>
 </div>
 <p>The schema returned alongside the class is simply that class’s own <code class="docutils literal notranslate"><span class="pre">schema</span></code> attribute (see
-<code class="xref py py-class docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code> below) – the registry does not maintain a
+<a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider" title="edelweissfe.utils.schema.OptionSchemaProvider"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code></a> below) – the registry does not maintain a
 second copy of it.</p>
 <p><strong>Registering a new built-in</strong> is one line in <code class="docutils literal notranslate"><span class="pre">config/registry.py</span></code>’s <code class="docutils literal notranslate"><span class="pre">_BUILTINS</span></code> table (or, for
 the uniform “one module per name, fixed attribute name” categories, one entry in the relevant
@@ -340,17 +383,20 @@ contributes via a <code class="docutils literal notranslate"><span class="pre">p
 </pre></div>
 </div>
 <p>Either way, a class becomes registrable simply by deriving from
-<code class="xref py py-class docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code> and setting <code class="docutils literal notranslate"><span class="pre">schema</span> <span class="pre">=</span> <span class="pre">MySchema</span></code> as a
+<a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider" title="edelweissfe.utils.schema.OptionSchemaProvider"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code></a> and setting <code class="docutils literal notranslate"><span class="pre">schema</span> <span class="pre">=</span> <span class="pre">MySchema</span></code> as a
 class attribute – that is the <em>entire</em> contract between a module and the registry.</p>
 </section>
 <section id="l4-from-parsed-text-to-a-python-call">
 <h2>L4: from parsed text to a Python call<a class="headerlink" href="#l4-from-parsed-text-to-a-python-call" title="Link to this heading"></a></h2>
 <p>There are two shapes of L4 adapter in the codebase, depending on whether construction needs
 anything beyond “validate options, call the constructor”:</p>
-<p><strong>The generic adapter</strong> – used for output managers, sections, analytical fields, generators, and
-similar – lives centrally in <code class="docutils literal notranslate"><span class="pre">edelweissfe/helpers/inputfilehelpers.py</span></code>. It does exactly three
-things per block: look the type up in the registry, validate/coerce the parsed options against the
-schema it got back, and call the constructor:</p>
+<p><strong>The generic adapter</strong> – used for output managers, sections, analytical fields and similar – does
+exactly three things per block: look the type up in the registry, validate/coerce the parsed options
+against the schema it got back, and call the constructor. The one for output managers lives in
+<code class="docutils literal notranslate"><span class="pre">edelweissfe/helpers/inputfilehelpers.py</span></code>, those for sections and analytical fields in
+<code class="docutils literal notranslate"><span class="pre">edelweissfe/generators/abqmodelconstructor.py</span></code>; generators are built by
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">fromGeneratorDefinition()</span></code>. For output
+managers:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">outputManagerClass</span><span class="p">,</span> <span class="n">outputManagerSchema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="s2">"outputmanager"</span><span class="p">,</span> <span class="n">outputManagerType</span><span class="p">)</span>
 
 <span class="n">configuration</span> <span class="o">=</span> <span class="n">buildSchemaFromOptions</span><span class="p">(</span>
@@ -365,10 +411,10 @@ schema it got back, and call the constructor:</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code> does the real work: it resolves
+<p><a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a> does the real work: it resolves
 case-insensitive keys, coerces each value to its field’s declared type, fills in defaults, and
 raises a descriptive <code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code> for an unknown option, a bad value, or a missing required
-one. If the schema declares <code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code> fields, matching
+one. If the schema declares <a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a> fields, matching
 <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code> blocks are built recursively into their own nested schema instances.</p>
 <p><strong>The per-class hook</strong> – used by step actions and constraints, whose construction needs to
 <em>resolve</em> something (turn an <code class="docutils literal notranslate"><span class="pre">nSet</span></code> name into an actual <code class="docutils literal notranslate"><span class="pre">NodeSet</span></code> object) before or instead of
@@ -419,7 +465,7 @@ validated as plain strings.</p>
 similar) option on a keyword, of which there may be many kinds (<code class="docutils literal notranslate"><span class="pre">*output,</span> <span class="pre">type=ensight</span></code> vs.
 <code class="docutils literal notranslate"><span class="pre">*output,</span> <span class="pre">type=monitor</span></code>). The <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file’s actual top-level keywords (<code class="docutils literal notranslate"><span class="pre">*element</span></code>, <code class="docutils literal notranslate"><span class="pre">*nSet</span></code>,
 <code class="docutils literal notranslate"><span class="pre">*job</span></code>, <code class="docutils literal notranslate"><span class="pre">*output</span></code> itself, …) are a small, closed set, each represented by its own
-<code class="xref py py-class docutils literal notranslate"><span class="pre">KeywordBase</span></code> subclass, registered under the
+<a class="reference internal" href="#edelweissfe.keywords.base.keywordbase.KeywordBase" title="edelweissfe.keywords.base.keywordbase.KeywordBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">KeywordBase</span></code></a> subclass, registered under the
 <code class="docutils literal notranslate"><span class="pre">&quot;keyword&quot;</span></code> category:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">NSetKeyword</span><span class="p">(</span><span class="n">KeywordBase</span><span class="p">):</span>
     <span class="n">schema</span> <span class="o">=</span> <span class="n">NSetSchema</span>
@@ -446,7 +492,7 @@ pre-declared schema, because it can target any already-declared solver or output
 <p>At parse time only <code class="docutils literal notranslate"><span class="pre">name</span></code> is required; every other <code class="docutils literal notranslate"><span class="pre">key=value</span></code> pair is accepted unvalidated.
 Once the step action runs, it resolves <code class="docutils literal notranslate"><span class="pre">name</span></code> against <code class="docutils literal notranslate"><span class="pre">model.solvers</span></code>/<code class="docutils literal notranslate"><span class="pre">model.outputManagers</span></code>,
 then validates the options actually given against <em>that instance’s own</em>
-<code class="docutils literal notranslate"><span class="pre">type(target).schema</span></code> via <code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code> (the
+<code class="docutils literal notranslate"><span class="pre">type(target).schema</span></code> via <a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a> (the
 partial-application counterpart of <code class="docutils literal notranslate"><span class="pre">buildSchemaFromOptions</span></code> – no missing-required check, since
 an override is by definition partial), and applies them via <code class="docutils literal notranslate"><span class="pre">target.applyOptionsOverride(...)</span></code>.
 This is why a field meant to be reachable only this way is marked
@@ -483,8 +529,8 @@ of a working <code class="docutils literal notranslate"><span class="pre">.inp</
 </div>
 </li>
 <li><p><strong>Write the L1 class</strong>, deriving from the category’s base class (here
-<code class="xref py py-class docutils literal notranslate"><span class="pre">OutputManagerBase</span></code>, itself an
-<code class="xref py py-class docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code>), with a typed constructor and
+<a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">OutputManagerBase</span></code></a>, itself an
+<a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider" title="edelweissfe.utils.schema.OptionSchemaProvider"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code></a>), with a typed constructor and
 <code class="docutils literal notranslate"><span class="pre">schema</span> <span class="pre">=</span> <span class="pre">MyOutputSchema</span></code> as a class attribute:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">OutputManager</span><span class="p">(</span><span class="n">OutputManagerBase</span><span class="p">):</span>
     <span class="n">schema</span> <span class="o">=</span> <span class="n">MyOutputSchema</span>
@@ -526,26 +572,26 @@ rendered documentation.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Declare a scalar option</p></td>
-<td><p><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.schemaField()</span></code></p></td>
+<td><p><a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.schemaField()</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Declare a repeatable <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code> block</p></td>
-<td><p><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.subKeywordField()</span></code></p></td>
+<td><p><a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.subKeywordField()</span></code></a></p></td>
 </tr>
 <tr class="row-even"><td><p>Declare a dataline body</p></td>
-<td><p><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.datalineField()</span></code>,
-<code class="xref py py-class docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.DatalineAggregatingSchema</span></code></p></td>
+<td><p><a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.datalineField()</span></code></a>,
+<a class="reference internal" href="#edelweissfe.utils.schema.DatalineAggregatingSchema" title="edelweissfe.utils.schema.DatalineAggregatingSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.DatalineAggregatingSchema</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Document (without validating) a structural argument</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">structuralOnly=True</span></code> on <code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">structuralOnly=True</span></code> on <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a></p></td>
 </tr>
 <tr class="row-even"><td><p>Make an option reachable only via <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">optionsOverrideOnly=True</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Build a schema instance from parsed options</p></td>
-<td><p><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.buildSchemaFromOptions()</span></code></p></td>
+<td><p><a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.buildSchemaFromOptions()</span></code></a></p></td>
 </tr>
 <tr class="row-even"><td><p>Partially override an existing instance’s options</p></td>
-<td><p><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.coercePresentOptions()</span></code></p></td>
+<td><p><a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.coercePresentOptions()</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Register a built-in implementation</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">edelweissfe/config/registry.py</span></code>, the <code class="docutils literal notranslate"><span class="pre">_BUILTINS</span></code> table</p></td>
@@ -554,16 +600,1143 @@ rendered documentation.</p>
 <td><p>an <code class="docutils literal notranslate"><span class="pre">&quot;edelweissfe.plugins&quot;</span></code> entry point in the plugin’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Look something up by name at runtime</p></td>
-<td><p><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.config.registry.lookup()</span></code></p></td>
+<td><p><a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.config.registry.lookup()</span></code></a></p></td>
 </tr>
 <tr class="row-even"><td><p>Add a new top-level <code class="docutils literal notranslate"><span class="pre">.inp</span></code> keyword</p></td>
-<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">edelweissfe.keywords.base.keywordbase.KeywordBase</span></code></p></td>
+<td><p><a class="reference internal" href="#edelweissfe.keywords.base.keywordbase.KeywordBase" title="edelweissfe.keywords.base.keywordbase.KeywordBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">edelweissfe.keywords.base.keywordbase.KeywordBase</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Render a schema’s option table in the docs</p></td>
 <td><p>the <code class="docutils literal notranslate"><span class="pre">..</span> <span class="pre">pprint::</span> <span class="pre">category:name</span></code> directive (<code class="docutils literal notranslate"><span class="pre">doc/source/conf.py</span></code>)</p></td>
 </tr>
 </tbody>
 </table>
+</section>
+<section id="api-reference">
+<h2>API reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h2>
+<section id="module-edelweissfe.utils.schema">
+<span id="schema-option-schemas"></span><h3><code class="docutils literal notranslate"><span class="pre">schema</span></code> - Option schemas<a class="headerlink" href="#module-edelweissfe.utils.schema" title="Link to this heading"></a></h3>
+<p>Primitives describing a module’s input options.</p>
+<p>A “schema” here is an ordinary, immutable (<code class="docutils literal notranslate"><span class="pre">frozen=True</span></code>) <code class="xref py py-mod docutils literal notranslate"><span class="pre">dataclasses</span></code> class that a
+module owns for itself: it declares which options that module accepts, their Python types,
+whether they are required, and a human-readable description – everything the Sphinx
+<code class="docutils literal notranslate"><span class="pre">pprint</span></code> documentation renderer needs, without a parallel dict living somewhere else and
+without mutating any other module’s state.</p>
+<p>This module has <strong>no</strong> dependency on <a class="reference internal" href="#module-edelweissfe.config.registry" title="edelweissfe.config.registry"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.config.registry</span></code></a> or any concrete
+element/material/solver module: it is pure, stdlib-only infrastructure that every module’s own
+constructor and the <code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser both depend on.</p>
+<p>Case-insensitivity and string-to-type coercion belong to the <code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser, not to the schema
+objects themselves – a schema instance is always exact-case and precisely typed. The coercion
+helpers in this module (<a class="reference internal" href="#edelweissfe.utils.schema.coerceValue" title="edelweissfe.utils.schema.coerceValue"><code class="xref py py-func docutils literal notranslate"><span class="pre">coerceValue()</span></code></a>, <a class="reference internal" href="#edelweissfe.utils.schema.resolveCaseInsensitiveOptions" title="edelweissfe.utils.schema.resolveCaseInsensitiveOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">resolveCaseInsensitiveOptions()</span></code></a>,
+<a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>, <a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a>) are utilities the parser calls, not
+something a schema class does to itself. <a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a> is the partial-application
+sibling of <a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>, for <em>overriding</em> a subset of an already-constructed
+instance’s fields (via <code class="docutils literal notranslate"><span class="pre">dataclasses.replace</span></code>) rather than building a fresh, fully-defaulted one.</p>
+<p>A value destined for a <code class="docutils literal notranslate"><span class="pre">bool</span></code> field goes through <code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.misc.asBool()</span></code>
+(tolerant of a real <code class="docutils literal notranslate"><span class="pre">bool</span></code>, otherwise <code class="docutils literal notranslate"><span class="pre">strtobool</span></code>-parsed); any other value is passed through
+unchanged if it is already an instance of the target type, otherwise coerced via <code class="docutils literal notranslate"><span class="pre">dtype(value)</span></code>.
+Do not call <code class="docutils literal notranslate"><span class="pre">strtobool</span></code> directly on a value that may already be a <code class="docutils literal notranslate"><span class="pre">bool</span></code> – it unconditionally
+calls <code class="docutils literal notranslate"><span class="pre">.lower()</span></code> and raises <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code> on a real <code class="docutils literal notranslate"><span class="pre">bool</span></code>; always go through
+<code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.misc.asBool()</span></code> instead.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.DatalineAggregatingSchema">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">DatalineAggregatingSchema</span></span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#DatalineAggregatingSchema"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.DatalineAggregatingSchema" title="Link to this definition"></a></dt>
+<dd><p>Base for a schema that is built from <em>all</em> datalines of one keyword block at once.</p>
+<p>This is the general, uniform mechanism by which any keyword turns its raw dataline payload
+(element connectivity, node coordinates, elSet ranges, surface faces, material property rows,
+<code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code>-less option datalines, raw Python source, …) into typed data. <a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code></a>
+marks <em>that a keyword has</em> a dataline payload (presence + doc + required, on the enclosing
+schema); <a class="reference internal" href="#edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines" title="edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fromDatalines()</span></code></a> is where the owning class actually <em>interprets</em> that payload,
+however it is shaped for that particular keyword.</p>
+<p>The ordinary adapter treats each dataline as an independent module instance: it builds one
+schema per dataline and calls the constructor once per dataline. That default is exactly
+right for a keyword whose datalines are a flat, uniform <code class="docutils literal notranslate"><span class="pre">key=value</span></code> mapping repeated per
+instance. <code class="docutils literal notranslate"><span class="pre">DatalineAggregatingSchema</span></code> is for the opposite shape: a single instance built from
+<em>all</em> datalines of the block <em>at once</em>, aggregating a <em>heterogeneous list of jobs</em>, one per
+dataline, with the kind of job selected by an option value on the line itself (<code class="docutils literal notranslate"><span class="pre">meshplot</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">create=perNode|perElement|xyData|meshOnly</span></code>, plus its orthogonal <code class="docutils literal notranslate"><span class="pre">saveFigure</span></code>). Neither a
+flat schema nor <a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a> expresses that: the jobs are not sub-keyword blocks and
+they do not share one option set.</p>
+<p>A schema of this kind takes responsibility for its own dataline interpretation in
+<a class="reference internal" href="#edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines" title="edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fromDatalines()</span></code></a>, and the adapter dispatches on this base class (a type check, like
+<a class="reference internal" href="#edelweissfe.utils.schema.schemaOf" title="edelweissfe.utils.schema.schemaOf"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaOf()</span></code></a>, not attribute probing).</p>
+<p>Prefer a flat schema (with a plain <a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code></a>) or <a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a> when a
+keyword’s datalines really are independent, uniformly-shaped instances; reach for this base
+only for the aggregate-into-one-instance shape described above.</p>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines" title="edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromDatalines</span></code></a>(datalines)</p></td>
+<td><p>Build one schema instance from <em>all</em> datalines of this keyword block, in file order.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">fromDatalines</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">datalines</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#DatalineAggregatingSchema.fromDatalines"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.DatalineAggregatingSchema.fromDatalines" title="Link to this definition"></a></dt>
+<dd><p>Build one schema instance from <em>all</em> datalines of this keyword block, in file order.</p>
+<p>The one, uniform seam by which any keyword of this shape turns its raw dataline payload
+into typed data – see the class docstring. What <code class="docutils literal notranslate"><span class="pre">datalines</span></code> contains is whatever the
+<code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser produces for this keyword’s block: a per-line mapping of raw (string)
+option name to value, for a <code class="docutils literal notranslate"><span class="pre">key=value</span></code>-shaped payload (as here, for <code class="docutils literal notranslate"><span class="pre">meshplot</span></code>), or a
+list of raw strings for a payload that is not <cite>key=value</cite> shaped at all (e.g. raw Python
+source, connectivity rows) – a future subclass with that shape overrides this with the
+signature it actually needs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>datalines</strong> (<em>list</em><em>[</em><em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em><em>]</em>) – One mapping of raw (string) option name to value per dataline of the keyword block.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An instance of the schema.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Any</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If a dataline is not interpretable, with a message naming the offending option.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.OptionSchemaProvider">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">OptionSchemaProvider</span></span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#OptionSchemaProvider"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.OptionSchemaProvider" title="Link to this definition"></a></dt>
+<dd><p>Mixin declaring that a class owns an option schema, exposed as the class attribute
+<a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider.schema" title="edelweissfe.utils.schema.OptionSchemaProvider.schema"><code class="xref py py-attr docutils literal notranslate"><span class="pre">schema</span></code></a>.</p>
+<p>This is the convention by which a schema reaches the registry along the <em>dotted-string</em>
+resolution paths – the built-in table and, crucially, third-party <code class="docutils literal notranslate"><span class="pre">importlib.metadata</span></code> entry
+points. <code class="docutils literal notranslate"><span class="pre">registry.register(...,</span> <span class="pre">schema=...)</span></code> can pass a schema explicitly, but nothing can
+pass an argument alongside a dotted string in a <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>; without this convention the
+registry would be schema-blind for exactly the external caller it exists to serve. Keeping the
+schema on the class also keeps it next to the constructor it describes, so the two cannot
+drift apart or be registered inconsistently.</p>
+<p>Deriving from this mixin is what makes a class’s schema discoverable; the default of <code class="docutils literal notranslate"><span class="pre">None</span></code>
+means “this class declares no schema”, which lets a base class adopt the mixin independently
+of whether its subclasses declare one.</p>
+<p>The declared default is also why <a class="reference internal" href="#edelweissfe.utils.schema.schemaOf" title="edelweissfe.utils.schema.schemaOf"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaOf()</span></code></a> needs no <code class="docutils literal notranslate"><span class="pre">getattr</span></code>/<code class="docutils literal notranslate"><span class="pre">hasattr</span></code> probing
+(which this codebase’s conventions forbid): the attribute is guaranteed to exist on every
+subclass, so a plain attribute access suffices.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>schema</strong></dt><dd></dd>
+</dl>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.OptionSchemaProvider.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">type</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#edelweissfe.utils.schema.OptionSchemaProvider.schema" title="Link to this definition"></a></dt>
+<dd><p>The schema dataclass describing the options this class accepts, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if it does
+not declare one (yet). Overridden as a plain class attribute by concrete subclasses.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.SchemaFieldMeta">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">SchemaFieldMeta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">description</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">required</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optionName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subSchema</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">isDataline</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optionsOverrideOnly</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">structuralOnly</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">updateOnly</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">documentedDefault</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#SchemaFieldMeta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="Link to this definition"></a></dt>
+<dd><p>Documentation-oriented metadata attached to a single field of a schema dataclass.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>description</strong> (<em>str</em>) – Human-readable description of the option, used verbatim by the Sphinx documentation
+generator.</p></li>
+<li><p><strong>dtype</strong> (<em>type</em>) – The Python type the option’s value must have once coerced (e.g. <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>,
+<code class="docutils literal notranslate"><span class="pre">str</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>).</p></li>
+<li><p><strong>required</strong> (<em>bool</em>) – Whether the option must be supplied by the caller. This is tracked explicitly (rather
+than being re-derived from “does the dataclass field have a default”) so that
+documentation generation does not need to inspect <code class="xref py py-data docutils literal notranslate"><span class="pre">dataclasses.MISSING</span></code> sentinels
+directly.</p></li>
+<li><p><strong>optionName</strong> (<em>str</em><em> | </em><em>None</em>) – <p>The name this option carries in the input file, when that differs from the dataclass field
+name. <code class="docutils literal notranslate"><span class="pre">None</span></code> means they are identical, which is the common case.</p>
+<p>This exists because the input language admits option names that are not valid Python
+identifiers and therefore cannot be dataclass field names at all – <code class="docutils literal notranslate"><span class="pre">f(x)</span></code> (the
+result-transforming expression accepted by several output managers) and <code class="docutils literal notranslate"><span class="pre">f_export(x)</span></code> are
+the real cases. Rather than renaming user-facing options, which would break every existing
+<code class="docutils literal notranslate"><span class="pre">.inp</span></code> file, a field may declare the spelling it answers to.</p>
+</p></li>
+<li><p><strong>subSchema</strong> (<em>type</em><em> | </em><em>None</em>) – For a field representing a <em>sub-keyword block</em> rather than a scalar option: the schema
+dataclass describing one such block. <code class="docutils literal notranslate"><span class="pre">None</span></code> (the common case) marks an ordinary scalar
+option. See <a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a>.</p></li>
+<li><p><strong>isDataline</strong> (<em>bool</em>) – Marks this field as the keyword’s dataline payload rather than a <code class="docutils literal notranslate"><span class="pre">key=value</span></code> scalar
+option or a <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code> sub-keyword block. See <a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code></a>.</p></li>
+<li><p><strong>optionsOverrideOnly</strong> (<em>bool</em>) – Marks a scalar field that exists solely so a later <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options,</span> <span class="pre">name=X,</span> <span class="pre">...</span></code> block has
+something to validate against and override (via
+<a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a>/<code class="docutils literal notranslate"><span class="pre">applyOptionsOverride</span></code>), and is
+<strong>not</strong> part of the keyword’s own line/<code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code>-block grammar – e.g. ensight’s
+<code class="docutils literal notranslate"><span class="pre">intermediateSaveInterval</span></code>/<code class="docutils literal notranslate"><span class="pre">minDTForOutput</span></code>, which a <code class="docutils literal notranslate"><span class="pre">&gt;&gt;configuration</span></code> block or the
+keyword line never sets directly. This affects rendering only:
+<code class="xref py py-func docutils literal notranslate"><span class="pre">renderSchemaSurface()</span></code>’s module-section renderer
+skips such fields, but <a class="reference internal" href="#edelweissfe.utils.schema.optionNames" title="edelweissfe.utils.schema.optionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">optionNames()</span></code></a>/<a class="reference internal" href="#edelweissfe.utils.schema.scalarOptionNames" title="edelweissfe.utils.schema.scalarOptionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">scalarOptionNames()</span></code></a> (and therefore
+<a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>/<a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a>) still include them, since they
+remain reachable through a later <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> override (validated dynamically against this
+very schema once <code class="docutils literal notranslate"><span class="pre">name</span></code> resolves to this instance – see <code class="docutils literal notranslate"><span class="pre">stepactions/options.py</span></code>).</p></li>
+<li><p><strong>structuralOnly</strong> (<em>bool</em>) – The mirror image of <code class="docutils literal notranslate"><span class="pre">optionsOverrideOnly</span></code>: marks a field that documents a <em>structural</em>
+argument – one naming an existing model object (an element/node set, a material, a
+surface, the step action’s own <code class="docutils literal notranslate"><span class="pre">name</span></code>) – which an adapter such as
+<a class="reference internal" href="../analysis/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fromStepActionDefinition()</span></code></a>
+resolves and pops from the raw definition <em>before</em> the remaining options ever reach
+<a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>. Such a field is never actually present in the mapping
+<a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>/<a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a> validate, so it is excluded
+from <a class="reference internal" href="#edelweissfe.utils.schema.optionNames" title="edelweissfe.utils.schema.optionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">optionNames()</span></code></a> (and therefore from <a class="reference internal" href="#edelweissfe.utils.schema.scalarOptionNames" title="edelweissfe.utils.schema.scalarOptionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">scalarOptionNames()</span></code></a>,
+<a class="reference internal" href="#edelweissfe.utils.schema.resolveCaseInsensitiveOptions" title="edelweissfe.utils.schema.resolveCaseInsensitiveOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">resolveCaseInsensitiveOptions()</span></code></a>’s valid-key set, and the missing-required check) –
+the opposite exclusion from <code class="docutils literal notranslate"><span class="pre">optionsOverrideOnly</span></code>, which stays <em>in</em> those but is excluded
+from rendering. A <code class="docutils literal notranslate"><span class="pre">structuralOnly</span></code> field is still fully rendered by
+<code class="xref py py-func docutils literal notranslate"><span class="pre">renderSchemaSurface()</span></code> (in its required/optional
+arguments section, ordered like any other field), so a schema can document a structural
+argument’s name/description/required-ness without the adapter code that pops it changing
+at all.</p></li>
+<li><p><strong>updateOnly</strong> (<em>bool</em>) – Marks a scalar field that belongs only to a keyword’s <code class="docutils literal notranslate"><span class="pre">update&lt;keyword&gt;</span></code> partial
+re-declaration grammar, not to the base keyword’s own line grammar – e.g.
+<code class="docutils literal notranslate"><span class="pre">distributedload</span></code>’s <code class="docutils literal notranslate"><span class="pre">delta</span></code>, which only <code class="docutils literal notranslate"><span class="pre">updatedistributedload</span></code> declares.
+Affects rendering only, exactly like <code class="docutils literal notranslate"><span class="pre">optionsOverrideOnly</span></code>: excluded from the <em>base</em>
+keyword’s <code class="xref py py-func docutils literal notranslate"><span class="pre">renderSchemaSurface()</span></code> block, but left in
+<a class="reference internal" href="#edelweissfe.utils.schema.optionNames" title="edelweissfe.utils.schema.optionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">optionNames()</span></code></a>/<a class="reference internal" href="#edelweissfe.utils.schema.scalarOptionNames" title="edelweissfe.utils.schema.scalarOptionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">scalarOptionNames()</span></code></a> since the field is a real, validated part of
+the (single, shared) runtime schema either way.</p></li>
+<li><p><strong>documentedDefault</strong> (<em>Any</em>) – Overrides the default value shown by <code class="xref py py-func docutils literal notranslate"><span class="pre">renderSchemaSurface()</span></code>
+for an optional field, when it differs from the dataclass field’s own (runtime) default –
+mirroring <code class="docutils literal notranslate"><span class="pre">edelweissfe.utils.inputlanguage.OptionalKeywordArg.documentedDefault</span></code>. One
+example is <code class="docutils literal notranslate"><span class="pre">bodyforce.delta</span></code>, whose documented default is <code class="docutils literal notranslate"><span class="pre">0</span></code> while the field’s actual
+runtime default is <code class="docutils literal notranslate"><span class="pre">None</span></code> (the sentinel <a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>
+needs to tell “not given” apart from a real value). <a class="reference internal" href="#edelweissfe.utils.schema.MISSING" title="edelweissfe.utils.schema.MISSING"><code class="xref py py-data docutils literal notranslate"><span class="pre">MISSING</span></code></a> (the default) means “no
+override – render the field’s own default”, which is the common case.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><strong>optionName</strong></dt><dd></dd>
+<dt><strong>subSchema</strong></dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.buildSchemaFromOptions">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">buildSchemaFromOptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schemaCls</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">options</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subKeywordOptions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#buildSchemaFromOptions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="Link to this definition"></a></dt>
+<dd><p>Build an instance of a schema dataclass from a (possibly mis-cased, string-valued) mapping.</p>
+<p>Resolves case-insensitive keys (<a class="reference internal" href="#edelweissfe.utils.schema.resolveCaseInsensitiveOptions" title="edelweissfe.utils.schema.resolveCaseInsensitiveOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">resolveCaseInsensitiveOptions()</span></code></a>), coerces each present
+value to its field’s declared <code class="docutils literal notranslate"><span class="pre">dtype</span></code> (<a class="reference internal" href="#edelweissfe.utils.schema.coerceValue" title="edelweissfe.utils.schema.coerceValue"><code class="xref py py-func docutils literal notranslate"><span class="pre">coerceValue()</span></code></a>), and lets the dataclass
+constructor fill in defaults for any field that was not present in <code class="docutils literal notranslate"><span class="pre">options</span></code>, expressed as an
+ordinary Python default value.</p>
+<p>An option whose value is <code class="docutils literal notranslate"><span class="pre">None</span></code> is treated as <strong>not supplied</strong>, so the field’s default
+applies, decided here once rather than in each adapter. The <code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser represents “the
+user did not specify this optional argument” as a key present with the value <code class="docutils literal notranslate"><span class="pre">None</span></code> (see e.g.
+<code class="docutils literal notranslate"><span class="pre">inputfilehelpers.py</span></code>’s <code class="docutils literal notranslate"><span class="pre">definition[&quot;name&quot;]</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">None</span></code> test), and coercing that <code class="docutils literal notranslate"><span class="pre">None</span></code>
+would be actively harmful rather than merely useless: for a <code class="docutils literal notranslate"><span class="pre">str</span></code>-typed option,
+<code class="docutils literal notranslate"><span class="pre">coerceValue(None,</span> <span class="pre">str)</span></code> yields the <em>string</em> <code class="docutils literal notranslate"><span class="pre">&quot;None&quot;</span></code>, which is truthy, so “the user said
+nothing” would silently become a real value – an export filename literally called <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+for instance.</p>
+<p>Key <em>names</em> are still validated before values are examined, so a misspelled option raises even
+if its value happens to be <code class="docutils literal notranslate"><span class="pre">None</span></code>, and a required field given <code class="docutils literal notranslate"><span class="pre">None</span></code> is reported as missing
+rather than being coerced into nonsense.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>schemaCls</strong> (<em>type</em>) – A frozen dataclass whose fields were declared via <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a>.</p></li>
+<li><p><strong>options</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em>) – A mapping of (possibly mis-cased) option names to raw (typically string) values.</p></li>
+<li><p><strong>subKeywordOptions</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>list</em><em>] </em><em>| </em><em>None</em>) – For a schema with <a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a> fields: a mapping of sub-keyword name to the list
+of option mappings for the blocks of that kind, in file order – exactly the shape the
+<code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser produces as <code class="docutils literal notranslate"><span class="pre">moduleOptions</span></code>. Each block is built recursively into its own
+sub-schema instance. Sub-keyword names are matched case-insensitively, like every other
+name in the input language; the parser stores them as the user wrote them.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An instance of <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Any</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">options</span></code> contains an unknown key, a value that cannot be coerced, or omits a
+required field; or if <code class="docutils literal notranslate"><span class="pre">subKeywordOptions</span></code> names a sub-keyword the schema does not declare.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.coercePresentOptions">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">coercePresentOptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schemaCls</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">options</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#coercePresentOptions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.coercePresentOptions" title="Link to this definition"></a></dt>
+<dd><p>Validate and coerce only the keys actually present in <code class="docutils literal notranslate"><span class="pre">options</span></code> against <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code>,
+without requiring or defaulting anything absent.</p>
+<p>This is the partial-application sibling of <a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>, for overriding a
+handful of fields of an <em>already-constructed</em> instance of <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code> (via
+<code class="docutils literal notranslate"><span class="pre">dataclasses.replace(existingInstance,</span> <span class="pre">**coercePresentOptions(type(existingInstance).schema,</span>
+<span class="pre">rawOptions))</span></code>) rather than building a fresh instance from scratch. There is no missing-required
+check here – an override is by definition partial, so “required at construction” does not mean
+“must be restated on every override” – and no field of <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code> gets a default value
+inserted for a key that was not given.</p>
+<p>An option whose value is <code class="docutils literal notranslate"><span class="pre">None</span></code> is still treated as <strong>not supplied</strong> (see
+<a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>), for the identical reason: a <code class="docutils literal notranslate"><span class="pre">None</span></code>-valued key is how the
+<code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser spells “the user did not write this option”, and coercing it would manufacture a
+value out of “nothing was said”.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>schemaCls</strong> (<em>type</em>) – A frozen dataclass whose fields were declared via <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a>.</p></li>
+<li><p><strong>options</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em>) – A mapping of (possibly mis-cased) option names to raw (typically string) values – typically
+a small subset of <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code>’s fields, not all of them.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Maps each <em>present</em>, non-<code class="docutils literal notranslate"><span class="pre">None</span></code> option to its coerced value, keyed by the schema’s
+exact-case field name. Safe to splat into <code class="docutils literal notranslate"><span class="pre">dataclasses.replace</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, Any]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">options</span></code> contains a key that is not a valid (scalar) option of <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code>, or a
+value that cannot be coerced to its field’s declared <code class="docutils literal notranslate"><span class="pre">dtype</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.coerceValue">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">coerceValue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#coerceValue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.coerceValue" title="Link to this definition"></a></dt>
+<dd><p>Coerce a single value to <code class="docutils literal notranslate"><span class="pre">dtype</span></code>, tolerating a value that is already correctly typed.</p>
+<p>Mirrors <code class="docutils literal notranslate"><span class="pre">edelweissfe.utils.inputlanguage.KeywordArg.getValueFromKwargs</span></code>: for <code class="docutils literal notranslate"><span class="pre">dtype</span> <span class="pre">is</span>
+<span class="pre">bool</span></code> this delegates to <code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.misc.asBool()</span></code> (which passes a real <code class="docutils literal notranslate"><span class="pre">bool</span></code>
+through unchanged and otherwise parses a truth-string via <code class="docutils literal notranslate"><span class="pre">strtobool</span></code>). Do not call
+<code class="docutils literal notranslate"><span class="pre">strtobool</span></code> directly on a value that may already be a <code class="docutils literal notranslate"><span class="pre">bool</span></code>: it unconditionally calls
+<code class="docutils literal notranslate"><span class="pre">.lower()</span></code> and raises <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code> on a real <code class="docutils literal notranslate"><span class="pre">bool</span></code>.</p>
+<p>For every other <code class="docutils literal notranslate"><span class="pre">dtype</span></code>, a value that is already an instance of <code class="docutils literal notranslate"><span class="pre">dtype</span></code> is returned
+unchanged; otherwise <code class="docutils literal notranslate"><span class="pre">dtype(value)</span></code> is attempted.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value</strong> (<em>Any</em>) – The value to coerce (typically a string from an <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file, or an already-correct
+Python value from a programmatic caller).</p></li>
+<li><p><strong>dtype</strong> (<em>type</em>) – The target type.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The coerced value.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Any</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">value</span></code> cannot be converted to <code class="docutils literal notranslate"><span class="pre">dtype</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.datalineField">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">datalineField</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">required</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#datalineField"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.datalineField" title="Link to this definition"></a></dt>
+<dd><p>Declare one field of a schema as this keyword’s <em>dataline payload</em>.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">.inp</span></code> keyword block carries, below its own <code class="docutils literal notranslate"><span class="pre">key=value</span></code> line, a body of raw dataline
+strings (element connectivity, node coordinates, an elSet’s ranges, a material’s property
+rows, <cite>&gt;&gt;</cite>-less option lines, raw Python source, …). <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a> and
+<a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a> both model <em>typed, named</em> pieces of grammar; a dataline field is
+neither – its shape varies per keyword and is not a flat option mapping nor a repeatable
+named block. This field records only <strong>presence, documentation, and required-ness</strong> – never a
+column or table description – and the owning class is responsible for turning the raw
+<code class="docutils literal notranslate"><span class="pre">list[str]</span></code>/<code class="docutils literal notranslate"><span class="pre">list[Mapping[str,</span> <span class="pre">Any]]</span></code> datalines into whatever it stores here, via its own
+<code class="docutils literal notranslate"><span class="pre">fromDatalines</span></code> classmethod (see <a class="reference internal" href="#edelweissfe.utils.schema.DatalineAggregatingSchema" title="edelweissfe.utils.schema.DatalineAggregatingSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">DatalineAggregatingSchema</span></code></a>, the general, uniform way
+any keyword consumes datalines).</p>
+<p>A datalineField is excluded from <a class="reference internal" href="#edelweissfe.utils.schema.optionNames" title="edelweissfe.utils.schema.optionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">optionNames()</span></code></a>/<a class="reference internal" href="#edelweissfe.utils.schema.scalarOptionNames" title="edelweissfe.utils.schema.scalarOptionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">scalarOptionNames()</span></code></a>
+(and therefore from <a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a>’s <code class="docutils literal notranslate"><span class="pre">key=value</span></code> validation and
+missing-required check): it is never reachable as a scalar option on the keyword’s own line,
+and its required-ness is the owning class’s concern (raise from <code class="docutils literal notranslate"><span class="pre">fromDatalines</span></code> if the
+datalines are empty), not something <code class="docutils literal notranslate"><span class="pre">buildSchemaFromOptions</span></code> can check – it is never handed
+dataline content in the first place.</p>
+<p>The declared dataclass field always defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> regardless of <code class="docutils literal notranslate"><span class="pre">required</span></code>, since a
+schema instance must remain constructible with no arguments at all (mirroring every other
+field kind here) – “required” documents an invariant the <em>owning class</em> enforces while
+interpreting datalines, not a constructor-level default.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>description</strong> (<em>str</em>) – Human-readable description of what the datalines contain.</p></li>
+<li><p><strong>required</strong> (<em>bool</em>) – Whether at least one dataline must be supplied. Purely documentation/validation metadata
+for the owning class to consult – see above.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A field descriptor suitable as a dataclass class-body value.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dataclasses.Field</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.datalineFieldMeta">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">datalineFieldMeta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schemaCls</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#datalineFieldMeta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.datalineFieldMeta" title="Link to this definition"></a></dt>
+<dd><p>Return the <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a> of <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code>’s dataline field, if it declares one.</p>
+<p>A schema declares at most one <a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code></a> – a keyword has exactly one dataline
+payload, however that payload is structured once parsed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>schemaCls</strong> (<em>type</em>) – A frozen dataclass, possibly declaring one field via <a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The dataline field’s metadata, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code> declares no dataline field.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta">SchemaFieldMeta</a> | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.fieldSchemaMeta">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">fieldSchemaMeta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">field</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#fieldSchemaMeta"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.fieldSchemaMeta" title="Link to this definition"></a></dt>
+<dd><p>Retrieve the <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a> attached to a dataclass field by <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>field</strong> (<em>Field</em>) – A field of a schema dataclass, as returned by <code class="docutils literal notranslate"><span class="pre">dataclasses.fields(schemaCls)</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The metadata describing this field.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta">SchemaFieldMeta</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>KeyError</strong> – If the field was declared without <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a> (i.e. it carries no schema
+metadata).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.optionNames">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">optionNames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schemaCls</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#optionNames"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.optionNames" title="Link to this definition"></a></dt>
+<dd><p>Map each of a schema’s input-file option names to the field that implements it.</p>
+<p>The option name is the field name unless the field declared an explicit
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">SchemaFieldMeta.optionName</span></code> – see there for why that indirection exists (input-file
+options such as <code class="docutils literal notranslate"><span class="pre">f(x)</span></code> are not valid Python identifiers).</p>
+<p>A field declared via <a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code></a> is excluded: it is filled by the owning class’s own
+dataline interpretation, not by a <code class="docutils literal notranslate"><span class="pre">key=value</span></code>/`` &gt;&gt;`` name the parser resolves here – see
+that function’s docstring. A field declared with <code class="docutils literal notranslate"><span class="pre">structuralOnly=True</span></code> is excluded too: it
+documents a structural argument the adapter already resolves and pops before the schema is
+built, so it is never actually present in the mapping this function’s callers validate – see
+<a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>schemaCls</strong> (<em>type</em>) – A frozen dataclass whose fields were declared via <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Mapping of user-facing option name to its field, in declaration order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, dataclasses.Field]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.resolveCaseInsensitiveOptions">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">resolveCaseInsensitiveOptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schemaCls</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">options</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#resolveCaseInsensitiveOptions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.resolveCaseInsensitiveOptions" title="Link to this definition"></a></dt>
+<dd><p>Map possibly-mis-cased option keys onto a schema dataclass’s exact-case field names.</p>
+<p>The schema class itself (<code class="docutils literal notranslate"><span class="pre">schemaCls</span></code>) is always exact-case, but an <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file (or a
+careless caller) may spell an option key in any case. This utility performs the case-fold
+lookup once, so schema instances never need to.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>schemaCls</strong> (<em>type</em>) – The schema dataclass whose field names are the valid option keys.</p></li>
+<li><p><strong>options</strong> (<em>Mapping</em><em>[</em><em>str</em><em>, </em><em>Any</em><em>]</em>) – A mapping of (possibly mis-cased) option names to raw values.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The same values, keyed by the schema’s exact-case field names.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, Any]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If a key in <code class="docutils literal notranslate"><span class="pre">options</span></code> does not case-insensitively match any field of <code class="docutils literal notranslate"><span class="pre">schemaCls</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.scalarOptionNames">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">scalarOptionNames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schemaCls</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#scalarOptionNames"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.scalarOptionNames" title="Link to this definition"></a></dt>
+<dd><p>Like <a class="reference internal" href="#edelweissfe.utils.schema.optionNames" title="edelweissfe.utils.schema.optionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">optionNames()</span></code></a>, but restricted to ordinary scalar options.</p>
+<p>Fields declared via <a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a> are excluded: they are filled from nested <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code>
+blocks, not from the keyword’s own option assignments, and must therefore not be reachable as
+a plain <code class="docutils literal notranslate"><span class="pre">name=value</span></code> pair (writing <code class="docutils literal notranslate"><span class="pre">perNode=1</span></code> on an ensight dataline is an error, not a
+way to populate the <code class="docutils literal notranslate"><span class="pre">perNode</span></code> blocks).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>schemaCls</strong> (<em>type</em>) – A frozen dataclass whose fields were declared via <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Mapping of user-facing option name to its field, in declaration order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, dataclasses.Field]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.schemaField">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">schemaField</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;dataclasses._MISSING_TYPE</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default_factory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;dataclasses._MISSING_TYPE</span> <span class="pre">object&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">required</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optionName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subSchema</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optionsOverrideOnly</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">structuralOnly</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">updateOnly</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">documentedDefault</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;dataclasses._MISSING_TYPE</span> <span class="pre">object&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#schemaField"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.schemaField" title="Link to this definition"></a></dt>
+<dd><p>Declare one field of an option schema dataclass.</p>
+<p>This is a thin wrapper around <code class="xref py py-func docutils literal notranslate"><span class="pre">dataclasses.field()</span></code> that attaches a
+<a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a> under a well-known metadata key, instead of maintaining a parallel
+dict of descriptions next to the dataclass. Use it as the value of a field in a class
+decorated with <code class="docutils literal notranslate"><span class="pre">&#64;dataclasses.dataclass(frozen=True)</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">EnsightConfigurationSchema</span><span class="p">:</span>
+    <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Overwrite existing output."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">intermediate_save_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Save an intermediate .case every N increments."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">10</span>
+    <span class="p">)</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>description</strong> (<em>str</em>) – Human-readable description of the option.</p></li>
+<li><p><strong>dtype</strong> (<em>type</em>) – The Python type the option’s value must have.</p></li>
+<li><p><strong>default</strong> (<em>Any</em>) – The default value, if the option is optional. Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">default_factory</span></code>.</p></li>
+<li><p><strong>default_factory</strong> (<em>Any</em>) – A zero-argument callable producing the default value, for mutable/composite defaults.
+Mutually exclusive with <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p></li>
+<li><p><strong>required</strong> (<em>bool</em><em> | </em><em>None</em>) – Explicitly override whether the option is required. If not given (<code class="docutils literal notranslate"><span class="pre">None</span></code>), it is
+inferred as <code class="docutils literal notranslate"><span class="pre">True</span></code> exactly when neither <code class="docutils literal notranslate"><span class="pre">default</span></code> nor <code class="docutils literal notranslate"><span class="pre">default_factory</span></code> was
+supplied.</p></li>
+<li><p><strong>optionName</strong> (<em>str</em><em> | </em><em>None</em>) – The name this option is spelled with in the input file, if it cannot be the field name –
+e.g. <code class="docutils literal notranslate"><span class="pre">optionName=&quot;f(x)&quot;</span></code> on a field called <code class="docutils literal notranslate"><span class="pre">f_x</span></code>. See <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a>.</p></li>
+<li><p><strong>subSchema</strong> (<em>type</em><em> | </em><em>None</em>) – Marks this field as a repeatable sub-keyword block described by the given schema. Prefer
+<a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a>, which sets the remaining arguments consistently.</p></li>
+<li><p><strong>optionsOverrideOnly</strong> (<em>bool</em>) – Marks this field as reachable only through a later <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> override, not through the
+keyword’s own line/<code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code>-block grammar – see <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a>. Affects rendering
+only.</p></li>
+<li><p><strong>structuralOnly</strong> (<em>bool</em>) – Marks this field as documenting a structural argument that the adapter resolves and pops
+before the schema is built, so it is never actually validated by
+<a class="reference internal" href="#edelweissfe.utils.schema.buildSchemaFromOptions" title="edelweissfe.utils.schema.buildSchemaFromOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">buildSchemaFromOptions()</span></code></a> – see <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a>. Affects
+<a class="reference internal" href="#edelweissfe.utils.schema.optionNames" title="edelweissfe.utils.schema.optionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">optionNames()</span></code></a>/construction-time validation only; rendering is unaffected (the field
+still appears in its required/optional arguments section).</p></li>
+<li><p><strong>updateOnly</strong> (<em>bool</em>) – Marks this field as belonging only to a keyword’s <code class="docutils literal notranslate"><span class="pre">update&lt;keyword&gt;</span></code> grammar, not its base
+keyword’s own line grammar – see <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a>. Affects rendering of the base
+keyword only.</p></li>
+<li><p><strong>documentedDefault</strong> (<em>Any</em>) – Overrides the default value shown in the rendered grammar surface for this field, when it
+differs from <code class="docutils literal notranslate"><span class="pre">default</span></code> – see <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a>. Affects rendering only; the
+dataclass field’s real, runtime default is still <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A field descriptor suitable as a dataclass class-body value.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dataclasses.Field</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.schemaFields">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">schemaFields</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schemaCls</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#schemaFields"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.schemaFields" title="Link to this definition"></a></dt>
+<dd><p>Collect the <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchemaFieldMeta</span></code></a> of every field of a schema dataclass.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>schemaCls</strong> (<em>type</em>) – A frozen dataclass whose fields were declared via <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Mapping of field name to its schema metadata, in declaration order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, <a class="reference internal" href="#edelweissfe.utils.schema.SchemaFieldMeta" title="edelweissfe.utils.schema.SchemaFieldMeta">SchemaFieldMeta</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.schemaOf">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">schemaOf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#schemaOf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.schemaOf" title="Link to this definition"></a></dt>
+<dd><p>Return the schema declared by <code class="docutils literal notranslate"><span class="pre">target</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if it declares none.</p>
+<p>Used by <a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.config.registry.lookup()</span></code></a> to attach a schema to an object it resolved
+from a dotted string.</p>
+<p><code class="docutils literal notranslate"><span class="pre">None</span></code> is returned for anything that is not a class deriving from
+<a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider" title="edelweissfe.utils.schema.OptionSchemaProvider"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code></a>. That covers a registry target that is a plain module-level
+<em>function</em> rather than a class (e.g. <code class="docutils literal notranslate"><span class="pre">executePythonCode</span></code>’s <code class="docutils literal notranslate"><span class="pre">Generator</span></code>, whose datalines are
+raw code rather than a flat option mapping, so it declares <code class="docutils literal notranslate"><span class="pre">schema</span> <span class="pre">=</span> <span class="pre">None</span></code>) –
+dispatching on the type here rather than probing for an attribute is what keeps that case an
+explicit, documented <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of an <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code> at lookup time.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>target</strong> (<em>Any</em>) – Any object resolved by the registry – a class, a factory function, anything.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The schema dataclass, or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>type | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.subKeywordField">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">subKeywordField</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">schema</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">optionName</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">required</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#subKeywordField"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.subKeywordField" title="Link to this definition"></a></dt>
+<dd><p>Declare one field of a schema as a repeatable <em>sub-keyword block</em>.</p>
+<p>Several keywords of the input language are not flat lists of options but carry nested,
+repeatable blocks introduced by the module-level keyword identifier <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code>. <code class="docutils literal notranslate"><span class="pre">*output,</span>
+<span class="pre">type=ensight</span></code> is the first such case to be ported:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">*</span><span class="n">output</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">ensight</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">myExport</span>
+<span class="o">&gt;&gt;</span><span class="n">perNode</span><span class="p">,</span>    <span class="n">fieldOutput</span><span class="o">=</span><span class="n">Displacement</span>
+<span class="o">&gt;&gt;</span><span class="n">perElement</span><span class="p">,</span> <span class="n">fieldOutput</span><span class="o">=</span><span class="n">Stress</span>
+<span class="o">&gt;&gt;</span><span class="n">configuration</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">yes</span>
+</pre></div>
+</div>
+<p>Each block has its own option set, so the natural representation is a schema per block kind
+plus, on the enclosing schema, one field per kind holding a <strong>tuple</strong> of block instances. The
+tuple (rather than a single instance) is what makes repetition representable, and it is
+immutable, so it does not compromise the enclosing dataclass’s <code class="docutils literal notranslate"><span class="pre">frozen=True</span></code>.</p>
+<p>The field defaults to the empty tuple, i.e. “no block of this kind was given”. A block kind
+that must appear at least once can say so via <code class="docutils literal notranslate"><span class="pre">required=True</span></code>.</p>
+<p>This mechanism is generic, not special-cased for ensight: any module (<code class="docutils literal notranslate"><span class="pre">sections/</span></code>,
+<code class="docutils literal notranslate"><span class="pre">stepactions/</span></code>, <code class="docutils literal notranslate"><span class="pre">utils/fieldoutput.py</span></code>, <code class="docutils literal notranslate"><span class="pre">modelmodifiers/adaptivity/hadaptivity.py</span></code>, …)
+that needs repeatable <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code> sub-keyword blocks uses it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>description</strong> (<em>str</em>) – Human-readable description of the block kind.</p></li>
+<li><p><strong>schema</strong> (<em>type</em>) – The schema dataclass describing the options of a single block.</p></li>
+<li><p><strong>optionName</strong> (<em>str</em><em> | </em><em>None</em>) – The name the sub-keyword is spelled with in the input file, if it differs from the field
+name – e.g. a field <code class="docutils literal notranslate"><span class="pre">configurations</span></code> answering to <code class="docutils literal notranslate"><span class="pre">&gt;&gt;configuration</span></code>.</p></li>
+<li><p><strong>required</strong> (<em>bool</em>) – Whether at least one block of this kind must be supplied.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A field descriptor suitable as a dataclass class-body value.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dataclasses.Field</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.subKeywordFieldNames">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">subKeywordFieldNames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schemaCls</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/schema.html#subKeywordFieldNames"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.schema.subKeywordFieldNames" title="Link to this definition"></a></dt>
+<dd><p>The inverse of <a class="reference internal" href="#edelweissfe.utils.schema.scalarOptionNames" title="edelweissfe.utils.schema.scalarOptionNames"><code class="xref py py-func docutils literal notranslate"><span class="pre">scalarOptionNames()</span></code></a>: only the sub-keyword block fields.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>schemaCls</strong> (<em>type</em>) – A frozen dataclass whose fields were declared via <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Mapping of user-facing sub-keyword name to its field, in declaration order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict[str, dataclasses.Field]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="edelweissfe.utils.schema.MISSING">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.schema.</span></span><span class="sig-name descname"><span class="pre">MISSING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">&lt;dataclasses._MISSING_TYPE</span> <span class="pre">object&gt;</span></span><a class="headerlink" href="#edelweissfe.utils.schema.MISSING" title="Link to this definition"></a></dt>
+<dd><p>Sentinel re-exported for callers that need to distinguish “no default given” from “default is
+None” when calling <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a> – identical to <code class="xref py py-data docutils literal notranslate"><span class="pre">dataclasses.MISSING</span></code>.</p>
+</dd></dl>
+
+</section>
+<section id="module-edelweissfe.config.registry">
+<span id="registry-names-to-implementations"></span><h3><code class="docutils literal notranslate"><span class="pre">registry</span></code> - Names to implementations<a class="headerlink" href="#module-edelweissfe.config.registry" title="Link to this heading"></a></h3>
+<p>Lazy registry mapping <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> to the object that implements it.</p>
+<p>Used both by the <code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser (to resolve a keyword/type name to its implementing class) and
+directly by third-party packages (EdelweissMeshfree, plugins) that need the same objects without
+going through the parser.</p>
+<p>Four properties are load-bearing; the first three are each covered by a dedicated test in
+<code class="docutils literal notranslate"><span class="pre">tests/test_registry.py</span></code>:</p>
+<ol class="arabic simple">
+<li><p><strong>Zero eager imports.</strong> Importing this module must not import any element, material, solver,
+or output-manager module – it only ever imports <code class="xref py py-mod docutils literal notranslate"><span class="pre">importlib</span></code> and
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">importlib.metadata</span></code>. Resolving a name (importing the module that actually implements it)
+happens exclusively inside <a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">lookup()</span></code></a>, on first use of that particular <code class="docutils literal notranslate"><span class="pre">(category,</span>
+<span class="pre">name)</span></code> pair.</p></li>
+<li><p><strong>Built-ins work with a stale editable install.</strong> Entry points declared in a package’s
+<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> only materialize in <code class="docutils literal notranslate"><span class="pre">importlib.metadata</span></code> after <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">.</span></code> is
+re-run, so EdelweissFE’s own modules are additionally listed in the static <code class="docutils literal notranslate"><span class="pre">_BUILTINS</span></code> table
+below as plain <code class="docutils literal notranslate"><span class="pre">&quot;module.path:AttrName&quot;</span></code> strings, requiring no metadata regeneration. Entry
+points are layered <em>on top</em> of that table for third-party discovery.</p></li>
+<li><p><strong>Thread-safe memoization.</strong> <code class="docutils literal notranslate"><span class="pre">lookup()</span></code> caches the resolved object in <code class="docutils literal notranslate"><span class="pre">_resolved</span></code> so a
+given <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> is only imported once. Under free-threading (<code class="docutils literal notranslate"><span class="pre">PYTHON_GIL=0</span></code>),
+multiple threads can call <code class="docutils literal notranslate"><span class="pre">lookup()</span></code> for the same key concurrently; see the docstring of
+<a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">lookup()</span></code></a> for the chosen strategy.</p></li>
+<li><p><strong>Names are case-insensitive.</strong> Both <code class="docutils literal notranslate"><span class="pre">category</span></code> and <code class="docutils literal notranslate"><span class="pre">name</span></code> are casefolded on the way in
+(<a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">lookup()</span></code></a>, <a class="reference internal" href="#edelweissfe.config.registry.register" title="edelweissfe.config.registry.register"><code class="xref py py-func docutils literal notranslate"><span class="pre">register()</span></code></a>) and stored casefolded in <code class="docutils literal notranslate"><span class="pre">_BUILTINS</span></code>, so a name resolves
+the same way whether it arrives through the <code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser or directly from an external
+package. Casefolded keys widen the chance of two callers claiming the same name, which is why
+every way of claiming a name raises <a class="reference internal" href="#edelweissfe.config.registry.RegistryConflictError" title="edelweissfe.config.registry.RegistryConflictError"><code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryConflictError</span></code></a> instead of silently
+overwriting – see that class.</p></li>
+</ol>
+<section id="built-in-coverage">
+<h4>Built-in coverage<a class="headerlink" href="#built-in-coverage" title="Link to this heading"></a></h4>
+<p>The <code class="docutils literal notranslate"><span class="pre">_BUILTINS</span></code> table below covers these categories:</p>
+<p><code class="docutils literal notranslate"><span class="pre">outputmanager</span></code> (10), <code class="docutils literal notranslate"><span class="pre">section</span></code> (3), <code class="docutils literal notranslate"><span class="pre">constraint</span></code> (12), <code class="docutils literal notranslate"><span class="pre">stepaction</span></code> (13),
+<code class="docutils literal notranslate"><span class="pre">generator</span></code> (11), <code class="docutils literal notranslate"><span class="pre">analyticalfield</span></code> (3), <code class="docutils literal notranslate"><span class="pre">solver</span></code> (7), <code class="docutils literal notranslate"><span class="pre">step</span></code> (2), <code class="docutils literal notranslate"><span class="pre">modelmodifier</span></code> (2),
+<code class="docutils literal notranslate"><span class="pre">statetransferstrategy</span></code> (3), <code class="docutils literal notranslate"><span class="pre">element</span></code> (42), <code class="docutils literal notranslate"><span class="pre">material</span></code> (7), <code class="docutils literal notranslate"><span class="pre">linsolver</span></code> (10).</p>
+<p><code class="docutils literal notranslate"><span class="pre">keyword</span></code> is the single source the <code class="docutils literal notranslate"><span class="pre">.inp</span></code> parser consults for every top-level keyword
+(<code class="docutils literal notranslate"><span class="pre">element</span></code>, <code class="docutils literal notranslate"><span class="pre">node</span></code>, <code class="docutils literal notranslate"><span class="pre">nSet</span></code>, <code class="docutils literal notranslate"><span class="pre">elSet</span></code>, <code class="docutils literal notranslate"><span class="pre">surface</span></code>, <code class="docutils literal notranslate"><span class="pre">job</span></code>, <code class="docutils literal notranslate"><span class="pre">section</span></code>, <code class="docutils literal notranslate"><span class="pre">elementProperty</span></code>,
+<code class="docutils literal notranslate"><span class="pre">material</span></code>, <code class="docutils literal notranslate"><span class="pre">advancedmaterial</span></code>, <code class="docutils literal notranslate"><span class="pre">fieldOutput</span></code>, <code class="docutils literal notranslate"><span class="pre">analyticalField</span></code>, <code class="docutils literal notranslate"><span class="pre">solver</span></code>, <code class="docutils literal notranslate"><span class="pre">step</span></code>,
+<code class="docutils literal notranslate"><span class="pre">output</span></code>, <code class="docutils literal notranslate"><span class="pre">updateConfiguration</span></code>, <code class="docutils literal notranslate"><span class="pre">modelGenerator</span></code>, <code class="docutils literal notranslate"><span class="pre">constraint</span></code>, <code class="docutils literal notranslate"><span class="pre">modelModifier</span></code>,
+<code class="docutils literal notranslate"><span class="pre">configurePlots</span></code>, <code class="docutils literal notranslate"><span class="pre">exportPlots</span></code>, <code class="docutils literal notranslate"><span class="pre">include</span></code>), each mapped to a
+<a class="reference internal" href="#edelweissfe.keywords.base.keywordbase.KeywordBase" title="edelweissfe.keywords.base.keywordbase.KeywordBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">edelweissfe.keywords.base.keywordbase.KeywordBase</span></code></a> subclass.</p>
+<p><code class="docutils literal notranslate"><span class="pre">element</span></code> and <code class="docutils literal notranslate"><span class="pre">material</span></code> are keyed by <em>element type</em> / <em>material name</em> and cover exactly the
+<code class="docutils literal notranslate"><span class="pre">provider=edelweiss</span></code> namespace of <code class="docutils literal notranslate"><span class="pre">config/elementlibrary.py</span></code> and <code class="docutils literal notranslate"><span class="pre">config/materiallibrary.py</span></code>.
+The <code class="docutils literal notranslate"><span class="pre">provider</span></code> axis itself is not part of this registry: it selects a namespace rather than a
+variant of one lookup, and only <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code> addresses anything by name – <code class="docutils literal notranslate"><span class="pre">marmot</span></code> and
+<code class="docutils literal notranslate"><span class="pre">marmotsingleqpelement</span></code> ignore the name and return a single wrapper class, <code class="docutils literal notranslate"><span class="pre">marmotmaterial</span></code>
+returns <code class="docutils literal notranslate"><span class="pre">None</span></code>. Those branches stay an explicit table in their own module.</p>
+<p><code class="docutils literal notranslate"><span class="pre">linsolver</span></code> is covered by a uniform <code class="docutils literal notranslate"><span class="pre">createSolver(opts)</span> <span class="pre">-&gt;</span> <span class="pre">Callable[[A,</span> <span class="pre">b],</span> <span class="pre">x]</span></code> factory per
+solver (see the <code class="docutils literal notranslate"><span class="pre">linsolver</span></code> block below), since not every linear solver reduces to a plain
+class/callable a dotted string can point at.</p>
+<p>What is outside the registry:</p>
+<ul class="simple">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">provider</span></code> axis of <code class="docutils literal notranslate"><span class="pre">config/elementlibrary.py</span></code>/<code class="docutils literal notranslate"><span class="pre">config/materiallibrary.py</span></code> (see above).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">config/solvers.py</span></code>’s <code class="docutils literal notranslate"><span class="pre">solverLibrary</span></code>, <code class="docutils literal notranslate"><span class="pre">config/outputmanagers.py</span></code>, <code class="docutils literal notranslate"><span class="pre">config/sections.py</span></code>
+and <code class="docutils literal notranslate"><span class="pre">config/analyticalfields.py</span></code>, which exist purely as Sphinx rendering targets and resolve
+nothing themselves.</p></li>
+</ul>
+</section>
+<dl class="py exception">
+<dt class="sig sig-object py" id="edelweissfe.config.registry.RegistryConflictError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.config.registry.</span></span><span class="sig-name descname"><span class="pre">RegistryConflictError</span></span><a class="reference internal" href="../_modules/edelweissfe/config/registry.html#RegistryConflictError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.config.registry.RegistryConflictError" title="Link to this definition"></a></dt>
+<dd><p>Raised when two different implementations claim the same <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code>.</p>
+<p>A <a class="reference internal" href="#edelweissfe.config.registry.RegistryLookupError" title="edelweissfe.config.registry.RegistryLookupError"><code class="xref py py-class docutils literal notranslate"><span class="pre">RegistryLookupError</span></code></a> subclass, so a caller guarding a name resolution with
+<code class="docutils literal notranslate"><span class="pre">except</span> <span class="pre">RegistryLookupError</span></code> also catches a conflict rather than letting it escape as an
+unrelated exception type. Re-registering the identical object under the same name is not a
+conflict (identity is compared before raising) and is idempotent.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="edelweissfe.config.registry.RegistryLookupError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.config.registry.</span></span><span class="sig-name descname"><span class="pre">RegistryLookupError</span></span><a class="reference internal" href="../_modules/edelweissfe/config/registry.html#RegistryLookupError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.config.registry.RegistryLookupError" title="Link to this definition"></a></dt>
+<dd><p>Raised by <a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">lookup()</span></code></a> when no implementation is registered for a requested name.</p>
+<p>Unlike a bare <code class="docutils literal notranslate"><span class="pre">findSimilarString</span></code> call (which raises a plain <code class="docutils literal notranslate"><span class="pre">Exception</span></code> with the message
+“You tried to find a string similar to … in an empty list.” when the candidate list happens
+to be empty), this always produces a message naming the category and, whenever at least one
+name is registered for it, a “did you mean” suggestion.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.config.registry.availableNames">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.config.registry.</span></span><span class="sig-name descname"><span class="pre">availableNames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">category</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/config/registry.html#availableNames"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.config.registry.availableNames" title="Link to this definition"></a></dt>
+<dd><p>List the names known for <code class="docutils literal notranslate"><span class="pre">category</span></code> across both the built-in table and entry points.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>category</strong> (<em>str</em>) – The registry category.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Sorted, de-duplicated list of registered names (original casing where available).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.config.registry.isRegistered">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.config.registry.</span></span><span class="sig-name descname"><span class="pre">isRegistered</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">category</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/config/registry.html#isRegistered"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.config.registry.isRegistered" title="Link to this definition"></a></dt>
+<dd><p>Report whether <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> resolves, <em>without</em> importing its implementation.</p>
+<p><a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">lookup()</span></code></a> is the wrong tool for a caller that only wants to validate a name – it imports
+the implementing module as a side effect, so merely asking “is ‘dirichlet’ a step action?” would
+pull in every module ever asked about. This is the predicate for those callers; it consults the
+same three sources in the same order, but compares strings only.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>category</strong> (<em>str</em>) – The registry category.</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – The name within that category.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Whether an implementation is registered, by any of the three mechanisms.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.config.registry.lookup">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.config.registry.</span></span><span class="sig-name descname"><span class="pre">lookup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">category</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/config/registry.html#lookup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.config.registry.lookup" title="Link to this definition"></a></dt>
+<dd><p>Resolve <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> to its implementing object (and option schema, if any).</p>
+<p>Resolution order: the in-process memo cache, then the built-in static table, then
+<code class="docutils literal notranslate"><span class="pre">importlib.metadata</span></code> entry points. The result of a successful resolution is memoized, so a
+given <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> is imported at most once per process.</p>
+<p>Thread-safety: guarded by <code class="xref py py-data docutils literal notranslate"><span class="pre">_lock</span></code> using double-checked locking – the cache is read
+without the lock first (the common case, once warm), and only threads that observe a miss
+contend for the lock, inside which the check is repeated before doing any work. See the
+docstring on <code class="xref py py-data docutils literal notranslate"><span class="pre">_lock</span></code> for why a full mutex was chosen over a lock-free scheme.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>category</strong> (<em>str</em>) – The registry category (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;outputmanager&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;stepaction&quot;</span></code>).</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – The name within that category (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;ensight&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;dirichlet&quot;</span></code>).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">(target,</span> <span class="pre">schema)</span></code>. Along the dotted-string paths (built-in table and entry points) the
+schema is obtained from the resolved target itself via
+<a class="reference internal" href="#edelweissfe.utils.schema.schemaOf" title="edelweissfe.utils.schema.schemaOf"><code class="xref py py-func docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.schemaOf()</span></code></a> – i.e. the target declares it as a class
+attribute by deriving from
+<a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider" title="edelweissfe.utils.schema.OptionSchemaProvider"><code class="xref py py-class docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.OptionSchemaProvider</span></code></a>. It is <code class="docutils literal notranslate"><span class="pre">None</span></code> for targets that
+declare no schema, and structurally always will be for the categories whose targets are
+plain functions rather than classes (see
+<a class="reference internal" href="#edelweissfe.utils.schema.schemaOf" title="edelweissfe.utils.schema.schemaOf"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaOf()</span></code></a>). <a class="reference internal" href="#edelweissfe.config.registry.register" title="edelweissfe.config.registry.register"><code class="xref py py-func docutils literal notranslate"><span class="pre">register()</span></code></a> may instead supply a schema
+explicitly, which takes precedence because it writes straight into the memo cache.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple[Any, type | None]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference internal" href="#edelweissfe.config.registry.RegistryLookupError" title="edelweissfe.config.registry.RegistryLookupError"><strong>RegistryLookupError</strong></a> – If no implementation is registered for <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code>.</p></li>
+<li><p><a class="reference internal" href="#edelweissfe.config.registry.RegistryConflictError" title="edelweissfe.config.registry.RegistryConflictError"><strong>RegistryConflictError</strong></a> – If two implementations claim <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> – two entry points, or an entry point
+against a built-in (see <code class="xref py py-func docutils literal notranslate"><span class="pre">_auditEntryPoints()</span></code>).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.config.registry.register">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.config.registry.</span></span><span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">category</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">schema</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">override</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/config/registry.html#register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.config.registry.register" title="Link to this definition"></a></dt>
+<dd><p>Manually register an implementation, bypassing both the built-in table and entry points.</p>
+<p>This is the seam a plugin (or a test) uses to register an object it already holds a reference
+to – e.g. a synthetic implementation created in-process – without needing an installed
+entry point. It writes directly into the resolved-object memo cache, so a subsequent
+<a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">lookup()</span></code></a> for the same <code class="docutils literal notranslate"><span class="pre">(category,</span> <span class="pre">name)</span></code> returns <code class="docutils literal notranslate"><span class="pre">target</span></code> (and <code class="docutils literal notranslate"><span class="pre">schema</span></code>)
+immediately, without any import.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>category</strong> (<em>str</em>) – The registry category (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;outputmanager&quot;</span></code>).</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – The name to register <code class="docutils literal notranslate"><span class="pre">target</span></code> under.</p></li>
+<li><p><strong>target</strong> (<em>Any</em>) – The class (or factory callable) implementing <code class="docutils literal notranslate"><span class="pre">name</span></code>.</p></li>
+<li><p><strong>schema</strong> (<em>type</em><em> | </em><em>None</em>) – The option schema dataclass associated with <code class="docutils literal notranslate"><span class="pre">target</span></code>, if any. Usually unnecessary for
+a class that derives from <a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider" title="edelweissfe.utils.schema.OptionSchemaProvider"><code class="xref py py-class docutils literal notranslate"><span class="pre">edelweissfe.utils.schema.OptionSchemaProvider</span></code></a> and
+declares its own <code class="docutils literal notranslate"><span class="pre">schema</span></code> attribute – <a class="reference internal" href="#edelweissfe.config.registry.lookup" title="edelweissfe.config.registry.lookup"><code class="xref py py-func docutils literal notranslate"><span class="pre">lookup()</span></code></a> picks that up by itself. Pass it
+explicitly only when <code class="docutils literal notranslate"><span class="pre">target</span></code> cannot declare it, e.g. a factory callable or a
+dynamically-created class in a test.</p></li>
+<li><p><strong>override</strong> (<em>bool</em>) – Replace an existing claim on <code class="docutils literal notranslate"><span class="pre">name</span></code> instead of raising. Deliberately explicit: silently
+replacing an implementation is how a built-in could stop existing with no diagnostic, so
+deliberate replacement has to say so.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.config.registry.RegistryConflictError" title="edelweissfe.config.registry.RegistryConflictError"><strong>RegistryConflictError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">name</span></code> is already claimed in <code class="docutils literal notranslate"><span class="pre">category</span></code> – by the built-in table, or by an earlier
+<a class="reference internal" href="#edelweissfe.config.registry.register" title="edelweissfe.config.registry.register"><code class="xref py py-func docutils literal notranslate"><span class="pre">register()</span></code></a> call with a <em>different</em> target – and <code class="docutils literal notranslate"><span class="pre">override</span></code> is not set.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="edelweissfe.config.registry.ENTRY_POINT_GROUP">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.config.registry.</span></span><span class="sig-name descname"><span class="pre">ENTRY_POINT_GROUP</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'edelweissfe.plugins'</span></span><a class="headerlink" href="#edelweissfe.config.registry.ENTRY_POINT_GROUP" title="Link to this definition"></a></dt>
+<dd><p>Entry-point group name third-party packages register EdelweissFE-discoverable implementations
+under: in a plugin’s <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>, the table <code class="docutils literal notranslate"><span class="pre">[project.entry-points.&quot;edelweissfe.plugins&quot;]</span></code>
+with entries such as <code class="docutils literal notranslate"><span class="pre">&quot;outputmanager.myoutputmanager&quot;</span> <span class="pre">=</span> <span class="pre">&quot;mypackage.mymodule:MyOutputManager&quot;</span></code>.</p>
+</dd></dl>
+
+</section>
+<section id="module-edelweissfe.keywords.base.keywordbase">
+<span id="keywordbase-top-level-keywords"></span><h3><code class="docutils literal notranslate"><span class="pre">KeywordBase</span></code> - Top-level keywords<a class="headerlink" href="#module-edelweissfe.keywords.base.keywordbase" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.keywords.base.keywordbase.KeywordBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.keywords.base.keywordbase.</span></span><span class="sig-name descname"><span class="pre">KeywordBase</span></span><a class="reference internal" href="../_modules/edelweissfe/keywords/base/keywordbase.html#KeywordBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.keywords.base.keywordbase.KeywordBase" title="Link to this definition"></a></dt>
+<dd><p>Base class for top-level <code class="docutils literal notranslate"><span class="pre">.inp</span></code> keywords, discovered via the registry’s <code class="docutils literal notranslate"><span class="pre">&quot;keyword&quot;</span></code>
+category (see <code class="docutils literal notranslate"><span class="pre">config/registry.py</span></code>).</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">KeywordBase</span></code> subclass carries <a class="reference internal" href="#edelweissfe.keywords.base.keywordbase.KeywordBase.schema" title="edelweissfe.keywords.base.keywordbase.KeywordBase.schema"><code class="xref py py-attr docutils literal notranslate"><span class="pre">schema</span></code></a> – the grammar’s single source of truth,
+built from <a class="reference internal" href="#edelweissfe.utils.schema.schemaField" title="edelweissfe.utils.schema.schemaField"><code class="xref py py-func docutils literal notranslate"><span class="pre">schemaField()</span></code></a>,
+<a class="reference internal" href="#edelweissfe.utils.schema.subKeywordField" title="edelweissfe.utils.schema.subKeywordField"><code class="xref py py-func docutils literal notranslate"><span class="pre">subKeywordField()</span></code></a> and
+<a class="reference internal" href="#edelweissfe.utils.schema.datalineField" title="edelweissfe.utils.schema.datalineField"><code class="xref py py-func docutils literal notranslate"><span class="pre">datalineField()</span></code></a> – plus its own spelling and description
+(<a class="reference internal" href="#edelweissfe.keywords.base.keywordbase.KeywordBase.keywordName" title="edelweissfe.keywords.base.keywordbase.KeywordBase.keywordName"><code class="xref py py-attr docutils literal notranslate"><span class="pre">keywordName</span></code></a>/<a class="reference internal" href="#edelweissfe.keywords.base.keywordbase.KeywordBase.keywordDescription" title="edelweissfe.keywords.base.keywordbase.KeywordBase.keywordDescription"><code class="xref py py-attr docutils literal notranslate"><span class="pre">keywordDescription</span></code></a>), consumed by
+<a class="reference internal" href="../syntax.html#module-edelweissfe.utils.inputfileparser" title="edelweissfe.utils.inputfileparser"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.utils.inputfileparser</span></code></a> for lexing/validation and by
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.utils.schemasurface</span></code> for the rendered grammar surface. Construction from a
+parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> definition happens in the per-category adapters
+(<code class="docutils literal notranslate"><span class="pre">abqmodelconstructor</span></code>/<code class="docutils literal notranslate"><span class="pre">inputfilehelpers</span></code>/<code class="docutils literal notranslate"><span class="pre">StepManager</span></code>), not on this class: a keyword’s
+grammar and its construction are separate concerns.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>schema</strong></dt><dd></dd>
+</dl>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.keywords.base.keywordbase.KeywordBase.keywordDescription">
+<span class="sig-name descname"><span class="pre">keywordDescription</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#edelweissfe.keywords.base.keywordbase.KeywordBase.keywordDescription" title="Link to this definition"></a></dt>
+<dd><p>The keyword’s human-readable description, rendered by the grammar surface.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.keywords.base.keywordbase.KeywordBase.keywordName">
+<span class="sig-name descname"><span class="pre">keywordName</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#edelweissfe.keywords.base.keywordbase.KeywordBase.keywordName" title="Link to this definition"></a></dt>
+<dd><p>The keyword as written in the <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file, in display case (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;elSet&quot;</span></code>, not the registry
+key <code class="docutils literal notranslate"><span class="pre">&quot;elset&quot;</span></code>). Single source of truth for its spelling; set by every concrete subclass.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.keywords.base.keywordbase.KeywordBase.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">type</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#edelweissfe.keywords.base.keywordbase.KeywordBase.schema" title="Link to this definition"></a></dt>
+<dd><p>Schema of this keyword’s line options, dataline payload and <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code> sub-blocks, or <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-edelweissfe.outputmanagers.base.outputmanagerbase">
+<span id="outputmanagerbase-output-managers"></span><h3><code class="docutils literal notranslate"><span class="pre">OutputManagerBase</span></code> - Output managers<a class="headerlink" href="#module-edelweissfe.outputmanagers.base.outputmanagerbase" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.outputmanagers.base.outputmanagerbase.</span></span><span class="sig-name descname"><span class="pre">OutputManagerBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">definitionLines</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plotter</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase" title="Link to this definition"></a></dt>
+<dd><p>This is the abstract base class for all output managers.
+User defined output managers must implement the abstract methods.</p>
+<p>Deriving from <a class="reference internal" href="#edelweissfe.utils.schema.OptionSchemaProvider" title="edelweissfe.utils.schema.OptionSchemaProvider"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptionSchemaProvider</span></code></a> means every output
+manager – including one supplied by a third-party package via an entry point – exposes a
+<code class="docutils literal notranslate"><span class="pre">schema</span></code> class attribute, so the registry can hand its option schema to the caller alongside
+the class itself. Subclasses that do not define their own option schema simply inherit the
+default of <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – The name of this output manager.</p></li>
+<li><p><strong>definitionLines</strong> (<em>dict</em>) – The dictionary containing the definition of the output manager.</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – A dictionary containing the model tree.</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="../output/fieldoutput.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output contoller instance.</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – The journal instance for logging.</p></li>
+<li><p><strong>plotter</strong> (<a class="reference internal" href="../output/plotter.html#edelweissfe.utils.plotter.Plotter" title="edelweissfe.utils.plotter.Plotter"><em>Plotter</em></a>) – The plotter instance for plotting.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><strong>checkpointedState</strong></dt><dd></dd>
+<dt><strong>schema</strong></dt><dd></dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.applyOptionsOverride" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.applyOptionsOverride"><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyOptionsOverride</span></code></a>(fieldValues)</p></td>
+<td><p>Apply a partial override of this output manager's own <code class="docutils literal notranslate"><span class="pre">schema</span></code> fields.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.dropLatestCheckpoint" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.dropLatestCheckpoint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dropLatestCheckpoint</span></code></a>()</p></td>
+<td><p>Offer the latest checkpoint (see <a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code></a>) no more: a step has fallen back to it, or found that it holds the state its failed increment started from.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeFailedIncrement" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeFailedIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finalizeFailedIncrement</span></code></a>(**kwargs)</p></td>
+<td><p>Finalize the output at the end of a time increment.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeIncrement" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finalizeIncrement</span></code></a>(timeStep, **kwargs)</p></td>
+<td><p>Finalize the output at the end of a time increment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeJob" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeJob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finalizeJob</span></code></a>()</p></td>
+<td><p>Finalize the output at the end of a job.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeStep" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finalizeStep</span></code></a>()</p></td>
+<td><p>Finalize the output the end of a step.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getRestartData</span></code></a>()</p></td>
+<td><p>The state this output manager carries from one increment to the next; by default the attributes declared in <a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.checkpointedState" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.checkpointedState"><code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeJob" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeJob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeJob</span></code></a>()</p></td>
+<td><p>Initalize the output manager at the beginning of a step.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeStep" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeStep</span></code></a>(step)</p></td>
+<td><p>Initalize the output manager at the beginning of a step.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">latestCheckpoint</span></code></a>()</p></td>
+<td><p>The latest restart checkpoint this output manager wrote that is still on disk and that no fallback has used yet, for a step to fall back to (see <a class="reference internal" href="../analysis/steps.html#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint" title="edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fallBackToCheckpoint()</span></code></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.setRestartData" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.setRestartData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code></a>(data)</p></td>
+<td><p>Restore the state <a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> returned.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.applyOptionsOverride">
+<span class="sig-name descname"><span class="pre">applyOptionsOverride</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fieldValues</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.applyOptionsOverride"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.applyOptionsOverride" title="Link to this definition"></a></dt>
+<dd><p>Apply a partial override of this output manager’s own <code class="docutils literal notranslate"><span class="pre">schema</span></code> fields.</p>
+<p>The counterpart, on the output manager side, of the name-based <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> override
+mechanism (<code class="docutils literal notranslate"><span class="pre">stepactions/options.py</span></code>): once that mechanism has resolved an <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options,</span>
+<span class="pre">name=X,</span> <span class="pre">...</span></code> block to this output manager instance and validated the present keys against
+<code class="docutils literal notranslate"><span class="pre">type(self).schema</span></code> via <a class="reference internal" href="#edelweissfe.utils.schema.coercePresentOptions" title="edelweissfe.utils.schema.coercePresentOptions"><code class="xref py py-func docutils literal notranslate"><span class="pre">coercePresentOptions()</span></code></a>, it calls
+this method with the result to actually apply them.</p>
+<p>Concrete output managers vary in how (or whether) they store overridable runtime options –
+unlike a solver’s uniform <code class="docutils literal notranslate"><span class="pre">self.options</span></code> dict, there is no single shared storage shape to
+update generically here, so a subclass that wants <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> support overrides this with
+its own named fields (ordinary polymorphism, not attribute probing – see
+<code class="xref py py-class docutils literal notranslate"><span class="pre">OutputManager</span></code> in <code class="docutils literal notranslate"><span class="pre">ensight.py</span></code> for the one concrete case that needs this today).</p>
+<p>The default here raises rather than silently doing nothing: without an override, a
+<code class="docutils literal notranslate"><span class="pre">&gt;&gt;options,</span> <span class="pre">name=X,</span> <span class="pre">someField=...</span></code> block against <code class="docutils literal notranslate"><span class="pre">X</span></code> would otherwise validate cleanly
+against <code class="docutils literal notranslate"><span class="pre">type(X).schema</span></code> (<code class="docutils literal notranslate"><span class="pre">stepactions/options.py</span></code>) and then apply no change at all –
+indistinguishable, from the <code class="docutils literal notranslate"><span class="pre">.inp</span></code> author’s side, from success.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>fieldValues</strong> (<em>dict</em>) – Maps schema field name to its new, already-coerced value.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>NotImplementedError</strong> – If <code class="docutils literal notranslate"><span class="pre">fieldValues</span></code> is non-empty and the subclass has not overridden this method.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.dropLatestCheckpoint">
+<span class="sig-name descname"><span class="pre">dropLatestCheckpoint</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.dropLatestCheckpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.dropLatestCheckpoint" title="Link to this definition"></a></dt>
+<dd><p>Offer the latest checkpoint (see <a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code></a>) no more: a step has fallen back
+to it, or found that it holds the state its failed increment started from. Every checkpoint
+serves one fallback at most.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeFailedIncrement">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">finalizeFailedIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.finalizeFailedIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeFailedIncrement" title="Link to this definition"></a></dt>
+<dd><p>Finalize the output at the end of a time increment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>**kwargs</strong> – Keyword arguments.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeIncrement">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">finalizeIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.finalizeIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeIncrement" title="Link to this definition"></a></dt>
+<dd><p>Finalize the output at the end of a time increment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>U</strong> – The initial solution vector.</p></li>
+<li><p><strong>P</strong> – The initial reaction vector.</p></li>
+<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The time step.</p></li>
+<li><p><strong>**kwargs</strong> – Keyword arguments.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeJob">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">finalizeJob</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.finalizeJob"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeJob" title="Link to this definition"></a></dt>
+<dd><p>Finalize the output at the end of a job.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>U</strong> – The final solution vector.</p></li>
+<li><p><strong>P</strong> – The final reaction vector.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeStep">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">finalizeStep</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.finalizeStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.finalizeStep" title="Link to this definition"></a></dt>
+<dd><p>Finalize the output the end of a step.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData">
+<span class="sig-name descname"><span class="pre">getRestartData</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.getRestartData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData" title="Link to this definition"></a></dt>
+<dd><p>The state this output manager carries from one increment to the next; by default the
+attributes declared in <a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.checkpointedState" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.checkpointedState"><code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code></a>. Overridden where the state is not a plain
+attribute.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A flat mapping of array name to array.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict[str, numpy.ndarray]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeJob">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">initializeJob</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.initializeJob"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeJob" title="Link to this definition"></a></dt>
+<dd><p>Initalize the output manager at the beginning of a step.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeStep">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">initializeStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.initializeStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeStep" title="Link to this definition"></a></dt>
+<dd><p>Initalize the output manager at the beginning of a step.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>step</strong> (<em>dict</em>) – A dictionary containing the step definition.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint">
+<span class="sig-name descname"><span class="pre">latestCheckpoint</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.latestCheckpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint" title="Link to this definition"></a></dt>
+<dd><p>The latest restart checkpoint this output manager wrote that is still on disk and that no
+fallback has used yet, for a step to fall back to (see
+<a class="reference internal" href="../analysis/steps.html#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint" title="edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fallBackToCheckpoint()</span></code></a>). Only an output
+manager that <a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.writesRestartCheckpoints" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.writesRestartCheckpoints"><code class="xref py py-attr docutils literal notranslate"><span class="pre">writesRestartCheckpoints</span></code></a> has any.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The file name of the checkpoint, or None if there is none.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.setRestartData">
+<span class="sig-name descname"><span class="pre">setRestartData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/outputmanagers/base/outputmanagerbase.html#OutputManagerBase.setRestartData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.setRestartData" title="Link to this definition"></a></dt>
+<dd><p>Restore the state <a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> returned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>ndarray</em><em>]</em>) – The mapping of arrays.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.checkpointedState">
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.checkpointedState" title="Link to this definition"></a></dt>
+<dd><p>The state this output manager carries from one increment to the next, by attribute name and
+type; see <a class="reference internal" href="../output/outputmanagers.html#module-edelweissfe.utils.checkpointedstate" title="edelweissfe.utils.checkpointedstate"><code class="xref py py-mod docutils literal notranslate"><span class="pre">checkpointedstate</span></code></a>. Every output manager declares it – an
+empty mapping if it carries none – or overrides <a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> and
+<a class="reference internal" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.setRestartData" title="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.setRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setRestartData()</span></code></a>. Undeclared, it cannot be checkpointed.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.name" title="Link to this definition"></a></dt>
+<dd><p>The name of this output manager, from its <code class="docutils literal notranslate"><span class="pre">*output,</span> <span class="pre">name=...</span></code> line; unique within a job.
+Set by every concrete output manager’s constructor.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.writesRestartCheckpoints">
+<span class="sig-name descname"><span class="pre">writesRestartCheckpoints</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.writesRestartCheckpoints" title="Link to this definition"></a></dt>
+<dd><p>Whether this output manager writes restart checkpoints. A solver that changes the model at
+the end of an increment (e.g. a topology check) finalizes such a manager after that change,
+so that the checkpoint holds the state the next increment starts from.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
 </section>
 </section>
 

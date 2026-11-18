@@ -159,8 +159,8 @@ mechanics would add as its internal force. A penalty spring of stiffness <span c
 </ul>
 <p>A solver sums the contributions in three loops of every iteration: <code class="docutils literal notranslate"><span class="pre">computeElements</span></code> over the elements,
 <code class="docutils literal notranslate"><span class="pre">assembleLoads</span></code> over the loads – every load assembles its own contribution, wherever it acts (see
-<a class="reference internal" href="../analysis/stepactions.html#edelweissfe.stepactions.base.loadbase.LoadBase" title="edelweissfe.stepactions.base.loadbase.LoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoadBase</span></code></a>) – and <code class="docutils literal notranslate"><span class="pre">assembleConstraints</span></code> over the constraints of
-the discrete system (see <a class="reference internal" href="../model/constraints.html"><span class="doc">Constraints</span></a>). Summed over all entities,</p>
+<a class="reference internal" href="../analysis/stepactions.html#edelweissfe.stepactions.base.loadbase.LoadBase" title="edelweissfe.stepactions.base.loadbase.LoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoadBase</span></code></a>) – and <code class="docutils literal notranslate"><span class="pre">assembleConstraints</span></code> (in the explicit solvers
+<code class="docutils literal notranslate"><span class="pre">assembleConstraintForces</span></code>, without the tangent) over the constraints of the discrete system (see <a class="reference internal" href="../model/constraints.html"><span class="doc">Constraints</span></a>). Summed over all entities,</p>
 <div class="math notranslate nohighlight">
 \[\boldsymbol{G}(\boldsymbol{U}) = \sum \boldsymbol{P} = \boldsymbol{f}_\mathrm{int} - \boldsymbol{f}_\mathrm{ext}\]</div>
 <p>is the out-of-balance force, which equilibrium makes zero, and the summed <span class="math notranslate nohighlight">\(\boldsymbol{K}\)</span> is its derivative.

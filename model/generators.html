@@ -155,7 +155,7 @@
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.config.generators</span></code></p>
 <p id="module-edelweissfe.config.generators">Mesh generators are used to create meshes,
 using different methods.</p>
-<p>Keyword: <code class="docutils literal notranslate"><span class="pre">*generator</span></code></p>
+<p>Keyword: <code class="docutils literal notranslate"><span class="pre">*modelGenerator</span></code></p>
 <div class="literal-block-wrapper docutils container" id="id3">
 <div class="code-block-caption"><span class="caption-text">Example:</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">theGeneratorType</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myGeneratorName</span>
@@ -1440,7 +1440,7 @@ face-consistent per-node tributary area shares for the pressure-weighted contact
 weighting that best approximates a <em>serendipity</em> face’s consistent nodal loads. See the
 <a class="reference internal" href="../theory/contact.html"><span class="doc">contact theory documentation</span></a> for the full background.</p>
 <p>The underlying <code class="xref py py-func docutils literal notranslate"><span class="pre">buildContactFacets()</span></code> is idempotent and re-runnable, so a
-<code class="xref py py-class docutils literal notranslate"><span class="pre">MeshDependent</span></code> consumer of these facets (e.g.
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.meshdependent.MeshDependent" title="edelweissfe.models.meshdependent.MeshDependent"><code class="xref py py-class docutils literal notranslate"><span class="pre">MeshDependent</span></code></a> consumer of these facets (e.g.
 <a class="reference internal" href="constraints.html#module-edelweissfe.constraints.nodetodeformablesurfacepenalty" title="edelweissfe.constraints.nodetodeformablesurfacepenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nodetodeformablesurfacepenalty</span></code></a>) can regenerate them from the
 current <code class="docutils literal notranslate"><span class="pre">*surface</span></code> definition after the source solid elements change underneath it (e.g. an AMR
 refinement) as well as at setup time; the recipe is recorded in <code class="docutils literal notranslate"><span class="pre">model.contactFacetRecipes</span></code>.</p>

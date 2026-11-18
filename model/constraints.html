@@ -554,7 +554,7 @@ the reference point (RP),</p>
 Prescribe Dirichlet conditions on the RP only, not on the slave nodes: a slave degree of freedom that
 is also prescribed loses its record to the Dirichlet condition (reported by the solver), so the body
 is no longer rigid at that node.</p>
-<p>This constraint is a <code class="xref py py-class docutils literal notranslate"><span class="pre">MeshDependent</span></code>: if adaptive refinement
+<p>This constraint is a <a class="reference internal" href="../developer/models.html#edelweissfe.models.meshdependent.MeshDependent" title="edelweissfe.models.meshdependent.MeshDependent"><code class="xref py py-class docutils literal notranslate"><span class="pre">MeshDependent</span></code></a>: if adaptive refinement
 changes the slave node set (e.g. by <a class="reference internal" href="../analysis/modelmodifiers.html#module-edelweissfe.modelmodifiers.adaptivity.hadaptivity" title="edelweissfe.modelmodifiers.adaptivity.hadaptivity"><code class="xref py py-mod docutils literal notranslate"><span class="pre">hadaptivity</span></code></a>), the
 records are rebuilt from the current members, so new nodes are tied as well.</p>
 <p>Limitation: static solvers only. The RP carries no mass of its own, and both dynamic solvers check
