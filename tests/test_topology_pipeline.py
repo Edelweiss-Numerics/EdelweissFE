@@ -185,7 +185,7 @@ def _modelWithNodes(*labels: int) -> FEModel:
 def test_remove_node_outside_a_topology_change_raises():
     model = _modelWithNodes(1)
     with pytest.raises(TopologyError, match="outside a topology change"):
-        model.removeNode(1)
+        model.removeNodes([1])
     assert 1 in model.nodes
 
 
@@ -194,7 +194,7 @@ def test_removed_node_leaves_the_model_and_every_node_set():
     allNodes = model.nodeSets["all"]
     node = model.nodes[1]
     with model.topology.changes():
-        model.removeNode(1)
+        model.removeNodes([1])
 
     assert 1 not in model.nodes
     assert model.nodeSets["all"] is allNodes  # cleaned in place: references held by consumers stay valid
@@ -205,7 +205,7 @@ def test_removed_node_leaves_the_model_and_every_node_set():
 def test_removed_node_label_is_never_reissued():
     model = _modelWithNodes(1, 2, 3)
     with model.topology.changes():
-        model.removeNode(3)
+        model.removeNodes([3])
         (label,) = model.topology.reserveNodeNumbers(1)
 
     assert label == 4

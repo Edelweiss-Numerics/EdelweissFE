@@ -15,11 +15,15 @@ import pytest
 pytest.importorskip("edelweissfe.elements.marmotelement.element")
 
 from _embeddingdecks import (  # noqa: E402
+    _REBAR_STRAIN_OUTPUT,
+    _UNIAXIAL_STEP,
     A_STEEL,
     E_CONCRETE,
     E_STEEL,
     NU_CONCRETE,
     NU_STEEL,
+    REACTION_PERFECT_BOND,
+    _barsInStrip,
     _line,
     _marmotHas,
     _run,
@@ -75,37 +79,6 @@ gen_all
 """
 
 
-def _barsInStrip(nBarElements=5, y=0.37):
-    bar, first, last = _line(100001, (0.0, y), (4.0, y), nBarElements)
-    return f"""{bar}
-*elSet, elSet=rebars, generate=True
-{first}, {last - 1}, 1
-
-*nSet, nSet=rebarRight
-{last}
-
-*section, name=rebarSection, area={A_STEEL}, material=steel, type=truss
-rebars
-"""
-
-
-_UNIAXIAL_STEP = """*job, name=job, domain=2d
-*solver, solver=NIST, name=theSolver
-
-*fieldOutput
->>perNode, name=RF, nSet=gen_right, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
->>perNode, name=RFrebar, nSet=rebarRight, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
-
-*step, solver=theSolver
-maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
->>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0
->>dirichlet, name=corner, nSet=gen_leftBottom, field=displacement, 2=0
->>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.004
-"""
-
-#: uniaxial tension of the reinforced plane strain strip at the strain 1e-3: concrete + steel
-REACTION_PERFECT_BOND = (E_CONCRETE / (1 - NU_CONCRETE**2) * 1.0 + E_STEEL * A_STEEL) * 1e-3
-
 _STIFF_LINEAR_BOND = f"""
 *material, name=LinearElasticBondSlip, id=bond, provider=marmot
 1e8, 1e8
@@ -123,7 +96,8 @@ def test_stiff_bond_reproduces_perfect_bond(tmp_path, hosts):
     """bond-slip with a very stiff linear bond law converges to the perfect bond solution, for linear, quadratic and
     triangular hosts"""
     strip = _triangleStrip() if hosts == "CPE3" else _strip(elType=hosts)
-    model, (RF, RFrebar) = _run(tmp_path, strip + _barsInStrip() + _STIFF_LINEAR_BOND + _UNIAXIAL_STEP, "RF", "RFrebar")
+    deck = strip + _barsInStrip() + _STIFF_LINEAR_BOND + _UNIAXIAL_STEP.replace(_REBAR_STRAIN_OUTPUT, "")
+    model, (RF, RFrebar) = _run(tmp_path, deck, "RF", "RFrebar")
     # the free rebar end carries no load, the bond transfers it to the host; the short shear lag at the free rebar
     # ends (1/beta = 0.0075 << 4) makes the response only slightly softer than with perfect bond
     assert abs(RFrebar.getLastResult()) < 1e-9
@@ -372,7 +346,7 @@ def test_bond_law_property_change_and_shared_nodes(tmp_path):
 rebars
 """
         + _STIFF_LINEAR_BOND
-        + _UNIAXIAL_STEP
+        + _UNIAXIAL_STEP.replace(_REBAR_STRAIN_OUTPUT, "")
     )
     with pytest.raises(ValueError, match="are nodes of host element"):
         _run(tmp_path, shared, "RF")
@@ -515,7 +489,9 @@ rebars
 """
             + _STIFF_LINEAR_BOND
             + f"splitBars={splitBars}\n"
-            + _UNIAXIAL_STEP.replace("field=displacement, 1=0.004", "field=displacement, 2=0.004").replace(
+            + _UNIAXIAL_STEP.replace(_REBAR_STRAIN_OUTPUT, "")
+            .replace("field=displacement, 1=0.004", "field=displacement, 2=0.004")
+            .replace(
                 "f(x)='sum(x[:,0])', saveHistory=True,\n>>perNode, name=RFrebar",
                 "f(x)='sum(x[:,1])', saveHistory=True,\n>>perNode, name=RFrebar",
             )

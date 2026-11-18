@@ -60,7 +60,9 @@ k, the coordinates are not), e.g., k fibers stacked through the thickness of a 2
 
 One material per element: a composite section (e.g., steel and concrete) is modeled by several beam elements on
 the same nodes, one per material, each with its part of the section (the fiber integration is additive). The parts
-must measure their coordinates from one common axis: give them ``centroidAtAxis=False`` (enforced). The torsion
+must measure their coordinates from one common axis: give them ``centroidAtAxis=False`` (enforced). The parametric
+profiles (``rectangle``, ``iprofile``, ``tube``, ``circle``) are generated about the origin, so an off-axis part
+needs a ``pointsFile`` or ``polygonFile`` with its coordinates from the common axis. The torsion
 constants of the parts are added, which is not the torsion constant of a composite (in particular a closed)
 section; give ``J`` per part accordingly. An eccentric section (a non-concentric composite, or ``centroidAtAxis=False``)
 couples axial strain and bending: the 3-node beams represent it exactly for a tip load, the 2-node beams (axial
@@ -375,4 +377,4 @@ class Section(SectionBase):
         element.initializeElement()
         if not isinstance(material, dict):
             raise Exception(f"Beam section {self.name}: beam elements require a Marmot material.")
-        element.setMaterial(material["name"], material["properties"])
+        self.assignMaterialToElement(element, material)

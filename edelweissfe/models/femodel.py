@@ -173,19 +173,6 @@ class FEModel:
 
         del self.elements[elNumber]
 
-    def removeNode(self, label: int):
-        """Remove a node from the model and from every node set. Its label is retired, never reissued.
-
-        The node-side counterpart of :meth:`removeElement`; see :meth:`removeNodes`, which this calls for one label.
-
-        Parameters
-        ----------
-        label
-            The label of the node to remove.
-        """
-
-        self.removeNodes([label])
-
     def removeNodes(self, labels):
         """Remove nodes from the model and from every node set. Their labels are retired, never reissued:
         :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers` is monotonic.
