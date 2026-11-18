@@ -249,6 +249,33 @@ class NISTSchema:
         dtype=str,
         default="0.8, 1.0, 1.2",
     )
+    backtracking: bool | None = schemaField(
+        description=(
+            "Safeguard every Newton correction by backtracking (opt-in): the iterate moves by the full correction only "
+            "if the model can evaluate it and it decreases the merit function (backtrackingMerit) sufficiently, else "
+            "the step length is cut, at most backtrackingMaxCuts times. A trial state at which the model cannot be "
+            "evaluated (e.g. a material requesting a cutback) counts as too long a step. Acts after the line search, "
+            "on its step length; the first correction of an increment only if it prescribes no Dirichlet increment."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    backtrackingMerit: str | None = schemaField(
+        description=(
+            "The merit function of the backtracking (residual|energy): the Euclidean norm of the residual, cut by "
+            "halving until an Armijo decrease holds; or the work of the residual along the correction, "
+            "ddU . R(alpha), cut by the secant to its zero until it is at most 0.8 times its value at the iterate "
+            "(the line search of Crisfield / Matthies-Strang, for problems with a potential such as associative "
+            "plasticity; falls back to the residual if the correction is no descent direction)."
+        ),
+        dtype=str,
+        default="residual",
+    )
+    backtrackingMaxCuts: int | None = schemaField(
+        description="The maximum number of cuts of the step length of the backtracking per Newton iteration.",
+        dtype=int,
+        default=5,
+    )
     fallBackToQuasiNewton: bool | None = schemaField(
         description=(
             "Instead of cutting an increment back once the residual grew more often than maxGrowIter allows, "
@@ -397,6 +424,9 @@ class NIST(NonlinearSolverBase):
         "lineSearchAfterIterations": 5,
         "lineSearchEveryIterations": 2,
         "lineSearchStepLengths": "0.8, 1.0, 1.2",
+        "backtracking": False,
+        "backtrackingMerit": "residual",
+        "backtrackingMaxCuts": 5,
         "fallBackToQuasiNewton": False,
         "convergenceCriterion": "legacy",
         "iterationsForAlternativeTolerance": 15,
@@ -669,6 +699,16 @@ class NIST(NonlinearSolverBase):
                 raise ValueError("lineSearchAfterIterations must not be negative")
             if self.options["lineSearchEveryIterations"] < 1:
                 raise ValueError("lineSearchEveryIterations must be at least 1")
+
+        if self.options["backtracking"]:
+            if self.options["backtrackingMerit"] not in ("residual", "energy"):
+                raise ValueError(
+                    "Unknown backtrackingMerit '{:}', use residual or energy".format(self.options["backtrackingMerit"])
+                )
+            if self.options["backtrackingMaxCuts"] < 1:
+                raise ValueError("backtrackingMaxCuts must be at least 1")
+            if type(self).solveIncrement is not NIST.solveIncrement:
+                raise ValueError("backtracking is available for the Newton loop of NIST (and NISTParallel) only")
 
         # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.prevTimeStep = None
@@ -1336,11 +1376,15 @@ class NIST(NonlinearSolverBase):
             )
 
         quasiNewton = QuasiNewtonFallback(self.options["fallBackToQuasiNewton"])
+        # the backtracking evaluated the model at the iterate already (the trial state it accepted last)
+        iterateIsEvaluated = False
 
         while True:
-            P, K, F = self.assembleResidualAndTangent(
-                U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
-            )
+            if not iterateIsEvaluated:
+                P, K, F = self.assembleResidualAndTangent(
+                    U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
+                )
+            iterateIsEvaluated = False
 
             # --- Impose the Dirichlet (prescribed-value) boundary conditions ---
             # For each constrained DOF i we overwrite its row of the linearized system
@@ -1403,6 +1447,42 @@ class NIST(NonlinearSolverBase):
                 stepLength = self.quadraticLineSearch(largestResidualAt)
             else:
                 stepLength = 1.0
+
+            if self.backtrackingIsDue(iterationCounter, ddU, dirichlets):
+                R_ = np.array(R)
+                for dirichlet in dirichlets:
+                    R_[dirichlet.constrainedDofIndices] = 0.0
+
+                def evaluateAt(stepLength):
+                    # the trial state at this step length, without the Dirichlet degrees of freedom; None if the model
+                    # cannot be evaluated there
+                    try:
+                        self.assembleResidualAndTangent(
+                            U_n,
+                            self.setTrialState(dU, ddU, stepLength),
+                            U_np,
+                            R,
+                            P,
+                            PLoadsAndConstraints,
+                            F,
+                            FConstraints,
+                            K,
+                            stepActions,
+                            model,
+                            timeStep,
+                        )
+                    except CutbackRequest as e:
+                        self.journal.message(
+                            "backtracking: step length {:7.4f} not evaluable ({:})".format(stepLength, str(e)[:60]),
+                            self.identification,
+                            2,
+                        )
+                        return None
+                    for dirichlet in dirichlets:
+                        R[dirichlet.constrainedDofIndices] = 0.0
+                    return R
+
+                stepLength, iterateIsEvaluated = self.backtrack(evaluateAt, R_, ddU, stepLength)
 
             ddU = self.applyCorrection(dU, ddU, stepLength)
             iterationCounter += 1
@@ -1684,6 +1764,125 @@ class NIST(NonlinearSolverBase):
         """
 
         return [float(stepLength) for stepLength in self.options["lineSearchStepLengths"].split(",")]
+
+    #: The Armijo constant of the backtracking with the residual merit, and the bound of the work of the residual along
+    #: the correction (relative to the iterate's) of the energy merit.
+    backtrackingArmijo = 1e-4
+    backtrackingEnergyTolerance = 0.8
+
+    def backtrackingIsDue(self, iterationCounter: int, ddU: DofVector, dirichlets: list) -> bool:
+        """Whether the correction of this iteration is safeguarded by backtracking (option ``backtracking``): in every
+        iteration, except the first of an increment if its correction prescribes a Dirichlet increment, which a shorter
+        step would not make.
+
+        Parameters
+        ----------
+        iterationCounter
+            The current iteration number.
+        ddU
+            The correction.
+        dirichlets
+            The Dirichlet boundary conditions.
+
+        Returns
+        -------
+        bool
+            True if the correction is safeguarded.
+        """
+
+        if not self.options["backtracking"]:
+            return False
+        if iterationCounter > 0:
+            return True
+        return all(not np.any(ddU[dirichlet.constrainedDofIndices]) for dirichlet in dirichlets)
+
+    @performancetiming.timeit("backtracking")
+    def backtrack(
+        self,
+        evaluateAt: Callable[[float], DofVector | None],
+        R0: np.ndarray,
+        ddU: DofVector,
+        stepLength: float = 1.0,
+    ) -> tuple[float, bool]:
+        """The step length of a Newton correction, cut back from ``stepLength`` until the trial state can be evaluated
+        and decreases the merit function (option ``backtrackingMerit``), at most ``backtrackingMaxCuts`` times.
+
+        * ``residual``: :math:`\\phi(\\alpha) = \\| R(\\alpha) \\|_2`, accepted if
+          :math:`\\phi(\\alpha) \\le (1 - c \\alpha) \\phi(0)` with :math:`c` = :attr:`backtrackingArmijo`; else halved.
+        * ``energy``: the work of the residual along the correction, :math:`g(\\alpha) = \\Delta\\Delta U \\cdot
+          R(\\alpha)`, the derivative of the (negative) incremental potential along the correction, accepted if
+          :math:`g(\\alpha) \\ge -s \\, g(0)` with :math:`s` = :attr:`backtrackingEnergyTolerance` (the step does not
+          overshoot the minimum along the correction by much); else cut to the zero of the secant through
+          :math:`g(0)` and :math:`g(\\alpha)`, limited to :math:`[0.1, 0.9] \\alpha`. If :math:`g(0) \\le 0`, the
+          correction is no descent direction of a potential and the residual merit applies.
+
+        A trial state that cannot be evaluated counts as too long a step (halved). If no trial is accepted, the trial
+        with the smallest merit among those that could be evaluated is taken; if none could, the increment is cut back.
+
+        Parameters
+        ----------
+        evaluateAt
+            Evaluates the model at the trial state of a step length; returns the residual without the Dirichlet degrees
+            of freedom, or None if the model cannot be evaluated there.
+        R0
+            The residual of the iterate, without the Dirichlet degrees of freedom.
+        ddU
+            The correction.
+        stepLength
+            The first step length tried.
+
+        Returns
+        -------
+        tuple[float,bool]
+            The step length, and whether the model was evaluated last at it (then the next iteration need not evaluate
+            it again).
+
+        Raises
+        ------
+        CutbackRequest
+            If the model can be evaluated at no trial step length.
+        """
+
+        merit = self.options["backtrackingMerit"]
+        phi0 = np.linalg.norm(R0)
+        g0 = float(np.dot(ddU, R0))
+        if merit == "energy" and not g0 > 0.0:
+            merit = "residual"
+
+        trials = []
+        for cut in range(self.options["backtrackingMaxCuts"] + 1):
+            R = evaluateAt(stepLength)
+            if R is None:
+                accepted, nextStepLength = False, 0.5 * stepLength
+            elif merit == "residual":
+                phi = np.linalg.norm(R)
+                trials.append((phi, stepLength))
+                accepted = phi <= (1.0 - self.backtrackingArmijo * stepLength) * phi0
+                nextStepLength = 0.5 * stepLength
+            else:
+                g = float(np.dot(ddU, R))
+                trials.append((abs(g), stepLength))
+                accepted = g >= -self.backtrackingEnergyTolerance * g0
+                secant = stepLength * g0 / (g0 - g)
+                nextStepLength = min(max(secant, 0.1 * stepLength), 0.9 * stepLength)
+
+            self.journal.message(
+                "backtracking: step length {:7.4f} {:}".format(
+                    stepLength, "not evaluable" if R is None else ("accepted" if accepted else "cut")
+                ),
+                self.identification,
+                2,
+            )
+            if accepted:
+                return stepLength, True
+            if cut < self.options["backtrackingMaxCuts"]:
+                stepLength = nextStepLength
+
+        if not trials:
+            raise CutbackRequest("The model could be evaluated at no step length of the backtracking", 0.25)
+
+        best = min(trials, key=lambda t: (t[0], t[1]))[1]
+        return best, best == stepLength and R is not None
 
     @performancetiming.timeit("line search")
     def quadraticLineSearch(self, largestResidualAt: Callable[[float], float]) -> float:
