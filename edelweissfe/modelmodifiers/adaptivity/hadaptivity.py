@@ -746,8 +746,12 @@ class ModelModifier(ModelModifierBase):
             change = ModelChange(kind=ModelChangeType.REFINEMENT)
             childNumbers = model.topology.reserveElementNumbers(len(levelEids))
             with timeit("elements & state transfer"):
-                for eid, elNumber in zip(levelEids, childNumbers):
-                    self._createChildElement(model, eid, elNumber, newNodes, oldValues, newValues, change)
+                children = {
+                    eid: self._makeChildElement(model, eid, elNumber) for eid, elNumber in zip(levelEids, childNumbers)
+                }
+                self._transferStateToChildren(levelEids, children)
+                for eid in levelEids:
+                    self._insertChildElement(model, eid, children[eid], newNodes, oldValues, newValues, change)
             self._recordFaceMap(levelEids, change)
 
             levelChanges.append(change)
@@ -755,29 +759,44 @@ class ModelModifier(ModelModifierBase):
             pending -= set(levelEids)
         return levelChanges, newChildEids
 
-    def _createChildElement(
-        self,
-        model: FEModel,
-        eid: int,
-        elNumber: int,
-        newNodes: dict,
-        oldValues: dict,
-        newValues: dict,
-        change: ModelChange,
-    ):
-        """Create the model element of one octree child cell, inheriting section, properties and
-        state from its parent, and interpolate the nodal values at its new nodes."""
+    def _makeChildElement(self, model: FEModel, eid: int, elNumber: int):
+        """The element of one octree child cell, with its parent's section and properties; not yet in the model."""
 
-        mesh = self._mesh
-        e = mesh.elements[eid]
-        parentEid = e["parent"]
-        parentEl = self._eidToEl[parentEid]
+        e = self._mesh.elements[eid]
+        parentEl = self._eidToEl[e["parent"]]
         child = self._makeElement(self._elementType or parentEl.elType, elNumber)
         child.setNodes([model.nodes[label] for label in e["conn"]])
         self._sectionOf[parentEl].assignSectionToElement(child, model)
         for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
             child.assignProperty(elementProperty.propertyName, elementProperty.values)
-        self._stateTransfer.transferState(parentEl, [child], self._topology)
+        return child
+
+    def _transferStateToChildren(self, levelEids: list, children: dict):
+        """Hand each parent's quadrature-point state down to its children of this level, all of a parent's at once."""
+
+        childrenOf = {}
+        for eid in levelEids:
+            childrenOf.setdefault(self._mesh.elements[eid]["parent"], []).append(children[eid])
+        for parentEid, itsChildren in childrenOf.items():
+            self._stateTransfer.transferState(self._eidToEl[parentEid], itsChildren, self._topology)
+
+    def _insertChildElement(
+        self,
+        model: FEModel,
+        eid: int,
+        child,
+        newNodes: dict,
+        oldValues: dict,
+        newValues: dict,
+        change: ModelChange,
+    ):
+        """Put the element of one octree child cell (see :meth:`_makeChildElement`) into the model, and interpolate
+        the nodal values at its new nodes."""
+
+        mesh = self._mesh
+        e = mesh.elements[eid]
+        parentEid = e["parent"]
+        parentEl = self._eidToEl[parentEid]
 
         # warm start: interpolate each NEW node's field values from the parent via the HEX20
         # isoparametric map, so the increment restarts from a consistent state, not zero

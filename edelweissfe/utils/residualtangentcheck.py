@@ -39,6 +39,8 @@ way as the tests of EdelweissFE check its constraints.
 
 import numpy as np
 
+from edelweissfe.numerics.systemmatrixcontributor import countEntriesOfBlock
+
 
 def localVector(constraint, nodalValue, scalarValues=()) -> np.ndarray:
     """A constraint's local degree-of-freedom vector, in the constraint's own layout.
@@ -178,7 +180,15 @@ def finiteDifferenceTangent(constraint, U: np.ndarray, dU: np.ndarray, timeStep=
         The dense ``nDof x nDof`` matrix ``dP/dU``.
     """
 
+    # Only P is differentiated: the tangent the constraint computes along goes to a scratch block, which is not read.
+    # It is zeroed before every call, as an assembly hands a block over.
+    scratch = np.zeros(countEntriesOfBlock(constraint))
+    discardedTangent = constraint.shapeBlock(scratch)
+
     def residualContribution(perturbation):
-        return residualContributionAndTangent(constraint, U + perturbation, dU + perturbation, timeStep)[0]
+        P = np.zeros(constraint.nDof)
+        scratch[:] = 0.0
+        constraint.computeKernels(U + perturbation, dU + perturbation, P, discardedTangent, timeStep)
+        return P
 
     return centralDifferences(residualContribution, np.zeros(constraint.nDof), h)

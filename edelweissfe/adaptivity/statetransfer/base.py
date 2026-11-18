@@ -62,13 +62,19 @@ def perQuadraturePointBlockSize(element) -> int:
     return n // nqp
 
 
-def quadraturePointReferenceCoordinates(element, referenceNodeCoords, topology) -> np.ndarray:
-    """Reference-cube coordinates (in the frame of ``referenceNodeCoords``) of ``element``'s
-    quadrature points. Passing the parent's node coordinates maps both the parent's and the
-    children's quadrature points into the same (parent) reference frame, which is what makes
+def quadraturePointReferenceCoordinates(elements, referenceNodeCoords, topology) -> list:
+    """Reference-cube coordinates (in the frame of ``referenceNodeCoords``) of the quadrature points of
+    each of ``elements``, mapped together. Passing the parent's node coordinates maps both the parent's
+    and the children's quadrature points into the same (parent) reference frame, which is what makes
     nearest-point matching and projection distortion-independent and octant-correct."""
-    phys = np.asarray(element.getCoordinatesAtQuadraturePoints()).reshape(element.getNumberOfQuadraturePoints(), -1)
-    return np.array([topology.inverse_map(p, referenceNodeCoords) for p in phys])
+    nQuadraturePoints = [element.getNumberOfQuadraturePoints() for element in elements]
+    phys = np.concatenate(
+        [
+            np.asarray(element.getCoordinatesAtQuadraturePoints()).reshape(n, -1)
+            for element, n in zip(elements, nQuadraturePoints)
+        ]
+    )
+    return np.split(topology.inverse_map(phys, referenceNodeCoords), np.cumsum(nQuadraturePoints)[:-1])
 
 
 class StateTransferStrategy(ABC):
@@ -96,15 +102,15 @@ class StateTransferStrategy(ABC):
         parentBlock = perQuadraturePointBlockSize(parent)
         parentValues = parent.getStateVars().reshape(parent.getNumberOfQuadraturePoints(), parentBlock)
         parentNodeCoords = np.array([n.coordinates for n in parent.nodes], dtype=float)
-        parentRefCoords = quadraturePointReferenceCoordinates(parent, parentNodeCoords, topology)
+        (parentRefCoords,) = quadraturePointReferenceCoordinates([parent], parentNodeCoords, topology)
 
         allColumns = np.arange(parentBlock)
-        for child in children:
+        childrenRefCoords = quadraturePointReferenceCoordinates(children, parentNodeCoords, topology)
+        for child, childRefCoords in zip(children, childrenRefCoords):
             childBlock = perQuadraturePointBlockSize(child)
             if childBlock != parentBlock:
                 raise ValueError("state transfer: parent and child per-QP state sizes differ.")
             childInit = child.getStateVars().reshape(child.getNumberOfQuadraturePoints(), childBlock)
-            childRefCoords = quadraturePointReferenceCoordinates(child, parentNodeCoords, topology)
 
             result = childInit.copy()
             result[:, allColumns] = self._transferColumns(

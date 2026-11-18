@@ -121,7 +121,7 @@ def test_weightsReproduceTheSlavesOnTheCurvedCoarseTrace():
     u = np.array([[1e-3 * x[1] ** 2 - 2e-3 * x[2], 5e-4 * x[1] * x[2], -1e-3 * x[0] * x[2]] for x in A])
     labelIndex = {lab: i for i, lab in enumerate(mesh.elements[coarse]["conn"])}
     for slave, masters in records.items():
-        xi = TOPOLOGY.inverse_map(coords[slave], A)
+        (xi,) = TOPOLOGY.inverse_map([coords[slave]], A)
         np.testing.assert_allclose(sum(w * u[labelIndex[m]] for m, w in masters), hex20_shape(*xi) @ u, atol=1e-14)
 
 

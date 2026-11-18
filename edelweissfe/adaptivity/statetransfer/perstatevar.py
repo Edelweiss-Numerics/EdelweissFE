@@ -56,7 +56,7 @@ class PerStateVarStateTransfer(StateTransferStrategy):
         parentBlock = perQuadraturePointBlockSize(parent)
         parentValues = parent.getStateVars().reshape(parent.getNumberOfQuadraturePoints(), parentBlock)
         parentNodeCoords = np.array([n.coordinates for n in parent.nodes], dtype=float)
-        parentRefCoords = quadraturePointReferenceCoordinates(parent, parentNodeCoords, topology)
+        (parentRefCoords,) = quadraturePointReferenceCoordinates([parent], parentNodeCoords, topology)
 
         # resolve each overridden name to its column range within one QP block
         overridden = np.zeros(parentBlock, dtype=bool)
@@ -68,12 +68,12 @@ class PerStateVarStateTransfer(StateTransferStrategy):
             overridden[cols] = True
         defaultColumns = np.flatnonzero(~overridden)
 
-        for child in children:
+        childrenRefCoords = quadraturePointReferenceCoordinates(children, parentNodeCoords, topology)
+        for child, childRefCoords in zip(children, childrenRefCoords):
             childBlock = perQuadraturePointBlockSize(child)
             if childBlock != parentBlock:
                 raise ValueError("state transfer: parent and child per-QP state sizes differ.")
             childInit = child.getStateVars().reshape(child.getNumberOfQuadraturePoints(), childBlock)
-            childRefCoords = quadraturePointReferenceCoordinates(child, parentNodeCoords, topology)
 
             result = childInit.copy()
             if defaultColumns.size:

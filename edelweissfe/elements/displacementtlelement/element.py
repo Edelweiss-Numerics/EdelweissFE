@@ -140,6 +140,7 @@ class DisplacementTLElement(DisplacementElementBase):
         self.J = computeJacobian(
             self._xi, self._eta, self._zeta, self._nodesCoordinates, self._nInt, self._nNodes, self.nSpatialDimensions
         )
+        self.detJ = np.array([lin.det(self.J[i]) for i in range(self._nInt)])
         self.nablaN = computeNablaN(
             self._xi, self._eta, self._zeta, self.J, self._nInt, self._nNodes, self.nSpatialDimensions
         )
@@ -213,7 +214,7 @@ class DisplacementTLElement(DisplacementElementBase):
         if not self._isHyperelastic:
             B = computeBOperator(self._F, self.nablaN, self._nInt, self._nNodes, dim)
         for i in range(self._nInt):
-            detJ = lin.det(self.J[i])
+            detJ = self.detJ[i]
             # get stress (PK2) and strain
             stress = self._stateVarsTemp[i][0:6]
             self.material.assignCurrentStateVars(self._stateVarsTemp[i][12:])
@@ -291,7 +292,7 @@ class DisplacementTLElement(DisplacementElementBase):
         if not self._isHyperelastic:
             B = computeBOperator(self._F, self.nablaN, self._nInt, self._nNodes, dim)
         for i in range(self._nInt):
-            detJ = lin.det(self.J[i])
+            detJ = self.detJ[i]
             # get stress (PK2) and strain
             stress = self._stateVarsTemp[i][0:6]
             self.material.assignCurrentStateVars(self._stateVarsTemp[i][12:])
@@ -345,7 +346,7 @@ class DisplacementTLElement(DisplacementElementBase):
 
         energy = 0.0
         for i in range(self._nInt):
-            detJ = lin.det(self.J[i])
+            detJ = self.detJ[i]
             energy += self._stateVarsTemp[i][0:6] @ self._stateVarsTemp[i][6:12] * detJ * self._t * self._weight[i]
 
         return energy
