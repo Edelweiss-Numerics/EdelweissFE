@@ -69,9 +69,11 @@ Relevant module: ``edelweissfe.stepactions.dissipationcontrol``
 
 An arc length controller (see :ref:`arc-length-control`): the solver option ``arcLengthController`` of
 ``NISTPArcLength`` selects it by its ``name``. It needs elements and materials that provide the gradients of their
-dissipation (:attr:`~edelweissfe.elements.base.baseelement.BaseElement.providesEnergyGradients`): Marmot's
-displacement elements with a solid or plane strain section, and its materials with energy tangents (e.g. ``VONMISES``
-and the Rankine plasticity models).
+dissipation (:attr:`~edelweissfe.elements.base.baseelement.BaseElement.providesEnergyGradients`); which Marmot elements,
+sections and materials do is listed in Marmot's documentation of the
+`energy gradients <https://materialmodelingtoolbox.github.io/Marmot/pages/features/energygradients.html>`_. An element
+without the capability is rejected when the step action is defined; a section or a material that cannot provide the
+gradients, when the step it controls starts.
 
 .. automodule:: edelweissfe.stepactions.dissipationcontrol
     :members: __doc__
