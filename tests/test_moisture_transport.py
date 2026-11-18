@@ -31,7 +31,7 @@ tangent convention (see ``test_heat_transport.py``)."""
 import numpy as np
 import pytest
 
-from edelweissfe.config.phenomena import getFieldSize, phenomena
+from edelweissfe.config.phenomena import getFieldSize, phenomena, rateFluxFields
 from edelweissfe.points.node import Node
 
 # Bazant-Najjar D(h) (D1, alpha0, hc, n), BSB isotherm (type 1, C, k, Vm), self-desiccation (dwInf, tauS)
@@ -144,3 +144,9 @@ def test_zero_time_increment_lets_no_moisture_flow():
     PLoad = np.zeros(4)
     element.computeDistributedLoad("moisture film", PLoad, np.zeros(16), 1, np.array([7.0, 0.5]), h, 1.0, 0.0)
     np.testing.assert_array_equal(PLoad, 0.0)
+
+
+def test_point_moisture_source_is_a_rate():
+    """A node force on ``relative humidity`` is a moisture flow per unit of time: like on ``temperature``, it supplies
+    nothing in a zero time increment (see ``test_heat_transport.py``)."""
+    assert {"temperature", "relative humidity"} <= rateFluxFields

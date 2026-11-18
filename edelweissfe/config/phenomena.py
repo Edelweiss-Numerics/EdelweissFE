@@ -188,6 +188,7 @@ absoluteFluxResidualTolerance = {
 # :class:`~edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase`.
 rateFluxFields = {
     "temperature",
+    "relative humidity",
 }
 
 # domain                 dimensions
