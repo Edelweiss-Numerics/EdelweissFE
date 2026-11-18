@@ -1,0 +1,50 @@
+** A 2D cantilever of Euler-Bernoulli beam elements (Marmot B2D2) - the entry example of the beam section.
+** Units: N, mm, MPa. Length L = 1000, rectangle b x h = 100 x 200 (I = b h^3 / 12 = 6.667e7 mm^4), steel
+** E = 200000 MPa, tip force P = 1000 N downwards.
+** Expected (exact with any number of B2D2 elements, the nodal values of the cubic Hermite interpolation are exact):
+**   tip deflection     P L^3 / (3 E I) = 0.025 mm (downwards),
+**   tip rotation       P L^2 / (2 E I) = 3.75e-5 (clockwise),
+**   bending moment     P (L - x) at the quadrature points (5e5 N mm at the root).
+*material, name=linearelastic, id=steel, provider=marmot
+** E [MPa], nu
+200000, 0.3
+
+*node
+1, 0, 0
+2, 250, 0
+3, 500, 0
+4, 750, 0
+5, 1000, 0
+
+*element, type=B2D2
+1, 1, 2
+2, 2, 3
+3, 3, 4
+4, 4, 5
+
+*elSet, elSet=beam, generate=True
+1, 4, 1
+*nSet, nSet=root
+1
+*nSet, nSet=tip
+5
+
+** the section points (fibers) of the rectangle: nY = 6 Gauss points over the height (exact A and I); the local
+** y axis lies in the plane, normal to the beam
+*section, name=s, type=beam, profile=rectangle, b=100, h=200, nY=6, material=steel
+beam
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, elSet=beam, field=displacement, result=U, name=displacement
+>>perNode, name=tipRotation, nSet=tip, field=rotation, result=U
+>>perElement, name=moment, elSet=beam, result=bending moment, quadraturePoint=0
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
+** clamped root: both node fields, the displacement and the rotation
+>>dirichlet, name=clamp, nSet=root, field=displacement, 1=0, 2=0
+>>dirichlet, name=clampR, nSet=root, field=rotation, 1=0
+>>nodeforces, name=P, nSet=tip, field=displacement, 2=-1000

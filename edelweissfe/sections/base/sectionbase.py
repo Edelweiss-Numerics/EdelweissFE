@@ -69,6 +69,11 @@ class WriteMaterialPropertiesToFileSchema:
 
 
 class Section(OptionSchemaProvider, ABC):
+    #: Whether the elements of the section follow a refinement (``hAdaptivity``) of other elements whose nodes they
+    #: share. False for sections of elements coupled to the nodes of host elements (e.g., embedded bond elements):
+    #: hAdaptivity then rejects refining those hosts.
+    supportsHostRefinement = True
+
     def __init__(
         self,
         name,

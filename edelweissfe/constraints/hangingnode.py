@@ -143,13 +143,5 @@ class Constraint(MultiPointConstraintBase):
             # equal-order elements)
             fields = [f for f in slaveNode.fields if all(f in mNode.fields for mNode, _ in masters)]
             for field in fields:
-                slaveDofs = fieldVariableIndices[slaveNode.fields[field]]
-                masterDofs = [(fieldVariableIndices[mNode.fields[field]], w) for mNode, w in masters]
-                for component in range(len(slaveDofs)):
-                    records.append(
-                        (
-                            slaveDofs[component],
-                            [(mDofs[component], w) for mDofs, w in masterDofs if w != 0.0],
-                        )
-                    )
+                records += self.nodalDofRecords(fieldVariableIndices, field, slaveNode, masters)
         return records
