@@ -1,0 +1,35 @@
+** Coupled heat and moisture transport in a hollow cylinder (DCAX4TH, THERMOHYGRO; units m, day, C, kg),
+** 0.1 <= r <= 0.3: a heat flux and a moisture flux into the bore, a heat film and a moisture film outside, a body heat
+** source. Illustrative parameters (heat in J/day).
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DCAX4TH
+nX=8
+nY=1
+x0=0.1
+l=0.2
+h=0.025
+
+*material, name=ThermoHygro, id=concrete
+2400.0, 900.0, 129600.0, 129600.0, 129600.0, 0.0, 0.0, 0.0, 0.002, 0.0, 20.0
+0.003, 0.05, 0.8, 6.0, 1.0, 18.0, 0.73, 20.0, 0.0, 1.0
+-273.15, 4000.0, 0.0, 0.003, 1.0, 4186.0, 0.3, 1.225e6, 0.0, 0.0, 1.0
+
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=cylinder, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=T, elSet=all, field=temperature, result=U
+>>perNode, name=rh, elSet=all, field=relative humidity, result=U
+
+*step, solver=theSolver
+startInc=0.1, maxInc=0.1, minInc=1e-4, maxNumInc=40, maxIter=12, stepLength=2.0
+>>setfield, name=T0, fieldOutput=T, type=uniform, value=20.0
+>>setfield, name=h0, fieldOutput=rh, type=uniform, value=0.8
+>>distributedload, name=hot, surface=gen_left, type=heat flux, magnitude='2.0e7', f(t)='1'
+>>distributedload, name=wet, surface=gen_left, type=moisture flux, magnitude='0.05', f(t)='1'
+>>distributedload, name=cool, surface=gen_right, type=heat film, magnitude='864000.0, 20.0', f(t)='1'
+>>distributedload, name=dry, surface=gen_right, type=moisture film, magnitude='1.0, 0.5', f(t)='1'
+>>bodyforce, name=src, elSet=all, forceVector='1.0e6, 0.0', f(t)='1'

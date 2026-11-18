@@ -62,6 +62,29 @@ material (e.g. kg/(m² s), or m/s in the classical form with a unit moisture cap
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/MoistureDryingDC2D8H/test.inp``
 
+Coupled heat and moisture transport elements
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The same eight element shapes with the suffix ``TH`` (``DC2D3TH``, ``DC2D4TH``, ``DC2D8TH``, ``DCAX4TH``, ``DCAX8TH``,
+``DC3D4TH``, ``DC3D8TH``, ``DC3D20TH``) carry two fields per node, ``temperature`` and ``relative humidity`` (in this
+order), and take the two-field transport material ``ThermoHygro`` (Bažant–Thonguthai-type coupling: Arrhenius
+diffusivity, hygrothermic coefficient, vapour pressure driven moisture flux, heat capacity of the water, moisture
+dependent conductivity, latent heat carried by the vapour, heat of hydration and self-desiccation over the equivalent
+age). With 21 properties (no coupling) it reproduces ``HeatConduction`` and ``MoistureDiffusion``. All heat and
+moisture loads act on their field; in addition:
+
+- ``distributedload`` of ``type=latent heat film`` (``magnitude='c, h_inf'``): the heat taken away by the evaporating
+  water, :math:`q_n = c\,(h - h_\infty)` on the temperature, with :math:`c = L_v\beta` (latent heat times the
+  coefficient of the moisture film).
+- ``bodyforce`` with ``forceVector='heat source, moisture source'``.
+
+Both fields keep their tolerances. A sealed body without loads (e.g. adiabatic early-age concrete) needs units-aware
+absolute flux floors for both fields (see the moisture elements).
+
+.. literalinclude:: ../../../testfiles/marmot/ThermoHygroHeatedDryingDC2D8TH/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/ThermoHygroHeatedDryingDC2D8TH/test.inp``
+
 Provider ``marmotsingleqpelement``
 ----------------------------------
 

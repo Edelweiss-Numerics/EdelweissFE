@@ -54,15 +54,18 @@ mapLoadTypes={
         "heat radiation" : DistributedLoadTypes.HeatRadiation,
         "moisture flux" : DistributedLoadTypes.MoistureFlux,
         "moisture film" : DistributedLoadTypes.MoistureFilm,
+        "latent heat film" : DistributedLoadTypes.LatentHeatFilm,
      }
 
-# the number of load values of the transport loads: [q], [h, T_inf], [c, T_inf, T_0]; [q], [beta, h_inf]
+# the number of load values of the transport loads: [q], [h, T_inf], [c, T_inf, T_0]; [q], [beta, h_inf];
+# [c, h_inf]
 requiredLoadSizes={
         "heat flux" : 1,
         "heat film" : 2,
         "heat radiation" : 3,
         "moisture flux" : 1,
         "moisture film" : 2,
+        "latent heat film" : 2,
      }
 
 mapStateTypes={
