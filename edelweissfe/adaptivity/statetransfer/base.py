@@ -71,6 +71,28 @@ def quadraturePointReferenceCoordinates(element, referenceNodeCoords, topology) 
     return np.array([topology.inverse_map(p, referenceNodeCoords) for p in phys])
 
 
+#: Element-level state variables stored as quadrature-point weighted totals (density x J0xW), not densities
+EXTENSIVE_STATE_VARS = ("elastic strain energy", "total strain energy", "dissipation")
+
+
+def scaleExtensiveStateVars(element, factor: float):
+    """Scale the weighted (extensive) state variables of ``element`` by ``factor``, e.g. by one over the number of
+    children after a transfer, so that a refinement conserves the summed totals (not the per-point densities)."""
+    nqp = element.getNumberOfQuadraturePoints()
+    values = element.getStateVars().reshape(nqp, -1).copy()
+    scaled = False
+    for name in EXTENSIVE_STATE_VARS:
+        try:
+            offset, size = element.getStateVarSlice(name)
+        except (ValueError, NotImplementedError):
+            # the element does not carry this state variable, or exposes no named state variables
+            continue
+        values[:, offset : offset + size] *= factor
+        scaled = True
+    if scaled:
+        element.setStateVars(values.reshape(-1))
+
+
 class StateTransferStrategy(ABC):
     """Interchangeable strategy for transferring quadrature-point material state from a refined
     parent element to its children.
