@@ -779,7 +779,7 @@ class ModelModifier(ModelModifierBase):
         for elementProperty in self._elementPropertiesOf.get(parentEl, ()):
             child.assignProperty(elementProperty.propertyName, elementProperty.values)
         self._stateTransfer.transferState(parentEl, [child], self._topology)
-        # weighted energies (density x J0xW) are the parent's totals: keep the child's share of the parent volume
+        # weighted energies (density x J0xW) are the parent's totals: 1/(number of children) conserves their sum
         scaleExtensiveStateVars(child, 1.0 / len(mesh.elements[parentEid]["children"]))
 
         # warm start: interpolate each NEW node's field values from the parent via the HEX20

@@ -76,8 +76,8 @@ EXTENSIVE_STATE_VARS = ("elastic strain energy", "total strain energy", "dissipa
 
 
 def scaleExtensiveStateVars(element, factor: float):
-    """Scale the weighted (extensive) state variables of ``element`` by ``factor``, e.g. by the child's share of
-    its parent's volume after a transfer, so that a refinement conserves the summed energies."""
+    """Scale the weighted (extensive) state variables of ``element`` by ``factor``, e.g. by one over the number of
+    children after a transfer, so that a refinement conserves the summed totals (not the per-point densities)."""
     nqp = element.getNumberOfQuadraturePoints()
     values = element.getStateVars().reshape(nqp, -1).copy()
     scaled = False
