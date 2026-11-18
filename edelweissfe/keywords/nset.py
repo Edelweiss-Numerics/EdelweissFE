@@ -26,12 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""``*nSet``: defines a node set.
-
-Note: :attr:`NSetKeyword.keywordDescription` reads "definition of an element set" rather than
-"node set" -- a long-standing copy-paste artifact from ``*elSet`` that is kept as-is for backward
-compatibility, not a typo introduced here.
-"""
+"""``*nSet``: defines a node set."""
 
 from __future__ import annotations
 
@@ -55,15 +50,10 @@ class NSetSchema:
 
 
 class NSetKeyword(KeywordBase):
-    """``*nSet``: definition of an element set.
-
-    See the module docstring: this description is kept as-is from a long-standing copy-paste
-    artifact, not a typo introduced here.
-    """
+    """``*nSet``: definition of a node set."""
 
     #: Schema class describing this keyword's options and dataline payload.
     schema = NSetSchema
 
     keywordName = "nSet"
-    # Kept as-is (copy-paste artifact from *elSet); see the module docstring.
-    keywordDescription = "definition of an element set"
+    keywordDescription = "definition of a node set"

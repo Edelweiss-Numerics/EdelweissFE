@@ -61,7 +61,7 @@ An *environment* is a separate folder that contains everything EdelweissFE needs
 tested with, without touching anything else on your computer. Create it with:
 
 ```console
-conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.11.09
+conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.11.16
 ```
 
 Always use this separate environment for EdelweissFE. If it ever breaks, delete it
@@ -110,7 +110,8 @@ EdelweissFE (on Windows, see the [installation documentation](doc/source/install
 ```console
 conda activate edelweissfe
 git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
-cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
+      -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
 cmake --build ../Marmot/build -j && cmake --install ../Marmot/build
 pip install -e .
 PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/

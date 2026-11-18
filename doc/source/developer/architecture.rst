@@ -160,7 +160,8 @@ holds by what it is derived from:
     copy (:meth:`~edelweissfe.numerics.dofvector.DofVector.onLocations`); the linear solver learns of a new pattern
     (:meth:`~edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern`) and drops what it built for the old one, a
     hierarchy or a factorization; the system matrix assembly is built with the pattern the locations determine, and,
-    in ``NID``, the mass is copied onto it. ``NED`` has no system matrix, and wraps its vectors only.
+    in ``NID``, the mass is copied onto it, unless entities integrate their own inertia (``inertia=nodes``): then the
+    mass and damping are assembled anew. ``NED`` has no system matrix, and wraps its vectors only.
 
 Nothing sized by the numbering is touched by new locations: the lumped mass of ``NED`` is a function of the elements
 and of the numbering, and a contact search does not reassemble it. A contact search is much narrower than it looks: it
@@ -342,7 +343,8 @@ What each solver uses, and when it updates its discrete system:
     * - ``NID``, ``NIDParallel``
       - tangent plus the mass (on the tangent's pattern) and the damping
       - once per Newton iteration
-      - as ``NIST``; new locations keep the mass and damping, which the first increment on a new numbering assembles
+      - as ``NIST``; new locations keep the mass and damping, which the first increment on a new numbering assembles;
+        with entities that integrate their own inertia (``inertia=nodes``), they are assembled anew for every increment
     * - ``NEST``, ``NESTParallel``
       - tangent, ``vij``
       - once per Runge--Kutta stage

@@ -29,15 +29,15 @@
 
 # @author: Matthias Neuner
 """
-Outputmanagers are used for monitoring and exporting results to variuous formats.
-They are defined globally:
+Output managers monitor and export results to various formats. They are defined globally and
+take their results from field outputs (``*fieldOutput``):
 
 .. code-block:: edelweiss
 
-    *output, type=ensight, jobName=cps4job, name=myEnsightExport
-        create=perNode,    elSet=all, fieldOutput=Displacement
-        create=perElement, elSet=all, fieldOutput=Stress
-        create=perElement, elSet=all, fieldOutput=Strain
+    *output, type=ensight, name=myEnsightExport
+    >>perNode,    fieldOutput=displacement
+    >>perElement, fieldOutput=stress
+    >>perElement, fieldOutput=strain
 
 """
 

@@ -17,7 +17,7 @@ Relevant module: ``edelweissfe.stepactions.bodyforce``
 
 .. literalinclude:: ../../../testfiles/marmot/BodyForce3D/test.inp
    :language: edelweiss
-   :caption: Example: ``testfiles/BodyForce3D/test.inp``
+   :caption: Example: ``testfiles/marmot/BodyForce3D/test.inp``
 
 ``dirichlet`` - Standard dirichlet BC
 -------------------------------------
@@ -166,6 +166,21 @@ Relevant module: ``edelweissfe.stepactions.changematerialproperty``
 .. literalinclude:: ../../../testfiles/marmot/ChangeMaterialProperties/test.inp
    :language: edelweiss
    :caption: Example: ``testfiles/marmot/ChangeMaterialProperties/test.inp``
+
+``options`` - Change the options of a solver or an output manager
+------------------------------------------------------------------
+
+Changes options of a ``*solver`` or an ``*output`` from this step on. ``name`` is the name of that solver or output
+manager; all other options are options of it, validated against its own options (see :doc:`solvers` and
+:doc:`/output/outputmanagers`). Only the options given are changed.
+
+.. code-block:: edelweiss
+
+    *solver, name=theSolver, solver=NIST
+
+    *step, solver=theSolver
+    maxInc=1e-1, maxNumInc=100
+    >>options, name=theSolver, extrapolation=linear
 
 Implementing your own step actions
 ----------------------------------

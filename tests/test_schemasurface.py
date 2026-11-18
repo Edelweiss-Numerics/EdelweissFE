@@ -362,7 +362,7 @@ def test_structural_keyword_printKeywords_block_matches_golden_byte_for_byte(key
     """``renderPrintKeywordsBlock`` over each top-level keyword's real, registered
     class (name + description + schema all from the class) reproduces the corresponding golden
     ``printKeywords()`` block exactly -- proving the class encodes the legacy grammar (spelling in
-    exact display case, descriptions incl. the *nSet* copy-paste bug, types, required/optional-ness,
+    exact display case, descriptions, types, required/optional-ness,
     textwrap-80 wrapping) with zero drift, without touching the running parser at all.
     """
     spec = _structuralKeywordSpec(keywordName)

@@ -95,6 +95,15 @@ Outputmanagers
 .. pprint:: outputmanager:computetimemonitor
     :caption: Options:
 
+``timemonitor`` - Write the model time of every increment to a file
+--------------------------------------------------------------------
+
+.. automodule:: edelweissfe.outputmanagers.timemonitor
+   :members: __doc__
+
+.. pprint:: outputmanager:timemonitor
+    :caption: Options:
+
 ``restart`` - Write restart checkpoints during the analysis
 -------------------------------------------------------------
 

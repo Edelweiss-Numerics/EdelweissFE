@@ -100,12 +100,10 @@ from typing import Any
 from edelweissfe.utils.misc import findSimilarString
 from edelweissfe.utils.schema import schemaOf
 
-#: Entry-point group name third-party packages register EdelweissFE-discoverable implementations
-#: under, e.g. in a plugin's ``pyproject.toml``::
-#:
-#:     [project.entry-points."edelweissfe.plugins"]
-#:     "outputmanager.myoutputmanager" = "mypackage.mymodule:MyOutputManager"
 ENTRY_POINT_GROUP = "edelweissfe.plugins"
+"""Entry-point group name third-party packages register EdelweissFE-discoverable implementations
+under: in a plugin's ``pyproject.toml``, the table ``[project.entry-points."edelweissfe.plugins"]``
+with entries such as ``"outputmanager.myoutputmanager" = "mypackage.mymodule:MyOutputManager"``."""
 
 
 class RegistryLookupError(LookupError):
@@ -174,7 +172,7 @@ _addBuiltins(
 _addBuiltins(
     "section",
     "Section",
-    ["plane", "planerandomthickness", "solid"],
+    ["plane", "planerandomthickness", "solid", "truss"],
     "edelweissfe.sections",
 )
 
