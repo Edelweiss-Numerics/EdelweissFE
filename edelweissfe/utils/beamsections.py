@@ -49,10 +49,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from edelweissfe.utils.trianglequadrature import (
-    TRIANGLE_RULES_BY_DEGREE,
-    triangleRuleByDegree,
-)
+from edelweissfe.utils.trianglequadrature import triangleRuleByDegree
 
 #: The 1D integration rules.
 RULES = ("gauss", "lobatto", "simpson")
@@ -205,10 +202,6 @@ def iProfile(
     return flange.shifted(0.5 * (h - tf), 0.0) + flange.shifted(-0.5 * (h - tf), 0.0) + web
 
 
-#: The available orders (polynomial degrees) of the triangle rules.
-TRIANGLE_ORDERS = tuple(sorted(TRIANGLE_RULES_BY_DEGREE))
-
-
 def _trapezoids(loops: list) -> list:
     """Exact decomposition of a polygon with holes (even-odd rule) into trapezoids with sides parallel to the z axis:
     (y0, y1, zLeft0, zRight0, zLeft1, zRight1)."""
@@ -253,8 +246,6 @@ def polygon(loops: list, meshSize: float = None, order: int = 2) -> SectionPoint
     order
         The polynomial degree of the triangle rule.
     """
-    if order not in TRIANGLE_RULES_BY_DEGREE:
-        raise ValueError(f"Triangle rules of the orders {TRIANGLE_ORDERS} are available.")
     allVertices = np.concatenate([np.asarray(loop, dtype=float) for loop in loops])
     if meshSize is None:
         meshSize = np.ptp(allVertices, axis=0).max() / 10
