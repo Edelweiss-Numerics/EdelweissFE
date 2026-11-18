@@ -316,6 +316,18 @@ class ModelModifier(ModelModifierBase):
                 "hAdaptivity found no refineable (20-node) elements in the model; specify "
                 "'refineElSet' (or 'elSet') to select the solid element set explicitly."
             )
+        refineNodes = {node for element in refineElements for node in element.nodes}
+        for sectionName, section in model.sections.items():
+            if section.supportsHostRefinement:
+                continue
+            for elementSet in section.elSets:
+                for element in elementSet:
+                    if refineNodes.intersection(element.nodes):
+                        raise ValueError(
+                            f"hAdaptivity modifier {name!r}: element {element.elNumber} of section {sectionName!r} "
+                            "is coupled to the nodes of refineable elements (e.g., an embedded bond element and its "
+                            "host); refining such hosts is not supported."
+                        )
 
         # Which elements this instance owns; TopologyPipeline.checkModelModifierDomains rejects overlaps
         # with other modifiers, since each maintains its own mirror and edits the model directly.

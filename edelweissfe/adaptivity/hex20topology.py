@@ -50,6 +50,7 @@ from edelweissfe.adaptivity.hex20shapefunctions import (
     subdivision_children_param,
 )
 from edelweissfe.adaptivity.topologybase import TopologyBase
+from edelweissfe.utils.isoparametricshapes import newtonInverseMapping
 
 
 class Hex20Topology(TopologyBase):
@@ -85,24 +86,15 @@ class Hex20Topology(TopologyBase):
     def shape_functions_and_grad(self, *params) -> tuple:
         return hex20_shape_grad(*params)
 
-    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
-        coords = np.asarray(elementNodeCoords, dtype=float)
-        xi = np.zeros(3)
-        for _ in range(itmax):
-            N, dN = self.shape_functions_and_grad(*xi)
-            x = N @ coords
-            residual = x - point
-            if float(np.linalg.norm(residual)) < tol:
-                return xi
-            jac = coords.T @ dN  # jac[i, k] = dx_i / dxi_k
-            try:
-                dxi = np.linalg.solve(jac, residual)
-            except np.linalg.LinAlgError:
-                break
-            xi -= dxi
-            if float(np.linalg.norm(dxi)) < 1e-10:
-                break
-        return np.clip(xi, -1.2, 1.2)
+    def inverse_map(self, point, elementNodeCoords, itmax=30) -> np.ndarray:
+        """The parametric coordinates of a point, by the one Newton inverse mapping of EdelweissFE
+        (:func:`edelweissfe.utils.isoparametricshapes.newtonInverseMapping`, on this module's node ordering); a point
+        it does not converge for is clipped to slightly outside of the parent domain (for the state transfer).
+        The convergence criterion is the dimensionless one of the shared mapping; ``itmax`` bounds the iterations."""
+        xi, converged = newtonInverseMapping(
+            lambda xi_: self.shape_functions_and_grad(*xi_), elementNodeCoords, point, np.zeros(3), itmax
+        )
+        return xi if converged else np.clip(xi, -1.2, 1.2)
 
     def subdivide(self, parent_coords: np.ndarray, n: int) -> list:
         parent_coords = np.asarray(parent_coords, dtype=float)

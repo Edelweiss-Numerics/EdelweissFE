@@ -4,6 +4,32 @@ Constraints
 .. automodule:: edelweissfe.config.constraints
     :members: __doc__
 
+``embeddedregion`` - Embedded elements (perfect bond of reinforcement)
+----------------------------------------------------------------------
+
+Ties every node of the embedded elements (e.g., truss or beam elements of reinforcement bars or structural members,
+meshed independently of the host) to the host continuum element it lies in,
+:math:`u_s = \sum_a N_a(\xi_s)\, u_{a}`, by master-slave DOF elimination, like Abaqus' ``*EMBEDDED ELEMENT``.
+
+The nodal ``P`` of an embedded (slave) node is reported on the slave node itself, before condensation: a reaction
+summed over a node set must include the embedded nodes on that boundary.
+
+Module ``edelweissfe.constraints.embeddedregion``
+
+.. automodule:: edelweissfe.constraints.embeddedregion
+    :members: __doc__
+
+.. pprint:: constraint:embeddedregion
+    :caption: Options:
+
+.. literalinclude:: ../../../testfiles/marmot/EmbeddedRegionRebar2D/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/EmbeddedRegionRebar2D/test.inp``
+
+.. literalinclude:: ../../../testfiles/marmot/EmbeddedBeamCantilever2D/test.inp
+    :language: edelweiss
+    :caption: Example (embedded beam, rotations tied): ``testfiles/marmot/EmbeddedBeamCantilever2D/test.inp``
+
 ``equalvaluelagrangian`` - Constrain nodal values to equal values
 -----------------------------------------------------------------
 
