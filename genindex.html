@@ -309,10 +309,10 @@
         <li><a href="analysis/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepEnd">(edelweissfe.stepactions.base.stepactionbase.StepActionBase method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="analysis/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepStart">applyAtStepStart() (edelweissfe.stepactions.base.stepactionbase.StepActionBase method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyCorrection">applyCorrection() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 
       <ul>
@@ -410,7 +410,11 @@
       <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.assembler">assembler (edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly attribute)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleResidualAndTangent">assembleResidualAndTangent() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
+
+      <ul>
+        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.assembleResidualAndTangent">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
+      </ul></li>
       <li><a href="developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleStiffnessCSR">assembleStiffnessCSR() (edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase method)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleSystemMatrix">assembleSystemMatrix() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
@@ -431,6 +435,12 @@
         <li><a href="model/materials.html#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.assignCurrentStateVars">(edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial method)</a>
 </li>
         <li><a href="model/materials.html#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.assignCurrentStateVars">(edelweissfe.materials.vonmises.vonmises.VonMisesMaterial method)</a>
+</li>
+      </ul></li>
+      <li><a href="model/elements.html#edelweissfe.elements.base.baseelement.BaseElement.assignEnergyGradientOutput">assignEnergyGradientOutput() (edelweissfe.elements.base.baseelement.BaseElement method)</a>
+
+      <ul>
+        <li><a href="model/elements.html#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.assignEnergyGradientOutput">(edelweissfe.elements.marmotelement.element.MarmotElementWrapper method)</a>
 </li>
       </ul></li>
       <li><a href="model/elements.html#edelweissfe.elements.base.baseelement.BaseElement.assignProperty">assignProperty() (edelweissfe.elements.base.baseelement.BaseElement method)</a>
@@ -483,6 +493,8 @@
         <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.beginAssembly">(edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly method)</a>
 </li>
       </ul></li>
+      <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.beginControl">beginControl() (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase method)</a>
+</li>
       <li><a href="developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep">beginStep() (edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase method)</a>
 
       <ul>
@@ -503,10 +515,10 @@
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.beginStep">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
       </ul></li>
-      <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.types.BlockAMG">BlockAMG (class in edelweissfe.linsolve.types)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.types.BlockAMG">BlockAMG (class in edelweissfe.linsolve.types)</a>
+</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.presets.blockAMG">blockAMG() (in module edelweissfe.linsolve.composition.presets)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.presets.blockAMGFieldPreconditioner">blockAMGFieldPreconditioner() (in module edelweissfe.linsolve.composition.presets)</a>
@@ -606,7 +618,11 @@
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.amg.checkBackend">checkBackend() (in module edelweissfe.linsolve.composition.amg)</a>
 </li>
       <li><a href="developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence">checkConvergence() (edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase method)</a>
+
+      <ul>
+        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.checkConvergence">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
+      </ul></li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.checkDirichletConflicts">checkDirichletConflicts() (edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation method)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkDivergingSolution">checkDivergingSolution() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
@@ -1861,8 +1877,6 @@
         <li><a href="developer/inputsystem.html#module-edelweissfe.outputmanagers.base.outputmanagerbase">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     edelweissfe.outputmanagers.computetimemonitor
 
@@ -1870,6 +1884,8 @@
         <li><a href="output/outputmanagers.html#module-edelweissfe.outputmanagers.computetimemonitor">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     edelweissfe.outputmanagers.conditionalstop
 
@@ -2123,6 +2139,13 @@
 </li>
       </ul></li>
       <li>
+    edelweissfe.stepactions.dissipationcontrol
+
+      <ul>
+        <li><a href="analysis/stepactions.html#module-edelweissfe.stepactions.dissipationcontrol">module</a>
+</li>
+      </ul></li>
+      <li>
     edelweissfe.stepactions.distributedload
 
       <ul>
@@ -2353,6 +2376,8 @@
       </ul></li>
       <li><a href="analysis/modelmodifiers.html#edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.encodePlan">encodePlan() (edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase method)</a>
 </li>
+      <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.endControl">endControl() (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase method)</a>
+</li>
       <li><a href="developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.endStep">endStep() (edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase method)</a>
 
       <ul>
@@ -2361,6 +2386,8 @@
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.endStep">(edelweissfe.solvers.nonlinearexplicitstatic.NEST method)</a>
 </li>
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.endStep">(edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
+</li>
+        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.endStep">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
       </ul></li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.energyOfTheModelsState">energyOfTheModelsState() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
@@ -2421,8 +2448,14 @@
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.extrapolates">extrapolates() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
-      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.extrapolationWeights">extrapolationWeights() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
+      <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.extrapolatesAfterCutback">extrapolatesAfterCutback (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase attribute)</a>
 </li>
+      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.extrapolationWeights">extrapolationWeights() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
+
+      <ul>
+        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.extrapolationWeights">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
+</li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -2604,7 +2637,11 @@
 </li>
       </ul></li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetPredictionAfterFailure">forgetPredictionAfterFailure() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
+
+      <ul>
+        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.forgetPredictionAfterFailure">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
+      </ul></li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.formNetForceOfTheModelsState">formNetForceOfTheModelsState() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.base.Description.formula">formula (edelweissfe.linsolve.composition.base.Description attribute)</a>
@@ -2704,6 +2741,8 @@
 </li>
       </ul></li>
       <li><a href="model/elements.html#edelweissfe.config.elementlibrary.getElementClass">getElementClass() (in module edelweissfe.config.elementlibrary)</a>
+</li>
+      <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.getExtrapolationFactor">getExtrapolationFactor() (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase method)</a>
 </li>
       <li><a href="output/plotter.html#edelweissfe.utils.plotter.Plotter.getFig">getFig() (edelweissfe.utils.plotter.Plotter method)</a>
 </li>
@@ -2959,14 +2998,14 @@
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.initializeIncrement">(edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeJob">initializeJob() (edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase method)</a>
 
       <ul>
         <li><a href="output/fieldoutput.html#edelweissfe.utils.fieldoutput._FieldOutputBase.initializeJob">(edelweissfe.utils.fieldoutput._FieldOutputBase method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/inputsystem.html#edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.initializeStep">initializeStep() (edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase method)</a>
 
       <ul>
@@ -2981,6 +3020,8 @@
 </li>
       <li><a href="developer/exceptions.html#edelweissfe.utils.exceptions.InputExecption">InputExecption</a>
 </li>
+      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.ArcLengthIncrement.internalForces">internalForces (edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.ArcLengthIncrement attribute)</a>
+</li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.internalInertialAndDampingForce">internalInertialAndDampingForce() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
 </li>
       <li><a href="developer/utils.html#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.isAtStepStart">isAtStepStart() (edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper method)</a>
@@ -2991,6 +3032,8 @@
         <li><a href="developer/utils.html#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.isAtStepStart">(edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper method)</a>
 </li>
       </ul></li>
+      <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.isConstraintSatisfied">isConstraintSatisfied() (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase method)</a>
+</li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.isDeferringFieldBookkeeping">isDeferringFieldBookkeeping (edelweissfe.models.topologypipeline.TopologyPipeline attribute)</a>
 </li>
       <li><a href="developer/models.html#edelweissfe.models.modelchange.ModelChange.isEmpty">isEmpty (edelweissfe.models.modelchange.ModelChange property)</a>
@@ -3549,6 +3592,8 @@
 </li>
         <li><a href="analysis/stepactions.html#module-edelweissfe.stepactions.dirichlet">edelweissfe.stepactions.dirichlet</a>
 </li>
+        <li><a href="analysis/stepactions.html#module-edelweissfe.stepactions.dissipationcontrol">edelweissfe.stepactions.dissipationcontrol</a>
+</li>
         <li><a href="analysis/stepactions.html#module-edelweissfe.stepactions.distributedload">edelweissfe.stepactions.distributedload</a>
 </li>
         <li><a href="analysis/stepactions.html#module-edelweissfe.stepactions.geostatic">edelweissfe.stepactions.geostatic</a>
@@ -3926,6 +3971,8 @@
 </li>
       <li><a href="syntax.html#edelweissfe.utils.inputfileparser.parseInputFile">parseInputFile() (in module edelweissfe.utils.inputfileparser)</a>
 </li>
+      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.passSystemStateToController">passSystemStateToController() (edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
+</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.types.PetscLU">PetscLU (class in edelweissfe.linsolve.types)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.placesOfInertia">placesOfInertia (edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic attribute)</a>
@@ -3944,10 +3991,10 @@
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner">Preconditioner (class in edelweissfe.linsolve.composition.base)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.amg.preconditionerMatrix">preconditionerMatrix() (in module edelweissfe.linsolve.composition.amg)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvives">predictionSurvives() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
       <li><a href="developer/journal.html#edelweissfe.journal.journal.Journal.preformatted">preformatted() (edelweissfe.journal.journal.Journal method)</a>
@@ -4012,6 +4059,12 @@
         <li><a href="developer/utils.html#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.proposeTimeStep">(edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper method)</a>
 </li>
       </ul></li>
+      <li><a href="model/elements.html#edelweissfe.elements.base.baseelement.BaseElement.providesEnergyGradients">providesEnergyGradients (edelweissfe.elements.base.baseelement.BaseElement property)</a>
+
+      <ul>
+        <li><a href="model/elements.html#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.providesEnergyGradients">(edelweissfe.elements.marmotelement.element.MarmotElementWrapper attribute)</a>
+</li>
+      </ul></li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.prune">prune() (edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix method)</a>
 </li>
   </ul></td>
@@ -4066,6 +4119,8 @@
         <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.SolveRecord.rebuildReason">(edelweissfe.linsolve.composition.krylov.SolveRecord attribute)</a>
 </li>
       </ul></li>
+      <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.receivesSystemState">receivesSystemState (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase attribute)</a>
+</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.base.Statistics.record">record() (edelweissfe.linsolve.composition.base.Statistics method)</a>
 </li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.recordChange">recordChange() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
@@ -4083,6 +4138,8 @@
 </li>
       </ul></li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.ArcLengthIncrement.referenceCorrection">referenceCorrection (edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.ArcLengthIncrement attribute)</a>
+</li>
+      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.ArcLengthIncrement.referenceIncrement">referenceIncrement (edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.ArcLengthIncrement attribute)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.ArcLengthIncrement.referenceLoad">referenceLoad (edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.ArcLengthIncrement attribute)</a>
 </li>
@@ -4136,14 +4193,14 @@
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.report">report() (edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.reportsSolveSummary">reportsSolveSummary (edelweissfe.linsolve.base.LinearSolver attribute)</a>
 
       <ul>
         <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver.reportsSolveSummary">(edelweissfe.linsolve.composition.solver.ComposedLinearSolver property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/dofnumbering.html#edelweissfe.numerics.parallelizationutilities.reportThreadAvailability">reportThreadAvailability() (in module edelweissfe.numerics.parallelizationutilities)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.reportTopologyChangeConservation">reportTopologyChangeConservation() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
@@ -4442,6 +4499,8 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.setSystemState">setSystemState() (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase method)</a>
+</li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState">setTrialState() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 
       <ul>

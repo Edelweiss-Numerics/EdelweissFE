@@ -169,6 +169,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.discretesystem</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteSystem</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofnumbering</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofNumbering</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.base.arclengthcontrollerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArcLengthControllerBase</span>
@@ -299,7 +300,7 @@
 <div class="viewcode-block" id="IndirectDisplacementControlBase.computeDDLambda">
 <a class="viewcode-back" href="../../../../analysis/solvers.html#edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase.computeDDLambda">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeDDLambda</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_0</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_f</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">numbering</span><span class="p">:</span> <span class="n">DofNumbering</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_0</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_f</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">DiscreteSystem</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The correction of the load parameter that makes the corrected increment change the controlled quantity by the</span>
 <span class="sd">        share of the increment, :math:`\\Delta p \\, \\Delta L`; see</span>
@@ -315,8 +316,8 @@
 <span class="sd">            The correction of the solution caused by the reference load alone.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The increment being solved, whose size :math:`\\Delta p` is ``timeStep.stepProgressIncrement``.</span>
-<span class="sd">        numbering</span>
-<span class="sd">            The numbering of the degrees of freedom of the current discrete system.</span>
+<span class="sd">        system</span>
+<span class="sd">            The current discrete system.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -324,7 +325,7 @@
 <span class="sd">            The correction of the load parameter.</span>
 <span class="sd">        """</span>
 
-        <span class="n">idcs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controlledDofIndices</span><span class="p">(</span><span class="n">numbering</span><span class="p">)</span>
+        <span class="n">idcs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controlledDofIndices</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">)</span>
 
         <span class="n">dL</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">changeOverStep</span>
 

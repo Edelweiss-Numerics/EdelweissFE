@@ -1029,6 +1029,13 @@ all
 </pre></div>
 </div>
 </div>
+<p>Whatever the strategy, the energies an element stores per quadrature point as totals, i.e. the density times the
+quadrature weight and the Jacobian, <code class="docutils literal notranslate"><span class="pre">elastic</span> <span class="pre">strain</span> <span class="pre">energy</span></code>, <code class="docutils literal notranslate"><span class="pre">total</span> <span class="pre">strain</span> <span class="pre">energy</span></code> and <code class="docutils literal notranslate"><span class="pre">dissipation</span></code> (Marmot’s
+displacement elements), are scaled by <span class="math notranslate nohighlight">\(1/n_c\)</span> after the transfer, with the number of children <span class="math notranslate nohighlight">\(n_c\)</span> of the
+refined element. With the <code class="docutils literal notranslate"><span class="pre">nearestQp</span></code> copy, this conserves the summed totals of the refined element instead of
+multiplying them by <span class="math notranslate nohighlight">\(n_c\)</span>; it does not conserve the densities at the single quadrature points, which a scaling
+by the ratio of the weighted Jacobians of child and parent point would. The mechanical response does not depend on
+these energies. Elements that do not carry these state variables are left as they are.</p>
 </section>
 <section id="predictor-after-a-refinement">
 <h2>Predictor after a refinement<a class="headerlink" href="#predictor-after-a-refinement" title="Link to this heading"></a></h2>

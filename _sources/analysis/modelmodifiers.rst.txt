@@ -237,6 +237,14 @@ everything except ``<var1>`` (projected) and ``<var2>`` (reset to its initial va
     :caption: Example (per-state-variable transfer device; the routed variable is arbitrary, chosen
               only to exercise the mechanism): ``testfiles/marmot/AMR_DynamicRefinementProjection/test.inp``
 
+Whatever the strategy, the energies an element stores per quadrature point as totals, i.e. the density times the
+quadrature weight and the Jacobian, ``elastic strain energy``, ``total strain energy`` and ``dissipation`` (Marmot's
+displacement elements), are scaled by :math:`1/n_c` after the transfer, with the number of children :math:`n_c` of the
+refined element. With the ``nearestQp`` copy, this conserves the summed totals of the refined element instead of
+multiplying them by :math:`n_c`; it does not conserve the densities at the single quadrature points, which a scaling
+by the ratio of the weighted Jacobians of child and parent point would. The mechanical response does not depend on
+these energies. Elements that do not carry these state variables are left as they are.
+
 Predictor after a refinement
 ----------------------------
 

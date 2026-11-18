@@ -250,7 +250,15 @@
     <span class="c1">#: The increment of the load parameter of the iterate, :math:`\\Delta\\lambda`.</span>
     <span class="n">loadParameterIncrement</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
     <span class="c1">#: The load parameter of the state being evaluated: of the iterate, or of a trial state of a line search.</span>
-    <span class="n">loadParameter</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span></div>
+    <span class="n">loadParameter</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="c1">#: The internal forces of the elements of the state evaluated last, and the residual contributions of its loads and</span>
+    <span class="c1">#: constraints: the solver's own vectors, from which :meth:`NISTPArcLength.passSystemStateToController` takes the</span>
+    <span class="c1">#: reactions at the prescribed degrees of freedom.</span>
+    <span class="n">internalForces</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">loadsAndConstraints</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1">#: The change of the prescribed degrees of freedom over the step (zero elsewhere), built once per increment for the</span>
+    <span class="c1">#: controller.</span>
+    <span class="n">referenceIncrement</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -271,7 +279,9 @@
 <span class="sd">    load parameter enters them through its hooks: the prediction (:meth:`extrapolateLastIncrement`), the loads of the</span>
 <span class="sd">    evaluated state (:meth:`assembleLoadsAtIncrementEnd`), the first iterate (:meth:`firstIterateNeedsCorrection`), the</span>
 <span class="sd">    linear solve for two right-hand sides (:meth:`solveForCorrection`), and the corrections of the pair of the solution</span>
-<span class="sd">    and the load parameter (:meth:`setTrialState`, :meth:`applyCorrection`).</span>
+<span class="sd">    and the load parameter (:meth:`setTrialState`, :meth:`applyCorrection`). A controller with a nonlinear equation</span>
+<span class="sd">    receives the state of every iterate (:meth:`passSystemStateToController`), has its equation checked with the</span>
+<span class="sd">    residual (:meth:`checkConvergence`), and scales the linear prediction (:meth:`extrapolationWeights`).</span>
 
 <span class="sd">    Every arc length step scales its own reference load -- the change of its loads and prescribed displacements over</span>
 <span class="sd">    the step -- from :math:`\\lambda = 0`, so it starts from the loads the steps before it ended with; at its end, every</span>
@@ -302,7 +312,7 @@
 
     <span class="n">identification</span> <span class="o">=</span> <span class="s2">"NISTPArcLength"</span>
 
-    <span class="n">supportsMPC</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">supportsMPC</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="c1">#: Option schema for this solver, per OptionSchemaProvider.</span>
     <span class="n">schema</span> <span class="o">=</span> <span class="n">NISTPArcLengthSchema</span>
@@ -411,6 +421,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthControllerOfStep</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"No ArcLengthController specified in current step"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">beginControl</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
         <span class="n">stopCondition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"stopCondition"</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">checkConditionalStop</span> <span class="o">=</span> <span class="p">(</span>
@@ -468,6 +480,27 @@
                 <span class="p">)</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">named</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="NISTPArcLength.endStep">
+<a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.endStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">endStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""End the step as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.endStep` does, and the control of</span>
+<span class="sd">        its controller, see</span>
+<span class="sd">        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.endControl`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step that was solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">endControl</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">endStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NISTPArcLength.solveIncrement">
@@ -588,13 +621,15 @@
                 <span class="n">maxGrowingIter</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">dLambda</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthIncrement</span><span class="o">.</span><span class="n">loadParameterIncrement</span>
+            <span class="c1"># the converged state, for finishIncrement</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">passSystemStateToController</span><span class="p">(</span><span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthIncrement</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span> <span class="o">+=</span> <span class="n">dLambda</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dLambdaOfConvergedAttempt</span> <span class="o">=</span> <span class="n">dLambda</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">finishIncrement</span><span class="p">(</span><span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dLambda</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">finishIncrement</span><span class="p">(</span><span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dLambda</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">stepActionType</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">stepActionType</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
@@ -710,6 +745,10 @@
 <span class="sd">        The controller completes :math:`\\Delta\\Delta U_0` with :math:`\\Delta\\Delta U_f` when the iterate is moved</span>
 <span class="sd">        (:meth:`setTrialState`, :meth:`applyCorrection`).</span>
 
+<span class="sd">        With multi-point constraints (e.g. hanging nodes), the reference load is condensed like the out-of-balance</span>
+<span class="sd">        force, without a constraint drift of its own, and the slave degrees of freedom of both corrections take the</span>
+<span class="sd">        part their masters interpolate.</span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        K_</span>
@@ -734,18 +773,178 @@
 
         <span class="n">R_0</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">R</span>
         <span class="n">R_f</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">increment</span><span class="o">.</span><span class="n">referenceLoad</span>
+        <span class="c1"># R is condensed already; the reference load carries no constraint drift, so its slave rows vanish</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">R_f</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformResidual</span><span class="p">(</span><span class="n">R_f</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">R_f</span><span class="p">))</span>
         <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>
             <span class="n">R_0</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="n">R_f</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToResidual</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">referenceTimeStep</span><span class="p">,</span> <span class="n">R_f</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">passSystemStateToController</span><span class="p">(</span><span class="n">dirichlets</span><span class="p">)</span>
 
         <span class="c1"># identity rows, and the columns eliminated into both right-hand sides R_0 and R_f</span>
         <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToStiffness</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">rightHandSides</span><span class="p">)</span>
 
         <span class="c1"># solve 2 eq. systems at once: ddU_0 = K⁻¹ R_0 and ddU_f = K⁻¹ R_f</span>
         <span class="n">ddU_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolve</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">rightHandSides</span><span class="p">)</span>
+        <span class="c1"># add the master-interpolated part at the slave DOFs of both corrections</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ddU_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">recoverSlaveSolution</span><span class="p">(</span><span class="n">ddU_</span><span class="p">)</span>
         <span class="n">increment</span><span class="o">.</span><span class="n">referenceCorrection</span> <span class="o">=</span> <span class="n">ddU_</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
 
         <span class="k">return</span> <span class="n">ddU_</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="NISTPArcLength.assembleResidualAndTangent">
+<a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.assembleResidualAndTangent">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleResidualAndTangent</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">PLoadsAndConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
+        <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
+        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Evaluate the model as</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleResidualAndTangent` does, and refer, under arc</span>
+<span class="sd">        length control, to the vectors of the evaluated state, from which the reaction for the controller is taken when</span>
+<span class="sd">        it is passed (:meth:`passSystemStateToController`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U_n</span>
+<span class="sd">            The solution at the start of the increment.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The trial solution increment.</span>
+<span class="sd">        U_np</span>
+<span class="sd">            The trial solution, overwritten.</span>
+<span class="sd">        R</span>
+<span class="sd">            The residual, overwritten.</span>
+<span class="sd">        P</span>
+<span class="sd">            The internal forces (the reaction), overwritten.</span>
+<span class="sd">        PLoadsAndConstraints</span>
+<span class="sd">            The residual contributions of the loads and the constraints, overwritten.</span>
+<span class="sd">        F</span>
+<span class="sd">            The accumulated absolute element fluxes, overwritten.</span>
+<span class="sd">        FConstraints</span>
+<span class="sd">            The accumulated absolute constraint fluxes, overwritten.</span>
+<span class="sd">        K</span>
+<span class="sd">            The tangent being assembled, assembled anew.</span>
+<span class="sd">        stepActions</span>
+<span class="sd">            The active step actions.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[DofVector,SystemMatrixAssembly,DofVector]</span>
+<span class="sd">            The internal forces, the tangent and the accumulated element fluxes.</span>
+<span class="sd">        """</span>
+
+        <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">assembleResidualAndTangent</span><span class="p">(</span>
+            <span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span>
+        <span class="p">)</span>
+
+        <span class="n">increment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthIncrement</span>
+        <span class="k">if</span> <span class="n">increment</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">increment</span><span class="o">.</span><span class="n">internalForces</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">loadsAndConstraints</span> <span class="o">=</span> <span class="n">P</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span>
+
+        <span class="k">return</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span></div>
+
+
+<div class="viewcode-block" id="NISTPArcLength.passSystemStateToController">
+<a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.passSystemStateToController">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">passSystemStateToController</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Pass the state of the model evaluated last -- the iterate, or the converged state -- to the controller, see</span>
+<span class="sd">        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.setSystemState`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dirichlets</span>
+<span class="sd">            The Dirichlet boundary conditions of the step.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">receivesSystemState</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">increment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthIncrement</span>
+
+        <span class="c1"># the change of the prescribed degrees of freedom over the step, conjugate to their reactions</span>
+        <span class="k">if</span> <span class="n">increment</span><span class="o">.</span><span class="n">referenceIncrement</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">increment</span><span class="o">.</span><span class="n">referenceIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToResidual</span><span class="p">(</span>
+                <span class="n">increment</span><span class="o">.</span><span class="n">referenceTimeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">(),</span> <span class="n">dirichlets</span>
+            <span class="p">)</span>
+
+        <span class="c1"># the internal forces of the elements and the constraints: the residual contributions without those of the loads</span>
+        <span class="n">reaction</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">internalForces</span> <span class="o">+</span> <span class="n">increment</span><span class="o">.</span><span class="n">loadsAndConstraints</span>
+        <span class="n">reaction</span> <span class="o">-=</span> <span class="n">increment</span><span class="o">.</span><span class="n">deadLoad</span>
+        <span class="n">reaction</span> <span class="o">-=</span> <span class="n">increment</span><span class="o">.</span><span class="n">loadParameter</span> <span class="o">*</span> <span class="n">increment</span><span class="o">.</span><span class="n">referenceLoad</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">setSystemState</span><span class="p">(</span>
+            <span class="n">reaction</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">referenceIncrement</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">loadParameterAtStart</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">loadParameterIncrement</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NISTPArcLength.checkConvergence">
+<a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.checkConvergence">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkConvergence</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">ddU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">iterationCounter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">residualHistory</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Check the convergence as</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence` does; under arc</span>
+<span class="sd">        length control, a converged iterate must satisfy the controller's equation as well, which is only linearized</span>
+<span class="sd">        in the correction of the load parameter (see</span>
+<span class="sd">        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.isConstraintSatisfied`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        R</span>
+<span class="sd">            The current residual.</span>
+<span class="sd">        ddU</span>
+<span class="sd">            The current correction increment.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current solution increment.</span>
+<span class="sd">        F</span>
+<span class="sd">            The accumulated absolute element fluxes.</span>
+<span class="sd">        FConstraints</span>
+<span class="sd">            The accumulated absolute constraint fluxes.</span>
+<span class="sd">        iterationCounter</span>
+<span class="sd">            The current iteration number.</span>
+<span class="sd">        residualHistory</span>
+<span class="sd">            The convergence state of every field in each iteration checked so far in this increment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[bool,dict]</span>
+<span class="sd">            - True if converged.</span>
+<span class="sd">            - The nodes with the largest residual, per field.</span>
+<span class="sd">        """</span>
+
+        <span class="n">converged</span><span class="p">,</span> <span class="n">nodesWithLargestResidual</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">checkConvergence</span><span class="p">(</span>
+            <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">,</span> <span class="n">residualHistory</span>
+        <span class="p">)</span>
+
+        <span class="n">increment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthIncrement</span>
+        <span class="k">if</span> <span class="n">converged</span> <span class="ow">and</span> <span class="n">increment</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">converged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">isConstraintSatisfied</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">converged</span><span class="p">,</span> <span class="n">nodesWithLargestResidual</span></div>
 
 
 <div class="viewcode-block" id="NISTPArcLength.correctionAtStepLength">
@@ -779,7 +978,7 @@
         <span class="n">ddU_f</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">referenceCorrection</span>
 
         <span class="n">ddU_0</span> <span class="o">=</span> <span class="n">stepLength</span> <span class="o">*</span> <span class="n">ddU_0</span>
-        <span class="n">ddLambda</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">computeDDLambda</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">ddU_0</span><span class="p">,</span> <span class="n">ddU_f</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">)</span>
+        <span class="n">ddLambda</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">computeDDLambda</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">ddU_0</span><span class="p">,</span> <span class="n">ddU_f</span><span class="p">,</span> <span class="n">increment</span><span class="o">.</span><span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">ddU_0</span> <span class="o">+</span> <span class="n">ddLambda</span> <span class="o">*</span> <span class="n">ddU_f</span><span class="p">,</span> <span class="n">ddLambda</span></div>
 
@@ -961,6 +1160,55 @@
             <span class="n">dLambda</span> <span class="o">+=</span> <span class="n">weightOfBeforeLast</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfIncrementBeforeLast</span>
 
         <span class="k">return</span> <span class="n">dLambda</span></div>
+
+
+<div class="viewcode-block" id="NISTPArcLength.extrapolationWeights">
+<a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.extrapolationWeights">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extrapolationWeights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">extrapolation</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The weights of the accepted increments in the prediction, see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.extrapolationWeights`. Under arc length control, the</span>
+<span class="sd">        controller scales the last accepted increment in a linear prediction (see</span>
+<span class="sd">        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.getExtrapolationFactor`),</span>
+<span class="sd">        of the solution and of the load parameter alike.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        extrapolation</span>
+<span class="sd">            The type of extrapolation, ``linear`` or ``quadratic``.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The new increment.</span>
+<span class="sd">        prevTimeStep</span>
+<span class="sd">            The last accepted increment, which the prediction extrapolates.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[float,float|None]</span>
+<span class="sd">            - The weight of the last accepted increment.</span>
+<span class="sd">            - The weight of the accepted increment before it, None for a linear prediction.</span>
+<span class="sd">        """</span>
+
+        <span class="n">weightOfLast</span><span class="p">,</span> <span class="n">weightOfBeforeLast</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">extrapolationWeights</span><span class="p">(</span><span class="n">extrapolation</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">weightOfBeforeLast</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">weightOfLast</span><span class="p">,</span> <span class="n">weightOfBeforeLast</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">getExtrapolationFactor</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">weightOfLast</span><span class="p">),</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="NISTPArcLength.forgetPredictionAfterFailure">
+<a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.forgetPredictionAfterFailure">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forgetPredictionAfterFailure</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Drop the prediction after a failed increment as</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetPredictionAfterFailure` does, unless the</span>
+<span class="sd">        controller predicts the increment that follows a cutback from the last accepted increment as well (see</span>
+<span class="sd">        :attr:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.extrapolatesAfterCutback`).</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">extrapolatesAfterCutback</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forgetPredictionAfterFailure</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="NISTPArcLength.acceptIncrement">
