@@ -33,6 +33,8 @@ import pytest
 
 from edelweissfe.config.phenomena import getFieldSize, phenomena
 from edelweissfe.points.node import Node
+from edelweissfe.stepactions.base.nodalloadbase import NodalLoadBase
+from edelweissfe.timesteppers.timestep import TimeStep
 
 
 def _heatElement(elType="DC2D4T", corners=((0, 0), (2, 0), (2, 1), (0, 1)), thickness=3.0):
@@ -118,3 +120,48 @@ def test_zero_time_increment_lets_no_heat_flow():
     PLoad = np.zeros(4)
     element.computeDistributedLoad("heat film", PLoad, np.zeros(16), 1, np.array([7.0, 20.0]), T, 0.0, 0.0)
     np.testing.assert_array_equal(PLoad, 0.0)
+
+
+class _PointLoad(NodalLoadBase):
+    """A load of 2 on the single degree of freedom of one node of the given field."""
+
+    def __init__(self, field):
+        self._field = field
+
+    @property
+    def field(self):
+        return self._field
+
+    @property
+    def nodeSet(self):
+        return None
+
+    def getCurrentLoad(self, timeStep):
+        return np.array([[2.0]])
+
+    def applyAtStepEnd(self, model, loadParameter=None):
+        pass
+
+
+class _OneDofNumbering:
+    @staticmethod
+    def locateFieldOnNodeSet(field, nodeSet):
+        return np.array([0]), np.array([0])
+
+
+class _OneDofLocations:
+    numbering = _OneDofNumbering
+
+
+@pytest.mark.parametrize(
+    "field, timeIncrement, expected",
+    [("temperature", 0.0, 0.0), ("temperature", 0.5, -2.0), ("displacement", 0.0, -2.0), ("displacement", 0.5, -2.0)],
+)
+def test_point_heat_source_supplies_nothing_in_a_zero_time_increment(field, timeIncrement, expected):
+    """A point load on a field whose fluxes are rates (a heat flow in W) supplies nothing while no time passes, like
+    the distributed and body loads of the transport elements: the zero increment at the beginning of a step would
+    otherwise balance it against the capacity alone and add the heat of one unit of time. Forces are not affected."""
+    P = np.zeros(1)
+    timeStep = TimeStep(0, timeIncrement, timeIncrement, timeIncrement, timeIncrement, timeIncrement)
+    _PointLoad(field).assembleLoad(P, None, None, None, timeStep, _OneDofLocations())
+    assert P[0] == expected
