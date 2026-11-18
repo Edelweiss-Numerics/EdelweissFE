@@ -69,6 +69,8 @@ cdef extern from "Marmot/MarmotElement.h" namespace "Marmot::Discretizations::El
         HeatFlux
         HeatFilm
         HeatRadiation
+        MoistureFlux
+        MoistureFilm
 
 cdef extern from "Marmot/MarmotElementFactory.h" nogil:
     cdef cppclass MarmotElementFactory "Marmot::Registry::ElementFactory":

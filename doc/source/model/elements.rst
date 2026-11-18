@@ -38,6 +38,30 @@ axisymmetric ones).
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/HeatTransientDC2D4T/test.inp``
 
+Moisture diffusion elements
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The same eight element shapes with the suffix ``H`` (``DC2D3H``, ``DC2D4H``, ``DC2D8H``, ``DCAX4H``, ``DCAX8H``,
+``DC3D4H``, ``DC3D8H``, ``DC3D20H``) carry the scalar field ``relative humidity`` (pore relative humidity, 0 ... 1) and
+take the transport material ``MoistureDiffusion`` (Bažant–Najjar diffusivity, linear or BSB sorption isotherm,
+optional self-desiccation). Loads:
+
+- ``distributedload`` of ``type=moisture flux`` (``magnitude=q``, into the body) and ``type=moisture film``
+  (``magnitude='beta, h_inf'``, exchange with an environment at the relative humidity ``h_inf``). As for the heat film,
+  the amplitude scales both values: use ``f(t)='1'`` to expose a surface at once.
+- ``bodyforce`` with ``forceVector`` a volumetric moisture source.
+- The initial relative humidity is set with ``setfield`` on a ``perNode`` field output of the result ``U``.
+
+The field ``relative humidity`` is converged when the correction is below 1e-8 (dimensionless) and the flux residual
+below 1e-8 of the averaged element flux, or below the absolute floor 1e-14. The flux unit depends on the units of the
+material (e.g. kg/(m² s), or m/s in the classical form with a unit moisture capacity): where the element fluxes cancel
+(e.g. a sealed, uniformly self-desiccating body), raise the floor with
+``*updateConfiguration, configuration=absoluteFluxResidualTolerance`` to a value fitting the units.
+
+.. literalinclude:: ../../../testfiles/marmot/MoistureDryingDC2D8H/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/MoistureDryingDC2D8H/test.inp``
+
 Provider ``marmotsingleqpelement``
 ----------------------------------
 

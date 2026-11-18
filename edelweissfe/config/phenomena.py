@@ -56,6 +56,7 @@ phenomena = {
     "pressure": "scalar",
     "jacobi": "scalar",
     "temperature": "scalar",
+    "relative humidity": "scalar",
 }
 
 
@@ -83,6 +84,7 @@ inertiaKind = {
     "pressure": "non-mechanical",
     "jacobi": "non-mechanical",
     "temperature": "non-mechanical",
+    "relative humidity": "non-mechanical",
 }
 
 
@@ -104,6 +106,7 @@ fieldCorrectionTolerance = {
     "pressure": 1e-8,
     "jacobi": 1e-8,
     "temperature": 1e-6,
+    "relative humidity": 1e-8,
 }
 
 # field                  correction tolerance relative to the largest increment of the field; 0: none
@@ -121,6 +124,7 @@ relativeFieldCorrectionTolerance = {
     "pressure": 0.0,
     "jacobi": 0.0,
     "temperature": 0.0,
+    "relative humidity": 0.0,
 }
 
 # field                  flux residual tolerance relative to the spatial average flux
@@ -138,6 +142,7 @@ fluxResidualTolerance = {
     "pressure": 1e-8,
     "jacobi": 1e-8,
     "temperature": 1e-8,
+    "relative humidity": 1e-8,
 }
 
 # field                  relative flux residual tolerance from iteration iterationsForAlternativeTolerance on
@@ -155,6 +160,7 @@ fluxResidualToleranceAlternative = {
     "pressure": 5e-3,
     "jacobi": 5e-3,
     "temperature": 5e-3,
+    "relative humidity": 5e-3,
 }
 
 # field                  absolute flux residual tolerance; the scalar variables' flux residual tolerances above are
@@ -173,6 +179,7 @@ absoluteFluxResidualTolerance = {
     "pressure": 1e-7,
     "jacobi": 1e-7,
     "temperature": 1e-7,
+    "relative humidity": 1e-14,
 }
 
 # domain                 dimensions

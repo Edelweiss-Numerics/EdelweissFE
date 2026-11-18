@@ -1,0 +1,28 @@
+** Drying of a solid concrete cylinder of radius 75 mm (DCAX4H, r = x, z = y; units mm, day), initially saturated,
+** through a moisture film on the mantle into an environment of 60 % relative humidity; a slice of height 10 mm with
+** sealed top and bottom. Bazant-Najjar diffusivity, classical form.
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DCAX4H
+x0=0.0
+nX=15
+nY=1
+l=75.0
+h=10.0
+
+*material, name=MoistureDiffusion, id=concrete
+30.0, 0.05, 0.8, 15.0
+
+** the thickness is not used by the axisymmetric elements
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=dryingjob, domain=axisymmetric
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=rh, elSet=all, field=relative humidity, result=U
+
+*step, solver=theSolver
+startInc=0.025, maxInc=0.025, minInc=1e-3, maxNumInc=50, maxIter=12, stepLength=200
+>>setfield, name=initial, fieldOutput=rh, type=uniform, value=1.0
+>>distributedload, name=film, surface=gen_right, type=moisture film, magnitude='10.0, 0.6', f(t)='1'
