@@ -377,4 +377,4 @@ class Section(SectionBase):
         element.initializeElement()
         if not isinstance(material, dict):
             raise Exception(f"Beam section {self.name}: beam elements require a Marmot material.")
-        element.setMaterial(material["name"], material["properties"])
+        self.assignMaterialToElement(element, material)
