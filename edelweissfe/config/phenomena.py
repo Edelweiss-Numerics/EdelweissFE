@@ -182,6 +182,15 @@ absoluteFluxResidualTolerance = {
     "relative humidity": 1e-14,
 }
 
+# fields whose fluxes are rates, i.e. amounts per unit of time (a heat flow in W, not a force): in a zero time
+# increment no time passes, so a load on such a field supplies nothing. The transport elements apply this rule to
+# their distributed and body loads themselves; the solver-level point loads (node forces) follow this set, see
+# :class:`~edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase`.
+rateFluxFields = {
+    "temperature",
+    "relative humidity",
+}
+
 # domain                 dimensions
 domainMapping = {
     "1d": 1,
