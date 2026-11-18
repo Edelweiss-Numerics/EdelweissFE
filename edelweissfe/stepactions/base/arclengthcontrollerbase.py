@@ -58,9 +58,9 @@ class ArcLengthControllerBase(StepActionBase):
 
     A controller whose equation is nonlinear in the solution, e.g. one that controls the dissipated energy, may
     override the optional hooks: :meth:`beginControl` and :meth:`endControl` (the step it controls),
-    :meth:`setSystemState` (the state of the iterate), :meth:`isConstraintSatisfied` (its equation in the convergence
-    check, as it is only linearized in :meth:`computeDDLambda`) and :meth:`getExtrapolationFactor` (the predictor), with
-    :attr:`extrapolatesAfterCutback`.
+    :meth:`setSystemState` (the state of the iterate, with :attr:`receivesSystemState`), :meth:`isConstraintSatisfied`
+    (its equation in the convergence check, as it is only linearized in :meth:`computeDDLambda`) and
+    :meth:`getExtrapolationFactor` (the predictor), with :attr:`extrapolatesAfterCutback`.
     """
 
     #: The name of this step action, by which the solver option ``arcLengthController`` selects it.
@@ -69,6 +69,10 @@ class ArcLengthControllerBase(StepActionBase):
     #: Whether the increment that follows a cutback is predicted from the last accepted increment as well, for a
     #: controller whose equation needs the direction of the path (a zero prediction may follow an unloading branch).
     extrapolatesAfterCutback = False
+
+    #: Whether the controller receives the state of every iterate (:meth:`setSystemState`); the solver builds it only
+    #: for a controller that does.
+    receivesSystemState = False
 
     @abstractmethod
     def computeDDLambda(
@@ -176,16 +180,18 @@ class ArcLengthControllerBase(StepActionBase):
 
         return True
 
-    def getExtrapolationFactor(self, timeStep: TimeStep, prevTimeStep: TimeStep) -> float:
+    def getExtrapolationFactor(self, timeStep: TimeStep, linearWeight: float) -> float:
         """The factor by which the last accepted increment, of the solution and of the load parameter, is scaled for
-        the linear prediction of a new increment. By default the ratio of their sizes, as without arc length control.
+        the linear prediction of a new increment. By default the weight of the linear prediction without arc length
+        control, the ratio of the sizes of the new and the last accepted increment.
 
         Parameters
         ----------
         timeStep
             The new increment.
-        prevTimeStep
-            The last accepted increment.
+        linearWeight
+            The weight of the last accepted increment in the linear prediction of the solver, see
+            :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.extrapolationWeights`.
 
         Returns
         -------
@@ -193,4 +199,4 @@ class ArcLengthControllerBase(StepActionBase):
             The scale factor.
         """
 
-        return timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement
+        return linearWeight

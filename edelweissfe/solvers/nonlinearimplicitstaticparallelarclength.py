@@ -109,9 +109,14 @@ class ArcLengthIncrement:
     loadParameterIncrement: float = 0.0
     #: The load parameter of the state being evaluated: of the iterate, or of a trial state of a line search.
     loadParameter: float = 0.0
-    #: The internal forces of the elements and the constraints of the state evaluated last, i.e. the reactions at the
-    #: prescribed degrees of freedom, for the controller (see :meth:`NISTPArcLength.passSystemStateToController`).
-    reaction: DofVector | None = None
+    #: The internal forces of the elements of the state evaluated last, and the residual contributions of its loads and
+    #: constraints: the solver's own vectors, from which :meth:`NISTPArcLength.passSystemStateToController` takes the
+    #: reactions at the prescribed degrees of freedom.
+    internalForces: DofVector | None = None
+    loadsAndConstraints: DofVector | None = None
+    #: The change of the prescribed degrees of freedom over the step (zero elsewhere), built once per increment for the
+    #: controller.
+    referenceIncrement: DofVector | None = None
 
 
 class NISTPArcLength(NISTParallel):
@@ -637,9 +642,9 @@ class NISTPArcLength(NISTParallel):
         timeStep: TimeStep,
     ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
         """Evaluate the model as
-        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleResidualAndTangent` does, and keep, under arc
-        length control, the internal forces of the elements and the constraints of the evaluated state for the
-        controller: the residual contributions without those of the loads.
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleResidualAndTangent` does, and refer, under arc
+        length control, to the vectors of the evaluated state, from which the reaction for the controller is taken when
+        it is passed (:meth:`passSystemStateToController`).
 
         Parameters
         ----------
@@ -680,9 +685,7 @@ class NISTPArcLength(NISTParallel):
 
         increment = self.arcLengthIncrement
         if increment is not None:
-            increment.reaction = P + PLoadsAndConstraints
-            increment.reaction -= increment.deadLoad
-            increment.reaction -= increment.loadParameter * increment.referenceLoad
+            increment.internalForces, increment.loadsAndConstraints = P, PLoadsAndConstraints
 
         return P, K, F
 
@@ -696,14 +699,24 @@ class NISTPArcLength(NISTParallel):
             The Dirichlet boundary conditions of the step.
         """
 
+        if not self.arcLengthController.receivesSystemState:
+            return
+
         increment = self.arcLengthIncrement
 
         # the change of the prescribed degrees of freedom over the step, conjugate to their reactions
-        referenceIncrement = self.system.locations.constructDofVector()
-        referenceIncrement = self.applyDirichletToResidual(increment.referenceTimeStep, referenceIncrement, dirichlets)
+        if increment.referenceIncrement is None:
+            increment.referenceIncrement = self.applyDirichletToResidual(
+                increment.referenceTimeStep, self.system.locations.constructDofVector(), dirichlets
+            )
+
+        # the internal forces of the elements and the constraints: the residual contributions without those of the loads
+        reaction = increment.internalForces + increment.loadsAndConstraints
+        reaction -= increment.deadLoad
+        reaction -= increment.loadParameter * increment.referenceLoad
 
         self.arcLengthController.setSystemState(
-            increment.reaction, referenceIncrement, increment.loadParameterAtStart, increment.loadParameterIncrement
+            reaction, increment.referenceIncrement, increment.loadParameterAtStart, increment.loadParameterIncrement
         )
 
     def checkConvergence(
@@ -985,7 +998,7 @@ class NISTPArcLength(NISTParallel):
         if self.arcLengthController is None or weightOfBeforeLast is not None:
             return weightOfLast, weightOfBeforeLast
 
-        return self.arcLengthController.getExtrapolationFactor(timeStep, prevTimeStep), None
+        return self.arcLengthController.getExtrapolationFactor(timeStep, weightOfLast), None
 
     def forgetPredictionAfterFailure(self):
         """Drop the prediction after a failed increment as

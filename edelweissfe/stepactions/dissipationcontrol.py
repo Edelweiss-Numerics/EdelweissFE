@@ -206,6 +206,9 @@ class StepAction(ArcLengthControllerBase, MeshDependent):
     #: A zero prediction after a cutback may follow an elastic unloading branch.
     extrapolatesAfterCutback = True
 
+    #: The reaction (for the work rate of the reference load) and the load parameter of every iterate.
+    receivesSystemState = True
+
     #: Carried from one increment to the next: the dissipation at the start of the increment and the last accepted
     #: increment (predictor, increment size); F and dLambda are set again in every iteration by setSystemState.
     checkpointedState = {
@@ -687,16 +690,18 @@ class StepAction(ArcLengthControllerBase, MeshDependent):
         onDisplacementLimit = abs(dUNorm - dUMax) <= tol * dUMax and dD <= (1 + tol) * dTau
         return onDissipationTarget or onDisplacementLimit
 
-    def getExtrapolationFactor(self, timeStep: TimeStep, prevTimeStep: TimeStep) -> float:
+    def getExtrapolationFactor(self, timeStep: TimeStep, linearWeight: float) -> float:
         """Scale factor of the last converged increment for the predictor of the current one: the ratio of target and
-        last increments of the quantity reached first.
+        last increments of the quantity reached first, at most :attr:`maxPredictorRatio` times the solver's linear
+        weight.
 
         Parameters
         ----------
         timeStep
             The current time step.
-        prevTimeStep
-            The time step of the last converged increment.
+        linearWeight
+            The weight of the last accepted increment in the solver's linear prediction, the ratio of the sizes of the
+            new and the last accepted increment.
 
         Returns
         -------
@@ -704,15 +709,13 @@ class StepAction(ArcLengthControllerBase, MeshDependent):
             The scale factor.
         """
 
-        stepRatio = timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement
-
         factors = []
         if (self.displacement is not None or self.isDissipationControlled()) and self.dDLast > 0.0:
             factors.append(timeStep.stepProgressIncrement * self.dissipation / self.dDLast)
         if self.displacement is not None and self.dUNormLast > 0.0:
             factors.append(timeStep.stepProgressIncrement * self.displacement / self.dUNormLast)
 
-        return min(factors + [self.maxPredictorRatio * stepRatio]) if factors else stepRatio
+        return min(factors + [self.maxPredictorRatio * linearWeight]) if factors else linearWeight
 
     def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, system: DiscreteSystem):
         """Store the dissipation and displacement increments of a converged increment.
