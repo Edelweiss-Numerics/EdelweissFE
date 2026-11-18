@@ -36,7 +36,11 @@ import numpy as np
 import pytest
 from _adaptivemeshbuilder import AdaptiveMeshBuilder
 
+from edelweissfe.adaptivity.hex20topology import Hex20Topology
+from edelweissfe.adaptivity.marking import RecoveryErrorMarker
 from edelweissfe.adaptivity.quad8topology import Quad8Topology
+from edelweissfe.adaptivity.rootentities import RootEntityTable
+from edelweissfe.adaptivity.statetransfer.projection import PolynomialProjection
 from edelweissfe.elements._quad2dnodeordering import quad8NodeXi
 from edelweissfe.utils.exceptions import TopologyError
 
@@ -211,3 +215,68 @@ def test_root_entity_keys_in_2d():
     assert table.key(right, (0, M // 2)) == shared
     assert table.local_point(right, shared) == (0, M // 2)
     assert table.key(left, (M, M)).kind == "interior"
+
+
+def test_each_edge_of_a_quad8_is_listed_once():
+    """In 2D the faces are the edges in another slot order: a point on an edge lies on that one edge."""
+    extent = 4
+    assert TOPOLOGY.entities_containing((1, 0), extent) == [(0, 4, 1)]
+    assert sorted(TOPOLOGY.entities_containing((0, 0), extent)) == [(0, 4, 1), (3, 7, 0)]
+    assert TOPOLOGY.entities_containing((1, 1), extent) == []
+    assert TOPOLOGY.lowest_entity_containing((4, 3), extent) == ("edge", (1, 5, 2))
+
+
+@pytest.mark.parametrize("topology", [Quad8Topology(), Hex20Topology()], ids=["QUAD8", "HEX20"])
+def test_the_inverse_map_recovers_reference_points_of_a_curved_element(topology):
+    """Distorted corners and bulged midside nodes: the map is far from affine, so Newton needs several steps."""
+    rng = np.random.default_rng(3)
+    reference = np.asarray(topology.reference_node_param(), dtype=float)
+    coords = 2.0 * reference + 0.2 * rng.uniform(-1, 1, reference.shape)
+    for xi in rng.uniform(-0.95, 0.95, (20, topology.dim)):
+        point = topology.shape_functions(*xi) @ coords
+        assert np.allclose(topology.inverse_map(point, coords), xi, atol=1e-10)
+    # a collapsed element has a singular Jacobian: Newton stops at the center instead of failing
+    assert np.array_equal(topology.inverse_map(np.ones(topology.dim), np.zeros_like(coords)), np.zeros(topology.dim))
+
+
+def _gaussPoints2D(n):
+    points, _ = np.polynomial.legendre.leggauss(n)
+    return np.array([(x, y) for x in points for y in points])
+
+
+@pytest.mark.parametrize(
+    "nGauss, field",
+    [
+        (2, lambda x, y: 1.5 - x + 2.0 * y - 3.0 * x * y),
+        (3, lambda x, y: -0.5 + x * y**2 - 2.0 * x**2 * y + x**2 * y**2 - y),
+    ],
+    ids=["bilinear from 4 points", "biquadratic from 9 points"],
+)
+def test_the_polynomial_projection_in_2d_reproduces_the_tensor_product_fields_of_its_degree(nGauss, field):
+    parentPoints = _gaussPoints2D(nGauss)
+    # the quadrature points of the lower left child, in the parent's reference square
+    childPoints = (_gaussPoints2D(nGauss) - 1) / 2
+    parentValues = np.array([[field(*p), 2.0 * field(*p)] for p in parentPoints])
+    childValues = PolynomialProjection()._transferColumns(
+        parentValues, parentPoints, childPoints, np.zeros((len(childPoints), 2)), np.array([0, 1])
+    )
+    expected = np.array([[field(*p), 2.0 * field(*p)] for p in childPoints])
+    assert np.allclose(childValues, expected, atol=1e-12)
+
+
+def test_a_non_manifold_2d_root_mesh_is_rejected():
+    """Three roots owning one edge (the same two corner labels)."""
+    M = 4
+    table = RootEntityTable(TOPOLOGY, M)
+    table.add_root(1, list(range(1, 9)))
+    edge = TOPOLOGY.faces[0]
+    table.add_root(2, [slot + 1 if slot in edge else 200 + slot for slot in range(8)])
+    with pytest.raises(ValueError, match="manifold"):
+        table.add_root(3, [slot + 1 if slot in edge else 300 + slot for slot in range(8)])
+
+
+def test_the_recovery_error_marker_rejects_quad8_elements():
+    marker = RecoveryErrorMarker("nonlocal damage")
+    marker.checkTopology(Hex20Topology())
+    with pytest.raises(ValueError, match="recoveryError marker on nodeField 'nonlocal damage'.*8-node .* 2D"):
+        marker.checkTopology(TOPOLOGY)

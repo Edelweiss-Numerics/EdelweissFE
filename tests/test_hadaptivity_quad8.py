@@ -36,6 +36,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.config.phenomena import domainMapping
+from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.helpers.inputfilehelpers import fillFEModelFromInputFile
 from edelweissfe.journal.journal import Journal
 from edelweissfe.modelmodifiers.adaptivity.hadaptivity import RefinementPlan
@@ -221,3 +222,18 @@ plate_all, pad_all
 def test_an_input_the_2d_refinement_cannot_handle_is_rejected_at_setup(tmp_path, edit, message):
     with pytest.raises(ValueError, match=message):
         _buildModel(tmp_path, "invalid.inp", edit(_INP))
+
+
+def test_the_2d_patch_test_reproduces_the_linear_field():
+    """``testfiles/marmot/AMR_PatchTestQuad8``: uniform tension on a distorted, live-refined CPS8R mesh."""
+    deck = Path(__file__).parent.parent / "testfiles" / "marmot" / "AMR_PatchTestQuad8" / "test.inp"
+    model, _ = finiteElementSimulation(parseInputFile(str(deck)), verbose=False, suppressPlots=True)
+    amr = model.modelModifiers["amr"]
+    assert {amr._mesh.elements[eid]["level"] for eid in amr._mesh.active()} == {0, 1, 2}
+    assert len(_hangingRecordsByLabel(amr._hanging)) == 14
+
+    sigma, E, nu = 30.0, 30000.0, 0.2
+    displacement = model.nodeFields["displacement"]
+    X = np.array([node.coordinates for node in displacement.nodes])
+    exact = np.column_stack([sigma / E * X[:, 0], -nu * sigma / E * X[:, 1]])
+    assert np.allclose(displacement["U"], exact, rtol=0.0, atol=1e-12)
