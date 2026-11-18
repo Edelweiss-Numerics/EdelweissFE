@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
 
       # Installs exactly what conda-lock.yml pins (conda packages, no solving).
       - uses: ./.github/actions/setup-locked-env

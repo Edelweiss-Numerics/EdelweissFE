@@ -26,7 +26,7 @@ runs:
     # Marmot is installed into a prefix of its own (not the environment), so that it can be cached and
     # restored independently of the environment's cache. The key includes this file, so that a changed build
     # (e.g. its CMake options) does not restore an install made the old way.
-    - uses: actions/cache@v4
+    - uses: actions/cache@v6
       id: cache
       with:
         path: ${{ runner.temp }}/marmot
