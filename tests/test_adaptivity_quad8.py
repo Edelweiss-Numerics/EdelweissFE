@@ -36,18 +36,18 @@ import numpy as np
 import pytest
 from _adaptivemeshbuilder import AdaptiveMeshBuilder
 
-from edelweissfe.adaptivity.quad8shapefunctions import (
-    LOCAL_COORDS,
-    face_child_indices,
-    quad8_box_coords,
-    quad8_shape,
-    quad8_shape_exact,
-    quad8_shape_grad,
-)
 from edelweissfe.adaptivity.quad8topology import Quad8Topology
+from edelweissfe.elements._quad2dnodeordering import quad8NodeXi
 from edelweissfe.utils.exceptions import TopologyError
 
 TOPOLOGY = Quad8Topology()
+LOCAL_COORDS = quad8NodeXi.astype(float)
+quad8_shape = TOPOLOGY.shape_functions
+
+
+def quad8_box_coords(x0, x1, y0, y1):
+    """The 8 node coordinates of an axis-aligned QUAD8 box, in CPS8 order."""
+    return np.array([x0, y0]) + (LOCAL_COORDS + 1) / 2 * np.array([x1 - x0, y1 - y0])
 
 
 def _builder(splitFactor=2):
@@ -81,11 +81,11 @@ def test_shape_functions_are_the_quad8_serendipity_basis():
         values = np.array([f(*p) for p in LOCAL_COORDS])
         assert max(abs(quad8_shape(*p) @ values - f(*p)) for p in points) < 1e-13
     for p in points:
-        exact = quad8_shape_exact(*(Fraction(v).limit_denominator(100) for v in p))
+        exact = TOPOLOGY.shape_functions_exact(*(Fraction(v).limit_denominator(100) for v in p))
         assert np.allclose(
             [float(v) for v in exact], quad8_shape(*(float(Fraction(v).limit_denominator(100)) for v in p))
         )
-        N, dN = quad8_shape_grad(*p)
+        N, dN = TOPOLOGY.shape_functions_and_grad(*p)
         h = 1e-7
         fd = np.array(
             [
@@ -105,7 +105,7 @@ def test_children_tile_the_parent_and_its_faces(n):
     for faceIndex, face in enumerate(TOPOLOGY.faces):
         axis = next(k for k in range(2) if np.all(LOCAL_COORDS[face][:, k] == LOCAL_COORDS[face][0, k]))
         value = LOCAL_COORDS[face][0, axis]
-        tiles = face_child_indices(faceIndex, n)
+        tiles = TOPOLOGY.face_child_indices(faceIndex, n)
         assert len(tiles) == n
         for j in tiles:
             assert np.all(children[j][face][:, axis] == value)
@@ -193,7 +193,7 @@ def test_node_sets_and_surfaces_are_inherited_through_edges_only():
     coordinates = mesh.registry.coordinates
     assert len(mesh.nodeSets["bottom"]) == 5 and all(coordinates[n][1] == 0.0 for n in mesh.nodeSets["bottom"])
     assert len(mesh.nodeSets["corner"]) == 1
-    assert mesh.surfaces["bottomSurface"] == {(kids[j], 1) for j in face_child_indices(0, 2)}
+    assert mesh.surfaces["bottomSurface"] == {(kids[j], 1) for j in TOPOLOGY.face_child_indices(0, 2)}
     for eid, faceID in mesh.surfaces["bottomSurface"]:
         conn = mesh.elements[eid]["conn"]
         assert all(coordinates[conn[i]][1] == 0.0 for i in TOPOLOGY.faces[TOPOLOGY.faceid_to_face[faceID]])

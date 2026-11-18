@@ -26,26 +26,29 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """``TopologyBase`` adapter for the 8-node serendipity quadrilateral (QUAD8), the 2D counterpart of
-:class:`~edelweissfe.adaptivity.hex20topology.Hex20Topology`. In 2D, the codimension-one entities
-(``faces``: refinement balance, surfaces, root-mesh manifoldness) are the element's edges, so
-``faces`` and ``edges`` list the same four edges, in Marmot faceID order and as
+:class:`~edelweissfe.adaptivity.hex20topology.Hex20Topology`, in the Abaqus/Marmot CPS8 node order of
+:mod:`~edelweissfe.elements._quad2dnodeordering` (corners 0-3 counter-clockwise from ``(-1, -1)``, then
+the midsides of the edges 0-1, 1-2, 2-3, 3-0), whose shape functions it uses. In 2D the
+codimension-one entities (``faces``: 2:1 balance, surfaces, root-mesh manifoldness) are the
+element's edges, so ``faces`` and ``edges`` list the same four edges, in Marmot faceID order and as
 ``[corner, midside, corner]`` respectively.
 """
 
+from fractions import Fraction
+
 import numpy as np
 
-from edelweissfe.adaptivity.quad8shapefunctions import (
-    EDGES,
-    FACEID_TO_FACE,
-    FACES,
-    face_child_indices,
-    quad8_box_coords,
-    quad8_shape,
-    quad8_shape_exact,
-    quad8_shape_grad,
-    subdivision_children_param,
-)
 from edelweissfe.adaptivity.topologybase import TopologyBase
+from edelweissfe.elements._quad2dnodeordering import quad8DNdXi, quad8N, quad8NodeXi
+
+#: Marmot Quad8 faceID (1-based) -> local slots ``[corner a, corner b, midside]``, from
+#: MarmotFiniteElement2D.cpp ``Quad8::getBoundaryElementIndices``.
+BOUNDARY_FACEID_INDICES = {1: [0, 1, 4], 2: [1, 2, 5], 3: [2, 3, 6], 4: [3, 0, 7]}
+#: The four edges in faceID order, as ``[corner a, corner b, midside]``.
+FACES = [BOUNDARY_FACEID_INDICES[faceID] for faceID in sorted(BOUNDARY_FACEID_INDICES)]
+#: The same four edges as ``[corner a, midside, corner b]``.
+EDGES = [[a, m, b] for a, b, m in FACES]
+FACEID_TO_FACE = {faceID: faceID - 1 for faceID in BOUNDARY_FACEID_INDICES}
 
 
 class Quad8Topology(TopologyBase):
@@ -64,43 +67,13 @@ class Quad8Topology(TopologyBase):
         return FACEID_TO_FACE
 
     def reference_node_param(self) -> np.ndarray:
-        return quad8_box_coords(-1.0, 1.0, -1.0, 1.0)
-
-    def subdivision_children_param(self, n: int) -> list:
-        return subdivision_children_param(n)
-
-    def face_child_indices(self, face_index: int, n: int) -> list:
-        return face_child_indices(face_index, n)
+        return quad8NodeXi.astype(float)
 
     def shape_functions(self, *params) -> np.ndarray:
-        return quad8_shape(*params)
+        return quad8N(*params)
 
     def shape_functions_exact(self, *params) -> list:
-        return quad8_shape_exact(*params)
+        return list(quad8N(*(Fraction(p) for p in params)))
 
     def shape_functions_and_grad(self, *params) -> tuple:
-        return quad8_shape_grad(*params)
-
-    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
-        coords = np.asarray(elementNodeCoords, dtype=float)
-        xi = np.zeros(2)
-        for _ in range(itmax):
-            N, dN = self.shape_functions_and_grad(*xi)
-            residual = N @ coords - point
-            if float(np.linalg.norm(residual)) < tol:
-                return xi
-            try:
-                dxi = np.linalg.solve(coords.T @ dN, residual)
-            except np.linalg.LinAlgError:
-                break
-            xi -= dxi
-            if float(np.linalg.norm(dxi)) < 1e-10:
-                break
-        return np.clip(xi, -1.2, 1.2)
-
-    def subdivide(self, parent_coords: np.ndarray, n: int) -> list:
-        parent_coords = np.asarray(parent_coords, dtype=float)
-        return [
-            np.array([self.shape_functions(*p) @ parent_coords for p in childParam])
-            for childParam in self.subdivision_children_param(n)
-        ]
+        return quad8N(*params), quad8DNdXi(*params).T
