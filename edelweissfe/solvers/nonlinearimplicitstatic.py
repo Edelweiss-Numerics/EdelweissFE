@@ -1863,7 +1863,8 @@ class NIST(NonlinearSolverBase):
                 g = float(np.dot(ddU, R))
                 trials.append((abs(g), stepLength))
                 accepted = g >= -self.backtrackingEnergyTolerance * g0
-                secant = stepLength * g0 / (g0 - g)
+                # not accepted: g < -0.8 g0 < 0 < g0, the secant has its zero inside the step
+                secant = stepLength * g0 / (g0 - g) if not accepted else stepLength
                 nextStepLength = min(max(secant, 0.1 * stepLength), 0.9 * stepLength)
 
             self.journal.message(

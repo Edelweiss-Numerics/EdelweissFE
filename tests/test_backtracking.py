@@ -198,3 +198,8 @@ def test_the_backtracking_leaves_the_converged_solution(tmp_path, monkeypatch, m
 def test_an_unknown_merit_is_refused(tmp_path):
     with pytest.raises(ValueError, match="Unknown backtrackingMerit"):
         run(tmp_path, deck("backtracking=True, backtrackingMerit=energie"))
+
+
+def test_an_energy_merit_that_does_not_change_along_the_correction_takes_the_full_step():
+    # g(a) = g(0): e.g. a residual that the correction does not change (a linear part of zero stiffness)
+    assert backtrack(lambda a: R0, "energy") == (1.0, [1.0])
