@@ -245,6 +245,9 @@ def _connectedComponents(elements: list) -> dict:
 #: (see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`).
 WARM_STARTED_NODE_FIELD_ENTRIES = ("U", "V", "A")
 
+#: The refineable element family of a model, by its dimension.
+_TOPOLOGY_OF_DIMENSION = {3: Hex20Topology, 2: Quad8Topology}
+
 
 class ModelModifier(ModelModifierBase):
     #: Option schema for this model modifier, per OptionSchemaProvider.
@@ -306,11 +309,17 @@ class ModelModifier(ModelModifierBase):
             for element in model.elementSets[elementProperty.elSetName]:
                 self._elementPropertiesOf.setdefault(element, []).append(elementProperty)
 
+        # the refineable element family follows from the model's dimension: HEX20 in 3D, QUAD8 in 2D
+        topologyClass = _TOPOLOGY_OF_DIMENSION.get(model.domainSize)
+        if topologyClass is None:
+            raise ValueError(f"hAdaptivity modifier {name!r} supports 2D and 3D models, not a {model.domainSize}D one")
+        self._topology = topologyClass()
+        nNodesOfFamily = self._topology.n_nodes
+        for marker in self.markers:
+            marker.checkTopology(self._topology)
+
         # restrict the octree mirror to the refineable solid elements (not e.g. contact-facet elements):
-        # the given set, or else all elements of the supported family: HEX20 in 3D, QUAD8 in 2D.
-        nNodesOfFamily = {3: 20, 2: 8}.get(model.domainSize)
-        if nNodesOfFamily is None:
-            raise ValueError(f"hAdaptivity supports 2D and 3D models, not a {model.domainSize}D one")
+        # the given set, or else all elements of the family.
         refineSetName = options.refineElSet or options.elSet
         if refineSetName is not None:
             refineElements = list(model.elementSets[refineSetName])
@@ -318,14 +327,14 @@ class ModelModifier(ModelModifierBase):
             refineElements = [el for el in model.elements.values() if len(el.nodes) == nNodesOfFamily]
         if not refineElements:
             raise ValueError(
-                f"hAdaptivity found no refineable ({nNodesOfFamily}-node) elements in the model; specify "
-                "'refineElSet' (or 'elSet') to select the solid element set explicitly."
+                f"hAdaptivity modifier {name!r} found no refineable ({nNodesOfFamily}-node) elements in the model; "
+                "specify 'refineElSet' (or 'elSet') to select the solid element set explicitly."
             )
         wrongFamily = [el.elNumber for el in refineElements if len(el.nodes) != nNodesOfFamily]
         if wrongFamily:
             raise ValueError(
-                f"hAdaptivity refines {nNodesOfFamily}-node elements in a {model.domainSize}D model, but the "
-                f"refineable set holds elements with another node count, e.g. {wrongFamily[:5]}"
+                f"hAdaptivity modifier {name!r} refines {nNodesOfFamily}-node elements in a {model.domainSize}D "
+                f"model, but the refineable set holds elements with another node count, e.g. {wrongFamily[:5]}"
             )
 
         # Which elements this instance owns; TopologyPipeline.checkModelModifierDomains rejects overlaps
@@ -342,7 +351,6 @@ class ModelModifier(ModelModifierBase):
 
         # build the AdaptiveMesh mirror: the roots are the refineable elements with the model's own
         # connectivity and node labels; new node labels come from the model's own allocator.
-        self._topology = Hex20Topology() if model.domainSize == 3 else Quad8Topology()
         self._mesh = AdaptiveMesh(
             splitFactor=self.splitFactor, topology=self._topology, reserve_labels=model.topology.reserveNodeNumbers
         )
@@ -400,7 +408,7 @@ class ModelModifier(ModelModifierBase):
         model.multiPointConstraints = {name + "_hanging": self._hanging, **model.multiPointConstraints}
         self._isFirstCall = True
         # parent-parametric coords of each child's nodes (used for warm-start interpolation)
-        self._octantParams = self._topology.subdivision_children_param(self.splitFactor)
+        self._childNodeParams = self._topology.subdivision_children_param(self.splitFactor)
 
     def declaredDomain(self, model: FEModel) -> set:
         """The refineable roots this instance owns; see
@@ -792,8 +800,8 @@ class ModelModifier(ModelModifierBase):
 
         # warm start: interpolate each NEW node's field values from the parent via its isoparametric
         # map, so the increment restarts from a consistent state, not zero
-        octant = mesh.elements[parentEid]["children"].index(eid)
-        childParams = self._octantParams[octant]
+        childIndex = mesh.elements[parentEid]["children"].index(eid)
+        childParams = self._childNodeParams[childIndex]
         for i, label in enumerate(e["conn"]):
             node = model.nodes[label]
             if label in newNodes and any(node not in newValues[f] for f in oldValues):

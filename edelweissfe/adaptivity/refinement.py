@@ -25,8 +25,9 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Octree refinement of HEX20 elements: subdivision, 2:1 balancing, hanging-node classification and
-the conformity check -- all decided topologically, in exact integer arithmetic.
+"""Octree refinement of HEX20 elements and quadtree refinement of QUAD8 elements: subdivision, 2:1
+balancing, hanging-node classification and the conformity check -- all decided topologically, in exact
+integer arithmetic.
 
 Vocabulary (see also :mod:`edelweissfe.adaptivity.rootentities`)
 -----------------------------------------------------------------
@@ -149,27 +150,25 @@ class InternalPlane(NamedTuple):
     value: int
 
 
-class Rectangle(NamedTuple):
-    """An axis-aligned rectangle ``[uMin, uMax] x [vMin, vMax]`` of lattice coordinates on a face."""
+class Box(NamedTuple):
+    """An axis-aligned box of lattice coordinates on a face: one interval ``(min, max)`` per coordinate
+    along the face (two on the face of a 3D element, one on the edge of a 2D element)."""
 
-    uMin: int
-    uMax: int
-    vMin: int
-    vMax: int
+    intervals: tuple
 
-    def overlaps(self, other: "Rectangle") -> bool:
-        """True if the two rectangles overlap with positive area (touching edges do not count)."""
-        return min(self.uMax, other.uMax) > max(self.uMin, other.uMin) and min(self.vMax, other.vMax) > max(
-            self.vMin, other.vMin
+    def overlaps(self, other: "Box") -> bool:
+        """True if the two boxes overlap with positive measure (touching boundaries do not count)."""
+        return all(
+            min(aMax, bMax) > max(aMin, bMin) for (aMin, aMax), (bMin, bMax) in zip(self.intervals, other.intervals)
         )
 
 
 class FaceOnEntity(NamedTuple):
     """An element face: the entity it lies on (a :class:`~edelweissfe.adaptivity.rootentities.RootFace`
-    or an :class:`InternalPlane`) and the rectangle it covers there."""
+    or an :class:`InternalPlane`) and the box it covers there."""
 
     entity: object
-    rectangle: Rectangle
+    box: Box
 
 
 class AdaptiveMesh:
@@ -201,8 +200,6 @@ class AdaptiveMesh:
 
             topology = Hex20Topology()
         self.topology = topology
-        #: the spatial dimension of the elements (3 for HEX20, 2 for QUAD8)
-        self.dim = topology.dim
         self.registry = NodeRegistry(reserve_labels=reserve_labels)
         self.splitFactor = splitFactor
         #: M: reference coordinate xi of a root is the lattice integer (xi + 1) * M
@@ -243,8 +240,13 @@ class AdaptiveMesh:
         self.nodeSets[name] = set(labels)
 
     def define_surface(self, name, pairs):
-        """pairs: iterable of (eid, faceID) with Marmot faceID (1-6)."""
+        """pairs: iterable of (eid, faceID) with Marmot faceID (1-6 for HEX20, 1-4 for QUAD8)."""
         self.surfaces[name] = set(pairs)
+
+    @property
+    def dim(self) -> int:
+        """The spatial dimension of the elements (3 for HEX20, 2 for QUAD8)."""
+        return self.topology.dim
 
     # ---- building the hierarchy ----
     def add_root(self, coords, labels, componentId: int = 0) -> int:
@@ -532,11 +534,10 @@ class AdaptiveMesh:
         """The faces (in 2D: edges) of an element as :class:`FaceOnEntity`, exact and topological.
 
         A face on the boundary of the element's root lies on a root face, named by its corner labels,
-        and its rectangle is measured in that face's canonical frame, so a neighbouring root derives the
-        identical entity and rectangle. A face inside the root lies on an :class:`InternalPlane`, with
-        the rectangle in the other two lattice coordinates. Two elements share a face iff they have faces
-        on one entity whose rectangles overlap with positive area. In 2D a face is an edge: its rectangle
-        is the interval along it times the fixed interval ``[0, 1]``.
+        and its :class:`Box` is measured in that face's canonical frame, so a neighbouring root derives the
+        identical entity and box. A face inside the root lies on an :class:`InternalPlane`, with the box
+        in the other lattice coordinates. Two elements share a face iff they have faces on one entity
+        whose boxes overlap with positive measure. In 2D a face is an edge, and its box one interval.
         """
         e = self.elements[eid]
         rootEid, origin, length = e["rootEid"], e["referenceBoxOrigin"], e["referenceBoxEdgeLength"]
@@ -549,6 +550,7 @@ class AdaptiveMesh:
             value = origin[axis] + int(rows[0, axis]) * length // 2
             inPlane = [k for k in range(self.dim) if k != axis]
             if value in (0, rootExtent):
+                # the face's two opposite corners, in the root face's own frame
                 corners = []
                 for d in (0, length):
                     point = [0] * self.dim
@@ -556,13 +558,12 @@ class AdaptiveMesh:
                     for k in inPlane:
                         point[k] = origin[k] + d
                     entity, position = self.rootEntities.root_face_position(rootEid, faceIndex, tuple(point))
-                    # an edge's position is 1D: its second coordinate is the fixed interval [0, 1]
-                    corners.append(tuple(position) if len(position) == 2 else (position[0], d // length))
-                (u0, v0), (u1, v1) = corners
-                faces.append(FaceOnEntity(entity, Rectangle(min(u0, u1), max(u0, u1), min(v0, v1), max(v0, v1))))
+                    corners.append(position)
+                box = Box(tuple((min(a, b), max(a, b)) for a, b in zip(*corners)))
+                faces.append(FaceOnEntity(entity, box))
             else:
-                (uMin, uMax), (vMin, vMax) = ([(origin[k], origin[k] + length) for k in inPlane] + [(0, 1)])[:2]
-                faces.append(FaceOnEntity(InternalPlane(rootEid, axis, value), Rectangle(uMin, uMax, vMin, vMax)))
+                box = Box(tuple((origin[k], origin[k] + length) for k in inPlane))
+                faces.append(FaceOnEntity(InternalPlane(rootEid, axis, value), box))
         return faces
 
     def balance_2to1(self) -> int:
@@ -586,19 +587,19 @@ class AdaptiveMesh:
             minLevel, maxLevel = min(level.values()), max(level.values())
             if maxLevel - minLevel < 2:
                 break
-            finerFacesOn = defaultdict(list)  # entity -> [(level, rectangle)] of the finer candidates
+            finerFacesOn = defaultdict(list)  # entity -> [(level, box)] of the finer candidates
             for eid in act:
                 if level[eid] >= minLevel + 2:
                     for face in self._facesOnEntities(eid):
-                        finerFacesOn[face.entity].append((level[eid], face.rectangle))
+                        finerFacesOn[face.entity].append((level[eid], face.box))
             toRefine = set()
             for a in act:
                 if level[a] + 2 > maxLevel:
                     continue
                 for face in self._facesOnEntities(a):
                     if any(
-                        finerLevel >= level[a] + 2 and face.rectangle.overlaps(rectangle)
-                        for finerLevel, rectangle in finerFacesOn.get(face.entity, ())
+                        finerLevel >= level[a] + 2 and face.box.overlaps(box)
+                        for finerLevel, box in finerFacesOn.get(face.entity, ())
                     ):
                         toRefine.add(a)
                         break

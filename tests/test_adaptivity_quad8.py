@@ -173,9 +173,7 @@ def test_balance_keeps_face_neighbours_within_one_level():
     faces = {eid: mesh._facesOnEntities(eid) for eid in mesh.active()}
     for a in faces:
         for b in faces:
-            if a < b and any(
-                fa.entity == fb.entity and fa.rectangle.overlaps(fb.rectangle) for fa in faces[a] for fb in faces[b]
-            ):
+            if a < b and any(fa.entity == fb.entity and fa.box.overlaps(fb.box) for fa in faces[a] for fb in faces[b]):
                 assert abs(mesh.elements[a]["level"] - mesh.elements[b]["level"]) <= 1
     mesh.check_conformity(mesh.hanging_mpc_records().keys())
 

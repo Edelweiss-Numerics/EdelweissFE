@@ -73,9 +73,9 @@ maxInc=1.0, minInc=1.0, maxNumInc=1, maxIter=25, stepLength=1
 """
 
 
-def _buildModel(tmp_path: Path, name: str) -> FEModel:
+def _buildModel(tmp_path: Path, name: str, inp: str = _INP) -> FEModel:
     inpPath = tmp_path / name
-    inpPath.write_text(_INP)
+    inpPath.write_text(inp)
     inputfile = parseInputFile(str(inpPath))
     journal = Journal(verbose=False)
     job = inputfile["job"][0]
@@ -178,3 +178,46 @@ def test_multi_round_replay_from_a_checkpoint_matches_the_live_run(tmp_path):
     for name, nodeField in modelA.nodeFields.items():
         for entry in ("U", "P"):
             assert np.array_equal(modelB.nodeFields[name][entry], nodeField[entry])
+
+
+_PAD_OF_CPS4 = """
+*modelGenerator, generator=planeRectQuad, name=pad
+nX=1
+nY=1
+x0=2
+y0=0
+l=1
+h=1
+elType=CPS4
+
+*section, name=padSection, material=mat, type=plane, thickness=1.0
+pad_all
+
+*elSet, elSet=mixed
+plate_all, pad_all
+"""
+
+
+@pytest.mark.parametrize(
+    "edit, message",
+    [
+        (lambda inp: inp.replace("domain=2d", "domain=1d"), "supports 2D and 3D models, not a 1D one"),
+        (lambda inp: inp.replace("elType  =CPS8R", "elType  =CPS4"), r"found no refineable \(8-node\) elements"),
+        (
+            lambda inp: inp.replace("maxLevel=1", "maxLevel=1\nrefineElSet=mixed") + _PAD_OF_CPS4,
+            r"refines 8-node elements in a 2D model, but the refineable set holds elements with another node "
+            r"count, e.g. \[10\]",
+        ),
+        (
+            lambda inp: inp.replace(
+                ">>marker, type=nodeSet, nSet=plate_top, initialOnly=True",
+                ">>marker, type=recoveryError, nodeField=displacement",
+            ),
+            "recoveryError marker on nodeField 'displacement': supports HEX20 elements",
+        ),
+    ],
+    ids=["1D model", "no QUAD8 elements", "refineElSet with QUAD4", "recoveryError marker"],
+)
+def test_an_input_the_2d_refinement_cannot_handle_is_rejected_at_setup(tmp_path, edit, message):
+    with pytest.raises(ValueError, match=message):
+        _buildModel(tmp_path, "invalid.inp", edit(_INP))
