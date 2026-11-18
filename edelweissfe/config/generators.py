@@ -32,7 +32,7 @@
 Mesh generators are used to create meshes,
 using different methods.
 
-Keyword: ``*generator``
+Keyword: ``*modelGenerator``
 
 .. code-block:: edelweiss
     :caption: Example:

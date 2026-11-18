@@ -19,8 +19,8 @@ decision out and may not. **See** :doc:`/developer/topologypipeline` **for the f
 that way, and what a new modifier must implement**; this page covers the individual modifiers.
 
 **Topological containers have stable identity.** :class:`~edelweissfe.sets.nodeset.NodeSet`,
-:class:`~edelweissfe.sets.elementset.ElementSet`, :class:`~edelweissfe.surfaces.entitybasedsurface.
-EntityBasedSurface` and :class:`~edelweissfe.fields.nodefield.NodeField` are created once and
+:class:`~edelweissfe.sets.elementset.ElementSet`,
+:class:`~edelweissfe.surfaces.entitybasedsurface.EntityBasedSurface` and :class:`~edelweissfe.fields.nodefield.NodeField` are created once and
 mutated in place (``replaceMembers``/``replaceData``/``resize``) by a mesh-mutating modifier --
 they are never replaced with a new object under the same name. A component that simply caches one
 of these, e.g. ``self._nodes = model.nodeSets["mySet"]`` in ``__init__`` and later iterates
@@ -35,8 +35,7 @@ the container on its own. Two mechanisms remain, narrowed to exactly these cases
 
 * **Lazy version check** -- each mutable container carries a ``_version`` counter, bumped on every
   in-place mutation. A component compares its own last-seen version against the container's current
-  one at its own per-increment entry point (e.g. ``StepActionBase._checkSetChanged``,
-  ``ConstraintBase._checkSetChanged``) and recomputes the derived array only on a mismatch --
+  one at its own per-increment entry point (e.g. ``StepActionBase._checkSetChanged``) and recomputes the derived array only on a mismatch --
   see :mod:`~edelweissfe.stepactions.dirichlet`, :mod:`~edelweissfe.stepactions.nodeforces` and
   :class:`~edelweissfe.utils.fieldoutput.ElementFieldOutput` for examples. This needs no
   registration and therefore has no observer lifecycle to leak.
@@ -244,11 +243,11 @@ Predictor after a refinement
 On the increment in which the mesh is mutated the solver already rebuilds the discrete system and
 starts from a zero predictor. The *following* increment, however, extrapolates from that increment's
 solution increment, which conflates the load advance with the one-off warm-start/remesh settling
-transient -- a questionable predictor when refining into a softening zone. The ``NISTSolver`` option
-``extrapolateAfterModelChange`` (default ``True``, i.e. previous behaviour) can be set ``False`` to
-also start the increment after a refinement from a zero predictor::
+transient -- a questionable predictor when refining into a softening zone. The ``NIST`` solver option
+``extrapolateAfterModelChange`` (default ``True``) can be set ``False`` to also start the increment after a
+refinement from a zero predictor::
 
-    >>options, category=NISTSolver, extrapolation=linear, extrapolateAfterModelChange=False
+    >>options, name=theSolver, extrapolation=linear, extrapolateAfterModelChange=False
 
 This changes only the Newton starting guess, not the converged solution.
 
@@ -258,12 +257,12 @@ Re-equilibration after a refinement
 By default the increment in which the mesh is refined advances the load *and* settles the
 warm-started refined mesh in a single solve. Near a softening process zone -- exactly where
 refinement is triggered -- coupling the load advance with the one-off warm-start settling transient
-can prevent recovery. The ``NISTSolver`` option ``equilibrateAfterModelChange`` (default ``False``)
+can prevent recovery. The ``NIST`` solver option ``equilibrateAfterModelChange`` (default ``False``)
 inserts, immediately after a refinement, one constant-load, zero-time re-equilibration increment
 (no load advance, zero Dirichlet increment) that settles the refined mesh to equilibrium at the last
 converged load *before* the load is advanced::
 
-    >>options, category=NISTSolver, equilibrateAfterModelChange=True
+    >>options, name=theSolver, equilibrateAfterModelChange=True
 
 On a path-independent material this is non-destructive (it changes only the increment sequence, not
 the converged root); for a history-dependent material it yields a physically distinct, relaxed path,
@@ -317,21 +316,18 @@ Compatibility with facet-based contact and tie
 
 Refining a solid whose surface feeds a facet-based contact or :mod:`~edelweissfe.constraints.tie`
 constraint works out of the box: the modifier keeps the relevant ``*surface`` definition in sync
-with the refined child faces, and the constraint -- a :class:`~edelweissfe.models.meshdependent.
-MeshDependent` -- regenerates its facets from it. :mod:`~edelweissfe.constraints.
-nodetodeformablesurfacepenalty` notices via :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changesSince`
-at its own next connectivity update (a pull, since that tick already runs before the discrete
-system is rebuilt); a tie has no such early tick of its own (its only hook is called *from inside*
-that rebuild, too late to safely swap in new facet elements), so it reconciles via the model's push
-notification instead. Either way, no separate wiring is needed. A model with both solid elements to
+with the refined child faces, and the constraint -- a
+:class:`~edelweissfe.models.meshdependent.MeshDependent` -- regenerates its facets from it: both
+:mod:`~edelweissfe.constraints.nodetodeformablesurfacepenalty` and :mod:`~edelweissfe.constraints.tie`
+register with the topology pipeline, which refreshes them
+(:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents`) after the refinement and before
+the discrete system is rebuilt. No separate wiring is needed. A model with both solid elements to
 be refined and pre-existing contact-facet elements should restrict the octree mirror explicitly with
 ``refineElSet`` (see above), since a facet element is never itself 20-node but need not be excluded
 by name::
 
     *modelModifier, type=hAdaptivity, name=amr
-    result=stress
-    expression='x > 300.0'
-    reducer=absmax
+    >>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>', threshold=300.0
     maxLevel=1
     refineElSet=lower_all
 
@@ -349,7 +345,7 @@ The rigid-body contact constraints (:mod:`~edelweissfe.constraints.nodetorigidsu
 :mod:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty`) are likewise ``MeshDependent``, but
 lighter still: their master geometry is rigid (an analytic plane, or a triangulated rigid body), so
 refinement only ever grows their watched slave ``nSet`` -- no facet regeneration, no per-slave
-history, just a refreshed node list at the next :meth:`updateConnectivity` tick.
+history, just a node list refreshed by the topology pipeline after the refinement, as above.
 
 .. literalinclude:: ../../../testfiles/marmot/AMR_RigidContactRefine/test.inp
     :language: edelweiss
@@ -415,7 +411,7 @@ refined, and a quality veto can clear once local geometry changes.
 node coordinates are cached at the moment each element is created, and never re-read from the live
 model afterward. Without correcting that cache too, a LATER refinement of an element ``surfaceSnap``
 already snapped would silently subdivide from the stale, pre-snap geometry. ``surfaceSnap`` calls
-``HAdaptivityModelModifier.syncNodeCoordinates`` on every ``hAdaptivity`` instance in the model right
+:meth:`~edelweissfe.modelmodifiers.adaptivity.hadaptivity.ModelModifier.syncNodeCoordinates` on every ``hAdaptivity`` instance in the model right
 after writing ``model.nodes``, closing this gap.
 
 .. pprint:: modelmodifier:surfacesnap

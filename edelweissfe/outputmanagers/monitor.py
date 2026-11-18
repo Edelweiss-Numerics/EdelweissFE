@@ -45,7 +45,7 @@ A simple monitor to observe results (fieldOutputs) in the console during analysi
 .. code-block:: edelweiss
     :caption: Example:
 
-    *output, type=monitor, jobName=cpe4job, name=omegaMon
+    *output, type=monitor, name=omegaMon
         fieldOutput=omega, f(x)='max(x)'
 """
 

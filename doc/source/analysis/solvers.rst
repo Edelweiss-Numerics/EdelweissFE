@@ -93,7 +93,11 @@ option is a constructor argument of the solver:
 
 .. code-block:: python
 
-    stepActions["indirectcontrol"]["opening"] = IndirectControl("opening", dof1, dof2, [-1.0, 0.0], [1.0, 0.0], 0.01, model, journal)
+    from edelweissfe.stepactions.indirectcontrol import StepAction as IndirectControl
+
+    stepActions["indirectcontrol"]["opening"] = IndirectControl(
+        "opening", dof1, dof2, np.array([-1.0, 0.0]), np.array([1.0, 0.0]), 0.01, model, journal
+    )
     solver = NISTPArcLength(jobInfo, journal, arcLengthController="opening")
 
 A step under arc length control may end before its time is up: the solver option ``stopCondition``, an expression of
