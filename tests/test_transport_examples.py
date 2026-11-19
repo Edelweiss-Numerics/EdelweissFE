@@ -98,3 +98,19 @@ def test_curing_slab_dries_at_the_top_and_self_desiccates_at_the_sealed_bottom(t
     _, bottom = _nodal(model, "relative humidity", nodeSet="gen_back")
     np.testing.assert_allclose(top, 0.9673, atol=2e-4)
     np.testing.assert_allclose(bottom, 0.9733, atol=2e-4)
+
+
+def test_early_age_wall_heats_by_hydration_and_dries_after_the_formwork_is_removed(tmp_path, monkeypatch):
+    """examples/ThermoHygro/early_age_wall_2d.inp: after 28 days the wall is back at the air temperature, the face has
+    dried towards the ambient humidity, the interior has self-desiccated, and the humidity stays within its bounds."""
+    _requireMarmotElement("DC2D4TH")
+    model = _runExample(tmp_path, monkeypatch, "ThermoHygro/early_age_wall_2d.inp")
+
+    _, T = _nodal(model, "temperature")
+    _, h = _nodal(model, "relative humidity")
+    _, hFace = _nodal(model, "relative humidity", nodeSet="gen_left")
+    _, hCore = _nodal(model, "relative humidity", nodeSet="gen_right")
+    np.testing.assert_allclose(T, 20.0, atol=0.02)
+    np.testing.assert_allclose(hFace, 0.6077, atol=5e-4)
+    np.testing.assert_allclose(hCore, 0.9742, atol=5e-4)
+    assert 0.6 < h.min() and h.max() < 1.0
