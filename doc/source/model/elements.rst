@@ -63,7 +63,7 @@ material (e.g. kg/(m² s), or m/s in the classical form with a unit moisture cap
     :caption: Example: ``testfiles/marmot/MoistureDryingDC2D8H/test.inp``
 
 Coupled heat and moisture transport elements
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The same eight element shapes with the suffix ``TH`` (``DC2D3TH``, ``DC2D4TH``, ``DC2D8TH``, ``DCAX4TH``, ``DCAX8TH``,
 ``DC3D4TH``, ``DC3D8TH``, ``DC3D20TH``) carry two fields per node, ``temperature`` and ``relative humidity`` (in this
