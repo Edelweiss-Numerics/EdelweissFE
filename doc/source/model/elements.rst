@@ -38,6 +38,9 @@ axisymmetric ones).
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/HeatTransientDC2D4T/test.inp``
 
+Worked examples with figures (fire exposure of a column section and of a cube, a pipe wall heated to steady state against
+its closed form) are in ``examples/HeatTransfer``.
+
 Moisture diffusion elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -61,6 +64,9 @@ material (e.g. kg/(m² s), or m/s in the classical form with a unit moisture cap
 .. literalinclude:: ../../../testfiles/marmot/MoistureDryingDC2D8H/test.inp
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/MoistureDryingDC2D8H/test.inp``
+
+Worked examples with figures (drying of a column section and of a standard cylinder, a curing slab with
+self-desiccation) are in ``examples/MoistureDiffusion``.
 
 Coupled heat and moisture transport elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
