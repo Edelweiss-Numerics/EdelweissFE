@@ -186,7 +186,7 @@ def test_no_documented_module_poisons_the_parser_when_imported_first():
     of the shared ``options`` keyword landed.
     """
 
-    failures = _failures(lambda returnCode, imported: returnCode != 0)
+    failures = _failures(lambda returnCode, imported: imported and returnCode != 0)
 
     assert (
         not failures

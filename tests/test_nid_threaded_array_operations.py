@@ -197,6 +197,7 @@ def test_the_threaded_path_reproduces_the_serial_one_bitwise(tmp_path, monkeypat
 
     assert _hangingSlaveNodes(threadedModel) > 0, "no hanging node; the MPC path was not exercised"
     assert slicedLengths and min(slicedLengths) > sliceLength, "an operation was not split into several slices"
+    assert any(length % sliceLength for length in slicedLengths), "no operation ended in a shorter slice"
     assert threadedModel.time == serialModel.time
     for serial, threaded, name in zip(_finalState(serialModel), _finalState(threadedModel), "UVA"):
         assert threaded.tobytes() == serial.tobytes(), name
