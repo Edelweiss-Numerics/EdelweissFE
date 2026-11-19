@@ -794,11 +794,27 @@ def _reader(checkpoint: Path) -> str:
 _NOT_STATE = {"_stepWallClockTic", "_version", "_seenParentVersion", "linSolver"}
 
 
-def _plainValue(value, directory: str, depth: int = 0):
+def _inCanonicalOrder(entries: list) -> list:
+    """Canonical forms (of the entries of a set or a dict) in a fixed order: their natural one, or by ``repr`` where
+    they do not compare (mixed types)."""
+    try:
+        return sorted(entries)
+    except TypeError:
+        return sorted(entries, key=repr)
+
+
+def _plainValue(value, directory: str, introspected: dict, depth: int = 0):
     """A canonical, comparable form of a plain value -- the kind of attribute state is made of --
     or None. Containers of plain values count, and so do the plain attributes of a helper object
     (one level deep, e.g. a solver's conservation check). Floats compare bitwise; the run's own
-    directory, which differs between two runs by construction, is cut out of strings."""
+    directory, which differs between two runs by construction, is cut out of strings. A helper object
+    is looked at once per snapshot: ``introspected`` holds its form, by ``id``, for the next component
+    that refers to it."""
+    kind = type(value)
+    if kind is int or kind is bool:
+        return value
+    if kind is float:
+        return value.hex()
     if isinstance(value, str):
         return value.replace(directory, "<run>")
     if isinstance(value, (bool, int, np.bool_, np.integer)):
@@ -808,29 +824,40 @@ def _plainValue(value, directory: str, depth: int = 0):
     if isinstance(value, np.ndarray):
         return None if value.dtype == object else (value.dtype.str, value.shape, value.tobytes())
     if isinstance(value, TimeStep):
-        return _plainValue((value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime), directory)
+        return _plainValue(
+            (value.number, value.stepProgressIncrement, value.stepProgress, value.totalTime), directory, introspected
+        )
     if isinstance(value, (list, tuple, set, frozenset)):
-        entries = [_plainValue(entry, directory, depth) for entry in value]
-        if any(entry is None for entry in entries):
-            return None
-        return tuple(sorted(entries, key=repr) if isinstance(value, (set, frozenset)) else entries)
+        if all(type(entry) is int for entry in value):
+            entries = list(value)
+        else:
+            entries = [_plainValue(entry, directory, introspected, depth) for entry in value]
+            if any(entry is None for entry in entries):
+                return None
+        return tuple(_inCanonicalOrder(entries) if isinstance(value, (set, frozenset)) else entries)
     if isinstance(value, dict):
         entries = [
-            (_plainValue(key, directory, depth), _plainValue(entry, directory, depth)) for key, entry in value.items()
+            (_plainValue(key, directory, introspected, depth), _plainValue(entry, directory, introspected, depth))
+            for key, entry in value.items()
         ]
         if any(key is None or entry is None for key, entry in entries):
             return None
-        return tuple(sorted(entries, key=repr))
+        return tuple(_inCanonicalOrder(entries))
     if depth == 0 and type(value).__module__.startswith("edelweissfe"):
-        try:
-            attributes = {
-                name: _plainValue(entry, directory, depth + 1)
-                for name, entry in vars(value).items()
-                if name not in _NOT_STATE
-            }
-        except TypeError:  # a compiled object without instance attributes
-            return None
-        return (type(value).__qualname__, tuple(sorted((n, a) for n, a in attributes.items() if a is not None)))
+        if id(value) not in introspected:
+            try:
+                attributes = {
+                    name: _plainValue(entry, directory, introspected, depth + 1)
+                    for name, entry in vars(value).items()
+                    if name not in _NOT_STATE
+                }
+                introspected[id(value)] = (
+                    type(value).__qualname__,
+                    tuple(sorted((n, a) for n, a in attributes.items() if a is not None)),
+                )
+            except TypeError:  # a compiled object without instance attributes
+                introspected[id(value)] = None
+        return introspected[id(value)]
     return None
 
 
@@ -843,14 +870,16 @@ def _components(model, step, directory: Path) -> dict:
     components |= {"fieldOutput " + name: o for name, o in step.fieldOutputController.fieldOutputs.items()}
     for actionType, actions in step.actions.items():
         components |= {"{:} {:}".format(actionType, name): a for name, a in actions.items()}
-    return {
-        key: {
-            name: _plainValue(value, str(directory))
+    introspected = {}
+    snapshot = {}
+    for key, component in components.items():
+        attributes = {
+            name: _plainValue(value, str(directory), introspected)
             for name, value in vars(component).items()
-            if name not in _NOT_STATE and _plainValue(value, str(directory)) is not None
+            if name not in _NOT_STATE
         }
-        for key, component in components.items()
-    }
+        snapshot[key] = {name: a for name, a in attributes.items() if a is not None}
+    return snapshot
 
 
 def _differingComponents(resumed: dict, reference: dict) -> list:

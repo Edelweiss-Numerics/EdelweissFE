@@ -29,6 +29,8 @@ Created on Thu May 21 14:23:14 2015
 
 @author: c8441141
 """
+
+import concurrent.futures
 import os
 import pathlib
 import shutil
@@ -73,6 +75,10 @@ marmot_dir = expanduser(os.environ.get("MARMOT_INSTALL_DIR", native_prefix))
 marmot_install_dir_file = "marmot_install_dir.txt"
 mkl_include = expanduser(os.environ.get("MKL_INCLUDE_DIR", join(native_prefix, "include")))
 eigen_include = expanduser(os.environ.get("EIGEN_INCLUDE_DIR", join(native_prefix, "include", "eigen3")))
+build_jobs = os.environ.get("EDELWEISSFE_BUILD_JOBS", str(os.process_cpu_count() or 1))
+if not build_jobs.isdigit() or int(build_jobs) < 1:
+    raise ValueError(f"EDELWEISSFE_BUILD_JOBS must be a positive integer, not {build_jobs!r}")
+build_jobs = int(build_jobs)
 # AMGCL specifically defaults to no arch flags (see the comment at its Extension below) but
 # still honors an explicit EDELWEISSFE_ARCH_FLAGS override, consistent with every other
 # extension above -- only the *default* differs, not the override mechanism.
@@ -84,6 +90,8 @@ print("MKL include directory (overwrite via environment var. MKL_INCLUDE_DIR):")
 print(mkl_include)
 print("Eigen include directory (overwrite via environment var. EIGEN_INCLUDE_DIR):")
 print(eigen_include)
+print("Extensions compiled at once (overwrite via environment var. EDELWEISSFE_BUILD_JOBS, or -j N):")
+print(build_jobs)
 print("Architecture compile flags (overwrite via environment var. EDELWEISSFE_ARCH_FLAGS):")
 print(arch_flags)
 print("AMGCL architecture compile flags (overwrite via the same environment variable; defaults to none, see below):")
@@ -313,15 +321,31 @@ print("Now compile!")
 
 class optional_build_ext(build_ext):
     def build_extensions(self):
-        self.successful_extensions = []
-
-        for ext in self.extensions:
+        # The extensions are independent of each other: they are compiled side by side (the compilers run as
+        # subprocesses; as many at once as there are cores, or as EDELWEISSFE_BUILD_JOBS or ``-j N`` say), and each
+        # may fail on its own.
+        def build(ext):
             try:
                 self.build_extension(ext)
+            except Exception as e:
+                return e
+            return None
+
+        # AMGCL's extension takes longer than all others together: it starts first, and the others share the
+        # remaining workers, instead of the build waiting for it at the end.
+        slowestFirst = sorted(self.extensions, key=lambda ext: ext.name != "edelweissfe.linsolve.amgcl.amgcl")
+        workers = self.parallel if type(self.parallel) is int and self.parallel > 0 else build_jobs
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            errors = dict(zip((ext.name for ext in slowestFirst), executor.map(build, slowestFirst)))
+
+        self.successful_extensions = []
+        for ext in self.extensions:
+            error = errors[ext.name]
+            if error is None:
                 self.successful_extensions.append(ext.name)
                 print(f"[OK] Built extension: {ext.name}")
-            except Exception as e:
-                print(f"[FAIL] Could not build {ext.name}: {e}")
+            else:
+                print(f"[FAIL] Could not build {ext.name}: {error}")
 
         self.write_package_file("built_extensions.log", "\n".join(self.successful_extensions) + "\n")
         # The Marmot installation the extensions were built against. On Windows, edelweissfe/__init__.py adds its

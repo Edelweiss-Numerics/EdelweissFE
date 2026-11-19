@@ -40,25 +40,42 @@ import pytest
 from edelweissfe.utils.facetcontactgeometry import (
     closestFacetCandidates,
     tria3ClosestPoint,
+    tria3ClosestPoints,
 )
+
+
+def _distancesToEveryFacet(queryPoints: np.ndarray, facetCoords: list) -> list:
+    """The distance of every query point to every facet, row by row, evaluated in one batch: a
+    pair's result does not depend on the batch (test_facet_closest_points.py), so these are the
+    distances :func:`tria3ClosestPoint` returns pair by pair."""
+
+    nPoints, nFacets = len(queryPoints), len(facetCoords)
+    facets = np.tile(np.asarray(facetCoords, dtype=float), (nPoints, 1, 1))
+    _, distances = tria3ClosestPoints(np.repeat(queryPoints, nFacets, axis=0), facets[:, 0], facets[:, 1], facets[:, 2])
+    return distances.reshape(nPoints, nFacets).tolist()
+
+
+def _firstStrictMinimum(distanceToFacet: list, facets, searchDistance) -> int | None:
+    """The selection the constraints make over the given facets, in the given order: the first strict
+    minimum wins, and none if it lies beyond the search distance."""
+
+    bestDistance, bestFacet = np.inf, None
+    for i in facets:
+        if distanceToFacet[i] < bestDistance:
+            bestDistance, bestFacet = distanceToFacet[i], i
+    if bestFacet is not None and (searchDistance is None or bestDistance <= searchDistance):
+        return bestFacet
+    return None
 
 
 def _selectExhaustively(queryPoints: np.ndarray, facetCoords: list, searchDistance=None) -> list:
     """The selection the constraints would make without any broadphase at all: every facet
     evaluated, first strict minimum wins."""
 
-    selected = []
-    for point in queryPoints:
-        bestDistance, bestFacet = np.inf, None
-        for i, facet in enumerate(facetCoords):
-            _, distance = tria3ClosestPoint(point, *facet)
-            if distance < bestDistance:
-                bestDistance, bestFacet = distance, i
-        if bestFacet is not None and (searchDistance is None or bestDistance <= searchDistance):
-            selected.append(bestFacet)
-        else:
-            selected.append(None)
-    return selected
+    return [
+        _firstStrictMinimum(distanceToFacet, range(len(facetCoords)), searchDistance)
+        for distanceToFacet in _distancesToEveryFacet(queryPoints, facetCoords)
+    ]
 
 
 def _selectViaBroadphase(queryPoints: np.ndarray, facetCoords: list, searchDistance=None) -> list:
@@ -66,19 +83,10 @@ def _selectViaBroadphase(queryPoints: np.ndarray, facetCoords: list, searchDista
     actually do."""
 
     candidatesPerPoint = closestFacetCandidates(queryPoints, facetCoords, searchDistance)
-
-    selected = []
-    for p, point in enumerate(queryPoints):
-        bestDistance, bestFacet = np.inf, None
-        for i in candidatesPerPoint[p]:
-            _, distance = tria3ClosestPoint(point, *facetCoords[i])
-            if distance < bestDistance:
-                bestDistance, bestFacet = distance, i
-        if bestFacet is not None and (searchDistance is None or bestDistance <= searchDistance):
-            selected.append(bestFacet)
-        else:
-            selected.append(None)
-    return selected
+    return [
+        _firstStrictMinimum(distanceToFacet, candidates, searchDistance)
+        for distanceToFacet, candidates in zip(_distancesToEveryFacet(queryPoints, facetCoords), candidatesPerPoint)
+    ]
 
 
 def _gradedSurface(fineCells: int, coarseCells: int, fineSize: float, coarseSize: float) -> list:

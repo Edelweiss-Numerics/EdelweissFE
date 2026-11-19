@@ -37,14 +37,16 @@ import order:
    lazily and idempotently by ``_ensureOptionsKeyword``) must not fail silently if imported before
    the step types it depends on exist.
 
-Each check runs in a **fresh subprocess** per module, which is the only way to test an import-order
-property, and the reason this file is slower than the rest of the suite. The subprocesses run
-concurrently, and a failure reports *every* offending module rather than only the first, because
-these bugs come in families with one shared cause -- seeing all of them together is what points at
-the cause instead of at a symptom.
+Both checks run in one **fresh subprocess** per module, which is the only way to test an import-order
+property, and the reason this file is slower than the rest of the suite: it imports the module, then
+the parser, and reports when the module has imported, so that the two failures are told apart (a crash
+included). The subprocesses run concurrently, and a failure reports *every* offending module rather
+than only the first, because these bugs come in families with one shared cause -- seeing all of them
+together is what points at the cause instead of at a symptom.
 """
 
 import concurrent.futures
+import functools
 import json
 import subprocess
 import sys
@@ -83,8 +85,8 @@ def _documentedModuleNames() -> list[str]:
     return json.loads(result.stdout)
 
 
-def _runInFreshInterpreter(code: str) -> tuple[int, str]:
-    """Run ``code`` in a fresh interpreter and return its exit status and last stderr line.
+def _runInFreshInterpreter(code: str) -> tuple[int, str, str]:
+    """Run ``code`` in a fresh interpreter and return its exit status, its stdout and its last stderr line.
 
     Parameters
     ----------
@@ -93,8 +95,9 @@ def _runInFreshInterpreter(code: str) -> tuple[int, str]:
 
     Returns
     -------
-    tuple[int, str]
-        The return code, and the last line of stderr (the exception message, for a traceback).
+    tuple[int, str, str]
+        The return code, the standard output, and the last line of stderr (the exception message, for a
+        traceback).
     """
 
     result = subprocess.run(
@@ -110,34 +113,50 @@ def _runInFreshInterpreter(code: str) -> tuple[int, str]:
         cwd=tempfile.gettempdir(),
     )
     lastLine = (result.stderr.strip().splitlines() or [""])[-1]
-    return result.returncode, lastLine
+    return result.returncode, result.stdout, lastLine
 
 
-def _failuresAcrossModules(codeForModule) -> list[tuple[str, str]]:
-    """Run one fresh interpreter per documented module and collect every failure.
+#: What a probe prints once its module has imported: a probe that does not print it failed (or crashed) importing the
+#: module on its own.
+_IMPORTED = "probe: the module imported on its own"
 
-    Parameters
-    ----------
-    codeForModule
-        Callable mapping a module name to the source to execute for it.
+#: The probe of a module: import it alone -- the first statement of the interpreter --, then the parser.
+_PROBE = """
+import {module}
+print("{imported}", flush=True)
+import edelweissfe.utils.inputfileparser
+"""
+
+
+@functools.cache
+def _probeEveryModule() -> dict[str, tuple[int, str, str]]:
+    """Probe every documented module in a fresh interpreter of its own (see :data:`_PROBE`).
 
     Returns
     -------
-    list[tuple[str, str]]
-        ``(moduleName, errorMessage)`` for each module whose interpreter exited non-zero, sorted.
+    dict[str, tuple[int, str, str]]
+        By module name, what :func:`_runInFreshInterpreter` returned for its probe.
     """
 
     names = _documentedModuleNames()
     assert names, "no documented modules were discovered at all -- the discovery must be broken"
 
     def probe(name):
-        returnCode, message = _runInFreshInterpreter(codeForModule(name))
-        return name, returnCode, message
+        return _runInFreshInterpreter(_PROBE.format(module=name, imported=_IMPORTED))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-        results = list(executor.map(probe, names))
+        return dict(zip(names, executor.map(probe, names)))
 
-    return sorted((name, message) for name, returnCode, message in results if returnCode != 0)
+
+def _failures(failed) -> list[tuple[str, str]]:
+    """``(moduleName, errorMessage)`` for each module whose probe ``failed(returnCode, imported)`` says failed,
+    sorted; ``imported`` tells whether the module imported on its own."""
+
+    return sorted(
+        (name, message)
+        for name, (returnCode, stdout, message) in _probeEveryModule().items()
+        if failed(returnCode, _IMPORTED in stdout)
+    )
 
 
 def _formatFailures(failures: list[tuple[str, str]]) -> str:
@@ -148,7 +167,7 @@ def _formatFailures(failures: list[tuple[str, str]]) -> str:
 def test_every_documented_module_imports_standalone():
     """Each documented module must import in an otherwise-untouched interpreter."""
 
-    failures = _failuresAcrossModules(lambda name: f"import {name}\n")
+    failures = _failures(lambda returnCode, imported: not imported)
 
     assert not failures, (
         "these documented modules cannot be imported on their own, so nothing but the input file "
@@ -167,7 +186,7 @@ def test_no_documented_module_poisons_the_parser_when_imported_first():
     of the shared ``options`` keyword landed.
     """
 
-    failures = _failuresAcrossModules(lambda name: f"import {name}\nimport edelweissfe.utils.inputfileparser\n")
+    failures = _failures(lambda returnCode, imported: imported and returnCode != 0)
 
     assert (
         not failures
