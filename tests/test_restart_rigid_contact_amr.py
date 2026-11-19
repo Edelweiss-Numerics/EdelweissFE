@@ -142,28 +142,23 @@ N_INCREMENTS_FULL = 400
 N_INCREMENTS_RESUMED_FROM = 340
 
 
-def _checkpointAfter(directory: Path, nIncrements: int) -> Path:
-    """The checkpoint a run wrote into ``directory`` after ``nIncrements`` increments."""
-    for checkpoint in directory.glob("ckpt_*.h5"):
-        with h5py.File(checkpoint, "r") as f:
-            if f.attrs["numberOfIncrementsDone"] == nIncrements:
-                assert f.attrs["time"] > 0.0
-                return checkpoint
-    raise AssertionError("no checkpoint after {:} increments".format(nIncrements))
-
-
 def test_resume_across_refinement_next_to_a_moving_rigid_body(tmp_path):
     stl = tmp_path / "plate.stl"
     _writePlateStl(stl)
 
-    # The uninterrupted run writes a checkpoint at every output and keeps them all; the resumed run writes none. That a
-    # write changes nothing is tested in test_contact_restart_frozen_projection.py, with live refinement.
+    # Neither the uninterrupted run nor the resumed run writes checkpoints: a write that changed the run before the
+    # checkpoint would have changed the checkpoint, and so where the resumed run ends.
+    reference = _run(tmp_path / "uninterrupted.inp", _deck(stl, N_INCREMENTS_FULL))
+
+    # Up to the checkpoint, writing one at every output; only the latest is kept.
     writer = (
-        "*output, type=restart, name=restart\n"
-        f"writeInterval=1, baseName={tmp_path / 'ckpt'}, numberOfFilesToKeep={N_INCREMENTS_FULL}\n"
+        f"*output, type=restart, name=restart\nwriteInterval=1, baseName={tmp_path / 'ckpt'}, numberOfFilesToKeep=1\n"
     )
-    reference = _run(tmp_path / "uninterrupted.inp", _deck(stl, N_INCREMENTS_FULL, writer))
-    checkpoint = _checkpointAfter(tmp_path, N_INCREMENTS_RESUMED_FROM)
+    _run(tmp_path / "writingCheckpoints.inp", _deck(stl, N_INCREMENTS_RESUMED_FROM, writer))
+    (checkpoint,) = tmp_path.glob("ckpt_*.h5")
+    with h5py.File(checkpoint, "r") as f:
+        assert f.attrs["numberOfIncrementsDone"] == N_INCREMENTS_RESUMED_FROM
+        assert f.attrs["time"] > 0.0
 
     resumed = _run(tmp_path / "resumed.inp", _deck(stl, N_INCREMENTS_FULL, f"*restart, readFrom={checkpoint}"))
 
