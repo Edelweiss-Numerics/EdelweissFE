@@ -5,8 +5,9 @@ Solvers
    :members:
 
 Every solver builds its discrete system from the model, and renews it when the model reports a change, e.g. after a
-contact search or an h-adaptive refinement; what is renewed depends only on the kind of change. How this works, which
-solver asks when, and what it asks of the model, is told once, for developers, in :doc:`/developer/architecture`; the
+contact search or an h-adaptive refinement; what is rebuilt depends only on the kind of change. How this works is
+explained for developers in :doc:`/developer/architecture`; when each solver updates its discrete system is listed in
+:ref:`solver-discrete-system-updates`, and what a solver takes from the model in :ref:`model-discrete-system`. The
 rule every contribution to the residual and the tangent follows is in :doc:`/developer/residualandtangent`. Below is
 what the user needs per solver.
 
