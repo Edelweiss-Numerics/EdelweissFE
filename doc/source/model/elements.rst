@@ -15,7 +15,7 @@ Relevant module: ``edelweissfe.elements.marmotelement.element``
    :members:
 
 Heat conduction elements
-^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 Marmot's transport elements ``DC2D3T``, ``DC2D4T``, ``DC2D8T`` (plane, ``type=plane`` section with a thickness),
 ``DCAX4T``, ``DCAX8T`` (axisymmetric, ``domain=axisymmetric``, :math:`r = x`; a plane section, whose thickness they do
@@ -39,7 +39,7 @@ axisymmetric ones).
     :caption: Example: ``testfiles/marmot/HeatTransientDC2D4T/test.inp``
 
 Moisture diffusion elements
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The same eight element shapes with the suffix ``H`` (``DC2D3H``, ``DC2D4H``, ``DC2D8H``, ``DCAX4H``, ``DCAX8H``,
 ``DC3D4H``, ``DC3D8H``, ``DC3D20H``) carry the scalar field ``relative humidity`` (pore relative humidity, 0 ... 1) and
