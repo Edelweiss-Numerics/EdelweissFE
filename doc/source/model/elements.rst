@@ -65,6 +65,9 @@ material (e.g. kg/(m² s), or m/s in the classical form with a unit moisture cap
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/MoistureDryingDC2D8H/test.inp``
 
+Worked examples with figures (drying of a column section and of a standard cylinder, a curing slab with
+self-desiccation) are in ``examples/MoistureDiffusion``.
+
 Provider ``marmotsingleqpelement``
 ----------------------------------
 
