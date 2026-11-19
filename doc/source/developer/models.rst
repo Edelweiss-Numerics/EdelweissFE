@@ -37,3 +37,18 @@ and mesh-dependent consumers, and the recorded history that a restart replays. S
 
 .. automodule:: edelweissfe.models.topologypipeline
    :members:
+
+``ModelChange`` - The change log of the topology pipeline
+---------------------------------------------------------
+
+.. automodule:: edelweissfe.models.modelchange
+   :members:
+
+``MeshDependent`` - Consumers that cache mesh-derived state
+-----------------------------------------------------------
+
+.. automodule:: edelweissfe.models.meshdependent
+   :members:
+
+.. automodule:: edelweissfe.models.modelchangeobserver
+   :members:

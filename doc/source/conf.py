@@ -280,7 +280,9 @@ class PrettyPrintDirective(CodeBlock):
             if meta.required:
                 self._add_literal_row(body, optionName, f"{meta.dtype.__name__} (required)", meta.description)
                 continue
-            if field.default is not dataclasses.MISSING:
+            if meta.documentedDefault is not dataclasses.MISSING:
+                default = meta.documentedDefault
+            elif field.default is not dataclasses.MISSING:
                 default = field.default
             elif field.default_factory is not dataclasses.MISSING:
                 default = field.default_factory()
@@ -298,6 +300,7 @@ class PrettyPrintDirective(CodeBlock):
         """
         from edelweissfe.config import registry
         from edelweissfe.utils.schema import (
+            datalineFieldMeta,
             optionNames,
             scalarOptionNames,
             subKeywordFieldNames,
@@ -317,7 +320,12 @@ class PrettyPrintDirective(CodeBlock):
             self._add_row(body, f"{name} declares no option schema -- see its own class docstring.")
             return [table]
 
-        result = [self._render_scalar_fields_table(itemCaption, optionNames(schema))]
+        table = self._render_scalar_fields_table(itemCaption, optionNames(schema))
+        datalines = datalineFieldMeta(schema)
+        if datalines is not None:
+            body = table.next_node(nodes.tbody)
+            self._add_row(body, "data lines", "required" if datalines.required else "optional", datalines.description)
+        result = [table]
 
         for optionName, field in subKeywordFieldNames(schema).items():
             from edelweissfe.utils.schema import fieldSchemaMeta

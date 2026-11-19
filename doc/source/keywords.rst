@@ -1,428 +1,185 @@
 Keyword reference
 =================
 
-Every keyword of the input file with its options. The syntax of an input file is described in :doc:`syntax`.
+Every top-level keyword of the input file with its options. The syntax of an input file is described in
+:doc:`syntax`. The tables are generated from each keyword's option schema in ``edelweissfe/keywords/``, the same
+schema the parser validates an input file against; ``edelweissfe --keywords`` prints the same information.
 
-.. list-table:: ``*advancedmaterial`` : definition of an advanced material
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+Many keywords only select a type (``type=``, ``solver=``, ``generator=``, ...); the options of that type are
+documented on the page linked below the keyword.
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - material description, multiline possible
-    * - ``id``
-      - ``string``
-      - name of the property
-    * - ``name``
-      - ``string``
-      - name of the property
+Model
+*****
 
-.. list-table:: ``*analyticalfield`` : define an analytical field
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+``*node`` - Define nodes
+------------------------
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - definition
-    * - ``name``
-      - ``string``
-      - name of analytical field
-    * - ``type``
-      - ``string``
-      - type of analytical field (currently 'expression' only)
+See :doc:`model/mesh`.
 
-.. list-table:: ``*configureplots`` : customize the figures and axes
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+.. pprint:: keyword:node
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - key=value pairs for configuration of figures and axes
+``*element`` - Define elements
+------------------------------
 
-.. list-table:: ``*constraint`` : define a constraint
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+See :doc:`model/mesh` and :doc:`model/elements`.
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - definition of the constraint
-    * - ``name``
-      - ``string``
-      - (optional) name of the constraint
-    * - ``type``
-      - ``string``
-      - constraint type
+.. pprint:: keyword:element
 
-.. list-table:: ``*element`` : definition of element(s)
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+``*elSet`` - Define an element set
+----------------------------------
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``numpy integer array``
-      - Abaqus like element definiton lines
-    * - ``elset``
-      - ``string``
-      - name
-    * - ``provider``
-      - ``string``
-      - provider (library) for the element type. Default: Marmot
-    * - ``type``
-      - ``string``
-      - assign one of the types definied in the elementlibrary
+See :doc:`model/sets`.
 
-.. list-table:: ``*elset`` : definition of an element set
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+.. pprint:: keyword:elSet
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - Abaqus like element set definiton lines
-    * - ``elset``
-      - ``string``
-      - name
-    * - ``generate``
-      - ``string``
-      - set True to generate from data line 1: start-element, end-element, step
+``*nSet`` - Define a node set
+-----------------------------
 
-.. list-table:: ``*exportplots`` : export your figures
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+See :doc:`model/sets`.
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - key=value pairs for exporting of figures and axes
+.. pprint:: keyword:nSet
 
-.. list-table:: ``*fieldoutput`` : define fieldoutput, which is used by outputmanagers
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+``*surface`` - Define a surface
+-------------------------------
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - defintions lines for the output module
-    * - ``jobname``
-      - ``string``
-      - (optional), name of job, standard=defaultJob
+See :doc:`model/sets`.
 
-.. list-table:: ``*include`` : (optional) load extra .inp file (fragment), use relative path to current .inp
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+.. pprint:: keyword:surface
 
-    * - Option
-      - Type
-      - Description
-    * - ``input``
-      - ``string``
-      - filename
+``*modelGenerator`` - Generate a mesh or model
+----------------------------------------------
 
-.. list-table:: ``*job`` : definition of an analysis job
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+Generators and their options: :doc:`model/generators`.
 
-    * - Option
-      - Type
-      - Description
-    * - ``domain``
-      - ``string``
-      - define spatial domain: 1d, 2d, 3d
-    * - ``name``
-      - ``string``
-      - (optional) name of job, standard = defaultJob
-    * - ``starttime``
-      - ``float``
-      - (optional) start time of job, standard = 0.0
+.. pprint:: keyword:modelGenerator
 
-.. list-table:: ``*linearsolver`` : define a linear solver
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+``*material`` - Define a material
+---------------------------------
 
-    * - Option
-      - Type
-      - Description
-    * - ``name``
-      - ``string``
-      - name of the linear solver, named by a ``*solver``'s ``linsolver=``
-    * - ``type``
-      - ``string``
-      - type of the linear solver: custom, blockamg, pardiso, superlu, umfpack, klu, petsclu, mumps, panuapardiso
-    * - ``data``
-      - ``string``
-      - (optional) the options of the type, one key=value per line (see :doc:`/analysis/linsolvers`)
+Materials, providers and their properties: :doc:`model/materials`.
 
-.. list-table:: ``*material`` : definition of a material
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+.. pprint:: keyword:material
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``numpy float array``
-      - material properties, multiline possible
-    * - ``id``
-      - ``string``
-      - name of the property
-    * - ``name``
-      - ``string``
-      - name of the property
-    * - ``statevars``
-      - ``integer``
-      - (deprecated and ignored) number of statevars
+``*advancedmaterial`` - Define a material by named options
+----------------------------------------------------------
 
-.. list-table:: ``*modelgenerator`` : define a model generator, loaded from a module
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+See :doc:`model/materials`.
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - key=value pairs
-    * - ``generator``
-      - ``string``
-      - generator module
-    * - ``name``
-      - ``string``
-      - (optional) name of the generator
+.. pprint:: keyword:advancedmaterial
 
-.. list-table:: ``*node`` : definition of nodes
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+``*section`` - Assign a material to elements
+--------------------------------------------
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``numpy float array``
-      - Abaqus like node definiton lines: label, x, [y], [z]
-    * - ``nset``
-      - ``string``
-      - name
+Section types and their options: :doc:`model/sections`.
 
-.. list-table:: ``*nset`` : definition of an element set
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+.. pprint:: keyword:section
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - Abaqus like node set definiton lines
-    * - ``generate``
-      - ``string``
-      - set True to generate from data line 1: start-node, end-node, step
-    * - ``nset``
-      - ``string``
-      - name
+``*elementProperty`` - Override an element property
+----------------------------------------------------
 
-.. list-table:: ``*output`` : define an output module
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+Sets the named property on all elements of an element set; the data lines hold its values.
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - defintions lines for the output module
-    * - ``jobname``
-      - ``string``
-      - (optional), name of job, standard=defaultJob
-    * - ``name``
-      - ``string``
-      - (optional), name of manager, standard=None
-    * - ``type``
-      - ``string``
-      - output module
+.. pprint:: keyword:elementProperty
 
-.. list-table:: ``*parameteridentification`` : identify material parameter for given x and y data
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+``*analyticalField`` - Define an analytical field
+-------------------------------------------------
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - key=value pairs
-    * - ``file``
-      - ``string``
-      - filename where identified parameters are written
-    * - ``id``
-      - ``string``
-      - name of the property
-    * - ``jobname``
-      - ``string``
-      - name of job
-    * - ``plot``
-      - ``string``
-      - True|False plot result with final parameters
-    * - ``xdata``
-      - ``string``
-      - filename where xData is given
-    * - ``ydata``
-      - ``string``
-      - filename where yData is given
+Field types and their options: :doc:`model/analyticalfields`.
 
-.. list-table:: ``*restart`` : configure resuming from a checkpoint
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+.. pprint:: keyword:analyticalField
 
-    * - Option
-      - Type
-      - Description
-    * - ``readfrom``
-      - ``string``
-      - (optional) path to an existing restart checkpoint to resume the analysis from
+``*constraint`` - Define a constraint
+-------------------------------------
 
-.. list-table:: ``*section`` : definition of an section
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+Constraint types and their options: :doc:`model/constraints`.
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - list of associated element sets
-    * - ``material``
-      - ``string``
-      - associated id of defined material
-    * - ``name``
-      - ``string``
-      - name
-    * - ``thickness``
-      - ``float``
-      - associated element set
-    * - ``type``
-      - ``string``
-      - type of the section
+.. pprint:: keyword:constraint
 
-.. list-table:: ``*solver`` : definition of a solver
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+Analysis
+********
 
-    * - Option
-      - Type
-      - Description
-    * - ``name``
-      - ``string``
-      - name of this solver
-    * - ``solver``
-      - ``string``
-      - solver type
-    * - ``data``
-      - ``string``
-      - (optional) define options which are passed to the respective solver instance.
+``*job`` - Define the analysis job
+----------------------------------
 
-.. list-table:: ``*step`` : definition of job steps
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+.. pprint:: keyword:job
 
-    * - Option
-      - Type
-      - Description
-    * - ``criticaliter``
-      - ``integer``
-      - maximum number of iterations to prevent from increasing the increment
-    * - ``data``
-      - ``string``
-      - define step actions, which are handled by the corresponding stepaction modules
-    * - ``jobname``
-      - ``string``
-      - (optional), name of job, standard=defaultJob
-    * - ``maxinc``
-      - ``float``
-      - maximum size of increment
-    * - ``maxiter``
-      - ``integer``
-      - maximum number of iterations
-    * - ``maxnuminc``
-      - ``integer``
-      - maximum number of increments
-    * - ``mininc``
-      - ``float``
-      - minimum size of increment
-    * - ``steplength``
-      - ``float``
-      - time period of step
+``*solver`` - Define a nonlinear solver
+---------------------------------------
 
-.. list-table:: ``*surface`` : definition of surface set
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+Solvers and their options: :doc:`analysis/solvers`.
 
-    * - Option
-      - Type
-      - Description
-    * - ``data``
-      - ``string``
-      - Abaqus like definition. Type 'element': elSet, faceID
-    * - ``name``
-      - ``string``
-      - name
-    * - ``type``
-      - ``string``
-      - type of surface (currently 'element' only)
+.. pprint:: keyword:solver
 
-.. list-table:: ``*updateconfiguration`` : update an configuration
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
+``*linearSolver`` - Define a linear solver
+------------------------------------------
 
-    * - Option
-      - Type
-      - Description
-    * - ``configuration``
-      - ``string``
-      -  name of the modified settings category
-    * - ``data``
-      - ``string``
-      - key=value pairs
+Linear solvers and their options: :doc:`analysis/linsolvers`.
 
+.. pprint:: keyword:linearSolver
+
+``*step`` - Define an analysis step
+-----------------------------------
+
+The data lines hold the options of the step type (e.g. ``maxInc``, ``maxNumInc``, ``stepLength``), see
+:doc:`analysis/steps`; the ``>>`` blocks inside a step are the step actions, see :doc:`analysis/stepactions`.
+
+.. pprint:: keyword:step
+
+``*modelModifier`` - Modify the model during the analysis
+---------------------------------------------------------
+
+Model modifiers and their options: :doc:`analysis/modelmodifiers`.
+
+.. pprint:: keyword:modelModifier
+
+``*updateConfiguration`` - Change a configuration
+-------------------------------------------------
+
+Changes the settings of a configuration category, given as ``key=value`` data lines, e.g. the solver tolerances
+(see :doc:`analysis/solvers`).
+
+.. pprint:: keyword:updateConfiguration
+
+``*restart`` - Resume from a checkpoint
+---------------------------------------
+
+.. pprint:: keyword:restart
+
+Output
+******
+
+``*fieldOutput`` - Define field outputs
+---------------------------------------
+
+See :doc:`output/fieldoutput`.
+
+.. pprint:: keyword:fieldOutput
+
+``*output`` - Define an output manager
+--------------------------------------
+
+Output managers and their options: :doc:`output/outputmanagers`.
+
+.. pprint:: keyword:output
+
+``*configurePlots`` - Configure figures and axes
+------------------------------------------------
+
+See :doc:`output/plotter`.
+
+.. pprint:: keyword:configurePlots
+
+``*exportPlots`` - Export figures
+---------------------------------
+
+See :doc:`output/plotter`.
+
+.. pprint:: keyword:exportPlots
+
+Input files
+***********
+
+``*include`` - Include another input file
+-----------------------------------------
+
+.. pprint:: keyword:include

@@ -17,7 +17,7 @@ Relevant module: ``edelweissfe.stepactions.bodyforce``
 
 .. literalinclude:: ../../../testfiles/marmot/BodyForce3D/test.inp
    :language: edelweiss
-   :caption: Example: ``testfiles/BodyForce3D/test.inp``
+   :caption: Example: ``testfiles/marmot/BodyForce3D/test.inp``
 
 ``dirichlet`` - Standard dirichlet BC
 -------------------------------------
@@ -61,6 +61,34 @@ Relevant module: ``edelweissfe.stepactions.geostatic``
 .. literalinclude:: ../../../testfiles/marmot/GeoStatic/test.inp
    :language: edelweiss
    :caption: Example: ``testfiles/marmot/GeoStatic/test.inp``
+
+``dissipationcontrol`` - Dissipation control
+--------------------------------------------
+
+Relevant module: ``edelweissfe.stepactions.dissipationcontrol``
+
+An arc length controller (see :ref:`arc-length-control`): the solver option ``arcLengthController`` of
+``NISTPArcLength`` selects it by its ``name``. It needs elements and materials that provide the gradients of their
+dissipation (:attr:`~edelweissfe.elements.base.baseelement.BaseElement.providesEnergyGradients`); which Marmot elements,
+sections and materials do is listed in Marmot's documentation of the
+`energy gradients <https://materialmodelingtoolbox.github.io/Marmot/pages/features/energygradients.html>`_. An element
+without the capability is rejected when the step action is defined; a section or a material that cannot provide the
+gradients, when the step it controls starts.
+
+.. automodule:: edelweissfe.stepactions.dissipationcontrol
+    :members: __doc__
+
+.. pprint:: stepaction:dissipationcontrol
+   :caption: Options:
+
+A bar of ten elements in uniaxial strain, whose three weak elements soften and harden again one after the other, is
+pulled through three snap-backs; ``tests/test_dissipationcontrol.py`` compares its path with the analytical solution.
+``testfiles/marmot/DissipationControlSnapBacksThreshold`` runs the same bar without a displacement limit, and
+``testfiles/marmot/AMR_DissipationControl`` across a mesh refinement.
+
+.. literalinclude:: ../../../testfiles/marmot/DissipationControlSnapBacks/test.inp
+   :language: edelweiss
+   :caption: Example: ``testfiles/marmot/DissipationControlSnapBacks/test.inp``
 
 ``indirectcontrol`` - Indirect displacement control
 ---------------------------------------------------
@@ -166,6 +194,21 @@ Relevant module: ``edelweissfe.stepactions.changematerialproperty``
 .. literalinclude:: ../../../testfiles/marmot/ChangeMaterialProperties/test.inp
    :language: edelweiss
    :caption: Example: ``testfiles/marmot/ChangeMaterialProperties/test.inp``
+
+``options`` - Change the options of a solver or an output manager
+------------------------------------------------------------------
+
+Changes options of a ``*solver`` or an ``*output`` from this step on. ``name`` is the name of that solver or output
+manager; all other options are options of it, validated against its own options (see :doc:`solvers` and
+:doc:`/output/outputmanagers`). Only the options given are changed.
+
+.. code-block:: edelweiss
+
+    *solver, name=theSolver, solver=NIST
+
+    *step, solver=theSolver
+    maxInc=1e-1, maxNumInc=100
+    >>options, name=theSolver, extrapolation=linear
 
 Implementing your own step actions
 ----------------------------------

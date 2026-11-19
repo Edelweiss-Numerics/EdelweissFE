@@ -6,6 +6,33 @@ Relevant module: ``edelweissfe.config.sections``
 .. automodule:: edelweissfe.config.sections
    :members: __doc__
 
+``solid`` - Solid (3D) elements
+-------------------------------
+
+Assigns the material to three-dimensional continuum elements. The data lines list the element sets.
+
+.. pprint:: section:solid
+   :caption: Options:
+
+.. code-block:: edelweiss
+
+    *section, name=section1, material=linearelastic, type=solid
+    all
+
+``plane`` - Plane (2D) elements
+-------------------------------
+
+Assigns the material and the out-of-plane ``thickness`` to two-dimensional continuum elements. The data lines list
+the element sets.
+
+.. pprint:: section:plane
+   :caption: Options:
+
+.. code-block:: edelweiss
+
+    *section, name=section1, thickness=1.0, material=myMaterial, type=plane
+    all
+
 ``truss`` - Truss (bar) elements
 --------------------------------
 

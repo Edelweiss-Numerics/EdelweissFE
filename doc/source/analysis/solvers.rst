@@ -93,7 +93,11 @@ option is a constructor argument of the solver:
 
 .. code-block:: python
 
-    stepActions["indirectcontrol"]["opening"] = IndirectControl("opening", dof1, dof2, [-1.0, 0.0], [1.0, 0.0], 0.01, model, journal)
+    from edelweissfe.stepactions.indirectcontrol import StepAction as IndirectControl
+
+    stepActions["indirectcontrol"]["opening"] = IndirectControl(
+        "opening", dof1, dof2, np.array([-1.0, 0.0]), np.array([1.0, 0.0]), 0.01, model, journal
+    )
     solver = NISTPArcLength(jobInfo, journal, arcLengthController="opening")
 
 A step under arc length control may end before its time is up: the solver option ``stopCondition``, an expression of
@@ -124,6 +128,19 @@ is the change over the step:
 
 .. automodule:: edelweissfe.stepactions.base.indirectdisplacementcontrolbase
    :members:
+
+The controller ``dissipationcontrol`` controls the energy the material dissipates instead (see
+:doc:`/analysis/stepactions` for its equations): its equation is nonlinear in the solution and only linearized in
+:math:`\Delta\Delta\lambda`. It uses the optional hooks of the base class: the solver passes it the state of every
+iterate (``setSystemState``: the reaction at the prescribed degrees of freedom and the load parameter, for a
+controller with ``receivesSystemState``), accepts an increment only once its equation holds as well
+(``isConstraintSatisfied``), lets it scale the linear prediction (``getExtrapolationFactor``), and tells it when it
+starts and ends controlling a step (``beginControl``, ``endControl``), during which the elements write the gradients of
+their dissipation in every evaluation.
+
+Multi-point constraints, e.g. the hanging nodes of a refined mesh, enter the arc length method as in ``NIST``: the
+reference load is condensed like the out-of-balance force, and the slave degrees of freedom of both corrections,
+:math:`\Delta\Delta U_0` and :math:`\Delta\Delta U_f`, take the part their masters interpolate.
 
 The options of Newton's method act on the pair of the solution increment and the increment of the load parameter
 :math:`(\Delta U, \Delta\lambda)`:

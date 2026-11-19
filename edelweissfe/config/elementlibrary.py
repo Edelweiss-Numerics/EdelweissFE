@@ -29,8 +29,9 @@
 
 # @author: Matthias Neuner
 """
-EdelweissFE currently supports finite element implementations provided by the Marmot library.
-In future, elements by other providers or elements directly implemented in EdelweissFE may be added here.
+Elements are selected by ``type`` and ``provider``: the provider ``edelweiss`` holds the elements
+implemented in EdelweissFE, the providers ``marmot`` and ``marmotsingleqpelement`` those of the Marmot
+library. Without ``provider``, ``marmot`` is assumed.
 
 .. code-block:: edelweiss
     :caption: Example:

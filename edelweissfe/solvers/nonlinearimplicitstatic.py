@@ -168,6 +168,7 @@ class NISTSchema:
         ),
         dtype=str,
         default="pardiso",
+        documentedDefault="pardiso if built, else superlu",
     )
     pruneCondensedMatrixZeros: bool | None = schemaField(
         description=(
