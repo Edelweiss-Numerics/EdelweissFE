@@ -15,7 +15,7 @@ Relevant module: ``edelweissfe.elements.marmotelement.element``
    :members:
 
 Heat conduction elements
-^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 Marmot's transport elements ``DC2D3T``, ``DC2D4T``, ``DC2D8T`` (plane, ``type=plane`` section with a thickness),
 ``DCAX4T``, ``DCAX8T`` (axisymmetric, ``domain=axisymmetric``, :math:`r = x`; a plane section, whose thickness they do
