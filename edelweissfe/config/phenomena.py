@@ -55,6 +55,7 @@ phenomena = {
     "plastic multiplier": "scalar",
     "pressure": "scalar",
     "jacobi": "scalar",
+    "temperature": "scalar",
 }
 
 
@@ -81,6 +82,7 @@ inertiaKind = {
     "plastic multiplier": "non-mechanical",
     "pressure": "non-mechanical",
     "jacobi": "non-mechanical",
+    "temperature": "non-mechanical",
 }
 
 
@@ -101,6 +103,7 @@ fieldCorrectionTolerance = {
     "plastic multiplier": 1e-8,
     "pressure": 1e-8,
     "jacobi": 1e-8,
+    "temperature": 1e-6,
 }
 
 # field                  correction tolerance relative to the largest increment of the field; 0: none
@@ -117,6 +120,7 @@ relativeFieldCorrectionTolerance = {
     "plastic multiplier": 0.0,
     "pressure": 0.0,
     "jacobi": 0.0,
+    "temperature": 0.0,
 }
 
 # field                  flux residual tolerance relative to the spatial average flux
@@ -133,6 +137,7 @@ fluxResidualTolerance = {
     "plastic multiplier": 1e-8,
     "pressure": 1e-8,
     "jacobi": 1e-8,
+    "temperature": 1e-8,
 }
 
 # field                  relative flux residual tolerance from iteration iterationsForAlternativeTolerance on
@@ -149,6 +154,7 @@ fluxResidualToleranceAlternative = {
     "plastic multiplier": 5e-3,
     "pressure": 5e-3,
     "jacobi": 5e-3,
+    "temperature": 5e-3,
 }
 
 # field                  absolute flux residual tolerance; the scalar variables' flux residual tolerances above are
@@ -166,6 +172,15 @@ absoluteFluxResidualTolerance = {
     "plastic multiplier": 1e-7,
     "pressure": 1e-7,
     "jacobi": 1e-7,
+    "temperature": 1e-7,
+}
+
+# fields whose fluxes are rates, i.e. amounts per unit of time (a heat flow in W, not a force): in a zero time
+# increment no time passes, so a load on such a field supplies nothing. The transport elements apply this rule to
+# their distributed and body loads themselves; the solver-level point loads (node forces) follow this set, see
+# :class:`~edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase`.
+rateFluxFields = {
+    "temperature",
 }
 
 # domain                 dimensions

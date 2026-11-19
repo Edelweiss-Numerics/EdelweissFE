@@ -48,7 +48,17 @@ cimport edelweissfe.elements.marmotelement.element
 mapLoadTypes={
         "pressure" : DistributedLoadTypes.Pressure,
         "surface torsion" : DistributedLoadTypes.SurfaceTorsion,
-        "surface traction" : DistributedLoadTypes.SurfaceTraction
+        "surface traction" : DistributedLoadTypes.SurfaceTraction,
+        "heat flux" : DistributedLoadTypes.HeatFlux,
+        "heat film" : DistributedLoadTypes.HeatFilm,
+        "heat radiation" : DistributedLoadTypes.HeatRadiation,
+     }
+
+# the number of load values of the transport loads: [q], [h, T_inf], [c, T_inf, T_0]
+requiredLoadSizes={
+        "heat flux" : 1,
+        "heat film" : 2,
+        "heat radiation" : 3,
      }
 
 mapStateTypes={
@@ -367,6 +377,12 @@ cdef class MarmotElementWrapper:
         cdef double[::1] externalLoad = np.zeros(P.shape[0])
         cdef Py_ssize_t i
 
+        # Marmot reads a fixed number of values for these load types from an unchecked pointer
+        if load.shape[0] < requiredLoadSizes.get(loadType, 1):
+            raise ValueError(
+                "Element {:}: load type '{:}' takes {:} values, but {:} were given.".format(
+                    self._elNumber, loadType, requiredLoadSizes[loadType], load.shape[0]))
+
         self.marmotElement.computeDistributedLoad(mapLoadTypes[loadType],
                                                   &externalLoad[0],
                                                   &K[0],
@@ -393,6 +409,15 @@ cdef class MarmotElementWrapper:
 
         cdef double[::1] externalLoad = np.zeros(P.shape[0])
         cdef Py_ssize_t i
+
+        # Marmot reads a force (one value per spatial dimension) or, for elements without displacements, a volumetric
+        # source (one value per field of a node) from an unchecked pointer
+        cdef int requiredSize = (self._nSpatialDimensions if "displacement" in self._fields[0]
+                                 else len(self._fields[0]))
+        if load.shape[0] < requiredSize:
+            raise ValueError(
+                "Element {:}: the body load takes {:} values, but {:} were given.".format(
+                    self._elNumber, requiredSize, load.shape[0]))
 
         self.marmotElement.computeBodyForce(
                                     &externalLoad[0],
