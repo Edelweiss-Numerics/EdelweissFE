@@ -1,0 +1,41 @@
+** Early-age concrete, adiabatic and sealed (DC3D8TH, THERMOHYGRO; units m, day, C, kg): heat of hydration and
+** self-desiccation over the equivalent (maturity) age, hygrothermic coefficient, heat capacity of the water. No loads.
+** Illustrative parameters (adiabatic temperature rise ~ 50 K).
+*node
+1, 0.0, 0.0, 0.0
+2, 1.0, 0.0, 0.0
+3, 1.0, 1.0, 0.0
+4, 0.0, 1.0, 0.0
+5, 0.0, 0.0, 1.0
+6, 1.0, 0.0, 1.0
+7, 1.0, 1.0, 1.0
+8, 0.0, 1.0, 1.0
+*element, type=DC3D8TH
+1, 1, 2, 3, 4, 5, 6, 7, 8
+
+** heat (11), moisture (10: BSB isotherm, self-desiccation dw_inf = 5 kg/m3, tau_s = 10 d), couplings (11: kappa,
+** c_w, E_h/R = 4000 K, Q_inf = 1.2e8 J/m3, tau_q = 1 d)
+*material, name=ThermoHygro, id=concrete
+2400.0, 1000.0, 1.5, 1.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0
+0.001, 0.05, 0.8, 6.0, 1.0, 18.0, 0.73, 20.0, 5.0, 10.0
+-273.15, 0.0, 0.0, 0.003, 0.0, 4186.0, 0.0, 0.0, 4000.0, 1.2e8, 1.0
+
+*section, name=section1, material=concrete, type=solid
+all
+
+*job, name=earlyage, domain=3d
+*solver, solver=NIST, name=theSolver
+
+** sealed and uniform: content and source cancel inside the element; units-aware absolute floors
+*updateConfiguration, configuration=absoluteFluxResidualTolerance
+temperature=1e-3
+relative humidity=1e-9
+
+*fieldOutput
+>>perNode, name=T, elSet=all, field=temperature, result=U
+>>perNode, name=rh, elSet=all, field=relative humidity, result=U
+
+*step, solver=theSolver
+startInc=0.05, maxInc=0.05, minInc=1e-4, maxNumInc=40, maxIter=12, stepLength=5.0
+>>setfield, name=T0, fieldOutput=T, type=uniform, value=20.0
+>>setfield, name=h0, fieldOutput=rh, type=uniform, value=0.85

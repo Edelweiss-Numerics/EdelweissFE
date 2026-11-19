@@ -242,3 +242,23 @@ def test_a_failed_remainder_below_the_minimum_increment_is_not_retried(timeStepp
     assert remainder.stepProgressIncrement == pytest.approx(0.1)
     with pytest.raises(ReachedMinIncrementSize):
         timeStepper.rejectTimeStep(0.5)
+
+
+@pytest.mark.parametrize("timeStepperOf", [_timeStepper, _simpleTimeStepper], ids=["adaptive", "simple"])
+def test_no_round_off_sliver_increment_ends_a_step(timeStepperOf):
+    """70 increments of 1/70 sum up to the step progress 1 only up to round-off: the 70th increment takes the remainder,
+    instead of leaving a sliver increment of about 1e-14 of the step, in which a transient problem cannot converge (its
+    capacity is divided by the time increment)."""
+
+    n = 70
+    timeStepper = timeStepperOf(startIncrement=1.0 / n, maxIncrement=1.0 / n, minIncrement=1e-6)
+    increments = []
+    while not timeStepper.isFinished():
+        timeStep = timeStepper.proposeTimeStep()
+        timeStepper.acceptTimeStep(timeStep)
+        increments.append(timeStep.stepProgressIncrement)
+
+    nonzero = [d for d in increments if d > 0.0]
+    assert len(nonzero) == n
+    assert min(nonzero) == pytest.approx(1.0 / n, rel=1e-9)
+    assert timeStep.stepProgress == pytest.approx(1.0, abs=1e-15)

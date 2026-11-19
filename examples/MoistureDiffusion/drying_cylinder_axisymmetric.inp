@@ -1,0 +1,45 @@
+** Drying of a standard concrete cylinder, 150 mm diameter x 300 mm height, axisymmetric (DCAX8H, MoistureDiffusion).
+**
+** The upper half is modelled: 0 <= r <= 75 mm (r = x), 0 <= z <= 150 mm (z = y), with z = 0 the mid-height (symmetry,
+** sealed) and r = 0 the axis. The mantle (r = 75 mm) and the top face (z = 150 mm) dry to air at h_inf = 0.5. Saturated
+** at the start. Same material as drying_column_2d.inp. Units: mm, day. Results at 30, 180 and 1000 days.
+
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DCAX8H
+x0=0.0
+nX=10
+nY=20
+l=75.0
+h=150.0
+
+** D1, alpha0, h_c, n, isotherm (0 = linear), K
+*material, name=MoistureDiffusion, id=concrete
+30.0, 0.05, 0.8, 15.0, 0, 1.0
+
+** axisymmetric elements take a plane section and do not use its thickness
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=dryingcylinder, domain=axisymmetric
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=humidity, elSet=all, field=relative humidity, result=U
+>>perNode, name=h_centre, nSet=gen_leftBottom, field=relative humidity, result=U
+
+*output, type=monitor, name=monitorh_centre
+fieldOutput=h_centre, f(x)='mean(x)'
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=humidity
+
+*step, solver=theSolver
+startInc=0.0005, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=30.0
+>>setfield, name=h0, fieldOutput=humidity, type=uniform, value=1.0
+>>distributedload, name=filmMantle, surface=gen_right, type=moisture film, magnitude='10.0, 0.5', f(t)='1'
+>>distributedload, name=filmTop, surface=gen_top, type=moisture film, magnitude='10.0, 0.5', f(t)='1'
+*step, solver=theSolver
+startInc=0.02, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=150.0
+*step, solver=theSolver
+startInc=0.02, maxInc=0.025, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=820.0
