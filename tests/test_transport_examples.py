@@ -86,3 +86,15 @@ def test_heated_pipe_reaches_the_closed_form_steady_state(tmp_path, monkeypatch)
     _, P = _nodal(model, "temperature", result="P", nodeSet="gen_left")
     Q = 2 * math.pi * H * k * (Ti - Tinf) / denominator
     assert abs(abs(P.sum()) - Q) < 1e-4 * Q
+
+
+def test_curing_slab_dries_at_the_top_and_self_desiccates_at_the_sealed_bottom(tmp_path, monkeypatch):
+    """examples/MoistureDiffusion/curing_slab_self_desiccation.inp: after 1 year (28 days of evaporation through the
+    top, then sealed) the humidity has dropped everywhere by self-desiccation, more at the top than at the bottom."""
+    _requireMarmotElement("DC3D20H")
+    model = _runExample(tmp_path, monkeypatch, "MoistureDiffusion/curing_slab_self_desiccation.inp")
+
+    _, top = _nodal(model, "relative humidity", nodeSet="gen_front")
+    _, bottom = _nodal(model, "relative humidity", nodeSet="gen_back")
+    np.testing.assert_allclose(top, 0.9673, atol=2e-4)
+    np.testing.assert_allclose(bottom, 0.9733, atol=2e-4)
