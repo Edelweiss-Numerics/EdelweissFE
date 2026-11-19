@@ -9,7 +9,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: mamba-org/setup-micromamba@v2
+    - uses: mamba-org/setup-micromamba@v3
       with:
         environment-file: conda-lock.yml
         environment-name: edelweissfe
