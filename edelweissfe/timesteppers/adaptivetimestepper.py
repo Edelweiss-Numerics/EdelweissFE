@@ -29,7 +29,10 @@
 import math
 
 from edelweissfe.journal.journal import Journal
-from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
+from edelweissfe.timesteppers.base.timestepperbase import (
+    TimeStepperBase,
+    stepProgressRoundOff,
+)
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
@@ -133,7 +136,8 @@ class AdaptiveTimeStepper(TimeStepperBase):
             raise ReachedMaxIncrements()
 
         remainder = 1.0 - self.finishedStepProgress
-        if remainder < self.increment:
+        # take the remainder now if this increment would leave only a round-off sliver of the step
+        if remainder < self.increment + stepProgressRoundOff:
             self.increment = remainder
 
         if self.makeZeroIncrementFirst and self.incrementCounter == 0:

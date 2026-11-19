@@ -27,7 +27,10 @@
 # Created on Sat Jan  21 12:18:10 2017
 
 from edelweissfe.journal.journal import Journal
-from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
+from edelweissfe.timesteppers.base.timestepperbase import (
+    TimeStepperBase,
+    stepProgressRoundOff,
+)
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
@@ -126,7 +129,8 @@ class SimpleTimeStepper(TimeStepperBase):
         if self.enforcedTimeIncrement is not None:
             self.increment = self.enforcedTimeIncrement / self.stepLength
         remainder = 1.0 - progress
-        if remainder < self.increment:
+        # take the remainder now if this increment would leave only a round-off sliver of the step
+        if remainder < self.increment + stepProgressRoundOff:
             self.increment = remainder
 
         progress += self.increment
