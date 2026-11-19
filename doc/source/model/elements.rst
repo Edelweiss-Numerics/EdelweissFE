@@ -38,6 +38,9 @@ axisymmetric ones).
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/HeatTransientDC2D4T/test.inp``
 
+Worked examples with figures (fire exposure of a column section and of a cube, a pipe wall heated to steady state against
+its closed form) are in ``examples/HeatTransfer``.
+
 Provider ``marmotsingleqpelement``
 ----------------------------------
 
