@@ -2571,7 +2571,7 @@ on again from outside.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">withinReach</span></code>: the constraint finds itself within reach of what it constrains, in its <code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>.
 A contact constraint whose partner is out of reach sets it to false. It does not report the change of <code class="docutils literal notranslate"><span class="pre">active</span></code>: the
 model compares which constraints take part before and after, and tells the solver (a
-<a class="reference internal" href="../developer/models.html#edelweissfe.models.change.Change" title="edelweissfe.models.change.Change"><code class="xref py py-class docutils literal notranslate"><span class="pre">Change</span></code></a>, see <a class="reference internal" href="../developer/architecture.html#model-discrete-system"><span class="std std-ref">What the solver takes from the discrete system</span></a>). A constraint that does not check stays
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.change.Change" title="edelweissfe.models.change.Change"><code class="xref py py-class docutils literal notranslate"><span class="pre">Change</span></code></a>, see <a class="reference internal" href="../developer/models.html#model-discrete-system"><span class="std std-ref">What the solver takes from the discrete system</span></a>). A constraint that does not check stays
 within reach.</p></li>
 </ul>
 <p>A constraint reports from <code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code> only whether the nodes it couples changed. A constraint that

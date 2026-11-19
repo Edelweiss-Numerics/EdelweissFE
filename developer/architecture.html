@@ -17,6 +17,7 @@
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -88,12 +89,26 @@
 <p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">How the parts fit together</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#the-words">The words</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#what-each-part-holds">What each part holds</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#how-a-change-selects-the-path">How a change selects the path</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-three-loops">The three loops</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-textbook-arrays-and-their-names">The textbook arrays and their names</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#example-numbering-and-locations">Example: numbering and locations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#where-the-material-law-is-evaluated">Where the material law is evaluated</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#what-edelweissfe-does-differently-from-the-textbook">What EdelweissFE does differently from the textbook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#when-the-id-and-the-lm-array-change">When the ID and the LM array change</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#who-reports-the-change">Who reports the change</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#what-the-solver-rebuilds">What the solver rebuilds</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#holder-lifetime-and-creator-of-the-objects">Holder, lifetime and creator of the objects</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#from-the-input-file-to-the-objects">From the input file to the objects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-classes-in-the-figure">The classes in the figure</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#the-entities-that-couple-nodes">The entities that couple nodes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#what-the-solver-takes-from-the-discrete-system">What the solver takes from the discrete system</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#one-increment-implicit-and-explicit">One increment, implicit and explicit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#where-to-start-when-adding-something">Where to start when adding something</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#abbreviations-and-solver-names">Abbreviations and solver names</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="solverbase.html">The solver base class</a></li>
@@ -147,334 +162,649 @@
              
   <section id="how-the-parts-fit-together">
 <h1>How the parts fit together<a class="headerlink" href="#how-the-parts-fit-together" title="Link to this heading"></a></h1>
-<p>A simulation is driven by a solver acting on a model. This page shows the objects between the two – the discrete
-system and its two parts, the numbering and the locations of the degrees of freedom, the entities that couple nodes,
-the system matrix assembly, the multi-point-constraint condensation and the linear solver – what each one holds, who
-builds it, how a change of the model reaches the solver, and why the boundaries are where they are. The pages linked
-from each section have the details.</p>
-<section id="the-words">
-<span id="architecture-words"></span><h2>The words<a class="headerlink" href="#the-words" title="Link to this heading"></a></h2>
-<p>Four words name four different things, and are used in exactly this meaning in the code, the docstrings and these
-pages:</p>
+<p>This page is written for students who know the finite element method from a textbook and want to read the code of
+EdelweissFE. It follows the textbook procedure and names, at each point, the class and the method that implement it.
+The names of the arrays IEN, ID and LM are those of Hughes, <em>The Finite Element Method</em>.</p>
+<p>The sections build on each other:</p>
+<ol class="arabic simple">
+<li><p>the three loops of a nonlinear analysis, and the object that runs each of them;</p></li>
+<li><p>the arrays of the textbook and their names in EdelweissFE, with a small example, and where the material law is
+evaluated;</p></li>
+<li><p>what EdelweissFE does differently from the textbook;</p></li>
+<li><p>when the ID and the LM array change during a run, and what the solver rebuilds then;</p></li>
+<li><p>which object holds, creates and discards which other object;</p></li>
+<li><p>the entities that couple nodes: elements and constraints;</p></li>
+<li><p>where to start when adding an element, a material or a solver.</p></li>
+</ol>
+<p>The abbreviations and the names of the solvers are listed at the end (<a class="reference internal" href="#architecture-abbreviations"><span class="std std-ref">Abbreviations and solver names</span></a>).</p>
+<section id="the-three-loops">
+<span id="architecture-loop"></span><h2>The three loops<a class="headerlink" href="#the-three-loops" title="Link to this heading"></a></h2>
+<p>A nonlinear analysis is divided into steps, e.g., a loading step and an unloading step. Each step is divided into
+increments of time, from <span class="math notranslate nohighlight">\(t_n\)</span> to <span class="math notranslate nohighlight">\(t_{n+1}\)</span>. In each increment, Newton’s method searches for the
+increment of the solution <span class="math notranslate nohighlight">\(\Delta\boldsymbol{U}\)</span> at which the residual vanishes:</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{R}(\Delta\boldsymbol{U}) = \boldsymbol{f}_\mathrm{ext}(t_{n+1})
+- \boldsymbol{f}_\mathrm{int}(\boldsymbol{U}_n + \Delta\boldsymbol{U}) = \boldsymbol{0}.\]</div>
+<p>Each Newton iteration solves the linearized equation <span class="math notranslate nohighlight">\(\boldsymbol{K}\,\Delta\Delta\boldsymbol{U} =
+\boldsymbol{R}\)</span> for the correction <span class="math notranslate nohighlight">\(\Delta\Delta\boldsymbol{U}\)</span> and adds the correction to
+<span class="math notranslate nohighlight">\(\Delta\boldsymbol{U}\)</span>. The tangent is <span class="math notranslate nohighlight">\(\boldsymbol{K} = \partial\boldsymbol{f}_\mathrm{int} / \partial
+\boldsymbol{U}\)</span>. The residual and the tangent are assembled from the contributions of the elements. If Newton’s method
+does not converge, the increment is repeated with a smaller time increment; this is called a cutback. The signs of all
+contributions are defined in <a class="reference internal" href="residualandtangent.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p>
+<p>In EdelweissFE, each loop is run by a different object:</p>
 <ul class="simple">
-<li><p>the <strong>connectivity</strong> of an entity: which nodes it touches (for a contact constraint: which it couples now). It is
-the <em>IEN</em> array of the textbooks, and belongs to the entities of the model;</p></li>
-<li><p>the <strong>numbering</strong> of the degrees of freedom: the global index of every degree of freedom of a node field or a scalar
-variable. It is the <em>ID</em> array, except that every degree of freedom is numbered, a prescribed one included;</p></li>
-<li><p>the <strong>location</strong> of an entity: the global indices of the entity’s local degrees of freedom, <code class="docutils literal notranslate"><span class="pre">locations[entity]</span></code>.
-It is the <em>LM</em> array – the numbering applied to the connectivity – and never a position in space;</p></li>
-<li><p><strong>indices</strong>: any other set of global indices – a node set’s, the Dirichlet degrees of freedom, the slaves of a
-multi-point constraint – which whoever uses them holds.</p></li>
+<li><p>The <strong>driver</strong> runs the loop over the steps
+(<a class="reference internal" href="jobs.html#edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation" title="edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation"><code class="xref py py-func docutils literal notranslate"><span class="pre">finiteElementSimulation()</span></code></a>).</p></li>
+<li><p>The <strong>step</strong> runs the loop over the increments (<a class="reference internal" href="../analysis/steps.html#edelweissfe.steps.base.stepbase.StepBase.solve" title="edelweissfe.steps.base.stepbase.StepBase.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a>). Its time
+stepper proposes the next time increment and reduces it after a failed attempt. The step also triggers the output.</p></li>
+<li><p>The <strong>solver</strong> runs the Newton iterations of one increment. The step calls it through five methods: <code class="docutils literal notranslate"><span class="pre">beginStep</span></code>,
+<code class="docutils literal notranslate"><span class="pre">prepareIncrement</span></code>, <code class="docutils literal notranslate"><span class="pre">attemptIncrement</span></code>, <code class="docutils literal notranslate"><span class="pre">acceptIncrement</span></code> and <code class="docutils literal notranslate"><span class="pre">endStep</span></code> (<a class="reference internal" href="solverbase.html"><span class="doc">The solver base class</span></a>).</p></li>
+<li><p>Each <strong>entity</strong>, i.e., each element and each constraint, computes its internal force <span class="math notranslate nohighlight">\(\boldsymbol{P}_e\)</span> and
+its tangent <span class="math notranslate nohighlight">\(\boldsymbol{K}_e\)</span> with respect to its own local degrees of freedom. The solver adds both into
+the global system, as in the assembly procedure of the textbook.</p></li>
 </ul>
-<p>The numbering changes with the mesh, and when scalar variables (e.g. the Lagrange multipliers of constraints) enter or
-leave. The locations change when the connectivity changes: a contact search couples other nodes, and the numbering
-stays. Each has its own object, and neither is ever changed in place: a change makes a new one
-(<a class="reference internal" href="dofnumbering.html"><span class="doc">Degrees of freedom: numbering and locations</span></a>).</p>
-</section>
-<section id="what-each-part-holds">
-<h2>What each part holds<a class="headerlink" href="#what-each-part-holds" title="Link to this heading"></a></h2>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">FEModel</span></code></dt><dd><p>The mesh and its data: the node fields, the elements, the constraints, the multi-point constraints, and the
-topology pipeline that changes the mesh during a run (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">FEModel</span></code></a>,
-<a class="reference internal" href="models.html"><span class="doc">Models</span></a>). It owns the connectivity of its entities, and classifies what they report
-(<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a>); a change of the mesh is what its topology
-update reports (see below). It knows nothing about solvers.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">DiscreteSystem</span></code></dt><dd><p>What the model says its system is made of (<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem" title="edelweissfe.models.discretesystem.DiscreteSystem"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiscreteSystem</span></code></a>, built by
-<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.buildDiscreteSystem" title="edelweissfe.models.femodel.FEModel.buildDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildDiscreteSystem()</span></code></a>): the numbering, the locations, the elements and
-constraints that have a location, the entities whose inertia is assembled element by element
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a>), the model the linear solver
-is set up for, and how the state passes between
-the model’s node fields and the solver’s vectors
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel" title="edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>,
-<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>). <strong>Why a discrete system, not a
-model the solver looks into:</strong> the same solvers solve models that are not made of finite elements. A meshfree
-model of EdelweissMeshfree, with background cells, particles, material points and degrees of freedom that live
-for one increment only, returns a discrete system derived from this one; the solver calls it the same way.
-The full list of what a solver takes from it is in <a class="reference internal" href="#model-discrete-system"><span class="std std-ref">What the solver takes from the discrete system</span></a>. The model builds it only if every
-numbered degree of freedom is in the location of an entity, or related by a multi-point constraint: a degree of
-freedom that no located entity touches would have no row in the system matrix, and is refused when the discrete
-system is built, naming the node and the field.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">DofNumbering</span></code></dt><dd><p>The numbering, and nothing about the entities
-(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>): the node fields, each one a contiguous block, then the
-scalar variables; the indices of node sets; the reading and writing of node fields. <strong>Why:</strong> one numbering, read
-by everything else – the locations, the condensation, the linear solver’s field blocks, the Dirichlet boundary
-conditions and the output.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">DofLocations</span></code></dt><dd><p>The numbering applied to the connectivity (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>): for every
-entity of the discrete system, the global indices of its local degrees of freedom. It builds the DOF vectors
-that refer to it. <strong>Why separate from the numbering:</strong> the two have different lifetimes. A contact search makes
-new locations on many increments; everything that is sized by the numbering is then left alone.</p>
-</dd>
-<dt>The solver</dt><dd><p>Everything it iterates on: the vectors <code class="docutils literal notranslate"><span class="pre">U</span></code>, <code class="docutils literal notranslate"><span class="pre">dU</span></code>, <code class="docutils literal notranslate"><span class="pre">P</span></code> (and the velocity and the acceleration of a dynamic
-solver); the <code class="docutils literal notranslate"><span class="pre">SystemMatrixAssembly</span></code> with its CSR pattern, derived from the locations and filled in every Newton
-iteration on one of two paths, <code class="docutils literal notranslate"><span class="pre">vij</span></code> or <code class="docutils literal notranslate"><span class="pre">direct</span></code> (<a class="reference internal" href="assembly.html#system-matrix-assembly"><span class="std std-ref">System matrix assembly</span></a>); and the condensation of the
-multi-point constraints (ties, hanging nodes) into their masters
-(<a class="reference internal" href="assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation</span></code></a>), whose pattern fill-in enters
-the pattern of the assembly. <strong>Why the solver builds the condensation, not the discrete system:</strong> it is
-reconciled against the Dirichlet boundary conditions of the step, which the model does not know. Each of these
-belongs to the object it is derived from: what is sized by the numbering is dropped and built anew with a new
-numbering, the pattern of the assembly with every new locations, and never the old and the new one at once
-(<a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonlinearSolverBase</span></code></a>).</p>
-</dd>
-<dt>The linear solver</dt><dd><p>One adapter for every linear solver (<a class="reference internal" href="../analysis/linsolvers.html"><span class="doc">Linear solvers</span></a>). A new numbering gives it the model and the
-numbering (<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.setModel" title="edelweissfe.linsolve.base.LinearSolver.setModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setModel()</span></code></a>), from which a field-split solver takes the
-field blocks, and the near-null-space its node coordinates; new locations tell it that the sparsity pattern
-changes (<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern" title="edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewMatrixPattern()</span></code></a>), so that it drops what it built for
-the old pattern. <strong>Why:</strong> a composed solver (<a class="reference internal" href="../analysis/composedlinsolvers.html"><span class="doc">Composing a linear solver</span></a>) needs the physics of the blocks,
-which a bare matrix does not carry. The linear solver itself is kept from step to step while the step names the
-same one.</p>
-</dd>
-</dl>
-</section>
-<section id="how-a-change-selects-the-path">
-<span id="id1"></span><h2>How a change selects the path<a class="headerlink" href="#how-a-change-selects-the-path" title="Link to this heading"></a></h2>
-<p>This section is the one telling of the mechanism; the docstrings of
-<a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonlinearSolverBase</span></code></a> (<a class="reference internal" href="solverbase.html"><span class="doc">The solver base class</span></a>) are its
-contract, and the pages on solvers, constraints and models link here.</p>
-<figure class="align-default" id="id2">
-<a class="reference internal image-reference" href="../_images/discretesystem_change.svg"><img alt="The topology update gives a Change. Change.NONE: nothing happens, both the DofNumbering and the DofLocations stay, and no hook is called. Change.LOCATIONS: withNewLocations gives the same DofNumbering and a new DofLocations, and only onNewLocations is called. Change.NUMBERING or Change.MESH: buildDiscreteSystem gives a new DofNumbering and a new DofLocations, and onNewNumbering, then onNewLocations, are called." src="../_images/discretesystem_change.svg" style="width: 100%;" />
-</a>
+<p>The following outline shows these loops for the implicit static solver <code class="docutils literal notranslate"><span class="pre">NIST</span></code>. Each call is written with its
+receiver, as in the code: <code class="docutils literal notranslate"><span class="pre">self</span></code> is the object whose method is shown. An indented block shows what a call does
+inside. Arguments that do not matter here are abbreviated as <code class="docutils literal notranslate"><span class="pre">...</span></code>, and methods that only report or measure time are
+omitted.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># finiteElementSimulation, the driver: the loop over the steps</span>
+<span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">stepManager</span><span class="o">.</span><span class="n">generateSteps</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">solvers</span><span class="p">,</span> <span class="n">outputManagers</span><span class="p">):</span>
+    <span class="n">step</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
+
+<span class="c1"># StepBase.solve: the loop over the increments</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">beginStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="k">while</span> <span class="ow">not</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">isFinished</span><span class="p">():</span>
+    <span class="n">solver</span><span class="o">.</span><span class="n">prepareIncrement</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">isRetry</span><span class="p">)</span>     <span class="c1"># did the ID or the LM array change?</span>
+    <span class="n">timeStep</span> <span class="o">=</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">proposeTimeStep</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">attemptIncrement</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>    <span class="c1"># Newton's method, see below</span>
+    <span class="k">except</span> <span class="n">IncrementFailed</span><span class="p">:</span>
+        <span class="n">timeStepper</span><span class="o">.</span><span class="n">rejectTimeStep</span><span class="p">(</span><span class="n">cutbackFactor</span><span class="p">)</span>     <span class="c1"># cutback, then a retry</span>
+        <span class="k">continue</span>
+    <span class="n">solver</span><span class="o">.</span><span class="n">acceptIncrement</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+    <span class="n">timeStepper</span><span class="o">.</span><span class="n">acceptTimeStep</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span>
+    <span class="n">outputManager</span><span class="o">.</span><span class="n">finalizeIncrement</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>              <span class="c1"># every output manager, if due</span>
+<span class="n">solver</span><span class="o">.</span><span class="n">endStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+
+<span class="c1"># NIST.solveIncrement, called by attemptIncrement: the Newton iterations</span>
+<span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">assembleResidualAndTangent</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>              <span class="c1"># at U_np = U_n + dU</span>
+        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elements</span><span class="p">:</span>
+            <span class="n">el</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">K</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">Pe</span><span class="p">,</span> <span class="n">U_np</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">time</span><span class="p">,</span> <span class="n">dT</span><span class="p">)</span>   <span class="c1"># K_e into K[el]</span>
+            <span class="n">P</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Pe</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoadsAtIncrementEnd</span><span class="p">(</span><span class="n">stepActions</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>        <span class="c1"># -f_ext into PLoadsAndConstraints</span>
+        <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">constraints</span><span class="p">:</span>
+            <span class="n">c</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">[</span><span class="n">c</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">c</span><span class="p">],</span> <span class="n">Pc</span><span class="p">,</span> <span class="n">K</span><span class="p">[</span><span class="n">c</span><span class="p">],</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="o">-</span><span class="n">P</span> <span class="o">-</span> <span class="n">PLoadsAndConstraints</span>                 <span class="c1"># R = f_ext - f_int</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformResidual</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">dU</span><span class="p">)</span>      <span class="c1"># MPC condensation of R</span>
+    <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToResidual</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>   <span class="c1"># the prescribed increments</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">R</span><span class="p">[</span><span class="n">constrainedDofs</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">converged</span><span class="p">,</span> <span class="o">...</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkConvergence</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">converged</span><span class="p">:</span>
+            <span class="k">break</span>
+    <span class="n">K_</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">assembledMatrix</span><span class="p">()</span>                          <span class="c1"># CSR</span>
+    <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformSystemMatrix</span><span class="p">(</span><span class="n">K_</span><span class="p">)</span>        <span class="c1"># MPC condensation of K</span>
+    <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solveForCorrection</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>  <span class="c1"># Dirichlet rows, then K_ ddU = R</span>
+        <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
+    <span class="n">dU</span> <span class="o">+=</span> <span class="n">ddU</span>                                         <span class="c1"># applyCorrection</span>
+    <span class="n">iterationCounter</span> <span class="o">+=</span> <span class="mi">1</span>
+
+<span class="c1"># NIST.acceptIncrement(step, model, timeStep)</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>             <span class="c1"># into the node fields of the model</span>
+<span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">)</span>               <span class="c1"># the entities accept their state</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">K</span></code> is the system matrix assembly: indexed with an entity, it returns the block of the system matrix the entity writes
+into. <code class="docutils literal notranslate"><span class="pre">U_np[el]</span></code> returns the values of the vector at the degrees of freedom of the entity. Both are explained in
+<a class="reference internal" href="#architecture-example"><span class="std std-ref">Example: numbering and locations</span></a>.</p>
+<p>The first iteration differs from the later ones. In the first iteration, the residual receives the prescribed
+increments of the Dirichlet boundary conditions in their rows, so that the first correction moves the prescribed
+degrees of freedom to their new values. From the second iteration on, these rows are set to zero, and the convergence
+check follows. Convergence is therefore checked on the residual of the new iterate, before the next linear solve.</p>
+<p>The figure summarizes one increment. It also shows the explicit dynamic solver <code class="docutils literal notranslate"><span class="pre">NED</span></code>, which computes the same
+entities but has no Newton loop: with a lumped mass, the equation of motion is solved degree of freedom by degree of
+freedom, so <code class="docutils literal notranslate"><span class="pre">NED</span></code> holds no system matrix and no linear solver.</p>
+<figure class="align-default" id="id1">
+<img alt="One increment. 1: prepareIncrement checks whether the ID or the LM array changed, and the solver rebuilds what depends on them. Left: the discrete system with its elements and constraints; each computes its internal force P_e and tangent K_e, and its location places them in the global system. Implicit lane (NIST, NID and their variants), Newton's method: residual and tangent, K_e into K[el], R = f_ext - sum of P_e, the MPC condensation of R; then the convergence check: in the first iteration the Dirichlet rows of R receive the prescribed increments, later they are zero and R and ddU are checked; if converged, the increment is accepted; otherwise solve and update: the MPC condensation of K in CSR format, identity rows for the Dirichlet DOFs, linSolver(K_, R) gives ddU, the slaves follow the masters, dU += ddU, and the next Newton iteration computes the entities again. Explicit lane (NED, NEDParallel): the net force R = f_ext - sum of P_e, without tangents, the MPC slave forces folded into the masters, zero in the Dirichlet rows; the velocity V += dt M^-1 R per DOF with the lumped mass, no matrix and no linear solve, the prescribed velocity on Dirichlet DOFs; the position dU = dt V, the slaves follow the masters; then the increment is accepted. 3: acceptIncrement writes U, dU, P, V and A to the node fields (a quasi-static solver writes V = A = 0), and model.advanceToTime lets the entities accept their state; then the step writes the output, and the next increment begins." src="../_images/discretesystem_increment.svg" />
 <figcaption>
-<p><span class="caption-text">What the topology update reports selects what is built anew: blue is a new object or a hook that is called, grey is
-kept.</span><a class="headerlink" href="#id2" title="Link to this image"></a></p>
+<p><span class="caption-text">One increment of an implicit solver and of the explicit dynamic solver. Both compute the same entities of the
+discrete system. Blue: where the implicit solvers solve a linear system, the explicit solver divides by a
+diagonal. <code class="docutils literal notranslate"><span class="pre">NEST</span></code>, the explicit static solver, solves a linear system in every Runge–Kutta stage and is not
+shown. In the code, <code class="docutils literal notranslate"><span class="pre">NED</span></code> computes the net force at the end of each increment, for the next one.</span><a class="headerlink" href="#id1" title="Link to this image"></a></p>
 </figcaption>
 </figure>
-<p>At the start of every increment, and of every retry after a cutback, the implicit solvers run the topology update
-(<a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity()</span></code></a>); <code class="docutils literal notranslate"><span class="pre">NED</span></code>
-runs it when it is due (see the table below). The model modifiers may change the mesh
-(<a class="reference internal" href="topologypipeline.html"><span class="doc">The topology pipeline: how a model changes itself</span></a>), the mesh-dependent consumers (a tie or contact surface) catch up on it, and the
-model brings the connectivity of its entities up to date, e.g. a contact constraint searches for the surface it now
-touches. The answer is one <a class="reference internal" href="models.html#edelweissfe.models.change.Change" title="edelweissfe.models.change.Change"><code class="xref py py-class docutils literal notranslate"><span class="pre">Change</span></code></a>, the same for every solver, ordered
-<code class="docutils literal notranslate"><span class="pre">NONE</span> <span class="pre">&lt;</span> <span class="pre">LOCATIONS</span> <span class="pre">&lt;</span> <span class="pre">NUMBERING</span> <span class="pre">&lt;</span> <span class="pre">MESH</span></code>. <strong>Who classifies:</strong> the model classifies what its entities report
-(<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a> gives <code class="docutils literal notranslate"><span class="pre">NONE</span></code>, <code class="docutils literal notranslate"><span class="pre">LOCATIONS</span></code> or <code class="docutils literal notranslate"><span class="pre">NUMBERING</span></code>), and
-<code class="docutils literal notranslate"><span class="pre">MESH</span></code> is what the topology update reports: the solver base class takes it if a model modifier changed the mesh, or
-if a mesh-dependent consumer caught up on a changed mesh (it refreshes only when nodes or elements did change), and
-otherwise the answer of the model.</p>
-<p>Every solver then goes through one build path
-(<a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateDiscreteSystem()</span></code></a>), which writes the
-journal lines about it, and only the change decides:</p>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">NONE</span></code></dt><dd><p>Nothing happens: the discrete system stands (it is built, if the solver has none yet).</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">LOCATIONS</span></code></dt><dd><p>An entity couples other nodes, or takes part or not (a contact constraint paired anew, or leaving reach). The
-numbering stands: the discrete system makes new locations on it
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations" title="edelweissfe.models.discretesystem.DiscreteSystem.withNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">withNewLocations()</span></code></a>), and only <code class="docutils literal notranslate"><span class="pre">onNewLocations()</span></code>
-follows.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">NUMBERING</span></code></dt><dd><p>The degrees of freedom to be numbered changed: the scalar variables of the active constraints, e.g. a constraint
-with Lagrange multipliers left reach; in a meshfree model, also the nodes of the active domain. The solver drops
-what it holds (<code class="docutils literal notranslate"><span class="pre">forgetDiscreteSystem()</span></code>), the model builds a new discrete system, and <code class="docutils literal notranslate"><span class="pre">onNewNumbering()</span></code> and
-then <code class="docutils literal notranslate"><span class="pre">onNewLocations()</span></code> follow.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">MESH</span></code></dt><dd><p>As <code class="docutils literal notranslate"><span class="pre">NUMBERING</span></code>, and the mesh changed, e.g. by h-adaptivity. The solver re-equilibrates, if asked
-(<code class="docutils literal notranslate"><span class="pre">equilibrateAfterModelChange</span></code>): the state of the model is then not the state the solver carries. Only a change
-of the mesh does so, as a change of the locations or of the numbering moves no node and creates none.</p>
-</dd>
-</dl>
-<p>The solver base class declares the hooks, and each solver implements them; both are abstract. They sort what a solver
-holds by what it is derived from:</p>
-<dl class="simple">
-<dt><code class="docutils literal notranslate"><span class="pre">onNewNumbering()</span></code></dt><dd><p>Everything that is sized by the numbering: the vectors, which the state is read into from the model; the linear
-solver’s view of the degrees of freedom; the layout of the convergence table; the multi-point-constraint
-condensation; and, in <code class="docutils literal notranslate"><span class="pre">NED</span></code>, the lumped operators, the classification of the fields by time derivative and the
-stable time increment. <code class="docutils literal notranslate"><span class="pre">NID</span></code> has no such hook of its own: its mass and damping are dropped with the discrete
-system (<code class="docutils literal notranslate"><span class="pre">forgetDiscreteSystem()</span></code>) and assembled by its first increment on the new one.</p>
-</dd>
-<dt><code class="docutils literal notranslate"><span class="pre">onNewLocations()</span></code></dt><dd><p>Everything that is derived from the locations: the vectors are wrapped with them, their values kept, without a
-copy (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector.onLocations" title="edelweissfe.numerics.dofvector.DofVector.onLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onLocations()</span></code></a>); the linear solver learns of a new pattern
-(<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern" title="edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewMatrixPattern()</span></code></a>) and drops what it built for the old one, a
-hierarchy or a factorization; the system matrix assembly is built with the pattern the locations determine, and,
-in <code class="docutils literal notranslate"><span class="pre">NID</span></code>, the mass is copied onto it, unless entities integrate their own inertia (<code class="docutils literal notranslate"><span class="pre">inertia=nodes</span></code>): then the
-mass and damping are assembled anew. <code class="docutils literal notranslate"><span class="pre">NED</span></code> has no system matrix, and wraps its vectors only.</p>
-</dd>
-</dl>
-<p>Nothing sized by the numbering is touched by new locations: the lumped mass of <code class="docutils literal notranslate"><span class="pre">NED</span></code> is a function of the elements
-and of the numbering, and a contact search does not reassemble it. A contact search is much narrower than it looks: it
-touches no node, no field, no scalar variable and no element, so no operator that is a function of these changes.</p>
-<p><strong>Why two hooks, and one path:</strong> a contact search changes the locations on many increments, and must not pay for what
-the numbering decides; and no solver needs its own test of what it may reuse – the model classifies what its entities
-report, the discrete system never changes in place, and the hooks say what depends on what. The restart checkpoint
-holds the digest of the numbering its vectors belong to (<a class="reference internal" href="restart.html"><span class="doc">Restart</span></a>).</p>
-<p>Two solvers ask less often. <code class="docutils literal notranslate"><span class="pre">NED</span></code> runs the topology update at the start of its step and after every
-<code class="docutils literal notranslate"><span class="pre">topology-check-frequency</span></code>-th increment, and, every <code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code>-th increment, calls
-<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a> alone; this can only be answered with new locations, as
-<code class="docutils literal notranslate"><span class="pre">NED</span></code> refuses constraints with scalar variables. It asks only if a constraint of the model searches as the bodies
-move
-(<a class="reference internal" href="dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion" title="edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion"><code class="xref py py-attr docutils literal notranslate"><span class="pre">connectivityChangesWithMotion</span></code></a>,
-e.g. a contact); the same attribute makes <code class="docutils literal notranslate"><span class="pre">NEST</span></code>, which never updates the connectivity, refuse such a constraint.
-<code class="docutils literal notranslate"><span class="pre">NIST</span></code> judges its prediction once per increment, right after the update
-(<a class="reference internal" href="../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvives" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predictionSurvives()</span></code></a>): it survives new locations on the same
-numbering by construction, but is extrapolated across a change of the connectivity only with
-<code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>; it survives a new numbering only if the new one numbers the degrees of
-freedom as before, and a change of the mesh never.</p>
 </section>
-<section id="the-entities-that-couple-nodes">
-<span id="architecture-entities"></span><h2>The entities that couple nodes<a class="headerlink" href="#the-entities-that-couple-nodes" title="Link to this heading"></a></h2>
-<p>The discrete system locates two kinds of entity, and locates both the same way, whatever it is:</p>
-<ul class="simple">
-<li><p>the <strong>elements</strong> – and, in a meshfree model, the cells and the particles – follow the protocol of
-<a class="reference internal" href="dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity" title="edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseNodeCouplingEntity</span></code></a>: their nodes, and the fields
-they couple on each node. The Python entities derive from it; the compiled Marmot wrappers implement the same
-protocol without deriving, because a Cython extension type cannot derive from a Python class;</p></li>
-<li><p>the <strong>constraints</strong> (<a class="reference internal" href="../model/constraints.html"><span class="doc">Constraints</span></a>) state their nodes and fields in the same way, and may change them
-between increments (<code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>).</p></li>
-</ul>
-<p>The protocol is the location, and only the location: what an entity computes is the business of its kind. The inertia
-and the damping, for example, are reported by finite elements, not by the protocol, and it is the discrete system that
-names the entities a solver asks for them at the nodes
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a>: in a finite element model the
-elements, in a meshfree model the finite elements only). The inertia of the particles, which integrate their own, is
-their own mass (<code class="docutils literal notranslate"><span class="pre">computeLumpedInertia</span></code>), lumped at the nodes by
-<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLumpedMassOfEntitiesWithOwnInertia()</span></code></a>.</p>
-<p>Every located entity writes into the residual and into its own block of the system matrix, in its own numbering of its
-degrees of freedom (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixContributorBase</span></code></a>); its location
-places that numbering in the global system. <strong>Why:</strong> the assembly, the solver and the locations never ask what kind of
-entity they deal with. A contact constraint and a hexahedral element are added the same way; a block that couples only
-a part of its degrees of freedom lists its entries, and is still added the same way.</p>
-<p>The <strong>loads</strong> of the step are not located entities: a load is a step action
-(<a class="reference internal" href="../analysis/stepactions.html#edelweissfe.stepactions.base.loadbase.LoadBase" title="edelweissfe.stepactions.base.loadbase.LoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoadBase</span></code></a>) that has no location and is not held by the discrete
-system. It adds to the residual, and to the tangent if it follows the deformation, into the block of the entity it acts
-on (<a class="reference internal" href="../analysis/stepactions.html"><span class="doc">Step actions</span></a>). The rule every contribution follows – residual and tangent, and their signs – is
-<a class="reference internal" href="residualandtangent.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p>
-</section>
-<section id="what-the-solver-takes-from-the-discrete-system">
-<span id="model-discrete-system"></span><h2>What the solver takes from the discrete system<a class="headerlink" href="#what-the-solver-takes-from-the-discrete-system" title="Link to this heading"></a></h2>
-<p>A solver solves; what its system is made of, the model says. The solver keeps the discrete system it got from
-<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.buildDiscreteSystem" title="edelweissfe.models.femodel.FEModel.buildDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildDiscreteSystem()</span></code></a> until the next rebuild, or until new locations on the
-same numbering replace it, and takes from it:</p>
-<ul class="simple">
-<li><p>the numbering of the degrees of freedom (<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.numbering" title="edelweissfe.models.discretesystem.DiscreteSystem.numbering"><code class="xref py py-attr docutils literal notranslate"><span class="pre">numbering</span></code></a>),
-which also locates the degrees of freedom of a field on a node set, those a Dirichlet boundary condition prescribes
-or a node force loads (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet" title="edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>);</p></li>
-<li><p>the locations of the entities in it (<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.locations" title="edelweissfe.models.discretesystem.DiscreteSystem.locations"><code class="xref py py-attr docutils literal notranslate"><span class="pre">locations</span></code></a>), and the
-vectors that refer to them;</p></li>
-<li><p>the elements (<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.elements" title="edelweissfe.models.discretesystem.DiscreteSystem.elements"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elements</span></code></a>), everything the solver computes
-like an element (<code class="docutils literal notranslate"><span class="pre">computeElements</span></code>): the finite elements that carry kernels (an entity that carries geometry only,
-such as a contact facet, takes no part), for every solver, <code class="docutils literal notranslate"><span class="pre">NED</span></code> included, and the constraints that take part
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.constraints" title="edelweissfe.models.discretesystem.DiscreteSystem.constraints"><code class="xref py py-attr docutils literal notranslate"><span class="pre">constraints</span></code></a>), the active ones the locations hold. The
-solver evaluates exactly these (<code class="docutils literal notranslate"><span class="pre">assembleConstraints</span></code>), so that every constraint it evaluates has its rows in the
-system matrix, and a solver never asks a constraint whether it is active;</p></li>
-<li><p>the entities whose inertia is assembled element by element
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a>), which <code class="docutils literal notranslate"><span class="pre">NID</span></code> (mass,
-damping) and <code class="docutils literal notranslate"><span class="pre">NED</span></code> (lumped operators, damping, stable time increment) loop over; <code class="docutils literal notranslate"><span class="pre">NID</span></code> also asks which degrees
-of freedom carry the mass of the nodes
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dofsWithNodalInertia()</span></code></a>), the lumped mass of the entities
-that integrate their own inertia
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLumpedMassOfEntitiesWithOwnInertia()</span></code></a>), and, at the
-start of a step, where the model holds their motion
-(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion" title="edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion"><code class="xref py py-meth docutils literal notranslate"><span class="pre">carriersOfTheMotion()</span></code></a>);</p></li>
-<li><p>the state the solution vector (and the velocity and the acceleration of a dynamic solver) starts from after a
-rebuild (<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel" title="edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>), and where the results of an
-accepted increment go (<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>; the velocity
-and the acceleration through
-<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a>, see
-<a class="reference internal" href="../output/nodefieldresults.html"><span class="doc">Node field results</span></a>);</p></li>
-<li><p>the model the linear solver is set up for.</p></li>
-</ul>
-<p>In every evaluation of the model – every Newton iteration, every trial state of a line search – <code class="docutils literal notranslate"><span class="pre">NIST</span></code> and the
-solvers derived from it also call
-<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints" title="edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateMaterialPoints()</span></code></a> right before they compute the elements
-(<a class="reference internal" href="../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleInternalForces()</span></code></a>); <code class="docutils literal notranslate"><span class="pre">NED</span></code> evaluates the elements of
-a finite element model itself, and does not. The loops over the entities stay with the solver: <code class="docutils literal notranslate"><span class="pre">NIST</span></code> computes the
-elements one after the other, <code class="docutils literal notranslate"><span class="pre">NISTParallel</span></code> on all threads, each element into its own part of the residual and its
-own block of the system matrix (see <a class="reference internal" href="assembly.html#system-matrix-assembly"><span class="std std-ref">System matrix assembly</span></a>). A discrete system that updates material points
-loops over them through the solver’s <a class="reference internal" href="../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forEachChunk()</span></code></a>, so that
-they are evaluated on the same threads. At the start of every step, the implicit solvers give the entities of the
-model that integrate their own inertia their Newmark parameters
-(<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities" title="edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setNewmarkParametersOfEntities()</span></code></a>): <code class="docutils literal notranslate"><span class="pre">NID</span></code> its own, every quasi-static
-solver zero, so that a quasi-static solver is quasi-static by construction. A step of <code class="docutils literal notranslate"><span class="pre">NED</span></code> starts from the velocity
-and the acceleration the model holds, and leaves the velocity at its end time
-(<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.advanceVelocity" title="edelweissfe.models.femodel.FEModel.advanceVelocity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">advanceVelocity()</span></code></a>), so that the steps of a dynamic analysis follow each
-other whichever solver solves them.</p>
-<p>A finite element model answers as follows: its constraints update the nodes they couple (a contact constraint
-searches for the surface it touches); its discrete system numbers all nodes and the active constraints with their
-scalar variables; its elements are the finite elements; every node carries its total solution from increment to
-increment; and nothing is to be updated before the elements, which evaluate the material at their quadrature points
-themselves.</p>
-<p>A model of EdelweissMeshfree answers differently, with the same solvers:</p>
-<ul class="simple">
-<li><p>Its material points move through a fixed background grid of cells, and its particles carry their kernel functions
-along. When asked what has changed, it first assigns the material points to the cells they lie in and the particles
-to the kernel functions they reach, then lets its constraints follow.</p></li>
-<li><p>Only the part of the grid that holds material points, and the nodes in reach of the particles, form the discrete
-system (the active domain). So a node set of the grid may reach beyond the discrete system: a Dirichlet boundary
-condition then prescribes, and a node force loads, the nodes of the set in the active domain.</p></li>
-<li><p>Its elements are its finite elements, the active cells, and the particles; the entities whose inertia is assembled
-element by element are its finite elements only, since its cells and cell elements contribute nothing there, and
-the particles integrate their own.</p></li>
-<li><p>Only finite element nodes carry a total solution from increment to increment. The material point method and RKPM
-are incremental on the current configuration – the cells are reset and the kernel functions move with their
-particles, while the state lives in the material points and particles – so the values at the nodes of the grid and
-of the kernel functions are coefficients of one increment, and start every new discrete system at zero.</p></li>
-<li><p>Before the cells are computed, each cell interpolates the solution increment to its material points, and the
-material points evaluate their material; the cells then integrate the result.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">MeshfreeExplicitDynamic</span></code> updates its discrete system after the particles advanced, on the kernel functions they
-reach then.</p></li>
-</ul>
-</section>
-<section id="one-increment-implicit-and-explicit">
-<h2>One increment, implicit and explicit<a class="headerlink" href="#one-increment-implicit-and-explicit" title="Link to this heading"></a></h2>
-<figure class="align-default" id="id3">
-<a class="reference internal image-reference" href="../_images/discretesystem_increment.svg"><img alt="One increment. First the topology update gives a Change and the solver updates its discrete system. Both lanes then start from the same entities, located in the numbering. Implicit lane: the blocks K[e] go into the SystemMatrixAssembly, which yields the CSR matrix K; the multi-point constraints condense K and the residual R, the Dirichlet boundary conditions replace their rows; the linear solver solves K ddU = R; the Newton update recovers the slaves and checks convergence, then the next Newton iteration computes the entities again. Explicit lane: the residuals P only form the net force; the multi-point constraints fold the slave forces into the masters; the acceleration is the net force minus damping divided by the lumped mass and damping, per degree of freedom; the central difference updates velocity and solution, and the next increment begins. Both write the accepted increment to the node fields through the discrete system." src="../_images/discretesystem_increment.svg" style="width: 100%;" />
-</a>
-<figcaption>
-<p><span class="caption-text">The implicit and the explicit solvers share the entities and the discrete system. Where the implicit solvers
-solve a linear system, the explicit solver divides by a diagonal (blue: where the two differ).</span><a class="headerlink" href="#id3" title="Link to this image"></a></p>
-</figcaption>
-</figure>
-<p>The implicit solvers compute every entity of the discrete system in every Newton iteration, assemble the blocks into
-the system matrix, condense and constrain it, and solve it (<a class="reference internal" href="../analysis/solvers.html"><span class="doc">Solvers</span></a>). The explicit solver <code class="docutils literal notranslate"><span class="pre">NED</span></code>
-computes the same entities, but uses their residuals only: with a lumped mass and damping, the equation of motion is
-solved degree of freedom by degree of freedom, so it holds no system matrix and no linear solver.</p>
-<p>What each solver uses, and when it updates its discrete system:</p>
-<table class="docutils align-default" style="width: 100%">
+<section id="the-textbook-arrays-and-their-names">
+<span id="architecture-words"></span><h2>The textbook arrays and their names<a class="headerlink" href="#the-textbook-arrays-and-their-names" title="Link to this heading"></a></h2>
+<p>The assembly procedure of the textbook uses three arrays. EdelweissFE uses the same three under other names, and one
+more word for all other sets of indices:</p>
+<table class="docutils align-default">
 <colgroup>
-<col style="width: 22.0%" />
-<col style="width: 26.0%" />
-<col style="width: 26.0%" />
-<col style="width: 26.0%" />
+<col style="width: 10.0%" />
+<col style="width: 14.0%" />
+<col style="width: 44.0%" />
+<col style="width: 32.0%" />
 </colgroup>
 <thead>
-<tr class="row-odd"><th class="head"><p>Solver</p></th>
-<th class="head"><p>System matrix</p></th>
-<th class="head"><p>Linear solver</p></th>
-<th class="head"><p>Updates its discrete system</p></th>
+<tr class="row-odd"><th class="head"><p>Textbook</p></th>
+<th class="head"><p>EdelweissFE</p></th>
+<th class="head"><p>What it is</p></th>
+<th class="head"><p>When it changes</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NIST</span></code>, <code class="docutils literal notranslate"><span class="pre">NISTParallel</span></code></p></td>
-<td><p>tangent, <code class="docutils literal notranslate"><span class="pre">vij</span></code> or <code class="docutils literal notranslate"><span class="pre">direct</span></code></p></td>
-<td><p>once per Newton iteration</p></td>
-<td><p>at the start of every increment, by the <code class="docutils literal notranslate"><span class="pre">Change</span></code></p></td>
+<tr class="row-even"><td><p>IEN</p></td>
+<td><p>connectivity</p></td>
+<td><p>The nodes of an entity, and the fields the entity couples on each node (<code class="docutils literal notranslate"><span class="pre">entity.nodes</span></code>, <code class="docutils literal notranslate"><span class="pre">entity.fields</span></code>).</p></td>
+<td><p>When a contact constraint couples other nodes, or when the mesh changes.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NISTPArcLength</span></code></p></td>
-<td><p>tangent, plus the tangents of the dead and the reference load, scaled</p></td>
-<td><p>for two right-hand sides</p></td>
-<td><p>as <code class="docutils literal notranslate"><span class="pre">NIST</span></code></p></td>
+<tr class="row-odd"><td><p>ID</p></td>
+<td><p>numbering</p></td>
+<td><p>The global index of each degree of freedom of a node field or a scalar variable
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>).</p></td>
+<td><p>When the mesh changes, or when scalar variables, e.g., Lagrange multipliers, are added or removed.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NID</span></code>, <code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code></p></td>
-<td><p>tangent plus the mass (on the tangent’s pattern) and the damping</p></td>
-<td><p>once per Newton iteration</p></td>
-<td><p>as <code class="docutils literal notranslate"><span class="pre">NIST</span></code>; new locations keep the mass and damping, which the first increment on a new numbering assembles;
-with entities that integrate their own inertia (<code class="docutils literal notranslate"><span class="pre">inertia=nodes</span></code>), they are assembled anew for every increment</p></td>
+<tr class="row-even"><td><p>LM</p></td>
+<td><p>locations</p></td>
+<td><p>For each entity, the global indices of its local degrees of freedom: the numbering applied to the
+connectivity (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>). <code class="docutils literal notranslate"><span class="pre">locations[entity]</span></code> is the
+location of one entity.</p></td>
+<td><p>When the connectivity or the numbering changes.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NEST</span></code>, <code class="docutils literal notranslate"><span class="pre">NESTParallel</span></code></p></td>
-<td><p>tangent, <code class="docutils literal notranslate"><span class="pre">vij</span></code></p></td>
-<td><p>once per Runge–Kutta stage</p></td>
-<td><p>once per step; no topology update, and a constraint whose connectivity changes with the motion is refused</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NED</span></code>, <code class="docutils literal notranslate"><span class="pre">NEDParallel</span></code></p></td>
-<td><p>none; lumped mass and damping</p></td>
-<td><p>none</p></td>
-<td><p>at the start of the step, after every <code class="docutils literal notranslate"><span class="pre">topology-check-frequency</span></code>-th increment, and for a contact search
-every <code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code>-th increment; a contact search only gives new locations</p></td>
+<tr class="row-odd"><td></td>
+<td><p>indices</p></td>
+<td><p>Any other set of global indices: the degrees of freedom of a node set, which the numbering holds
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet" title="edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>), the degrees of freedom a
+Dirichlet boundary condition prescribes, the slaves of a multi-point constraint.</p></td>
+<td><p>When the numbering changes.</p></td>
 </tr>
 </tbody>
 </table>
-<p>The state passes through the model’s node fields in all of them (<a class="reference internal" href="../output/nodefieldresults.html"><span class="doc">Node field results</span></a>): a step solved by
-<code class="docutils literal notranslate"><span class="pre">NID</span></code> can be followed by a step solved by <code class="docutils literal notranslate"><span class="pre">NED</span></code>, and the other way round.</p>
+<p>An <em>entity</em> is anything that has a location: an element or a constraint (<a class="reference internal" href="#architecture-entities"><span class="std std-ref">The entities that couple nodes</span></a>). A location is
+a list of indices, never a position in space. The four words have exactly this meaning in the code, in the docstrings
+and in this documentation.</p>
+<p>Neither the numbering nor the locations are ever changed in place. A change creates a new object
+(<a class="reference internal" href="dofnumbering.html"><span class="doc">Degrees of freedom: numbering and locations</span></a>).</p>
+<section id="example-numbering-and-locations">
+<span id="architecture-example"></span><h3>Example: numbering and locations<a class="headerlink" href="#example-numbering-and-locations" title="Link to this heading"></a></h3>
+<figure class="align-default" id="id2">
+<img alt="A small example. Left: two quadrilateral elements, e1 with the nodes 1, 2, 3, 4 and e2 with the nodes 5, 6, 7, 8, separated by a gap; node 2 faces the middle of the facet 5-8 of e2, and a contact constraint c couples node 2 with this facet once the gap closes. Below: the ID array, two DOFs per node, node 1: 0, 1 up to node 8: 14, 15, and the location of c, 2, 3, 8, 9, 14, 15. Middle: the sparsity pattern of the system matrix, one cell per pair of nodes, before the contact: two separate blocks, nodes 1 to 4 and nodes 5 to 8. Right: the pattern with the contact, case (a): the pairs 2-5, 2-8, 5-2 and 8-2 are added. The numbering is the same in both; the locations and the pattern change: Change.LOCATIONS." src="../_images/architecture_example.svg" />
+<figcaption>
+<p><span class="caption-text">Two elements and a contact constraint. The contact changes the locations and the sparsity pattern of the system
+matrix, case (a), but not the numbering.</span><a class="headerlink" href="#id2" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+<p>The model consists of two four-node elements, <code class="docutils literal notranslate"><span class="pre">e1</span></code> and <code class="docutils literal notranslate"><span class="pre">e2</span></code>, separated by a gap. Each node carries a displacement
+field with two components, so the model has 16 degrees of freedom. A contact constraint <code class="docutils literal notranslate"><span class="pre">c</span></code> is defined between node 2
+and the facet 5–8 of <code class="docutils literal notranslate"><span class="pre">e2</span></code>. Once the gap is closed, <code class="docutils literal notranslate"><span class="pre">c</span></code> couples the nodes 2, 5 and 8.</p>
+<p>Each node field occupies a contiguous block of the numbering, ordered node by node
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>). If the field lists the nodes in the order 1 to 8, the ID
+array reads as follows. The indices start at 0, as all indices in Python do; Hughes starts at 1.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>node</p></th>
+<th class="head"><p>1</p></th>
+<th class="head"><p>2</p></th>
+<th class="head"><p>3</p></th>
+<th class="head"><p>4</p></th>
+<th class="head"><p>5</p></th>
+<th class="head"><p>6</p></th>
+<th class="head"><p>7</p></th>
+<th class="head"><p>8</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>ID</p></td>
+<td><p>0, 1</p></td>
+<td><p>2, 3</p></td>
+<td><p>4, 5</p></td>
+<td><p>6, 7</p></td>
+<td><p>8, 9</p></td>
+<td><p>10, 11</p></td>
+<td><p>12, 13</p></td>
+<td><p>14, 15</p></td>
+</tr>
+</tbody>
+</table>
+<p>The location of an entity is obtained by applying the numbering to its connectivity
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>). It lists the degrees of freedom node by node, and on each
+node the fields in the order in which the entity lists them. An entity may reorder this list
+(<code class="docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code>), and the indices of its scalar variables, if it has any, are appended at the end. The LM
+array of the example reads:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>entity</p></th>
+<th class="head"><p>connectivity (IEN)</p></th>
+<th class="head"><p>location (LM)</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">e1</span></code></p></td>
+<td><p>1, 2, 3, 4</p></td>
+<td><p>0, 1, 2, 3, 4, 5, 6, 7</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">e2</span></code></p></td>
+<td><p>5, 6, 7, 8</p></td>
+<td><p>8, 9, 10, 11, 12, 13, 14, 15</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">c</span></code>, in contact</p></td>
+<td><p>2, 5, 8</p></td>
+<td><p>2, 3, 8, 9, 14, 15</p></td>
+</tr>
+</tbody>
+</table>
+<p>A DOF vector indexed with an entity returns the values at the location of the entity, e.g., <code class="docutils literal notranslate"><span class="pre">U[e1]</span></code>. The system
+matrix assembly indexed with an entity returns the block the entity writes into, <code class="docutils literal notranslate"><span class="pre">K[e1]</span></code>. With these two operations,
+the element loop of <code class="docutils literal notranslate"><span class="pre">NIST</span></code> (<a class="reference internal" href="../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>) is a direct
+implementation of the assembly procedure of the textbook:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span>
+<span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">:</span>
+    <span class="n">Ke</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
+    <span class="n">Pe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+
+    <span class="n">el</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">Ke</span><span class="p">,</span> <span class="n">Pe</span><span class="p">,</span> <span class="n">U_np</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">time</span><span class="p">,</span> <span class="n">dT</span><span class="p">)</span>
+
+    <span class="n">P</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Pe</span>
+    <span class="n">F</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">Pe</span><span class="p">)</span>
+
+</pre></div>
+</div>
+</section>
+<section id="where-the-material-law-is-evaluated">
+<span id="architecture-material"></span><h3>Where the material law is evaluated<a class="headerlink" href="#where-the-material-law-is-evaluated" title="Link to this heading"></a></h3>
+<p>The solver never calls a material. Each element evaluates its material at its quadrature points inside
+<code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>. The material receives the deformation over the whole increment, e.g., the strain increment
+computed from <code class="docutils literal notranslate"><span class="pre">dU[el]</span></code>, and the history variables of the last accepted state. It returns the stress, the new history variables and the material
+tangent, and the element integrates them into <span class="math notranslate nohighlight">\(\boldsymbol{P}_e\)</span> and <span class="math notranslate nohighlight">\(\boldsymbol{K}_e\)</span>. Every Newton
+iteration starts again from the accepted history variables. The material therefore always integrates from
+<span class="math notranslate nohighlight">\(t_n\)</span> to <span class="math notranslate nohighlight">\(t_{n+1}\)</span>, not from the previous iteration.</p>
+<p>The element writes the new history variables into a trial buffer. When the increment is accepted,
+<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-meth docutils literal notranslate"><span class="pre">advanceToTime()</span></code></a> calls <code class="docutils literal notranslate"><span class="pre">acceptLastState()</span></code> of every element and of every
+active constraint, and the trial state becomes the accepted state. A failed increment needs no rollback: the trial
+state is overwritten by the next attempt, which starts again from the accepted state. A material that cannot compute
+a state, e.g., because its return mapping does not converge, raises a
+<a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.CutbackRequest" title="edelweissfe.utils.exceptions.CutbackRequest"><code class="xref py py-class docutils literal notranslate"><span class="pre">CutbackRequest</span></code></a>, and the step retries the increment with a smaller time
+increment.</p>
+<p>The elements and materials of Marmot are implemented in C++. EdelweissFE wraps them with Cython
+(<code class="docutils literal notranslate"><span class="pre">edelweissfe.elements.marmotelement</span></code>), and the wrapper is used like any other element (<a class="reference internal" href="../model/elements.html"><span class="doc">Elements</span></a>,
+<a class="reference internal" href="../model/materials.html"><span class="doc">Materials</span></a>).</p>
+</section>
+</section>
+<section id="what-edelweissfe-does-differently-from-the-textbook">
+<span id="architecture-differences"></span><h2>What EdelweissFE does differently from the textbook<a class="headerlink" href="#what-edelweissfe-does-differently-from-the-textbook" title="Link to this heading"></a></h2>
+<p><strong>Every degree of freedom is numbered.</strong> In Hughes, the ID array gives a prescribed degree of freedom the equation
+number zero, so that it is not an unknown. EdelweissFE numbers all degrees of freedom, the prescribed ones included.
+A Dirichlet boundary condition replaces the row of its degree of freedom by an identity row and moves the column into
+the right-hand side (<a class="reference internal" href="../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness"><code class="xref py py-meth docutils literal notranslate"><span class="pre">applyDirichletToStiffness()</span></code></a>).
+The numbering therefore does not depend on the boundary conditions, and a step may prescribe other degrees of freedom
+than the previous step without a new numbering.</p>
+<p><strong>The ID and the LM array may change during a run.</strong> In the textbook, both are set up once, before the analysis. In
+EdelweissFE, a contact search may change the LM array between two increments, and a mesh refinement may change both.
+<a class="reference internal" href="#how-a-change-selects-the-path"><span class="std std-ref">When the ID and the LM array change</span></a> explains how the solver follows such a change.</p>
+<p><strong>A discrete system lies between the model and the solver.</strong> The solver does not loop over the elements of the model.
+It asks the model for a <a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem" title="edelweissfe.models.discretesystem.DiscreteSystem"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiscreteSystem</span></code></a>, which contains the numbering, the
+locations, the entities that have a location, and the methods that transfer the state between the node fields of the
+model and the vectors of the solver. The reason is that the same solvers also solve models that are not made of finite
+elements. A meshfree model of EdelweissMeshfree, with background cells, particles and material points, returns a
+discrete system derived from this one, and the solvers use it in the same way. The complete list of what a solver
+takes from the discrete system is in <a class="reference internal" href="models.html#model-discrete-system"><span class="std std-ref">What the solver takes from the discrete system</span></a>.</p>
+<p>The model builds a discrete system only if every numbered degree of freedom lies in the location of an entity or is
+related to one by a multi-point constraint. Otherwise the degree of freedom would have no row in the system matrix; the
+model refuses to build the discrete system and names the node and the field.</p>
+<p><strong>The step runs the loop over the increments.</strong> In many codes, the solver runs the whole analysis. In EdelweissFE, the
+step runs the increments, and the solver solves one increment at a time. Consecutive steps may therefore use
+different solvers. The state passes from one step to the next through the node fields of the model
+(<a class="reference internal" href="../output/nodefieldresults.html"><span class="doc">Node field results</span></a>), so that a step solved by <code class="docutils literal notranslate"><span class="pre">NID</span></code> can be followed by a step solved by <code class="docutils literal notranslate"><span class="pre">NED</span></code>, and
+the other way round.</p>
+</section>
+<section id="when-the-id-and-the-lm-array-change">
+<span id="how-a-change-selects-the-path"></span><h2>When the ID and the LM array change<a class="headerlink" href="#when-the-id-and-the-lm-array-change" title="Link to this heading"></a></h2>
+<p>The model reports what changed before an increment as a <a class="reference internal" href="models.html#edelweissfe.models.change.Change" title="edelweissfe.models.change.Change"><code class="xref py py-class docutils literal notranslate"><span class="pre">Change</span></code></a>. The four values
+are ordered: <code class="docutils literal notranslate"><span class="pre">NONE</span> <span class="pre">&lt;</span> <span class="pre">LOCATIONS</span> <span class="pre">&lt;</span> <span class="pre">NUMBERING</span> <span class="pre">&lt;</span> <span class="pre">MESH</span></code>. In the example of <a class="reference internal" href="#architecture-example"><span class="std std-ref">Example: numbering and locations</span></a>, three events are
+possible:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Event</p></th>
+<th class="head"><p>ID</p></th>
+<th class="head"><p>LM</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">Change</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>(a) the gap closes</p></td>
+<td><p>the same, 16 DOFs</p></td>
+<td><p>a location for <code class="docutils literal notranslate"><span class="pre">c</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LOCATIONS</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>(b) as (a), with a Lagrange multiplier</p></td>
+<td><p>index 16 is added</p></td>
+<td><p>a location for <code class="docutils literal notranslate"><span class="pre">c</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NUMBERING</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>(c) <code class="docutils literal notranslate"><span class="pre">e2</span></code> is refined</p></td>
+<td><p>new</p></td>
+<td><p>new</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">MESH</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>In case (a), <code class="docutils literal notranslate"><span class="pre">c</span></code> couples the nodes 2, 5 and 8. No degree of freedom is added, so the numbering is kept. <code class="docutils literal notranslate"><span class="pre">c</span></code> obtains
+a location, and the sparsity pattern of the system matrix gains the entries marked in blue in the example figure. In
+case (b), <code class="docutils literal notranslate"><span class="pre">c</span></code> enforces the contact with a Lagrange multiplier. The multiplier is a scalar variable, and scalar
+variables are numbered after the node fields: the multiplier obtains the index 16, which is appended to the location
+of <code class="docutils literal notranslate"><span class="pre">c</span></code>. In case (c), the refinement of <code class="docutils literal notranslate"><span class="pre">e2</span></code> adds nodes and elements, and both the numbering and the locations are
+rebuilt.</p>
+<section id="who-reports-the-change">
+<h3>Who reports the change<a class="headerlink" href="#who-reports-the-change" title="Link to this heading"></a></h3>
+<p>At the start of every increment, <code class="docutils literal notranslate"><span class="pre">NIST</span></code> runs the topology update
+(<a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity()</span></code></a>). It has two
+parts; a retry after a cutback runs only the second:</p>
+<ul class="simple">
+<li><p>The model modifiers may change the mesh, e.g., a mesh refinement (<a class="reference internal" href="topologypipeline.html"><span class="doc">The topology pipeline: how a model changes itself</span></a>). The objects
+that depend on the mesh, such as a tie or a contact surface, then update themselves.</p></li>
+<li><p>The model brings the connectivity of its entities up to date, e.g., a contact constraint searches for the surface it
+touches now. The model collects what its entities report and answers with <code class="docutils literal notranslate"><span class="pre">NONE</span></code>, <code class="docutils literal notranslate"><span class="pre">LOCATIONS</span></code> or <code class="docutils literal notranslate"><span class="pre">NUMBERING</span></code>
+(<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a>).</p></li>
+</ul>
+<p>The result is <code class="docutils literal notranslate"><span class="pre">MESH</span></code> if the mesh changed, and otherwise the answer of the model. The other solvers run the topology
+update less often; see <a class="reference internal" href="solverbase.html#solver-discrete-system-updates"><span class="std std-ref">When each solver updates its discrete system</span></a>.</p>
+</section>
+<section id="what-the-solver-rebuilds">
+<h3>What the solver rebuilds<a class="headerlink" href="#what-the-solver-rebuilds" title="Link to this heading"></a></h3>
+<figure class="align-default" id="id3">
+<img alt="What the solver rebuilds for each Change. NIST runs the topology update at the start of every increment: model modifiers may change the mesh, except on a retry, and model.updateConnectivity() reports the rest; the other solvers are listed on the page of the solver base class. Row 1, Change.NONE with an existing discrete system: the DofNumbering and the DofLocations are the same objects, and no hook is called. Row 2, Change.LOCATIONS, case (a): withNewLocations() keeps the DofNumbering and creates new DofLocations; onNewNumbering() is not called, so U, dU and P keep their values and the MPC condensation and the DOF layout of the linear solver are kept; onNewLocations() wraps the vectors with the new locations, creates a new SystemMatrixAssembly, and the linear solver drops its factorization. Row 3, Change.NUMBERING or MESH, cases (b) and (c), or no discrete system yet: forgetDiscreteSystem() and buildDiscreteSystem() create a new DofNumbering and new DofLocations; onNewNumbering() reads U, dU, P from the model, builds the MPC condensation and the DOF layout of the linear solver, then onNewLocations() follows. Dark blue: new per numbering; light blue: new per locations; grey and dashed: kept, or not called." src="../_images/discretesystem_change.svg" />
+<figcaption>
+<p><span class="caption-text">What the solver rebuilds for each <code class="docutils literal notranslate"><span class="pre">Change</span></code>. The middle row is case (a), the bottom row cases (b) and (c). The
+colours are those of the figure in <a class="reference internal" href="#architecture-objects"><span class="std std-ref">Holder, lifetime and creator of the objects</span></a>: dark blue is new per numbering, light blue new per
+locations, grey and dashed kept or not called.</span><a class="headerlink" href="#id3" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+<p>Every solver follows the change through the same method,
+<a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateDiscreteSystem()</span></code></a>, in the same notation as
+in <a class="reference internal" href="#architecture-loop"><span class="std std-ref">The three loops</span></a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># NIST.beginStep(step, model, ...)</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">selectLinearSolverForStep</span><span class="p">()</span>                      <span class="c1"># a new linSolver, unless the step uses the same one</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createConvergenceCriterion</span><span class="p">()</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>                           <span class="c1"># built again in the first increment</span>
+
+<span class="c1"># NIST.prepareIncrement(step, model, isRetry): what changed?</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">_change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>    <span class="c1"># -&gt; a Change</span>
+    <span class="n">meshChanged</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">isRetry</span> <span class="k">else</span> <span class="kc">False</span>    <span class="c1"># model modifiers</span>
+    <span class="n">change</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">()</span>               <span class="c1"># e.g. a contact search</span>
+    <span class="k">return</span> <span class="n">Change</span><span class="o">.</span><span class="n">MESH</span> <span class="k">if</span> <span class="n">meshChanged</span> <span class="k">else</span> <span class="n">change</span>
+
+<span class="c1"># NIST.attemptIncrement(step, model, timeStep)</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">updateDiscreteSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_change</span><span class="p">)</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">change</span> <span class="o">&gt;=</span> <span class="n">Change</span><span class="o">.</span><span class="n">NUMBERING</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forgetDiscreteSystem</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildDiscreteSystem</span><span class="p">()</span>     <span class="c1"># the model creates:</span>
+            <span class="c1"># numbering = DofNumbering(nodeFields, scalarVariables, nodeSets)        # ID</span>
+            <span class="c1"># locations = DofLocations(numbering, elements, constraints)            # LM</span>
+            <span class="c1"># return DiscreteSystem(model, locations)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">onNewNumbering</span><span class="p">()</span>                         <span class="c1"># what lives per numbering</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>     <span class="c1"># also dU, P</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="n">MultiPointConstraintTransformation</span><span class="p">(</span><span class="n">records</span><span class="p">,</span> <span class="n">nDof</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">change</span> <span class="o">==</span> <span class="n">Change</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">withNewLocations</span><span class="p">()</span>  <span class="c1"># new LM, same ID</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">onNewLocations</span><span class="p">()</span>                             <span class="c1"># what lives per locations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="o">.</span><span class="n">onLocations</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">)</span>        <span class="c1"># also dU, P</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">onNewMatrixPattern</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">SystemMatrixAssembly</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">,</span> <span class="n">nWorkers</span><span class="p">,</span> <span class="n">patternFillIn</span><span class="p">)</span>
+<span class="bp">self</span><span class="o">.</span><span class="n">solveIncrement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The two hooks sort the objects of a solver by what they are derived from. Both are declared in the base class and
+implemented by every solver:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">onNewNumbering()</span></code></dt><dd><p>Builds the objects that are sized by the numbering: the vectors <code class="docutils literal notranslate"><span class="pre">U</span></code>, <code class="docutils literal notranslate"><span class="pre">dU</span></code> and <code class="docutils literal notranslate"><span class="pre">P</span></code>, whose values are read
+from the model; the DOF layout of the linear solver (<code class="docutils literal notranslate"><span class="pre">setModel</span></code>); the layout of the convergence table; and the
+MPC condensation, which is reconciled with the Dirichlet boundary conditions of the step.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">onNewLocations()</span></code></dt><dd><p>Builds the objects that are derived from the locations. The vectors are wrapped with the new locations; their
+values are kept without a copy (<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofvector.DofVector.onLocations" title="edelweissfe.numerics.dofvector.DofVector.onLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onLocations()</span></code></a>). The linear
+solver discards what it built for the old sparsity pattern, e.g., a factorization or a multigrid hierarchy
+(<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern" title="edelweissfe.linsolve.base.LinearSolver.onNewMatrixPattern"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewMatrixPattern()</span></code></a>). A new system matrix assembly is created with
+the sparsity pattern of the new locations.</p>
+</dd>
+</dl>
+<p>Before a new numbering, the solver discards its old discrete system (<code class="docutils literal notranslate"><span class="pre">forgetDiscreteSystem</span></code>). The base class
+discards the discrete system and the MPC condensation; each solver extends the method by the other objects it holds,
+e.g., <code class="docutils literal notranslate"><span class="pre">NIST</span></code> its vectors and its system matrix assembly. The old and the new objects therefore never exist at the
+same time.</p>
+<p>The split into two hooks matters because a contact search may change the locations in many increments. On new
+locations, only the objects that depend on the sparsity pattern are rebuilt. The vectors keep their values, and the
+MPC condensation and the DOF layout of the linear solver are kept. <code class="docutils literal notranslate"><span class="pre">NID</span></code> keeps its mass and damping on new locations
+and copies the mass into the new system matrix assembly; only with <code class="docutils literal notranslate"><span class="pre">inertia=nodes</span></code> does it assemble the lumped mass
+of the entities that integrate their own inertia anew in every increment.</p>
+<p>Only a change of the mesh moves or creates nodes. After a refinement, the state transferred to the new mesh is in
+general not in equilibrium. With the option <code class="docutils literal notranslate"><span class="pre">equilibrateAfterModelChange</span></code>, <code class="docutils literal notranslate"><span class="pre">NIST</span></code> first restores equilibrium at
+the last converged load, in an increment of zero length, and then advances the load.</p>
+</section>
+</section>
+<section id="holder-lifetime-and-creator-of-the-objects">
+<span id="architecture-objects"></span><h2>Holder, lifetime and creator of the objects<a class="headerlink" href="#holder-lifetime-and-creator-of-the-objects" title="Link to this heading"></a></h2>
+<figure class="align-default" id="id4">
+<a class="reference external image-reference" href="../_images/architecture_objects.svg"><img alt="The objects of a run with the implicit static solver NIST. Nesting shows which object holds which; the fill shows how long an object lives: per job, per step, per numbering, per locations, per increment or per Newton iteration. The driver, finiteElementSimulation, holds the StepManager with the step actions, the current Step with its TimeStepper, the FEModel with nodes, node fields, elements and constraints, the output managers, the journal, and the solver. The solver holds its options (per job), its convergence criterion and its LinearSolver (per step), the multi-point-constraint condensation (per numbering), the SystemMatrixAssembly and the vectors U, dU, P (per locations, the values carried over), and its DiscreteSystem (per locations), which holds the DofLocations (per locations), which hold the DofNumbering (per numbering): the numbering outlives its holders. The LinearSolver holds the DOF layout of the model (per numbering) and its factorization (by default per iteration). The local variables of solveIncrement are R and U_np (per increment) and the condensed matrix K_ and the correction ddU (per iteration). Green: the creator, where it is not the holder: the StepManager creates each Step (generateSteps), the FEModel creates the DiscreteSystem (buildDiscreteSystem), the DiscreteSystem creates its successor (withNewLocations), and the DofLocations create the vectors (constructDofVector)." src="../_images/architecture_objects.svg" />
+</a>
+<figcaption>
+<p><span class="caption-text">The objects of a run with <code class="docutils literal notranslate"><span class="pre">NIST</span></code>. A box holds the boxes inside it. The fill shows how long an object lives, i.e.,
+upon which event it is created again. Grey monospace: the attribute in the code. Green: the method that creates an
+object whose creator is not its holder. Click the figure to enlarge it.</span><a class="headerlink" href="#id4" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+<p>The figure combines three relations.</p>
+<p><strong>Nesting shows ownership.</strong> A box contains the objects it holds a reference to. For example, the solver holds its
+discrete system as <code class="docutils literal notranslate"><span class="pre">self.system</span></code>, the discrete system holds its locations as <code class="docutils literal notranslate"><span class="pre">.locations</span></code>, and the locations hold
+the numbering as <code class="docutils literal notranslate"><span class="pre">.numbering</span></code>; the pseudocode in <a class="reference internal" href="#architecture-loop"><span class="std std-ref">The three loops</span></a> uses this path. The dashed frame
+<code class="docutils literal notranslate"><span class="pre">solveIncrement()</span></code> is an exception: it contains the local variables of the Newton loop, which no object holds.</p>
+<p><strong>The fill shows the lifetime.</strong> A holder and the objects it holds may live for different times, in both directions.
+The linear solver lives for a step, but by default builds its factorization again in every Newton iteration. The
+numbering outlives the locations and the discrete system that hold it, because <code class="docutils literal notranslate"><span class="pre">withNewLocations</span></code> passes it on to
+their successors.</p>
+<p><strong>Green shows the creator, where it is not the holder.</strong> Usually an object is created by its holder. There are four
+exceptions. The step manager creates each step, and the driver holds the step while it is solved. The model creates the
+discrete system together with its locations and its numbering, and the solver holds it. The discrete system creates its
+successor when only the locations change. The locations create the vectors (<code class="docutils literal notranslate"><span class="pre">constructDofVector</span></code>), and the solver
+holds them.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">Change</span></code> of <a class="reference internal" href="#how-a-change-selects-the-path"><span class="std std-ref">When the ID and the LM array change</span></a> rebuilds the objects of its lifetime and all shorter-lived ones:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">LOCATIONS</span></code> rebuilds the light blue objects: the discrete system, the locations, the system matrix assembly and
+the vectors, which keep their values. The linear solver discards what it built for the old sparsity pattern.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NUMBERING</span></code> and <code class="docutils literal notranslate"><span class="pre">MESH</span></code> also rebuild the dark blue objects: the numbering, the MPC condensation and the DOF layout
+of the linear solver. The vectors are created again and read their values from the model.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NONE</span></code> rebuilds nothing, once a discrete system exists. The first increment of a step always builds one.</p></li>
+</ul>
+<p>The discrete system lives for at most one step. <code class="docutils literal notranslate"><span class="pre">beginStep</span></code> discards it, and the first increment of the step builds
+it again, because the MPC condensation is reconciled with the Dirichlet boundary conditions of the step.</p>
+<section id="from-the-input-file-to-the-objects">
+<h3>From the input file to the objects<a class="headerlink" href="#from-the-input-file-to-the-objects" title="Link to this heading"></a></h3>
+<p>The driver, <a class="reference internal" href="jobs.html#edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation" title="edelweissfe.drivers.inputfiledrivensimulation.finiteElementSimulation"><code class="xref py py-func docutils literal notranslate"><span class="pre">finiteElementSimulation()</span></code></a>, reads the input file and
+creates the objects of the figure. The keywords of the example input file of the start page
+(<code class="docutils literal notranslate"><span class="pre">examples/CantileverBeam/test3D.inp</span></code>) map to the objects as follows:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 26.0%" />
+<col style="width: 40.0%" />
+<col style="width: 34.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Keyword</p></th>
+<th class="head"><p>Object</p></th>
+<th class="head"><p>Created by, held by</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">*job</span></code></p></td>
+<td><p>the job information, and a default solver</p></td>
+<td><p>the driver</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">*node</span></code>, <code class="docutils literal notranslate"><span class="pre">*element</span></code>, <code class="docutils literal notranslate"><span class="pre">*nSet</span></code>, <code class="docutils literal notranslate"><span class="pre">*elSet</span></code>, <code class="docutils literal notranslate"><span class="pre">*modelGenerator</span></code></p></td>
+<td><p>nodes, node fields, elements, sets</p></td>
+<td><p>the <code class="xref py py-class docutils literal notranslate"><span class="pre">AbqModelConstructor</span></code> and the model generators; held
+by the model</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">*material</span></code>, <code class="docutils literal notranslate"><span class="pre">*section</span></code></p></td>
+<td><p>the materials, which the sections assign to the elements</p></td>
+<td><p>the <code class="docutils literal notranslate"><span class="pre">AbqModelConstructor</span></code>; held by the model and the elements</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">*constraint</span></code></p></td>
+<td><p>constraints</p></td>
+<td><p>the <code class="docutils literal notranslate"><span class="pre">AbqModelConstructor</span></code>; held by the model</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">*solver</span></code></p></td>
+<td><p>a solver</p></td>
+<td><p>the driver; also known to the model as <code class="docutils literal notranslate"><span class="pre">model.solvers</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">*linearSolver</span></code></p></td>
+<td><p>the definition of a linear solver</p></td>
+<td><p>the driver; the solver creates the linear solver from it when a step begins</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">*step</span></code> and its <code class="docutils literal notranslate"><span class="pre">&gt;&gt;</span></code> lines</p></td>
+<td><p>a step; step actions such as <code class="docutils literal notranslate"><span class="pre">&gt;&gt;dirichlet</span></code>, <code class="docutils literal notranslate"><span class="pre">&gt;&gt;nodeforces</span></code>, <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code></p></td>
+<td><p>the step manager</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">*fieldOutput</span></code></p></td>
+<td><p>the field output controller</p></td>
+<td><p>the driver; also known to the model</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">*output</span></code></p></td>
+<td><p>an output manager</p></td>
+<td><p>the driver; also known to the model as <code class="docutils literal notranslate"><span class="pre">model.outputManagers</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>The model refers to the solvers and the output managers so that an <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> line of a step can find the object it
+modifies. The step manager creates the step actions when the first step that defines them is due, and updates them
+when a later <code class="docutils literal notranslate"><span class="pre">*step</span></code> redefines them. The step and the solver refer to the same step actions. The step manager creates
+each step when it is due, and each step creates its time stepper.</p>
+<p>The solver creates the objects it iterates on:</p>
+<ul class="simple">
+<li><p>once: its options. An <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> line of a step changes them for the remaining steps. The parameters of the
+increment loop, such as the maximum number of iterations, belong to the step.</p></li>
+<li><p>when a step begins: the linear solver, unless the step uses the same one as the previous step, and the convergence
+criterion.</p></li>
+<li><p>on a new numbering: the vectors <code class="docutils literal notranslate"><span class="pre">U</span></code>, <code class="docutils literal notranslate"><span class="pre">dU</span></code> and <code class="docutils literal notranslate"><span class="pre">P</span></code>, the MPC condensation, and the DOF layout of the linear
+solver.</p></li>
+<li><p>on new locations: the system matrix assembly, and the vectors wrapped with the new locations.</p></li>
+<li><p>in every increment: the residual <code class="docutils literal notranslate"><span class="pre">R</span></code> and the trial solution <code class="docutils literal notranslate"><span class="pre">U_np</span></code>.</p></li>
+<li><p>in every Newton iteration: new values of the system matrix, the condensed system matrix <code class="docutils literal notranslate"><span class="pre">K_</span></code> in CSR format, the
+correction <code class="docutils literal notranslate"><span class="pre">ddU</span></code> and, by default, the factorization or the multigrid hierarchy of the linear solver.</p></li>
+</ul>
+</section>
+<section id="the-classes-in-the-figure">
+<h3>The classes in the figure<a class="headerlink" href="#the-classes-in-the-figure" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">FEModel</span></code></a></dt><dd><p>The mesh and its data: the nodes, the node fields, the elements, the constraints, the multi-point constraints,
+and the topology pipeline that changes the mesh during a run (<a class="reference internal" href="models.html"><span class="doc">Models</span></a>). It holds the
+connectivity of its entities and builds the discrete system on request.</p>
+</dd>
+<dt><a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem" title="edelweissfe.models.discretesystem.DiscreteSystem"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiscreteSystem</span></code></a></dt><dd><p>What a solver needs from the model: the numbering, the locations, the elements and the constraints that have a
+location, and the transfer of the state between the node fields and the vectors
+(<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel" title="edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>,
+<a class="reference internal" href="models.html#edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel" title="edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>).</p>
+</dd>
+<dt><a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a></dt><dd><p>The numbering: the node fields, each in a contiguous block, then the scalar variables. It also holds the indices
+of the node sets and reads and writes the node fields. The locations, the MPC condensation, the linear solver,
+the Dirichlet boundary conditions and the output all use the same numbering.</p>
+</dd>
+<dt><a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a></dt><dd><p>The locations of all entities of the discrete system. It creates the DOF vectors that refer to it. It is a class
+of its own because it lives shorter than the numbering: a contact search creates new locations in many
+increments.</p>
+</dd>
+<dt>The solver</dt><dd><p>Everything it iterates on: the vectors <code class="docutils literal notranslate"><span class="pre">U</span></code>, <code class="docutils literal notranslate"><span class="pre">dU</span></code>, <code class="docutils literal notranslate"><span class="pre">P</span></code> (and the velocity and the acceleration of a dynamic
+solver); the system matrix assembly, which is filled in every Newton iteration on one of two paths, <code class="docutils literal notranslate"><span class="pre">vij</span></code> or
+<code class="docutils literal notranslate"><span class="pre">direct</span></code> (<a class="reference internal" href="assembly.html#system-matrix-assembly"><span class="std std-ref">System matrix assembly</span></a>); and the MPC condensation
+(<a class="reference internal" href="assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation</span></code></a>). The solver, not the
+discrete system, builds the MPC condensation, because the condensation is reconciled with the Dirichlet boundary
+conditions of the step, which the model does not know
+(<a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonlinearSolverBase</span></code></a>).</p>
+</dd>
+<dt>The linear solver</dt><dd><p>One interface for every linear solver (<a class="reference internal" href="../analysis/linsolvers.html"><span class="doc">Linear solvers</span></a>). On a new numbering, the solver passes it the
+model and the numbering (<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.setModel" title="edelweissfe.linsolve.base.LinearSolver.setModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setModel()</span></code></a>). A field-split solver takes
+the field blocks from them, and an algebraic multigrid solver the node coordinates for the near-null space. A
+composed linear solver (<a class="reference internal" href="../analysis/composedlinsolvers.html"><span class="doc">Composing a linear solver</span></a>) needs this information, which a bare matrix does not
+carry.</p>
+</dd>
+</dl>
+<p>The figure shows <code class="docutils literal notranslate"><span class="pre">NIST</span></code>. <code class="docutils literal notranslate"><span class="pre">NID</span></code> holds the same objects, and in addition the velocity, the acceleration, the mass
+matrix and the lumped damping. <code class="docutils literal notranslate"><span class="pre">NEST</span></code> is derived from <code class="docutils literal notranslate"><span class="pre">NIST</span></code> and holds the same objects, but builds its discrete
+system once per step, in <code class="docutils literal notranslate"><span class="pre">beginStep</span></code>. <code class="docutils literal notranslate"><span class="pre">NED</span></code> holds no linear solver and no system matrix assembly. It holds the
+lumped mass per numbering and solves no system of equations.</p>
+</section>
+</section>
+<section id="the-entities-that-couple-nodes">
+<span id="architecture-entities"></span><h2>The entities that couple nodes<a class="headerlink" href="#the-entities-that-couple-nodes" title="Link to this heading"></a></h2>
+<p>The discrete system locates two kinds of entity, and locates both in the same way:</p>
+<ul class="simple">
+<li><p>The <strong>elements</strong> (and, in a meshfree model, the cells and the particles) follow the protocol of
+<a class="reference internal" href="dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity" title="edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseNodeCouplingEntity</span></code></a>: they state their nodes,
+and the fields they couple on each node. The Python elements derive from this class. The Cython wrappers of the
+Marmot elements implement the same protocol without deriving from it, because a Cython extension type cannot derive
+from a Python class.</p></li>
+<li><p>The <strong>constraints</strong> (<a class="reference internal" href="../model/constraints.html"><span class="doc">Constraints</span></a>) state their nodes and fields in the same way. Unlike elements, they
+may change them between increments (<code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>).</p></li>
+</ul>
+<p>The protocol describes only the location. What an entity computes depends on its kind. Every located entity adds to
+the residual and writes into its own block of the system matrix, in its own local numbering of its degrees of freedom
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixContributorBase</span></code></a>). Its location maps this local
+numbering into the global system. The assembly, the solver and the locations therefore never need to know what kind of
+entity they handle: a contact constraint and a hexahedral element are added in the same way.</p>
+<p>The <strong>loads</strong> of a step are not located entities. A load is a step action
+(<a class="reference internal" href="../analysis/stepactions.html#edelweissfe.stepactions.base.loadbase.LoadBase" title="edelweissfe.stepactions.base.loadbase.LoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoadBase</span></code></a>): it has no location and is not held by the discrete system.
+It adds to the residual, and to the tangent if it follows the deformation, in the block of the entity it acts on
+(<a class="reference internal" href="../analysis/stepactions.html"><span class="doc">Step actions</span></a>).</p>
+<p>The signs of all contributions, from elements, loads and constraints, are defined in
+<a class="reference internal" href="residualandtangent.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p>
+</section>
+<section id="where-to-start-when-adding-something">
+<span id="architecture-extending"></span><h2>Where to start when adding something<a class="headerlink" href="#where-to-start-when-adding-something" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>A material</strong>: a constitutive model for production use belongs in Marmot (<code class="docutils literal notranslate"><span class="pre">modules/materials</span></code>); EdelweissFE also
+has its own Python materials (<code class="docutils literal notranslate"><span class="pre">edelweissfe/materials</span></code>), which are easier to read and to debug. A new keyword or a
+new type name is registered as described in <a class="reference internal" href="inputsystem.html"><span class="doc">The input system: how .inp grammar is defined</span></a>; see also <a class="reference internal" href="../model/materials.html"><span class="doc">Materials</span></a>.</p></li>
+<li><p><strong>An element</strong>: derive from <a class="reference internal" href="../model/elements.html#edelweissfe.elements.base.baseelement.BaseElement" title="edelweissfe.elements.base.baseelement.BaseElement"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseElement</span></code></a>. It computes
+<span class="math notranslate nohighlight">\(\boldsymbol{P}_e\)</span> and <span class="math notranslate nohighlight">\(\boldsymbol{K}_e\)</span> in <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>, keeps its trial state until
+<code class="docutils literal notranslate"><span class="pre">acceptLastState()</span></code>, and states its nodes and fields for its location. See <a class="reference internal" href="../model/elements.html"><span class="doc">Elements</span></a>.</p></li>
+<li><p><strong>A constraint</strong>: see <a class="reference internal" href="../model/constraints.html"><span class="doc">Constraints</span></a>, and <a class="reference internal" href="residualandtangent.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a> for the signs.</p></li>
+<li><p><strong>A solver</strong>: derive from <a class="reference internal" href="solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonlinearSolverBase</span></code></a> and implement
+the two hooks <code class="docutils literal notranslate"><span class="pre">onNewNumbering</span></code> and <code class="docutils literal notranslate"><span class="pre">onNewLocations</span></code> for the objects it holds (<a class="reference internal" href="solverbase.html"><span class="doc">The solver base class</span></a>).</p></li>
+</ul>
+</section>
+<section id="abbreviations-and-solver-names">
+<span id="architecture-abbreviations"></span><h2>Abbreviations and solver names<a class="headerlink" href="#abbreviations-and-solver-names" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt>BC</dt><dd><p>Boundary condition. Dirichlet boundary conditions and loads are step actions (<a class="reference internal" href="../analysis/stepactions.html"><span class="doc">Step actions</span></a>).</p>
+</dd>
+<dt>CSR</dt><dd><p>Compressed sparse row: the storage format of the system matrix (<a class="reference internal" href="assembly.html"><span class="doc">System matrix assembly</span></a>).</p>
+</dd>
+<dt>DOF</dt><dd><p>Degree of freedom.</p>
+</dd>
+<dt>IEN, ID, LM</dt><dd><p>The element nodes array, the destination array and the location matrix of Hughes. In EdelweissFE: the
+connectivity, the numbering and the locations (<a class="reference internal" href="#architecture-words"><span class="std std-ref">The textbook arrays and their names</span></a>).</p>
+</dd>
+<dt>MPC</dt><dd><p>Multi-point constraint: slave degrees of freedom expressed by master degrees of freedom, e.g., ties and hanging
+nodes. The MPC condensation eliminates the slaves from the system
+(<a class="reference internal" href="assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation</span></code></a>, attribute
+<code class="docutils literal notranslate"><span class="pre">mpcTransformation</span></code>).</p>
+</dd>
+<dt>VIJ</dt><dd><p>Values with their row and column indices (coordinate format): the default assembly path
+(<a class="reference internal" href="assembly.html"><span class="doc">System matrix assembly</span></a>).</p>
+</dd>
+<dt>NIST, NID</dt><dd><p>Nonlinear Implicit STatic and Nonlinear Implicit Dynamic (Newmark) solver: one linear solve per Newton iteration
+(<a class="reference internal" href="../analysis/solvers.html"><span class="doc">Solvers</span></a>).</p>
+</dd>
+<dt>NEST, NED</dt><dd><p>Nonlinear Explicit STatic (Runge–Kutta) and Nonlinear Explicit Dynamic (central difference, lumped mass) solver
+(<a class="reference internal" href="../analysis/solvers.html"><span class="doc">Solvers</span></a>).</p>
+</dd>
+</dl>
+<p>The suffix <code class="docutils literal notranslate"><span class="pre">Parallel</span></code> marks the variant that computes the elements on all threads; the constraints are still
+computed one after the other. <code class="docutils literal notranslate"><span class="pre">NISTPArcLength</span></code> is the parallel arc length variant of <code class="docutils literal notranslate"><span class="pre">NIST</span></code>.</p>
 </section>
 </section>
 

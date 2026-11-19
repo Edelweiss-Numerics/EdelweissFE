@@ -2589,7 +2589,7 @@ ordinary displacement DOFs of a deformable body’s boundary nodes, used as the 
 <a class="reference internal" href="generators.html"><span class="doc">surfaceElementGenerator</span></a> generator.</p>
 <p>Because a facet has neither a material nor a state, its kernels, its internal energy and its state
 acceptance are all no-ops, and it reports <code class="docutils literal notranslate"><span class="pre">hasKernels</span> <span class="pre">=</span> <span class="pre">False</span></code>. The model leaves such an entity out of its
-discrete system (<a class="reference internal" href="../developer/architecture.html#model-discrete-system"><span class="std std-ref">discrete system</span></a>): the facet has no block in the system matrix and no
+discrete system (<a class="reference internal" href="../developer/models.html#model-discrete-system"><span class="std std-ref">discrete system</span></a>): the facet has no block in the system matrix and no
 location, and no solver calls into it on any increment. Its nodes have rows only through the elements that carry
 kernels: a node that only a facet touches is numbered but has no row, and the discrete system refuses it, naming the
 node. A load on an element set that holds facets, e.g. a body force on <code class="docutils literal notranslate"><span class="pre">all</span></code>, acts on the elements of the set that

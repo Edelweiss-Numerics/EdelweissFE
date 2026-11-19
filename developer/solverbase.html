@@ -89,47 +89,51 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="architecture.html">How the parts fit together</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">The solver base class</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.collectLoads"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.collectLoads()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.acceptIncrement()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyDirichletToResidual"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyDirichletToResidual()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyOptionsOverride"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyOptionsOverride()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtIncrementStart"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyStepActionsAtIncrementStart()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtStepEnd"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyStepActionsAtStepEnd()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtStepStart"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyStepActionsAtStepStart()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.assembleConstraintForces()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleLoads"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.assembleLoads()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleStiffnessCSR"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.assembleStiffnessCSR()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.attemptIncrement()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.beginStep()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.buildAndCheckMPCTransformation"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.buildAndCheckMPCTransformation()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.buildMPCTransformation"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.buildMPCTransformation()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.checkConvergence()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkMPCDirichletConflicts"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.checkMPCDirichletConflicts()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkNumberingOfRestartedVectors"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.checkNumberingOfRestartedVectors()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.endStep"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.endStep()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forgetDiscreteSystem"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.forgetDiscreteSystem()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.getRestartData"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.getRestartData()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.isOutputIncrement"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.isOutputIncrement()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.linearSolve"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.linearSolve()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.locateConstrainedDofs"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.locateConstrainedDofs()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.onNewLocations()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.onNewNumbering()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.prepareIncrement()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.printResidualOutlierNodes"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.printResidualOutlierNodes()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.setRestartData"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.setRestartData()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.updateDiscreteSystem()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateRigidBodies"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.updateRigidBodies()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.updateTopologyAndConnectivity()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.validateModelCapabilities"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.validateModelCapabilities()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkpointedState"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.checkpointedState</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.convergenceTable"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.convergenceTable</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.incrementStatus"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.incrementStatus</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.mpcTransformation"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.mpcTransformation</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.supportsMPC"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.supportsMPC</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.supportsModelModifiers"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.supportsModelModifiers</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.system"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.system</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.tableHeaderWritten"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.tableHeaderWritten</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#when-each-solver-updates-its-discrete-system">When each solver updates its discrete system</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-class">The class</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.collectLoads"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.collectLoads()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.acceptIncrement()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyDirichletToResidual"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyDirichletToResidual()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyOptionsOverride"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyOptionsOverride()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtIncrementStart"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyStepActionsAtIncrementStart()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtStepEnd"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyStepActionsAtStepEnd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyStepActionsAtStepStart"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.applyStepActionsAtStepStart()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.assembleConstraintForces()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleLoads"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.assembleLoads()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleStiffnessCSR"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.assembleStiffnessCSR()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.attemptIncrement()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.beginStep()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.buildAndCheckMPCTransformation"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.buildAndCheckMPCTransformation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.buildMPCTransformation"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.buildMPCTransformation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.checkConvergence()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkMPCDirichletConflicts"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.checkMPCDirichletConflicts()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkNumberingOfRestartedVectors"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.checkNumberingOfRestartedVectors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.endStep"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.endStep()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forgetDiscreteSystem"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.forgetDiscreteSystem()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.getRestartData"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.getRestartData()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.isOutputIncrement"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.isOutputIncrement()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.linearSolve"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.linearSolve()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.locateConstrainedDofs"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.locateConstrainedDofs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.onNewLocations()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.onNewNumbering()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.prepareIncrement()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.printResidualOutlierNodes"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.printResidualOutlierNodes()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.setRestartData"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.setRestartData()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.updateDiscreteSystem()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateRigidBodies"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.updateRigidBodies()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.updateTopologyAndConnectivity()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.validateModelCapabilities"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.validateModelCapabilities()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkpointedState"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.checkpointedState</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.convergenceTable"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.convergenceTable</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.incrementStatus"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.incrementStatus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.mpcTransformation"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.mpcTransformation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.supportsMPC"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.supportsMPC</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.supportsModelModifiers"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.supportsModelModifiers</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.system"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.system</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.tableHeaderWritten"><code class="docutils literal notranslate"><span class="pre">NonlinearSolverBase.tableHeaderWritten</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -186,10 +190,78 @@
 <h1>The solver base class<a class="headerlink" href="#the-solver-base-class" title="Link to this heading"></a></h1>
 <p>Every nonlinear solver derives from <a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonlinearSolverBase</span></code></a>. It
 runs the topology update, builds and renews the discrete system through the one path of
-<a class="reference internal" href="architecture.html#how-a-change-selects-the-path"><span class="std std-ref">How a change selects the path</span></a>, and declares the two hooks, <code class="docutils literal notranslate"><span class="pre">onNewNumbering</span></code> and <code class="docutils literal notranslate"><span class="pre">onNewLocations</span></code>, that every
+<a class="reference internal" href="architecture.html#how-a-change-selects-the-path"><span class="std std-ref">When the ID and the LM array change</span></a>, and declares the two hooks, <code class="docutils literal notranslate"><span class="pre">onNewNumbering</span></code> and <code class="docutils literal notranslate"><span class="pre">onNewLocations</span></code>, that every
 solver implements for what it holds. It also assembles the loads and the constraints
 (<a class="reference internal" href="residualandtangent.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>), and checks convergence. A solver that holds more than the base class
 extends <code class="docutils literal notranslate"><span class="pre">forgetDiscreteSystem</span></code>.</p>
+<section id="when-each-solver-updates-its-discrete-system">
+<span id="solver-discrete-system-updates"></span><h2>When each solver updates its discrete system<a class="headerlink" href="#when-each-solver-updates-its-discrete-system" title="Link to this heading"></a></h2>
+<p>All solvers follow a change through the same method,
+<a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateDiscreteSystem()</span></code></a>, but they run the
+topology update at different times and use different parts of the discrete system:</p>
+<table class="docutils align-default" style="width: 100%">
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 26.0%" />
+<col style="width: 26.0%" />
+<col style="width: 26.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Solver</p></th>
+<th class="head"><p>System matrix</p></th>
+<th class="head"><p>Linear solver</p></th>
+<th class="head"><p>Updates its discrete system</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NIST</span></code>, <code class="docutils literal notranslate"><span class="pre">NISTParallel</span></code></p></td>
+<td><p>tangent, <code class="docutils literal notranslate"><span class="pre">vij</span></code> or <code class="docutils literal notranslate"><span class="pre">direct</span></code></p></td>
+<td><p>once per Newton iteration</p></td>
+<td><p>at the start of every increment and of every retry, by the <code class="docutils literal notranslate"><span class="pre">Change</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NISTPArcLength</span></code></p></td>
+<td><p>tangent, plus the tangents of the dead and the reference load, scaled</p></td>
+<td><p>for two right-hand sides</p></td>
+<td><p>as <code class="docutils literal notranslate"><span class="pre">NIST</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NID</span></code>, <code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code></p></td>
+<td><p>tangent plus the mass (on the pattern of the tangent) and the damping</p></td>
+<td><p>once per Newton iteration</p></td>
+<td><p>as <code class="docutils literal notranslate"><span class="pre">NIST</span></code>. New locations keep the mass and the damping, which the first increment on a new numbering
+assembles. With <code class="docutils literal notranslate"><span class="pre">inertia=nodes</span></code>, the lumped mass of the entities that integrate their own inertia is
+assembled anew in every increment.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NEST</span></code>, <code class="docutils literal notranslate"><span class="pre">NESTParallel</span></code></p></td>
+<td><p>tangent, <code class="docutils literal notranslate"><span class="pre">vij</span></code></p></td>
+<td><p>once per Runge–Kutta stage</p></td>
+<td><p>once per step, in <code class="docutils literal notranslate"><span class="pre">beginStep</span></code>; no topology update during the step</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NED</span></code>, <code class="docutils literal notranslate"><span class="pre">NEDParallel</span></code></p></td>
+<td><p>none; lumped mass and damping</p></td>
+<td><p>none</p></td>
+<td><p>at the start of the step; after every <code class="docutils literal notranslate"><span class="pre">topology-check-frequency</span></code>-th increment, if a model modifier acts
+after the start; a contact search every <code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code>-th increment</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">NED</span></code> runs the full topology update at the start of its step. During the step, it runs it again after every
+<code class="docutils literal notranslate"><span class="pre">topology-check-frequency</span></code>-th increment, but only if a model modifier of the model acts after the start of the
+analysis; the default of <code class="docutils literal notranslate"><span class="pre">topology-check-frequency</span></code> is zero, i.e., never. Every <code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code>-th
+increment, it calls <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a> alone, but only if a constraint of
+the model searches its partner as the bodies move
+(<a class="reference internal" href="dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion" title="edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion"><code class="xref py py-attr docutils literal notranslate"><span class="pre">connectivityChangesWithMotion</span></code></a>,
+e.g., a contact constraint). Such a contact search can only result in new locations, because <code class="docutils literal notranslate"><span class="pre">NED</span></code> refuses
+constraints with scalar variables. <code class="docutils literal notranslate"><span class="pre">NEST</span></code> never updates the connectivity during a step, and refuses a constraint
+whose connectivity changes with the motion.</p>
+<p><code class="docutils literal notranslate"><span class="pre">NIST</span></code> predicts the first iterate of an increment by extrapolating the last accepted increments. Once per increment,
+right after the update of the discrete system, it decides whether the prediction may be used
+(<a class="reference internal" href="../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvives" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predictionSurvives()</span></code></a>). After a change of the mesh, the
+prediction is always dropped. After any other change of the connectivity (<code class="docutils literal notranslate"><span class="pre">LOCATIONS</span></code> or <code class="docutils literal notranslate"><span class="pre">NUMBERING</span></code>), it is
+dropped unless the option <code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code> is set. With this option, it is used if the new
+numbering numbers the degrees of freedom as the old one did, which new locations on the same numbering always do.</p>
+</section>
+<section id="the-class">
+<h2>The class<a class="headerlink" href="#the-class" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.solvers.base.nonlinearsolverbase.</span></span><span class="sig-name descname"><span class="pre">NonlinearSolverBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/nonlinearsolverbase.html#NonlinearSolverBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase" title="Link to this definition"></a></dt>
@@ -1016,6 +1088,7 @@ above the table, not inside it.</p>
 
 </dd></dl>
 
+</section>
 </section>
 
 

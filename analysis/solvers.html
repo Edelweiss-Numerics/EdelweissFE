@@ -476,8 +476,9 @@ like a built-in one. An unknown name raises
 </dd></dl>
 
 <p>Every solver builds its discrete system from the model, and renews it when the model reports a change, e.g. after a
-contact search or an h-adaptive refinement; what is renewed depends only on the kind of change. How this works, which
-solver asks when, and what it asks of the model, is told once, for developers, in <a class="reference internal" href="../developer/architecture.html"><span class="doc">How the parts fit together</span></a>; the
+contact search or an h-adaptive refinement; what is rebuilt depends only on the kind of change. How this works is
+explained for developers in <a class="reference internal" href="../developer/architecture.html"><span class="doc">How the parts fit together</span></a>; when each solver updates its discrete system is listed in
+<a class="reference internal" href="../developer/solverbase.html#solver-discrete-system-updates"><span class="std std-ref">When each solver updates its discrete system</span></a>, and what a solver takes from the model in <a class="reference internal" href="../developer/models.html#model-discrete-system"><span class="std std-ref">What the solver takes from the discrete system</span></a>. The
 rule every contribution to the residual and the tangent follows is in <a class="reference internal" href="../developer/residualandtangent.html"><span class="doc">The residual and the tangent</span></a>. Below is
 what the user needs per solver.</p>
 <section id="module-edelweissfe.solvers.nonlinearimplicitstatic">
@@ -8350,7 +8351,7 @@ Omitted – as in every deck that predates them – they assert nothing at all.<
 re-assigns which nodes a contact constraint couples, and touches no node, no field, no scalar variable and no element:
 the change is <code class="docutils literal notranslate"><span class="pre">LOCATIONS</span></code>, <code class="docutils literal notranslate"><span class="pre">NED</span></code> only wraps its vectors with the new locations, and the lumped inertia, the
 mass-proportional damping rate, the multi-point-constraint condensation and the stable time increment are kept
-(<a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewLocations()</span></code></a>, and <a class="reference internal" href="../developer/architecture.html#how-a-change-selects-the-path"><span class="std std-ref">How a change selects the path</span></a>).</p>
+(<a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewLocations()</span></code></a>, and <a class="reference internal" href="../developer/architecture.html#how-a-change-selects-the-path"><span class="std std-ref">When the ID and the LM array change</span></a>).</p>
 <p>A change of the mesh – a refinement – gives a new numbering
 (<a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewNumbering()</span></code></a>): the operators are assembled anew over the
 elements of the new discrete system, the solution, the velocity and the acceleration are read from the model, which
