@@ -1,0 +1,38 @@
+** Abaqus' convergence criterion in the zero increment that begins a step: its increment is the round-off of its own
+** corrections, so the relative correction check cannot pass. Without the linear case (R_l tiny, as for a large model
+** whose round-off residual exceeds R_l * q~), only the zero increment rule (zeroIncrementThreshold) accepts it.
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+**E    nu
+1.8e4, 0.22
+
+*job, name=c3d8job, domain=3d
+*solver, solver=NIST, name=theSolver
+convergenceCriterion=abaqus
+abaqusLinearResidualTolerance=1e-30
+zeroIncrementThreshold=1e-10
+
+*modelGenerator, generator=boxGen, name=gen
+nX      =2
+nY      =2
+nZ      =6
+lX      =5
+lY      =5
+lZ      =50
+elProvider =edelweiss
+elType  =C3D8
+
+*section, name=section1, material=linearelastic, type=solid
+all
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+
+*step, solver=theSolver
+maxInc=0.5, minInc=1e-9, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=front,  nSet=gen_front, field=displacement, 1=0.0, 2=0.0, 3=.0
+>>nodeforces, name=back, nSet=gen_back, components='0, 1.0, -4.0', field=displacement
+
+*step, solver=theSolver
+maxInc=0.5, minInc=1e-9, maxNumInc=100, maxIter=25, stepLength=1
+>>nodeforces, name=back, components='0, 2.0, -8.0'
