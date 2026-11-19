@@ -39,7 +39,7 @@ axisymmetric ones).
     :caption: Example: ``testfiles/marmot/HeatTransientDC2D4T/test.inp``
 
 Moisture diffusion elements
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The same eight element shapes with the suffix ``H`` (``DC2D3H``, ``DC2D4H``, ``DC2D8H``, ``DCAX4H``, ``DCAX8H``,
 ``DC3D4H``, ``DC3D8H``, ``DC3D20H``) carry the scalar field ``relative humidity`` (pore relative humidity, 0 ... 1) and
