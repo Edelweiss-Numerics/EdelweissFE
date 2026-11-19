@@ -1,9 +1,10 @@
 Prerequisites
 #############
 
-EdelweissFE requires a conda installation (e.g. `Miniforge <https://conda-forge.org/download/>`_) and
-`conda-lock <https://conda.github.io/conda-lock/>`_. The complete environment, including the free-threaded Python
-interpreter, is declared in ``environment.yml`` in the repository root and pinned by ``conda-lock.yml``:
+EdelweissFE requires a conda installation (e.g. `Miniforge <https://conda-forge.org/download/>`_). The complete
+environment, including the free-threaded Python interpreter, is declared in ``environment.yml`` in the repository root,
+pinned by ``conda-lock.yml``, and published as the conda package ``edelweissfe-dev``; changing it needs
+`conda-lock <https://conda.github.io/conda-lock/>`_:
 
 .. literalinclude:: ../../environment.yml
    :language: yaml

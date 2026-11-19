@@ -32,6 +32,7 @@ from abc import abstractmethod
 
 import numpy as np
 
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
@@ -146,7 +147,7 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
         self.changeOverStep = L - self.controlledQuantity() if self.absolute else L
 
     def computeDDLambda(
-        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, numbering: DofNumbering
+        self, dU: DofVector, ddU_0: DofVector, ddU_f: DofVector, timeStep: TimeStep, system: DiscreteSystem
     ) -> float:
         """The correction of the load parameter that makes the corrected increment change the controlled quantity by the
         share of the increment, :math:`\\Delta p \\, \\Delta L`; see
@@ -162,8 +163,8 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
             The correction of the solution caused by the reference load alone.
         timeStep
             The increment being solved, whose size :math:`\\Delta p` is ``timeStep.stepProgressIncrement``.
-        numbering
-            The numbering of the degrees of freedom of the current discrete system.
+        system
+            The current discrete system.
 
         Returns
         -------
@@ -171,7 +172,7 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
             The correction of the load parameter.
         """
 
-        idcs = self.controlledDofIndices(numbering)
+        idcs = self.controlledDofIndices(system.numbering)
 
         dL = timeStep.stepProgressIncrement * self.changeOverStep
 

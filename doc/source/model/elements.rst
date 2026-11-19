@@ -150,7 +150,7 @@ Example of the usage of a 3D hexahedron element with 8 nodes.
     :caption: Example: ``examples/CantileverBeam/test3D.inp``
 
 .. note::
-    This element is only compatible with the material provider ``edelweiss``!
+    This element is compatible with the material providers ``edelweiss`` and ``marmothypoelastic``.
 
 .. note::
     This element works with the Cauchy stress :math:`\sigma` and the tangent :math:`\frac{d\sigma}{d\varepsilon}`, where
@@ -167,7 +167,7 @@ Relevant module: ``edelweissfe.elements.displacementtlelement.element``
     :members:
 
 .. note::
-    This element is only compatible with the material provider ``edelweiss``!
+    This element is compatible with the material providers ``edelweiss`` and ``marmothypoelastic``.
 
 .. note::
     For hyperelastic materials, this element works with the second Piola-Kirchhoff stress :math:`\mathbf{S}` and the tangent

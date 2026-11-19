@@ -57,8 +57,7 @@ field, a screened-Poisson (Helmholtz) operator for a gradient-enhanced damage fi
 The field-split preconditioner buys reach, not necessarily speed.
 On the reference models AMGCL's smoothed aggregation converges, but not tightly, on the
 non-symmetric (contact-condensed) displacement block, so the outer Krylov solve needs
-many iterations -- with the former defaults typically :math:`O(100)`; with the current
-defaults (see :ref:`measured-defaults`), mostly 5--50. The hardest damage-onset
+many iterations -- with the defaults (see :ref:`measured-defaults`) mostly 5--50. The hardest damage-onset
 solves stop at its cap of 100 iterations
 (``maxIterations``), return their iterate, and the hierarchies are rebuilt for
 the next solve. The cap is a deliberate budget: a solve that needs more is taken as a sign that the
@@ -126,7 +125,7 @@ Left unset, that option is automatic: it prunes for a linear solver that factori
 the stored zeros gone) and does not reuse a preconditioner, and leaves the matrix alone for the others
 (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`): a tree of Krylov solvers and AMG gets
 the same iterations with and without the stored zeros, so pruning would only cost it a copy of the matrix and a
-pass over it in every Newton iteration (0.8 s of a 1 s call on a model with 376 million stored nonzeros), and a Krylov
+pass over it in every Newton iteration (on a large model, most of the time of the call), and a Krylov
 solve that reuses its preconditioner (``RebuildPolicy(reusePreconditioner=True)``) must not have its pattern changed
 anew in every iteration. An explicit
 ``pruneCondensedMatrixZeros = true`` or ``false`` in the nonlinear solver's own configuration overrides the choice.
@@ -1066,10 +1065,9 @@ once at ``info``. The field's tree, the default one or one given to ``TwoLevel(a
 the aggregation and the hierarchy below.
 
 Switch it off on a model whose solves converge in a few outer iterations with the hierarchy on the translations: the
-coarse level saves little there, and its setup is larger wherever its coarse operator is -- up to 1.2 times that of
-the hierarchy on the translations on the larger models of :ref:`measured-rigid-body-coarse-level`. On the edge breakout, where the translations need 22
-and 23 outer iterations, the coarse level saves 2 and 1, at a setup of 0.94 and 0.99 times theirs and a solve time,
-setup included, of 0.92 and 0.95 -- a wash. The data line ``rigidBodyModesPerAggregate=false`` of ``type=blockamg``
+coarse level saves little there, and its setup is larger wherever its coarse operator is (see
+:ref:`measured-rigid-body-coarse-level`). On the edge breakout, where the translations need 22 and 23 outer
+iterations, the coarse level saves 2 and 1, at about the same setup and solve time -- a wash. The data line ``rigidBodyModesPerAggregate=false`` of ``type=blockamg``
 switches it off; its options are those of a ``custom`` script (see :ref:`its arguments
 <blockamg-rigid-body-coarse-level-configuration>`).
 
@@ -1222,9 +1220,8 @@ iteration :math:`z \leftarrow z + M^{-1} (r - \tilde S z)` with the one-sweep pr
 which on bar systems was found a good balance between AMG cycles and outer iterations; ``sweeps = 1`` is
 cheaper per iteration and needs more of them.
 
-**The direct solver.** ``condensedBlockSolve=DirectSolver(package)`` takes any registered direct solver package; ``superlu``
-and ``pardiso`` factorize once for several right-hand sides, the others (``klu``, ``mumps``, ``petsclu``,
-``umfpack``, ``panuapardiso``) factorize again for every one, which makes them a poor choice here. Every outer
+**The direct solver.** ``condensedBlockSolve=DirectSolver(package)`` takes any registered direct solver package; every package
+factorizes once and then solves for as many right-hand sides as needed by back substitution. Every outer
 iteration solves with :math:`A_{bb}`, so the cost of a back substitution counts most:
 for the block-tridiagonal chains of bars, ``superlu`` (the default) is the cheaper one (with ``blockFactors =
 "both"``, twice per iteration). A large compact zone (a
@@ -1263,14 +1260,12 @@ Practical guidance
 * Reach for the field-split preconditioner (``type=blockamg``) when a direct factorization no longer fits in memory, or when the
   factorization dominates the run. Below that, measure against ``pardiso`` rather than assuming.
 * Run the first characterisation at ``verbosity=info`` and read the job's performance table.
-  Outer iteration counts up to the low hundreds were the expected regime at the former defaults; with
-  the current ones, mostly 5--50, with the hardest damage-onset solves reaching the cap; counts
+  Outer iteration counts are mostly 5--50, with the hardest damage-onset solves reaching the cap; counts
   triggering the warning threshold, or cap hits, repeatedly point at the preconditioner, not the
   tolerance.
 * Set ``OMP_NUM_THREADS`` for the AMGCL kernels as usual (see :doc:`/analysis/parallelization`). Results are
-  reproducible at a fixed thread count up to last-bit summation order; across thread counts the
-  hierarchies differ slightly (see :ref:`blockamg-chebyshev`), and lowering the
-  power-iteration setting of the vector-field default makes that difference large.
+  reproducible at a fixed thread count up to last-bit summation order; the spectral radius estimate of the
+  smoothers is the same at any thread count (see :ref:`blockamg-chebyshev`).
 * Reach for the knobs in roughly this order: the tree of a field whose hierarchy is clearly the weak one (a
   ``custom`` script), then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance.
 * The corner-node two-level cycle is on for a quadratic 3D displacement field by default, the rigid-body coarse level

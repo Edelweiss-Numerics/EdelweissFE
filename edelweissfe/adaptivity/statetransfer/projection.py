@@ -28,6 +28,8 @@
 
 """Least-squares polynomial projection of quadrature-point state (tier F2)."""
 
+from itertools import product
+
 import numpy as np
 
 from edelweissfe.adaptivity.statetransfer.base import StateTransferStrategy
@@ -35,28 +37,30 @@ from edelweissfe.adaptivity.statetransfer.base import StateTransferStrategy
 
 def _monomialBasis(refCoords, degree):
     """Tensor-product monomial basis :math:`\\xi^i \\eta^j \\zeta^k`, :math:`0 \\le i,j,k \\le`
-    ``degree``, evaluated at the given reference coordinates. Returns ``(nPoints, (degree+1)**3)``.
+    ``degree`` (in 2D :math:`\\xi^i \\eta^j`), evaluated at the given reference coordinates. Returns
+    ``(nPoints, (degree+1)**dim)``.
     """
     refCoords = np.atleast_2d(refCoords)
-    powers = [refCoords[:, d][:, None] ** np.arange(degree + 1)[None, :] for d in range(3)]
-    cols = [
-        powers[0][:, i] * powers[1][:, j] * powers[2][:, k]
-        for i in range(degree + 1)
-        for j in range(degree + 1)
-        for k in range(degree + 1)
-    ]
+    dim = refCoords.shape[1]
+    powers = [refCoords[:, d][:, None] ** np.arange(degree + 1)[None, :] for d in range(dim)]
+    cols = []
+    for exponents in product(range(degree + 1), repeat=dim):
+        column = np.ones(refCoords.shape[0])
+        for d, e in enumerate(exponents):
+            column = column * powers[d][:, e]
+        cols.append(column)
     return np.column_stack(cols)
 
 
 class PolynomialProjection(StateTransferStrategy):
     """Reconstruct a tensor-product polynomial from the parent's quadrature-point values (in the
-    parent reference cube) by least squares, then resample it at the child quadrature points.
+    parent reference cube or square) by least squares, then resample it at the child quadrature points.
 
     The polynomial degree is chosen so the basis is at most as large as the number of parent
-    quadrature points -- ``degree = round(nQpParent ** (1/3)) - 1`` (trilinear for 8 points,
-    triquadratic for 27), capped so the fit is never underdetermined -- and the least-squares solve
-    tolerates rank deficiency gracefully. Unlike :class:`~edelweissfe.adaptivity.statetransfer.nearestquadraturepoint.NearestQuadraturePointCopy`
-    this is smooth across octants, but it may produce an *inadmissible* internal state (e.g. a
+    quadrature points -- ``degree = round(nQpParent ** (1/dim)) - 1`` (trilinear for 8 points,
+    triquadratic for 27; in 2D bilinear for 4, biquadratic for 9), capped so the fit is never
+    underdetermined -- and the least-squares solve tolerates rank deficiency gracefully. Unlike :class:`~edelweissfe.adaptivity.statetransfer.nearestquadraturepoint.NearestQuadraturePointCopy`
+    this is smooth across children, but it may produce an *inadmissible* internal state (e.g. a
     stress off the yield surface), so it is best applied per state variable to genuinely
     smooth fields via :class:`~edelweissfe.adaptivity.statetransfer.perstatevar.PerStateVarStateTransfer`.
     """
@@ -65,13 +69,13 @@ class PolynomialProjection(StateTransferStrategy):
         self._degree = degree
 
     def _transferColumns(self, parentValues, parentRefCoords, childRefCoords, childInitValues, columns):
-        nQpParent = parentRefCoords.shape[0]
+        nQpParent, dim = parentRefCoords.shape
         if self._degree is not None:
             degree = self._degree
         else:
-            degree = int(round(nQpParent ** (1.0 / 3.0))) - 1
+            degree = int(round(nQpParent ** (1.0 / dim))) - 1
         # never let the basis outgrow the samples (would make the fit underdetermined)
-        while degree > 0 and (degree + 1) ** 3 > nQpParent:
+        while degree > 0 and (degree + 1) ** dim > nQpParent:
             degree -= 1
 
         parentBasis = _monomialBasis(parentRefCoords, degree)
