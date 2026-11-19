@@ -34,7 +34,7 @@ Four concerns, mirrored by four groups of tests below:
   statically; no solver's or output manager's option names are pre-declared on it at all (unlike the
   mechanism this one replaces, which required a static, hand-synchronized aggregate). Any other
   ``key=value`` pair is accepted unvalidated by the
-  parser's dedicated ``isDynamicOptionsKeyword`` branch (``utils/inputfileparser.py``'s
+  parser's dedicated ``isStepDynamicOptions`` branch (``utils/inputfileparser.py``'s
   ``parseModuleKeywordLine``) and handed on raw for
   :func:`~edelweissfe.stepactions.options._writtenOptions` to recover.
 - **The dynamic-validation branch is declared in exactly one place.** A source-level guard against a

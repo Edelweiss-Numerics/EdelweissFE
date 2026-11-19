@@ -56,14 +56,15 @@ We use **pre-commit** to enforce code formatting and static checks before each c
 
 ### Install and Run
 ```bash
-# Install the pre-commit framework (one-time)
-pip install pre-commit
+# Install the pre-commit framework into an environment of its own (one-time), not into the
+# pinned EdelweissFE environment
+conda create -n pre-commit -c conda-forge pre-commit
 
 # Install git hook scripts
-pre-commit install
+conda run -n pre-commit pre-commit install
 
 # Run checks against all files
-pre-commit run --all-files
+conda run -n pre-commit pre-commit run --all-files
 ```
 
 Formatting and linting tools configured in `.pre-commit-config.yaml`:

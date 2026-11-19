@@ -1,0 +1,70 @@
+** Live 2D h-adaptivity of a two-field (displacement + nonlocal damage) model, the 2D counterpart of
+** AMR_TwoFieldGC3D20R: a distorted GCPE8R cantilever (plane strain, thickness 2) under an end displacement.
+** After the first increment the stress marker refines the elements at the clamped end, so the second
+** increment solves with hanging nodes that couple both fields, the damage state transferred to the
+** children (2D inverse map of the state transfer) and both fields warm-started at the new nodes.
+*material, name=AT2PHASEFIELD, id=mat
+20000, 0.2, 0.1, 5
+
+*section, name=sec, material=mat, type=plane, thickness=2.0
+all
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=fieldOutput, fieldOutput=stressForAMR, operator='>', threshold=7.0
+maxLevel=1
+
+*job, name=amr, domain=2d
+*solver, solver=NIST, name=S
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=U
+>>perNode, elSet=all, field=nonlocal damage, result=U, name=D
+>>perElement, elSet=all, result=stress, quadraturePoint=0:4, name=stressForAMR, f(x)='np.abs(x)'
+
+*step, solver=S
+maxInc=0.8, minInc=0.2, maxNumInc=2, maxIter=25
+>>dirichlet, name=left, nSet=left, field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=right, nSet=right, field=displacement, 2=-0.003
+
+*node
+1, 0, 0
+2, 0.9, 0
+3, 1.15, 0.9
+4, 0, 1
+5, 0.45, 0
+6, 1.025, 0.45
+7, 0.575, 0.95
+8, 0, 0.5
+9, 2.1, 0
+10, 1.9, 1.1
+11, 1.5, 0
+12, 2, 0.55
+13, 1.525, 1
+14, 3, 0
+15, 3, 0.85
+16, 2.55, 0
+17, 3, 0.425
+18, 2.45, 0.975
+19, 1.1, 2
+20, 0, 2
+21, 1.125, 1.45
+22, 0.55, 2
+23, 0, 1.5
+24, 1.85, 2
+25, 1.875, 1.55
+26, 1.475, 2
+27, 3, 2
+28, 3, 1.425
+29, 2.425, 2
+*element, type=GCPE8R
+1, 1, 2, 3, 4, 5, 6, 7, 8
+2, 2, 9, 10, 3, 11, 12, 13, 6
+3, 9, 14, 15, 10, 16, 17, 18, 12
+4, 4, 3, 19, 20, 7, 21, 22, 23
+5, 3, 10, 24, 19, 13, 25, 26, 21
+6, 10, 15, 27, 24, 18, 28, 29, 25
+*elSet, elSet=all, generate
+1, 6, 1
+*nSet, nSet=left
+1, 4, 8, 20, 23
+*nSet, nSet=right
+14, 15, 17, 27, 28

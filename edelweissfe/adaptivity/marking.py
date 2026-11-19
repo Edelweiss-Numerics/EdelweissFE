@@ -51,6 +51,7 @@ from edelweissfe.adaptivity.hex20shapefunctions import (
     hex20_shape,
     hex20_shape_grad,
 )
+from edelweissfe.adaptivity.hex20topology import Hex20Topology
 from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.utils.fieldoutput import ElementFieldOutput
 from edelweissfe.utils.schema import (
@@ -185,6 +186,16 @@ class MarkerBase(OptionSchemaProvider):
         ----------
         model
             The FEModel.
+        """
+
+    def checkTopology(self, topology):
+        """Raise if this marker cannot mark elements of the refineable element family ``topology``, so that an
+        adaptivity mechanism rejects the combination at setup. Every family is supported by default.
+
+        Parameters
+        ----------
+        topology
+            The :class:`~edelweissfe.adaptivity.topologybase.TopologyBase` of the refineable elements.
         """
 
     def isReady(self, model) -> bool:
@@ -940,6 +951,14 @@ class RecoveryErrorMarker(MarkerBase):
                 f"RecoveryErrorMarker: unknown entry={entry!r}; a node field holds the entries {NodeField.ENTRIES}."
             )
         self.entry = entry
+
+    def checkTopology(self, topology):
+        # the recovery patches and the 2x2x2 sampling points are those of the HEX20
+        if not isinstance(topology, Hex20Topology):
+            raise ValueError(
+                f"hAdaptivity recoveryError marker on nodeField {self.nodeFieldName!r}: supports HEX20 elements "
+                f"(3D models) only, not the {topology.n_nodes}-node elements of a {topology.dim}D model"
+            )
 
     def mark(self, model, candidateElements, mesh):
         if model.nodeFields is None or self.nodeFieldName not in model.nodeFields:

@@ -66,9 +66,31 @@ def quadraturePointReferenceCoordinates(element, referenceNodeCoords, topology) 
     """Reference-cube coordinates (in the frame of ``referenceNodeCoords``) of ``element``'s
     quadrature points. Passing the parent's node coordinates maps both the parent's and the
     children's quadrature points into the same (parent) reference frame, which is what makes
-    nearest-point matching and projection distortion-independent and octant-correct."""
+    nearest-point matching and projection distortion-independent and child-correct."""
     phys = np.asarray(element.getCoordinatesAtQuadraturePoints()).reshape(element.getNumberOfQuadraturePoints(), -1)
     return np.array([topology.inverse_map(p, referenceNodeCoords) for p in phys])
+
+
+#: Element-level state variables stored as quadrature-point weighted totals (density x J0xW), not densities
+EXTENSIVE_STATE_VARS = ("elastic strain energy", "total strain energy", "dissipation")
+
+
+def scaleExtensiveStateVars(element, factor: float):
+    """Scale the weighted (extensive) state variables of ``element`` by ``factor``, e.g. by one over the number of
+    children after a transfer, so that a refinement conserves the summed totals (not the per-point densities)."""
+    nqp = element.getNumberOfQuadraturePoints()
+    values = element.getStateVars().reshape(nqp, -1).copy()
+    scaled = False
+    for name in EXTENSIVE_STATE_VARS:
+        try:
+            offset, size = element.getStateVarSlice(name)
+        except (ValueError, NotImplementedError):
+            # the element does not carry this state variable, or exposes no named state variables
+            continue
+        values[:, offset : offset + size] *= factor
+        scaled = True
+    if scaled:
+        element.setStateVars(values.reshape(-1))
 
 
 class StateTransferStrategy(ABC):
@@ -77,7 +99,7 @@ class StateTransferStrategy(ABC):
 
     Subclasses implement the single primitive :meth:`_transferColumns`; the shared driver
     :meth:`transferState` handles buffer (re)shaping, the parent/child reference-frame mapping and
-    writing the result back. A strategy is therefore agnostic of the HEX20 machinery and only needs
+    writing the result back. A strategy is therefore agnostic of the element family and only needs
     to answer "given the parent's per-quadrature-point values, what are the children's?".
     """
 
@@ -121,9 +143,11 @@ class StateTransferStrategy(ABC):
         parentValues
             ``(nQpParent, blockSize)`` parent per-quadrature-point state.
         parentRefCoords
-            ``(nQpParent, 3)`` parent quadrature-point coordinates in the parent reference cube.
+            ``(nQpParent, dim)`` parent quadrature-point coordinates in the parent reference cube (in 2D:
+            square).
         childRefCoords
-            ``(nQpChild, 3)`` child quadrature-point coordinates in the *parent* reference cube.
+            ``(nQpChild, dim)`` child quadrature-point coordinates in the *parent* reference cube (in 2D:
+            square).
         childInitValues
             ``(nQpChild, blockSize)`` the child's freshly-initialised state (virgin values).
         columns
