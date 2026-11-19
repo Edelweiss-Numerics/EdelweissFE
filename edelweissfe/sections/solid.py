@@ -106,14 +106,11 @@ class Section(SectionBase):
         nSpatialDimensions = element.nSpatialDimensions
         if nSpatialDimensions < 3 and nSpatialDimensions != 0:
             raise Exception(f"Solid section is incompatible with {nSpatialDimensions}-dimensional finite elements.")
+        if element.ensightType in ("bar2", "bar3"):
+            raise Exception(
+                f"Solid section is incompatible with the bar element {element.elNumber} ({element.elType}): "
+                "use the truss or the beam section."
+            )
 
         element.initializeElement()
-
-        # to make sure all elProviders work
-        if not isinstance(material, dict):
-            element.setMaterial(material)
-        else:
-            try:  # for Marmot
-                element.setMaterial(material["name"], material["properties"])
-            except TypeError:
-                raise Exception("Material provider and element are not compatible!")
+        self.assignMaterialToElement(element, material)

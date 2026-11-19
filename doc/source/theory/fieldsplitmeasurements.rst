@@ -178,19 +178,18 @@ testfile deck run with ``verbosity=info`` shows the same: each linear solve reac
 outer iterations, and Newton converges in two; with the coarse level switched off, every solve stops at the
 iteration cap with a relative residual of about 1e-2, and Newton needs five.
 
-Live, from the start of each run on the same workstation, one run at a time and each capped at 10 minutes, the
-hierarchy on the translations against the rigid-body coarse level for the displacement field:
+Live, from the start of each run, one run at a time with the same time limit, the hierarchy on the translations
+against the rigid-body coarse level for the displacement field:
 
 * the L-shaped concrete panel (``examples/WinklerL``, quadratic elements, damage): with the rigid-body coarse level
-  the run completed in 581 s, while the translations had covered 88% of the load path when stopped at 600 s;
+  the run completed within the limit, while the translations had not reached the end of the load path;
   24.7 against 28.3 outer iterations per solve, at most 61 against one solve at the cap of 100. The
   load-displacement curves agree to 2e-4 of the peak load.
-* a coarser tunnel segment with embedded bars with bond-slip (0.28 M unknowns, ``SchurComplement``, the rigid-body
-  coarse level on the displacement field of the remaining nodes), run to its end: 46 against 65 s of computation,
-  13 against 21 Newton iterations and linear solves, and 9.1 against 14.7 outer iterations per solve. The final
-  load agrees to 2e-4.
-* the damage cylinder (0.84 M unknowns, implicit dynamics): simulated time 0.215 against 0.185 in the same time,
-  and 7.9 against 12.6 outer iterations per solve. The load agrees to 3e-4 at the same simulated times.
+* a coarser tunnel segment with embedded bars with bond-slip (``SchurComplement``, the rigid-body coarse level on the
+  displacement field of the remaining nodes), run to its end: less computation time, 13 against 21 Newton
+  iterations and linear solves, and 9.1 against 14.7 outer iterations per solve. The final load agrees to 2e-4.
+* the damage cylinder (implicit dynamics): further in simulated time within the same limit, and 7.9 against 12.6
+  outer iterations per solve. The load agrees to 3e-4 at the same simulated times.
 
 .. _measured-scaled-corner-node-interpolation:
 
@@ -319,7 +318,8 @@ contact anchor model with many multi-point-constraint slaves):
   iteration.
 * **One high-degree post-smoothing sweep** (``npre = 0``, ``npost = 1``, Chebyshev degree 16, instead
   of a symmetric V(1,1) cycle at degree 5) and **smoothed aggregation's own spectral-radius estimate**
-  for its prolongation smoother (``estimate_spectral_radius``, 20 power iterations) cut outer
+  for its prolongation smoother (measured with 20 power iterations, since replaced by the Arnoldi estimate of
+  :ref:`measured-power-iterations`) cut outer
   iterations for the same number of preconditioner applications.
 * **The translations of the equilibrated block** as a block hierarchy's near-null-space
   (``nearNullspace``, the default on a block backend), instead of AMGCL's identity blocks, which are :math:`D`-weighted

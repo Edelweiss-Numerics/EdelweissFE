@@ -27,15 +27,30 @@
 #  ---------------------------------------------------------------------
 
 """
-Hexa8/Hexa20 shape functions and their local derivatives, in the standard Abaqus C3D8/C3D20 node
-ordering (corner ring 0-3 at zeta=-1, ring 4-7 at zeta=+1) -- matching Marmot's element
-formulation, so this is the only node-ordering convention across the framework. The single source
+Hexa8/Hexa20 shape functions, their local derivatives and the natural coordinates of their nodes,
+in the standard Abaqus C3D8/C3D20 node ordering (corner ring 0-3 at zeta=-1, ring 4-7 at zeta=+1)
+-- matching Marmot's element formulation, so this is the only node-ordering convention across the framework. The single source
 of truth for both the small-strain (:mod:`edelweissfe.elements.displacementelement`) and
 total-Lagrangian (:mod:`edelweissfe.elements.displacementtlelement`) element formulations, so the
 ordering only needs to be correct in one place.
 """
 
 import numpy as np
+
+#: Natural coordinates ``(xi, eta, zeta)`` of the Hexa20 nodes: the 8 corners, then the edge midpoints
+#: of the bottom face, of the top face and of the vertical edges.
+hexa20NodeXi = np.array(
+    [
+        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+        [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+        [0, -1, -1], [1, 0, -1], [0, 1, -1], [-1, 0, -1],
+        [0, -1, 1], [1, 0, 1], [0, 1, 1], [-1, 0, 1],
+        [-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0],
+    ]
+)  # fmt: skip
+
+#: Natural coordinates ``(xi, eta, zeta)`` of the Hexa8 nodes.
+hexa8NodeXi = hexa20NodeXi[:8]
 
 
 def hexa8N(xi, eta, z):

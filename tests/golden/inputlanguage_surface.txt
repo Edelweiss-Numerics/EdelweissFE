@@ -18,7 +18,7 @@
         nSet                  string              name of nSet to be created
 
 
-    nSet    definition of an element set
+    nSet    definition of a node set
         nSet                  string              name
         generate              boolean             set True to generate from data
                                                   line 1: start-node, end-node,
@@ -557,15 +557,15 @@ refinement) as well as at setup time; the recipe is recorded in ``model.contactF
     [triangulation] The facet triangulation of higher-order element faces: 'corner' (linear corner-node subset only; exact for straight-edged meshes) or 'midside' (triangulation of the full face boundary including midside nodes; strictly more accurate for curved faces). Linear element faces are unaffected by this option. (<class 'str'>, default = corner)
     [nodalWeights] The per-node contact weighting of the generated facets: 'facetConsistent' (the consistent nodal loads of the flat facet tiling itself) or 'serendipityOptimal' (the resultant-exact, non-negative weighting that minimises the mismatch against a quadratic face's own consistent nodal loads, by reassigning each corner node's share to its two adjacent midside nodes -- the modified shape functions of Puso, Laursen & Solberg, CMAME 2008). Reduces the spurious corner/midside load pattern on hexa20 contact surfaces by a third, at the price of corner nodes ceasing to be contact points -- but NO measured benefit has been demonstrated, because a quadratic face under near-uniform pressure lifts its corner nodes off anyway, which makes their weight moot; see the contact theory documentation. Requires triangulation='midside'; linear element faces are unaffected by this option. (<class 'str'>, default = facetConsistent)
 ===== module documentation: edelweissfe.modelmodifiers.adaptivity.hadaptivity =====
-Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
-[hadaptivity] Dynamic hanging-node h-adaptivity model modifier for HEX20 elements.
+Dynamic h-adaptivity model modifier for hanging-node AMR of HEX20 (3D) and QUAD8 (2D) elements.
+[hadaptivity] Dynamic hanging-node h-adaptivity model modifier for HEX20 and QUAD8 elements.
   optional arguments
     [moduleOptions] Internal (<class 'dict'>, default = {})
     [elSet] Fallback for 'refineElSet' if that is not given. Does not restrict marking itself -- each '>>marker' scopes its own eligible elements (a fieldOutput's associated set, an elementSet/nodeSet/surface's members). (<class 'str'>, default = None)
-    [refineElSet] Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh that also contains contact-facet elements. Elements outside this set never become octree roots and are left untouched by refinement. Defaults to 'elSet' if given, otherwise to every 20-node (HEX20-family) element in the model. (<class 'str'>, default = None)
+    [refineElSet] Restrict the AMR octree mirror itself to this element set, e.g. the solid elements in a mesh that also contains contact-facet elements. Elements outside this set never become octree roots and are left untouched by refinement. Defaults to 'elSet' if given, otherwise to every 20-node (HEX20-family) element of a 3D model, or every 8-node (QUAD8-family) element of a 2D model. (<class 'str'>, default = None)
     [maxLevel] Maximum refinement level. (<class 'int'>, default = 1)
     [minMarkedElements] Minimum number of eligible elements one evaluation of the markers must mark for a refinement pass to happen; with fewer, nothing is refined and no discrete system is rebuilt. Marks are not carried over to later evaluations: they are a function of the current state only. Individual markers may cap their own marks (e.g. 'maxRefinedFraction') or expand them (e.g. 'halo') before this count is taken. Default 1 refines as soon as any element is marked. (<class 'int'>, default = 1)
-    [splitFactor] Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children; 3 = 3x3x3 = 27 children, etc.). The hanging-node coupling stays exact for any factor. (<class 'int'>, default = 2)
+    [splitFactor] Number of equal parts per axis a marked element is split into (2 = octree bisection into 8 children, in 2D quadtree bisection into 4; 3 = 3x3x3 = 27 children, in 2D 3x3 = 9, etc.). The hanging-node coupling stays exact for any factor. (<class 'int'>, default = 2)
     [elementType] Element type to instantiate for children (default: like parents). (<class 'str'>, default = None)
     [elementProvider] Element provider. (<class 'str'>, default = marmot)
     [stateTransfer] Quadrature-point state-transfer strategy for the whole state block: nearestQp|projection|virgin. (<class 'str'>, default = nearestQp)
@@ -585,6 +585,59 @@ Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
   required arguments
     [stop] Model accessible function describing the stop condition. (<class 'str'>)
 ===== module documentation: edelweissfe.outputmanagers.ensight =====
+Output manager for Ensight exports.
+If loaded, it automatically exports all elSets as Ensight parts.
+For each part, perNode and perElement results can be exported, which are imported from fieldOutputs.
+
+**Quadrature point results.** ``>>perQuadraturePoint`` writes an element result at all quadrature points on an
+additional part ``<elSet>_QP``, which splits each quadrilateral or hexahedron into one linear sub-element per
+quadrature point of its Gauss rule. The results are shown where they are computed, without averaging over the element
+or extrapolating to the nodes.
+
+1. Collect the result at **all** quadrature points of the elements in a ``*fieldOutput``:
+
+   ================================ =========== ===================
+   Elements                         Gauss rule  ``quadraturePoint``
+   ================================ =========== ===================
+   CPE4, CPS4, CPE8R, CPS8R         2x2         ``0:4``
+   CPE8, CPS8                       3x3         ``0:9``
+   C3D8, C3D20R                     2x2x2       ``0:8``
+   C3D20                            3x3x3       ``0:27``
+   ================================ =========== ===================
+
+2. Hand that field output to the Ensight output manager with ``>>perQuadraturePoint`` instead of ``>>perElement``:
+
+.. code-block:: edelweiss
+
+    *fieldOutput
+    >>perNode,    name=displacement, elSet=all, field=displacement, result=U
+    >>perElement, name=stress,       elSet=all, result=stress, quadraturePoint=0:8
+    >>perElement, name=sigma yy,     elSet=all, result=stress, quadraturePoint=0:8, f(x)='x[:,:,1]'
+
+    *output, type=ensight, name=esExport
+    >>perNode,            fieldOutput=displacement
+    >>perQuadraturePoint, fieldOutput=stress
+    >>perQuadraturePoint, fieldOutput=sigma yy
+
+- The variables are per element variables of the part ``<elSet>_QP``, named after the field output (``stress``,
+  ``sigma_yy``). Their size follows from the result: scalar, vector or tensor.
+- An ``f(x)`` of the field output may reduce or rescale the components, e.g. ``f(x)='x[:,:,1]'`` or
+  ``f(x)='np.linalg.norm(x, axis=2)'``, but the first two axes of its result must stay elements and quadrature points.
+  Reducing over the quadrature points (``np.mean(x, axis=1)``) belongs to ``>>perElement``.
+- ``>>perNode`` results defined on the same element set are written on the part ``<elSet>_QP`` as well, interpolated
+  to its added nodes, so it can be shown deformed. Node results defined on a node set are not.
+- ``>>perElement`` and ``>>perQuadraturePoint`` can be combined in one output manager, with different field outputs.
+- The export is refused if the field output does not cover exactly all quadrature points of the elements, if its
+  result is not laid out as (elements, quadrature points, ...), if the element set mixes quadrilaterals and hexahedra
+  or quadrature rules, or if an element is of another shape or not integrated by a Gauss rule.
+
+Along each natural direction, an element is split at :math:`b_k = -1 + \sum_{m<k} w_m` of the Gauss weights
+:math:`w_m`: sub-element :math:`(i, j)` spans :math:`[b_i, b_{i+1}] \times [b_j, b_{j+1}]` in natural coordinates
+(and :math:`[b_k, b_{k+1}]` in 3D), so its natural area is the weight of its Gauss point, which it contains. That is
+a split at 0 for 2 points and at :math:`\pm 4/9` for 3 points. Sub-element g of an element contains its quadrature
+point g, in the order of either element provider. The added nodes are placed by the element's interpolation and shared
+between neighboring elements; nodes of the element set which no sub-element uses (the edge midpoints of quadratic
+elements with 3 points per direction) are left out. The part is rebuilt after a mesh change (h-adaptivity).
 [ensight] Ensight export.
   optional keywords
     < perNode > Node-based Ensight export.
@@ -593,6 +646,9 @@ Dynamic h-adaptivity model modifier for HEX20 hanging-node AMR.
     < perElement > Element-based Ensight export.
       required arguments
         [fieldOutput] Name of the result, defined on an elSet (also for perNode results!) (<class 'str'>)
+    < perQuadraturePoint > Quadrature point-based Ensight export on sub-elements.
+      required arguments
+        [fieldOutput] Name of an element result at all quadrature points of quadrilaterals or hexahedra, e.g. quadraturePoint=0:4 for CPE8R, 0:9 for CPE8, 0:8 for C3D20R, 0:27 for C3D20; written on a separate part, which splits each element into linear sub-elements, one per quadrature point (<class 'str'>)
     < configuration >
       optional arguments
         [overwrite] Overwrite results. (<class 'bool'>, default = False)
@@ -800,6 +856,84 @@ kept, apart from the changed one.
     [components] Prescribe values using a numpy ndarray for representation; use 'x' for ignored values. (<class 'str'>, default = None)
     [analyticalField] Scales the defined boundary condition (<class 'str'>, default = None)
     [f(t)] Define an amplitude in the step progress interval [0...1] (<class 'str'>, default = None)
+===== module documentation: edelweissfe.stepactions.dissipationcontrol =====
+Dissipation controller for the NISTPArcLength solver, after the dissipation-based arc length method of Gutiérrez
+(2004) and Verhoosel, Remmers and Gutiérrez (2009), for loading by prescribed displacements (Dirichlet boundary
+conditions scaled by the load parameter).
+
+The controller adds the equation
+
+.. math::
+
+    g(\boldsymbol{U}) = D(\boldsymbol{U}) - D_n - \Delta \tau = 0
+
+for the increment of the load parameter :math:`\Delta\lambda`. Here, :math:`D` is the dissipated energy of the
+material, summed from the quadrature point result ``dissipation`` over the elements of ``elSet`` (instead of the
+expressions of Verhoosel et al. in terms of the load and the displacements, which assume a particular material),
+:math:`D_n` its value at the start of the increment, and :math:`\Delta\tau = \Delta p \, \tau` the share of the
+increment (of size :math:`\Delta p`) in the dissipation ``dissipation`` of the step. Linearized along the correction
+:math:`\Delta\Delta\boldsymbol{U} = \Delta\Delta\boldsymbol{U}_0 + \Delta\Delta\lambda \, \Delta\Delta
+\boldsymbol{U}_f`, the correction of the load parameter is
+
+.. math::
+
+    \Delta\Delta\lambda = \frac{\Delta\tau - (D - D_n) - \nabla D \cdot \Delta\Delta\boldsymbol{U}_0}
+        {\nabla D \cdot \Delta\Delta\boldsymbol{U}_f},
+
+with :math:`D` and its gradient :math:`\nabla D` of the iterate. The elements write their share of the gradient in
+every evaluation of their kernels (:meth:`~edelweissfe.elements.base.baseelement.BaseElement.assignEnergyGradientOutput`),
+which needs Marmot elements and materials that provide the energy gradients. The solver accepts an increment once its
+residual has converged and :math:`|D - D_n - \Delta\tau| \le \epsilon \, \Delta\tau`, with the relative
+tolerance :math:`\epsilon` = ``constraintTolerance``.
+
+The dissipation equation is singular where nothing dissipates. Two ways cover these parts of the path:
+
+* With ``displacement`` (the combined constraint, a heuristic), every increment ends at the first of the dissipation
+  target and the limit :math:`\Delta u_{\max} = \Delta p \, u_{\max}` of the largest nodal displacement increment,
+
+  .. math::
+
+      \max_i \left| \Delta U_i + \Delta\Delta U_{0,i} + \Delta\Delta\lambda \, \Delta\Delta U_{f,i} \right|
+          \le \Delta u_{\max}
+
+  over all displacement degrees of freedom :math:`i`. This bounds :math:`\Delta\Delta\lambda` to an interval; the
+  dissipation target is taken within it, and otherwise an end of the interval: the one where the linearized
+  dissipation does not decrease, as an increment cannot release dissipated energy (at the onset of a snap-back, the
+  end in the direction of the last converged increment does), and if both ends or neither qualify, the end whose
+  increment points in the direction of the last converged increment. The displacement limit thus governs the
+  elastic range and the final failure, where the dissipation hardly constrains the deformation anymore.
+* Without ``displacement``, the load parameter is controlled directly, :math:`\Delta\lambda = \Delta p \,
+  \lambda_{\mathrm{step}}` with :math:`\lambda_{\mathrm{step}}` = ``loadParameter``, until the dissipation at
+  the start of an increment exceeds ``threshold``; then the dissipation is. An elastic iterate in the dissipation
+  controlled phase (the first one from a zero prediction) is moved by the secant of the last increment, or, without
+  one, by the load parameter rule.
+
+References
+----------
+Gutiérrez, M. A. (2004). Energy release control for numerical simulations of failure in quasi-brittle solids.
+Communications in Numerical Methods in Engineering, 20(1), 19-29.
+
+Verhoosel, C. V., Remmers, J. J. C., Gutiérrez, M. A. (2009). A dissipation-based arc-length method for robust
+simulation of brittle and ductile failure. International Journal for Numerical Methods in Engineering, 77(9),
+1290-1321.
+< dissipationcontrol > Dissipation controller for the NISTPArcLength solver.
+  required arguments
+    [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
+    [dissipation] Energy to be dissipated over the step. (<class 'float'>)
+  optional arguments
+    [elSet] Element set whose quadrature point result 'dissipation' is summed. (<class 'str'>, default = all)
+    [displacement] Maximum nodal displacement increment over the step; enables the combined constraint. (<class 'float'>, default = None)
+    [loadParameter] Load parameter increment over the step before dissipating (without displacement). (<class 'float'>, default = None)
+    [threshold] Dissipated energy beyond which the dissipation controlled phase starts (without displacement). (<class 'float'>, default = 0.0)
+< dissipationcontrol > Dissipation controller for the NISTPArcLength solver.
+  required arguments
+    [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
+    [dissipation] Energy to be dissipated over the step. (<class 'float'>)
+  optional arguments
+    [elSet] Element set whose quadrature point result 'dissipation' is summed. (<class 'str'>, default = all)
+    [displacement] Maximum nodal displacement increment over the step; enables the combined constraint. (<class 'float'>, default = None)
+    [loadParameter] Load parameter increment over the step before dissipating (without displacement). (<class 'float'>, default = None)
+    [threshold] Dissipated energy beyond which the dissipation controlled phase starts (without displacement). (<class 'float'>, default = 0.0)
 ===== module documentation: edelweissfe.stepactions.distributedload =====
 < distributedload > Standard distributed load, applied on a surface set.
   required arguments
@@ -990,7 +1124,7 @@ that could drift out of sync with the object it is supposed to identify.
 
 The ``>>options`` keyword's own grammar is validated **dynamically**, not against a statically
 pre-declared list of every solver's and output manager's option names: at parse time, before
-``name`` has even been resolved, the parser's dedicated ``isDynamicOptionsKeyword`` branch (see
+``name`` has even been resolved, the parser's dedicated ``isStepDynamicOptions`` branch (see
 ``utils/inputfileparser.py::parseModuleKeywordLine``) only enforces that ``name`` itself is present
 -- every other ``key=value`` pair is accepted unvalidated and handed on raw. Real validation happens
 once ``name`` resolves to a concrete object, against *that object's own* ``type(target).schema``

@@ -24,12 +24,13 @@ runs:
         ref: ${{ inputs.ref }}
 
     # Marmot is installed into a prefix of its own (not the environment), so that it can be cached and
-    # restored independently of the environment's cache.
-    - uses: actions/cache@v4
+    # restored independently of the environment's cache. The key includes this file, so that a changed build
+    # (e.g. its CMake options) does not restore an install made the old way.
+    - uses: actions/cache@v6
       id: cache
       with:
         path: ${{ runner.temp }}/marmot
-        key: marmot-${{ runner.os }}-${{ inputs.repository }}-${{ runner.arch }}-${{ steps.resolve.outputs.sha }}-${{ hashFiles('conda-lock.yml') }}
+        key: marmot-${{ runner.os }}-${{ inputs.repository }}-${{ runner.arch }}-${{ steps.resolve.outputs.sha }}-${{ hashFiles('conda-lock.yml', '.github/actions/build-marmot/action.yml') }}
 
     # Clone into the parent directory, never into the checkout: Marmot ships a committed symlink
     # _codeql_detected_source_root -> ., which `pip install .` otherwise follows into itself while collecting the
@@ -47,13 +48,15 @@ runs:
         git clone --recurse-submodules --branch "$MARMOT_BRANCH" "https://github.com/$MARMOT_REPOSITORY.git" Marmot
         git -C Marmot checkout --detach "$MARMOT_SHA"
 
+    # Marmot's own tests are not built: EdelweissFE needs the library only, and Marmot's CI builds and runs them.
     - name: Build and install Marmot
       if: steps.cache.outputs.cache-hit != 'true' && runner.os != 'Windows'
       shell: bash -leo pipefail {0}
       run: |
         cd ..
         cmake -S Marmot -B Marmot/build -DCMAKE_INSTALL_PREFIX="${{ runner.temp }}/marmot" \
-          -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF
+          -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+          -DBUILD_TESTING=OFF
         cmake --build Marmot/build -j 4
         cmake --install Marmot/build
 
@@ -64,7 +67,7 @@ runs:
       shell: cmd /C CALL {0}
       run: |
         cd ..
-        cmake -S Marmot -B Marmot\_build -DCMAKE_INSTALL_PREFIX="${{ runner.temp }}\marmot" -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%\Library" -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF || exit /b 1
+        cmake -S Marmot -B Marmot\_build -DCMAKE_INSTALL_PREFIX="${{ runner.temp }}\marmot" -DCMAKE_PREFIX_PATH="%CONDA_PREFIX%\Library" -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF -DBUILD_TESTING=OFF || exit /b 1
         cmake --build Marmot\_build --config Release --parallel 4 || exit /b 1
         cmake --install Marmot\_build --config Release || exit /b 1
 
