@@ -91,6 +91,9 @@ absolute flux floors for both fields (see the moisture elements).
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/ThermoHygroHeatedDryingDC2D8TH/test.inp``
 
+Worked examples with figures (heated drying of a column section and of a cube, a massive wall at early age with heat of
+hydration and formwork removal) are in ``examples/ThermoHygro``.
+
 Provider ``marmotsingleqpelement``
 ----------------------------------
 
