@@ -1,0 +1,48 @@
+** Drying of a concrete column, 300 x 300 mm, from all four sides (DC2D8H, MoistureDiffusion, Bazant-Najjar).
+**
+** One quarter of the section is modelled (0 <= x, y <= 150 mm). Saturated at the start (h = 1). The faces x = 0 and
+** y = 0 are exposed to air at h_inf = 0.5 (moisture film); the faces x = y = 150 mm are symmetry planes (sealed).
+** Classical Bazant-Najjar form: linear isotherm with unit capacity, so h itself is the diffused quantity.
+** Units: mm, day (D in mm2/day, film coefficient in mm/day). Results at 30, 180, 1000 and 3000 days.
+
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DC2D8H
+nX=16
+nY=16
+l=150.0
+h=150.0
+
+** short form (6 properties): D1 [mm2/d], alpha0, h_c, n, isotherm (0 = linear), K (capacity dw/dh)
+**   D(h) = D1 (alpha0 + (1 - alpha0) / (1 + ((1 - h) / (1 - h_c))^n))     (MC90 shape: alpha0 = 0.05, h_c = 0.8, n = 15)
+*material, name=MoistureDiffusion, id=concrete
+30.0, 0.05, 0.8, 15.0, 0, 1.0
+
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=dryingcolumn, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=humidity, elSet=all, field=relative humidity, result=U
+>>perNode, name=h_core, nSet=gen_rightTop, field=relative humidity, result=U
+
+*output, type=monitor, name=monitorh_core
+fieldOutput=h_core, f(x)='mean(x)'
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=humidity
+
+** Moisture film: magnitude='beta, h_inf'. The amplitude scales both values: f(t)='1' exposes the faces at once.
+*step, solver=theSolver
+startInc=0.0005, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=30.0
+>>setfield, name=h0, fieldOutput=humidity, type=uniform, value=1.0
+>>distributedload, name=filmLeft, surface=gen_left, type=moisture film, magnitude='10.0, 0.5', f(t)='1'
+>>distributedload, name=filmBottom, surface=gen_bottom, type=moisture film, magnitude='10.0, 0.5', f(t)='1'
+*step, solver=theSolver
+startInc=0.02, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=150.0
+*step, solver=theSolver
+startInc=0.02, maxInc=0.025, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=820.0
+*step, solver=theSolver
+startInc=0.02, maxInc=0.025, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=2000.0
