@@ -1,0 +1,72 @@
+** Concrete column, 300 x 300 mm, heated to 60 degC in dry air: coupled heat and moisture transport (DC2D8TH,
+** ThermoHygro with all transport couplings).
+**
+** One quarter of the section is modelled (0 <= x, y <= 150 mm). Initially 20 degC and h = 0.8. The faces x = 0 and
+** y = 0 are exposed to air at 60 degC and h_inf = 0.4: heat film (10 W/(m2 K)), moisture film
+** (beta = 1.157e-5 kg/(m2 s)) and the latent heat taken away by the evaporating water (latent heat film,
+** c = L_v beta). The faces x = y = 150 mm are symmetry planes (insulated, sealed).
+** Couplings: Arrhenius diffusivity (Q_D/R), hygrothermic coefficient kappa (h rises with T at constant water content),
+** vapour pressure driven moisture flux (chi = 1), heat capacity of the water (c_w), moisture dependent conductivity
+** (beta_kh) and latent heat carried by the vapour (ell = 0.5 L_v). The values are illustrative.
+** Units: m, s, kg, degC. Results at 1 h, 6 h, 1 d, 10 d and 100 d.
+**
+** The drying skin is a few mm thick in the first hours: a fine mesh is needed there (16 x 16 quadratic elements give a
+** humidity slightly below h_inf at the surface, 48 x 48 do not).
+
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DC2D8TH
+nX=48
+nY=48
+l=0.15
+h=0.15
+
+** heat (11): rho [kg/m3], c0 [J/(kg K)], k11, k22, k33 [W/(m K)], k12, k13, k23, beta_k, beta_c, T_ref [degC]
+** moisture (10): D1 [kg/(m s)], alpha0, h_c, n, isotherm (1 = BSB), C, k, V_m [kg/m3], dw_inf [kg/m3], tau_s [s]
+** couplings (11): T_0 (absolute zero) [degC], Q_D/R [K], m, kappa [1/K], chi, c_w [J/(kg K)], beta_kh, ell [J/kg],
+**                 E_h/R [K], Q_inf [J/m3], tau_q [s]
+*material, name=ThermoHygro, id=concrete
+2400.0, 900.0, 1.5, 1.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0
+3.4722e-08, 0.05, 0.8, 6.0, 1, 18.0, 0.73, 20.0, 0.0, 1.0
+-273.15, 4000.0, 0.0, 0.003, 1.0, 4186.0, 0.3, 1.225e6, 0.0, 0.0, 1.0
+
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=heateddrying, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=temperature, elSet=all, field=temperature, result=U
+>>perNode, name=humidity, elSet=all, field=relative humidity, result=U
+>>perNode, name=T_core, nSet=gen_rightTop, field=temperature, result=U
+>>perNode, name=h_core, nSet=gen_rightTop, field=relative humidity, result=U
+
+*output, type=monitor, name=monitorT_core
+fieldOutput=T_core, f(x)='mean(x)'
+
+*output, type=monitor, name=monitorh_core
+fieldOutput=h_core, f(x)='mean(x)'
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=temperature
+>>perNode, fieldOutput=humidity
+
+*step, solver=theSolver
+startInc=0.005, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=3600.0
+>>setfield, name=T0, fieldOutput=temperature, type=uniform, value=20.0
+>>setfield, name=h0, fieldOutput=humidity, type=uniform, value=0.8
+>>distributedload, name=heatLeft, surface=gen_left, type=heat film, magnitude='10.0, 60.0', f(t)='1'
+>>distributedload, name=heatBottom, surface=gen_bottom, type=heat film, magnitude='10.0, 60.0', f(t)='1'
+>>distributedload, name=moistLeft, surface=gen_left, type=moisture film, magnitude='1.1574e-05, 0.4', f(t)='1'
+>>distributedload, name=moistBottom, surface=gen_bottom, type=moisture film, magnitude='1.1574e-05, 0.4', f(t)='1'
+>>distributedload, name=latentLeft, surface=gen_left, type=latent heat film, magnitude='28.356, 0.4', f(t)='1'
+>>distributedload, name=latentBottom, surface=gen_bottom, type=latent heat film, magnitude='28.356, 0.4', f(t)='1'
+*step, solver=theSolver
+startInc=0.02, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=18000.0
+*step, solver=theSolver
+startInc=0.02, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=64800.0
+*step, solver=theSolver
+startInc=0.02, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=777600.0
+*step, solver=theSolver
+startInc=0.02, maxInc=0.025, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=7776000.0
