@@ -1,0 +1,44 @@
+** Fire exposure of a concrete cube, 300 mm, heated from all six faces (DC3D20T, HeatConduction).
+**
+** One octant is modelled (0 <= x, y, z <= 150 mm). The faces x = 0, y = 0, z = 0 (boxGen surfaces left, bottom, back)
+** are exposed to hot gas at 600 degC: convection (25 W/(m2 K)) plus radiation (emissivity 0.7). The faces
+** x = y = z = 150 mm are symmetry planes (insulated). Initially 20 degC. Same material as fire_column_2d.inp.
+** Units: m, s, kg, degC. Results at 15 min, 1 h and 4 h.
+
+*modelGenerator, generator=boxGen, name=gen
+x0=0, y0=0, z0=0, lX=0.15, lY=0.15, lZ=0.15, nX=12, nY=12, nZ=12, elType=DC3D20T
+
+** rho, c, k11, k22, k33, k12, k13, k23, beta_k, beta_c, T_ref
+*material, name=HeatConduction, id=concrete
+2400.0, 900.0, 1.6, 1.6, 1.6, 0.0, 0.0, 0.0, -0.0004, 0.0003, 20.0
+
+*section, name=section1, material=concrete, type=solid
+all
+
+*job, name=firecube, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=temperature, elSet=all, field=temperature, result=U
+>>perNode, name=T_centre, nSet=gen_topRightFront, field=temperature, result=U
+
+*output, type=monitor, name=monitorT_centre
+fieldOutput=T_centre, f(x)='mean(x)'
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=temperature
+
+*step, solver=theSolver
+startInc=0.002, maxInc=0.05, minInc=1e-6, maxNumInc=1000, maxIter=20, stepLength=900.0
+>>setfield, name=T0, fieldOutput=temperature, type=uniform, value=20.0
+>>distributedload, name=filmLeft, surface=gen_left, type=heat film, magnitude='25.0, 600.0', f(t)='1'
+>>distributedload, name=filmBottom, surface=gen_bottom, type=heat film, magnitude='25.0, 600.0', f(t)='1'
+>>distributedload, name=filmBack, surface=gen_back, type=heat film, magnitude='25.0, 600.0', f(t)='1'
+>>distributedload, name=radLeft, surface=gen_left, type=heat radiation, magnitude='3.9693e-08, 600.0, -273.15', f(t)='1'
+>>distributedload, name=radBottom, surface=gen_bottom, type=heat radiation, magnitude='3.9693e-08, 600.0, -273.15', f(t)='1'
+>>distributedload, name=radBack, surface=gen_back, type=heat radiation, magnitude='3.9693e-08, 600.0, -273.15', f(t)='1'
+*step, solver=theSolver
+startInc=0.02, maxInc=0.025, minInc=1e-6, maxNumInc=1000, maxIter=20, stepLength=2700.0
+*step, solver=theSolver
+startInc=0.02, maxInc=0.025, minInc=1e-6, maxNumInc=1000, maxIter=20, stepLength=10800.0
