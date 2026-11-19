@@ -1,0 +1,54 @@
+** Young concrete slab, 200 mm thick: evaporation through a curing compound for 28 days, then sealed; self-desiccation
+** throughout (DC3D20H, MoistureDiffusion with the BSB sorption isotherm).
+**
+** A column of 20 x 20 mm through the slab thickness (boxGen, z = thickness): the bottom face (z = 0) and the sides are
+** sealed. The top face (z = 200 mm, boxGen surface front) loses water at a fixed rate of 0.003 kg/(m2 day) for
+** 28 days (moisture flux, negative = out of the body), after which it is sealed. The cement hydration consumes water
+** (self-desiccation, dw_inf = 5 kg/m3 with tau_s = 10 days), so the humidity drops also in the sealed bottom.
+** Units: m, day, kg (water content w in kg/m3, moisture flux in kg/(m2 day), D in kg/(m day)). Initially h = 1.
+
+*modelGenerator, generator=boxGen, name=gen
+x0=0, y0=0, z0=0, lX=0.02, lY=0.02, lZ=0.2, nX=1, nY=1, nZ=20, elType=DC3D20H
+
+** D1 [kg/(m d)], alpha0, h_c, n, isotherm (1 = BSB), C, k, V_m [kg/m3], dw_inf [kg/m3], tau_s [d]
+**   BSB: w(h) = C k V_m h / ((1 - k h)(1 + (C - 1) k h));  self-desiccation sink dw_s/dt = dw_inf/tau_s exp(-t/tau_s)
+*material, name=MoistureDiffusion, id=concrete
+0.001, 0.05, 0.8, 6.0, 1, 18.0, 0.73, 20.0, 5.0, 10.0
+
+*section, name=section1, material=concrete, type=solid
+all
+
+*job, name=curingslab, domain=3d
+*solver, solver=NIST, name=theSolver
+
+** flux residuals in kg/day: an absolute floor that fits these units (the default 1e-14 is below round-off here)
+*updateConfiguration, configuration=absoluteFluxResidualTolerance
+relative humidity=1e-10
+
+*fieldOutput
+>>perNode, name=humidity, elSet=all, field=relative humidity, result=U
+>>perNode, name=h_top, nSet=gen_topRightFront, field=relative humidity, result=U
+>>perNode, name=h_bottom, nSet=gen_topRightBack, field=relative humidity, result=U
+
+*output, type=monitor, name=monitorh_top
+fieldOutput=h_top, f(x)='mean(x)'
+
+*output, type=monitor, name=monitorh_bottom
+fieldOutput=h_bottom, f(x)='mean(x)'
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=humidity
+
+** 0 ... 28 days: evaporation through the curing compound. A prescribed flux is not limited by the water available:
+** too large a rate dries the surface below h = 0 (use a moisture film where the environment controls the drying).
+*step, solver=theSolver
+startInc=0.005, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=28.0
+>>setfield, name=h0, fieldOutput=humidity, type=uniform, value=1.0
+>>distributedload, name=evaporation, surface=gen_front, type=moisture flux, magnitude=-0.003, f(t)='1'
+
+** 28 ... 365 days: sealed (the flux is set to 0 at once; a load keeps its value from step to step unless redefined),
+** self-desiccation continues
+*step, solver=theSolver
+startInc=0.01, maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=337.0
+>>distributedload, name=evaporation, surface=gen_front, type=moisture flux, magnitude=0.0, f(t)='1'
