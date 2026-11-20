@@ -362,7 +362,7 @@ def test_structural_keyword_printKeywords_block_matches_golden_byte_for_byte(key
     """``renderPrintKeywordsBlock`` over each top-level keyword's real, registered
     class (name + description + schema all from the class) reproduces the corresponding golden
     ``printKeywords()`` block exactly -- proving the class encodes the legacy grammar (spelling in
-    exact display case, descriptions incl. the *nSet* copy-paste bug, types, required/optional-ness,
+    exact display case, descriptions, types, required/optional-ness,
     textwrap-80 wrapping) with zero drift, without touching the running parser at all.
     """
     spec = _structuralKeywordSpec(keywordName)
@@ -818,6 +818,12 @@ _U3B_STEP_ACTION_SPECS = [
         "UpdateDirichletSchema",
     ),
     _StepActionRenderSpec(
+        "edelweissfe.stepactions.dissipationcontrol",
+        "dissipationcontrol",
+        "Dissipation controller for the NISTPArcLength solver.",
+        "DissipationControlSchema",
+    ),
+    _StepActionRenderSpec(
         "edelweissfe.stepactions.distributedload",
         "distributedload",
         "Standard distributed load, applied on a surface set.",
@@ -880,7 +886,7 @@ _U3B_STEP_ACTION_SPECS = [
         "SetInitialConditionsSchema",
     ),
 ]
-assert len(_U3B_STEP_ACTION_SPECS) == 12
+assert len(_U3B_STEP_ACTION_SPECS) == 13
 
 
 #: The number of step types (registry category "step") every step action's keyword is registered
@@ -982,5 +988,5 @@ def test_non_bracket_format_golden_section_is_now_fully_covered():
     coveredByStepActionTest = {spec.modpath for spec in _U3B_STEP_ACTION_SPECS}
     coveredByMeshplotTest = {"edelweissfe.outputmanagers.meshplot"}
     formerlyNonBracketFormat = coveredByStepActionTest | coveredByMeshplotTest
-    assert len(formerlyNonBracketFormat) == 13
+    assert len(formerlyNonBracketFormat) == 14
     assert _NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION == frozenset()
