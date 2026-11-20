@@ -65,8 +65,8 @@ The stable increment is computed once per mesh as the smallest of the elements' 
 (``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum element, two over the square root
 of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) and scaled by
 ``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed
-when it has not: as a material softens the true limit only grows, so reusing it is the conservative
-direction, and re-deriving it costs a full element pass.
+when it has not -- neither for a new numbering of the same mesh: as a material softens the true limit
+only grows, so reusing it is the conservative direction, and re-deriving it costs a full element pass.
 
 **Three cadences, all in increments.** ``output-frequency`` is how often progress is logged and
 field outputs are finalized (a divisor, so it must be at least 1). ``topology-check-frequency`` is
@@ -86,7 +86,8 @@ that can act *only* through its tangent contributes nothing to an explicit incre
 refused at validation rather than silently ignored.
 
 **The lumped mass is the mass of the start of the step.** The lumped operators are assembled once for the numbering,
-at the first increment of every step, from the elements as they are then, and kept until the next numbering. A change of
+at the first increment of every step, from the elements as they are then, and kept until the next numbering (the
+entities that carry their own inertia excepted, see below). A change of
 a material property during the step (:doc:`/analysis/stepactions`, ``changeMaterialProperty``) takes effect on the
 mass at the next step, as it does on the stable time increment.
 
@@ -99,6 +100,58 @@ multi-point-constraint condensation and the vectors of the increments, and the s
 lumped operators are functions of the elements and of the numbering and are kept, the vectors keep their values, and
 only the locations they are wrapped with are new (:meth:`NED.onNewLocations`). The elements the increment evaluates are
 the ones of the discrete system, those that carry kernels.
+
+**Entities that carry their own inertia.** A model may hold, besides finite elements, entities that carry their state,
+and with it their inertia, in themselves, and couple other nodes as they move: the RKPM particles of an EdelweissMeshfree
+model, whose kernel functions move with them
+(:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia`). The nodes of their kernel functions
+carry no total solution: their values are the coefficients of one increment, and no element assembles a mass there.
+The leapfrog is the same, on every node; an increment of such a model has three parts:
+
+1. **advance**: the elements compute their internal force with the solution and the increment, and the entities take
+   the increment on the kernel functions they were assigned at its start
+   (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia`), and move;
+2. **accept and reconnect**: the model accepts the state, assigns the entities to the kernel functions they reach now
+   and says what that changed (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the discrete system
+   follows, through the one build path: new locations if the entities reach other nodes of the same numbering, a new
+   numbering if the nodes of the active domain changed. The internal force of the elements is carried to a new
+   numbering element by element; nothing is evaluated again;
+3. **evaluate**: on the new kernel functions, the entities return their internal force, their lumped mass and their
+   lumped momentum (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,
+   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`), and with the
+   internal force of the elements and the forces of the loads and the constraints, they give the net force. The
+   configuration is accepted, no increment is left: the loads and the constraints are evaluated with a zero
+   increment, so only a constraint that measures its condition at the configuration acts here
+   (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis`).
+
+The mass of the entities is assembled anew in every increment -- it is their mass at the kernel functions as they are at
+their current positions, which change in every increment, whether or not the locations do -- and added to the lumped
+operators at their nodes; the mass of the elements is assembled per numbering. No node is both: a node the elements
+couple carries its total solution and their mass, and an entity that lumps mass to it is refused. A node of the
+entities without a positive mass (their kernel function reaches them only where it vanishes) has no equation of motion:
+it gets no velocity, and its ``P`` is its internal force. The velocity of the nodes is the state the next increment
+starts from, and the model holds it in the entry ``V`` of its node fields, for the nodes of the entities as for those of
+the elements: it is written at acceptance and read back by node whenever the discrete system gets a new numbering, so a
+node keeps its velocity while the active nodes change around it, and a node that has just become active starts at
+rest. With ``project-velocity-every-increment``, the velocity of the nodes of the entities is projected from their
+momentum in every increment instead, :math:`\boldsymbol{v} = \boldsymbol{M}^{-1} \boldsymbol{p}`, which dissipates
+more; it is what the material point method does. The nodes of the elements are never projected.
+
+The entities report no stable time increment: the critical time step covers the elements, and in a model of entities
+alone it is infinite, and the time increment is the step's; the journal says so. The first increment of a step must be
+the zero increment: in it, the entities take an increment of zero length, from which they evaluate the force and the
+mass of the configuration the step starts from. Where the model holds the motion of their nodes
+(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`) -- after a step of this solver, or of
+``NID`` integrating the inertia at the nodes --, the step continues it as at the nodes of elements, from their velocity
+and the net force of their acceleration: the force evaluated in the zero increment would not do, since the entities'
+integration refers to the increment taken last. Otherwise -- at the start of an analysis, with the initial velocity
+given to the particles, after a quasi-static step, or after ``NID`` integrating the inertia in the entities --, the
+force evaluated in the zero increment is taken, and the velocity of their nodes is projected from their momentum. The
+nodes of the elements always start from the model's velocity, which is how a projectile gets its initial velocity.
+The kinetic energy of the balance, and the momentum of the diagnostics, are those of the nodal velocity with the
+lumped mass, on the nodes of the entities as on those of the elements: the state the leapfrog integrates. The
+checkpoint holds the mass of the entities with the net force, and a resumed step finds their connectivity again.
+Model modifiers that act after the start of the analysis are not supported in such a model.
 
 **Energy balance.** Every reporting increment prints the energy the model held at the start of the
 step, kinetic and internal (``E_0``), the external work accumulated at prescribed degrees of freedom
@@ -329,6 +382,17 @@ class NEDSchema:
         default=CONSERVATION_TOLERANCE,
         optionName="lumped-quantity-conservation-tolerance",
     )
+    projectVelocityEveryIncrement: bool = schemaField(
+        description=(
+            "Project the velocity of the nodes of entities that carry their own inertia (the particles of a meshfree "
+            "model) from their lumped momentum in every increment, not only at the start of a step whose model holds "
+            "no motion at these nodes. Projecting dissipates more; it is what the material point method does. The "
+            "nodes of finite elements are never projected."
+        ),
+        dtype=bool,
+        default=False,
+        optionName="project-velocity-every-increment",
+    )
 
 
 class NED(NonlinearSolverBase):
@@ -359,18 +423,21 @@ class NED(NonlinearSolverBase):
         "topology-check-frequency": 0,
         "report-performance": False,
         "lumped-quantity-conservation-tolerance": CONSERVATION_TOLERANCE,
+        "project-velocity-every-increment": False,
         # Lists, so _updateOptions appends the comma-separated items. Empty means "assert nothing".
         "expect-second-order-fields": [],
         "expect-first-order-fields": [],
     }
 
     #: The last completed increment and the net force, both read by the central-difference velocity
-    #: update of the next increment, and the external work, an accumulator that cannot be reconstructed
-    #: from the solution, with the energy at the step start it adds to. The velocity and the acceleration
+    #: update of the next increment, the lumped mass of the entities that carry their own inertia (the particles of a
+    #: meshfree model), which the next increment divides by, and the external work, an accumulator that cannot be
+    #: reconstructed from the solution, with the energy at the step start it adds to. The velocity and the acceleration
     #: are the model's (entries ``V`` and ``A`` of its node fields).
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "_netForce": np.ndarray,
+        "_massOfEntitiesWithOwnInertia": np.ndarray,
         "_numberingOfNetForce": str,
         "_externalWork": float,
         "_energyAtStepStart": float,
@@ -387,7 +454,7 @@ class NED(NonlinearSolverBase):
         self.options = deepcopy(self.SolverSpecificOptions)
         self._updateOptions(kwargs, journal, strict=True)
         #: Fields integrated first order (forward Euler) and second order (central difference) in
-        #: time, and their DOFs; derived in :meth:`_classifyFieldsByScheme`.
+        #: time, derived from the mesh in :meth:`_classifyFieldsByScheme`, and their DOFs in the numbering.
         self.firstOrderFields = []
         self.secondOrderFields = []
         self.ids_1st = None
@@ -400,6 +467,20 @@ class NED(NonlinearSolverBase):
         #: Second-order fields whose inertia is neither a mass nor a rotational inertia; reported
         #: separately and kept out of both balances; see phenomena.inertiaKind.
         self.nonMechanicalSecondOrderFields = []
+        #: The DOFs whose inertia the entities that carry their own inertia lump to them (the nodes of the kernel
+        #: functions of a meshfree model's particles), and no element; empty in a finite element model. Their mass is
+        #: assembled in every increment (see :meth:`_takeLumpedMassOfEntitiesWithOwnInertia`).
+        self.ids_inertiaOfEntities = None
+        #: The lumped mass of the entities that carry their own inertia at the configuration last accepted, a vector of
+        #: the numbering; None before their first evaluation in a discrete system, and in a finite element model.
+        self._massOfEntitiesWithOwnInertia = None
+        #: The version of the model's topology (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`)
+        #: the stable time increment and the classification of the fields are derived for: both are properties of the
+        #: mesh, derived again when it changed, and at the start of every step, not for a new numbering of the same
+        #: mesh. None until the first discrete system of a step.
+        self._versionOfTheMesh = None
+        #: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.
+        self._internalEnergy = 0.0
         #: The operators of the explicit update, arrays of the length of the numbering, assembled by
         #: :meth:`_assembleLumpedOperators` for every new numbering; the elements and the numbering determine them,
         #: not the locations. The inverse lumped mass, zero on multi-point-constraint slave DOFs, which integrate no
@@ -444,7 +525,8 @@ class NED(NonlinearSolverBase):
         #: :meth:`_assembleLumpedOperators`.
         self._inertia = None
         self._damping = None
-        #: The stable time increment of the current mesh, already scaled by the courant number.
+        #: The stable time increment of the current mesh, already scaled by the courant number; infinite if no
+        #: element reports one, i.e. in a model of particles alone.
         self._criticalTimeStep = None
         #: The vectors the increments work on, of the current discrete system, wrapped with its locations. They are the
         #: solution, its increment, the velocity (staggered half an increment behind the solution) and the
@@ -491,6 +573,9 @@ class NED(NonlinearSolverBase):
         self._externalWork = 0.0
         self._energyAtStepStart = 0.0
         self.prevTimeStep = None
+        # The stable time increment and the classification of the fields are derived anew for every step: a change of a
+        # material property takes effect at the next step.
+        self._versionOfTheMesh = None
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
@@ -545,18 +630,32 @@ class NED(NonlinearSolverBase):
             self.updateTopologyAndConnectivity(model, step)
 
         if self.system is None:
-            # The net force of the checkpoint on a resumed step, None on a cold one.
-            resumedNetForce, numberingOfResumedNetForce = self._netForce, self._numberingOfNetForce
+            # The net force and the mass of the entities that carry their own inertia of the checkpoint on a resumed
+            # step, None on a cold one.
+            resumedNetForce, resumedMassOfEntities, numberingOfResumedNetForce = (
+                self._netForce,
+                self._massOfEntitiesWithOwnInertia,
+                self._numberingOfNetForce,
+            )
+            if resumedMassOfEntities is not None:
+                # A model with entities that carry their own inertia: the checkpoint does not hold their connectivity,
+                # which follows from their positions; the resumed step finds it, as every increment does.
+                model.updateConnectivity()
             self.updateDiscreteSystem(model, Change.NONE)
             self.journal.printSeperationLine()
             if resumedNetForce is not None:
                 self.checkNumberingOfRestartedVectors(numberingOfResumedNetForce)
                 self._netForce[:] = resumedNetForce
+                if resumedMassOfEntities is not None:
+                    self._takeLumpedMassOfEntitiesWithOwnInertia(resumedMassOfEntities)
             else:
+                # With entities that carry their own inertia, formed again in the zero increment, once their mass is
+                # evaluated (see _startTheMotionOfEntitiesWithOwnInertia).
                 self.formNetForceOfTheModelsState(step.actions["dirichlet"].values())
                 self._energyAtStepStart = self.energyOfTheModelsState()
-            # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.
-            if step.timeStepper.enforcedTimeIncrement is None:
+            # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own. A model
+            # without elements has none to enforce: its time increment is the step's.
+            if np.isfinite(self._criticalTimeStep) and step.timeStepper.enforcedTimeIncrement is None:
                 step.timeStepper.enforceTimeIncrement(self._criticalTimeStep)
 
         # --- h-adaptivity, mid-run ----------------------------------------------------------------
@@ -662,12 +761,22 @@ class NED(NonlinearSolverBase):
             and timeStep.number % topologyCheckFrequency == 0
         )
 
+        if self.system.entitiesWithOwnInertia and self._massOfEntitiesWithOwnInertia is None and timeStep.timeIncrement:
+            raise ValueError(
+                "The first increment of a step must be the zero increment for {:} in a model with entities that carry "
+                "their own inertia (particles): in it, they evaluate the force and the mass of the configuration the "
+                "step starts from, before anything moves.".format(self.identification)
+            )
+
+        # A model whose entities carry their own inertia is reconnected after every increment (see acceptIncrement),
+        # with every connectivity search of its constraints: the periodic search would only repeat it.
         if (
             self._modelConnectivityChangesWithMotion
             and contactUpdateFrequency
             and timeStep.number > 0
             and timeStep.number % contactUpdateFrequency == 0
             and not topologyCheckDueThisIncrement
+            and not self.system.entitiesWithOwnInertia
         ):
             # Throttled: a node-to-surface search is O(slaves x facets) in Python, which is affordable once per
             # increment of an implicit analysis -- amortised over a Newton loop and a linear solve -- and not tens
@@ -718,7 +827,9 @@ class NED(NonlinearSolverBase):
 
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
         """Commit the increment to the model; see
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement`.
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement`. In a model with
+        entities that carry their own inertia, the model is reconnected, and the net force evaluated on the new
+        connectivity (see :meth:`_acceptReconnectAndEvaluate`).
 
         Parameters
         ----------
@@ -735,14 +846,12 @@ class NED(NonlinearSolverBase):
         if timeStep.timeIncrement > 0.0:
             # The zero increment is not recorded, so the first real increment is the leapfrog's half step.
             self.prevTimeStep = timeStep
-            dirichlets = step.actions["dirichlet"].values()
-            P = self.internalInertialAndDampingForce(dirichlets)
-            A = self.accelerationAtTheEndOfTheIncrement(dirichlets, timeStep.timeIncrement)
-        else:
-            # The zero increment integrates nothing and evaluates no force: the model keeps the force and the
-            # acceleration the last accepted increment published, of this step or of the step before.
-            P = A = None
 
+        if self.system.entitiesWithOwnInertia:
+            self._acceptReconnectAndEvaluate(step, model, timeStep)
+            return
+
+        P, A = self._forceAndAccelerationToPublish(step, timeStep)
         self.writeResultsToModel(U, dU, P, V, A)
 
         self.updateRigidBodies(model, timeStep)
@@ -750,6 +859,197 @@ class NED(NonlinearSolverBase):
         # Timed: a serial Python loop over all elements and constraints, run every increment here.
         with performancetiming.timeit("accept state"):
             model.advanceToTime(timeStep.totalTime)
+
+    def _forceAndAccelerationToPublish(self, step, timeStep: TimeStep) -> tuple[DofVector | None, DofVector | None]:
+        """The force ``P`` and the acceleration ``A`` the model receives for the increment just completed (see
+        :meth:`internalInertialAndDampingForce` and :meth:`accelerationAtTheEndOfTheIncrement`). The zero increment
+        integrates nothing and publishes neither: the model keeps the force and the acceleration the last accepted
+        increment published, of this step or of the step before.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        timeStep
+            The increment.
+
+        Returns
+        -------
+        tuple[DofVector | None, DofVector | None]
+            The force and the acceleration; None for both in the zero increment.
+        """
+
+        if timeStep.timeIncrement == 0.0:
+            return None, None
+
+        dirichlets = step.actions["dirichlet"].values()
+        return self.internalInertialAndDampingForce(dirichlets), self.accelerationAtTheEndOfTheIncrement(
+            dirichlets, timeStep.timeIncrement
+        )
+
+    def _acceptReconnectAndEvaluate(self, step, model: FEModel, timeStep: TimeStep):
+        """Accept an increment of a model with entities that carry their own inertia (see the module documentation,
+        "Entities that carry their own inertia"): the increment, and the velocity it was taken with, reach the model on
+        the connectivity of its start; the model accepts the state and reconnects the entities
+        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the discrete system follows. On the new
+        connectivity, the net force the next increment starts from is evaluated
+        (:meth:`_evaluateTheNetForceOnTheNewConnectivity`), and the force, the velocity and the acceleration reach the
+        model.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        model
+            The model tree.
+        timeStep
+            The increment.
+        """
+
+        self.writeResultsToModel(self._U, self._dU, None, self._V, None)
+
+        self.updateRigidBodies(model, timeStep)
+
+        with performancetiming.timeit("accept state"):
+            model.advanceToTime(timeStep.totalTime)
+
+        numberingOfTheIncrement, internalForceOfTheElements = self.system.numbering, self._internalForce
+        with performancetiming.timeit("reconnect"):
+            change = model.updateConnectivity()
+        self.updateDiscreteSystem(model, change)
+        if self.system.numbering is not numberingOfTheIncrement:
+            # The elements were computed on the numbering of the increment. Their nodes keep their degrees of freedom
+            # in the new one, only with other indices: their force is carried over element by element.
+            for element in self.system.elementsWithNodalInertia:
+                self._internalForce[element] = internalForceOfTheElements[element]
+
+        self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep)
+
+        P, A = self._forceAndAccelerationToPublish(step, timeStep)
+        self.writeResultsToModel(self._U, None, P, self._V, A)
+
+    @performancetiming.timeit("entities with own inertia")
+    def _evaluateTheNetForceOnTheNewConnectivity(self, step, timeStep: TimeStep):
+        """Evaluate, at the configuration just accepted and on the connectivity the entities that carry their own
+        inertia reach now, what the next increment starts from: their internal force, their lumped momentum and their
+        lumped mass (see :meth:`_takeLumpedMassOfEntitiesWithOwnInertia`), and, with the internal force of the elements
+        of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The configuration is
+        accepted: no increment is left, so the loads and the constraints are evaluated with a zero increment, and the
+        nodes of the entities carry no total solution.
+
+        In the zero increment, the motion of the entities starts (:meth:`_startTheMotionOfEntitiesWithOwnInertia`);
+        with ``project-velocity-every-increment``, the velocity of their nodes is projected from their momentum in every
+        increment. A node of theirs without a positive mass has no equation of motion, so it has no velocity: not even
+        the one it carried while it still had a mass, which the update would otherwise keep.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        timeStep
+            The increment just accepted.
+        """
+
+        system = self.system
+        dirichlets = step.actions["dirichlet"].values()
+        self.locateConstrainedDofs(dirichlets)
+
+        internalForceOfEntities, momentum = system.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia(
+            self.forEachChunk
+        )
+        self._takeLumpedMassOfEntitiesWithOwnInertia(
+            system.assembleLumpedMassOfEntitiesWithOwnInertia(self.forEachChunk)
+        )
+
+        self._internalForce += internalForceOfEntities
+        noIncrement = system.locations.constructDofVector()
+        self._netForce = self.assembleNetForce(
+            self._netForce, self._internalForce, self.collectLoads(step.actions), self._U, noIncrement, timeStep
+        )
+
+        ids = self.ids_inertiaOfEntities
+        if timeStep.timeIncrement == 0.0:
+            self._startTheMotionOfEntitiesWithOwnInertia(momentum, dirichlets)
+        elif self.options["project-velocity-every-increment"]:
+            self._V[ids] = momentum[ids] * self._Minv[ids]
+
+        self._V[ids[self._Minv[ids] == 0.0]] = 0.0
+
+        if timeStep.timeIncrement > 0.0 and timeStep.number % self.options["output-frequency"] == 0:
+            self.reportEnergyBalance(self._V, timeStep)
+
+    def _startTheMotionOfEntitiesWithOwnInertia(self, momentum: DofVector, dirichlets):
+        """Start the motion of the entities that carry their own inertia, in the zero increment, once their mass is
+        evaluated (see the module documentation, "Entities that carry their own inertia"). The net force of the
+        model's state (:meth:`formNetForceOfTheModelsState`) is formed again, now with their mass: the nodes of finite
+        elements get the one they got when the discrete system was built. Where the model holds the motion of the
+        entities' nodes (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`), e.g. after a
+        step of this solver, the step continues it from their velocity and acceleration, as at the nodes of finite
+        elements. Otherwise, the force just evaluated is taken, and their velocity is projected from the entities'
+        momentum, :math:`\boldsymbol{v} = \boldsymbol{M}^{-1} \boldsymbol{p}`. The energy at the start of the step
+        follows, with their kinetic energy.
+
+        Parameters
+        ----------
+        momentum
+            The lumped momentum of the entities.
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+        """
+
+        ids = self.ids_inertiaOfEntities
+        evaluatedNetForce = np.array(self._netForce[ids])
+
+        self.formNetForceOfTheModelsState(dirichlets)
+
+        if "nodes" not in self.system.carriersOfTheMotion():
+            self._netForce[ids] = evaluatedNetForce
+            self._V[ids] = momentum[ids] * self._Minv[ids]
+
+        self._energyAtStepStart = self.energyOfTheModelsState()
+
+    def _takeLumpedMassOfEntitiesWithOwnInertia(self, massOfEntities: np.ndarray):
+        """Take the lumped mass of the entities that carry their own inertia into the operators of the explicit update,
+        at their nodes (:attr:`ids_inertiaOfEntities`): the inertia, the lumped mass with and without the fold, which no
+        multi-point constraint touches there, and the inverse the increment divides by, zero where the mass is not
+        positive. Their mass is that of the entities at their current positions, so it is taken in every increment,
+        and from the checkpoint by a resumed step; the operators of the elements are assembled per numbering.
+
+        Parameters
+        ----------
+        massOfEntities
+            The lumped mass of the entities, one value per degree of freedom
+            (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`).
+
+        Raises
+        ------
+        NotImplementedError
+            If an entity lumps mass to a node of a finite element, which carries its total solution and the elements'
+            mass.
+        """
+
+        ids = self.ids_inertiaOfEntities
+        mass = np.asarray(massOfEntities)
+        if np.count_nonzero(mass[ids]) != np.count_nonzero(mass):
+            raise NotImplementedError(
+                "An entity that carries its own inertia lumps its mass to a node of a finite element. {:} integrates "
+                "the nodes of finite elements, which carry their total solution and the elements' mass, apart from the "
+                "nodes of these entities, which carry the coefficients of one increment: a node cannot be both.".format(
+                    self.identification
+                )
+            )
+
+        massAtTheNodes = mass[ids]
+        self._rawLumpedMass[ids] = massAtTheNodes
+        self._lumpedMass[ids] = massAtTheNodes
+        self._inertia[ids] = massAtTheNodes * self._secondOrderMask[ids]
+
+        inverseMass = np.zeros(ids.size)
+        hasInertia = massAtTheNodes > 0.0
+        inverseMass[hasInertia] = 1.0 / massAtTheNodes[hasInertia]
+        self._Minv[ids] = inverseMass
+
+        self._massOfEntitiesWithOwnInertia = massOfEntities
 
     def endStep(self, step, model: FEModel):
         """Leave the model's state at the end time of the step, and report the step's performance timing.
@@ -845,7 +1145,7 @@ class NED(NonlinearSolverBase):
             The kinetic and the internal energy.
         """
 
-        internalEnergy = sum(element.computeInternalEnergy() for element in self.system.elements)
+        internalEnergy = sum(element.computeInternalEnergy() for element in self.system.elementsWithNodalInertia)
 
         return self.kineticEnergy(self._V) + internalEnergy
 
@@ -881,7 +1181,8 @@ class NED(NonlinearSolverBase):
         \\boldsymbol{f}_\\mathrm{net}`, which is the force of the loads and the constraints there. On a degree of
         freedom with a prescribed motion, whose acceleration the next increment's prescribed velocity sets, it is the
         internal force alone. A multi-point-constraint slave has a zero net force (it is folded onto its masters), so
-        it gets its internal force as well.
+        it gets its internal force as well, and so does a node of an entity that carries its own inertia without a
+        positive mass, which has no equation of motion.
 
         Parameters
         ----------
@@ -899,6 +1200,8 @@ class NED(NonlinearSolverBase):
         np.add(internalForce, self._netForce, out=force)
         for dirichlet in dirichlets:
             force[dirichlet.constrainedDofIndices] = internalForce[dirichlet.constrainedDofIndices]
+        withoutInertia = self.ids_inertiaOfEntities[self._Minv[self.ids_inertiaOfEntities] == 0.0]
+        force[withoutInertia] = internalForce[withoutInertia]
 
         return force
 
@@ -916,7 +1219,10 @@ class NED(NonlinearSolverBase):
         timeStep: TimeStep,
         prevTimeStep: TimeStep,
     ) -> tuple[DofVector, DofVector, DofVector]:
-        """Standard explicit update scheme to solve for an increment.
+        """The central-difference update of an increment: the kinematic update, the elements' internal force at the end
+        of it, and the entities that carry their own inertia advanced by it. In a finite element model, the net force
+        of the increment follows here (:meth:`assembleNetForce`); in a model with entities that carry their own
+        inertia, at acceptance, on the connectivity they reach (see :meth:`_acceptReconnectAndEvaluate`).
 
         Parameters
         ----------
@@ -951,14 +1257,16 @@ class NED(NonlinearSolverBase):
                 - the net force of this increment
         """
 
-        elements = self.system.elements
+        elements = self.system.elementsWithNodalInertia
         dirichlets = stepActions["dirichlet"].values()
-        loads = self.collectLoads(stepActions)
 
         # Find which global DOFs the Dirichlet BCs constrain, once up front.
         self.locateConstrainedDofs(dirichlets)
 
         if timeStep.timeIncrement == 0.0:
+            # Nothing moves in the zero increment. An entity that carries its own inertia takes it as an increment of
+            # zero length, from which it evaluates the force of its state at acceptance.
+            self._advanceEntitiesWithOwnInertia(dU, timeStep)
             return U_n, V, netForce
 
         if prevTimeStep is None:
@@ -1025,124 +1333,201 @@ class NED(NonlinearSolverBase):
             for geostatic in stepActions["geostatic"].values():
                 geostatic.applyAtIterationStart()
 
-        # Every element, load and constraint adds its residual contribution; the net force that
-        # accelerates the nodes is the negative of their sum, f_ext - f_int. The elements' sum alone, the
-        # internal force, is kept for the force published at acceptance.
+        # Every element adds its residual contribution, the internal force; it is kept for the force published at
+        # acceptance.
         internalForce[:] = 0.0
-        internalForce, psi = self.computeElements(elements, U_n, dU, internalForce, timeStep)
+        internalForce, self._internalEnergy = self.computeElements(elements, U_n, dU, internalForce, timeStep)
+
+        self._advanceEntitiesWithOwnInertia(dU, timeStep)
+
+        if self.system.entitiesWithOwnInertia:
+            return U_n, V, netForce
+
+        netForce = self.assembleNetForce(netForce, internalForce, self.collectLoads(stepActions), U_n, dU, timeStep)
+
+        if timeStep.number % self.options["output-frequency"] == 0:
+            self.reportEnergyBalance(V, timeStep)
+
+        return U_n, V, netForce
+
+    def assembleNetForce(
+        self,
+        netForce: DofVector,
+        internalForce: DofVector,
+        loads: list,
+        U: DofVector,
+        dU: DofVector,
+        timeStep: TimeStep,
+    ) -> DofVector:
+        """The net force that accelerates the nodes, :math:`\\boldsymbol{f}_\\mathrm{net} = \\boldsymbol{f}_\\mathrm{ext}
+        - \\boldsymbol{f}_\\mathrm{int}`: every element, entity, load and constraint adds its residual contribution,
+        and the net force is the negative of their sum. The forces of the multi-point-constraint slaves are folded onto
+        their masters, so that the next increment's Dirichlet handling sees the folded vector.
+
+        Parameters
+        ----------
+        netForce
+            Overwritten with the net force.
+        internalForce
+            The residual contributions of the elements and of the entities that carry their own inertia.
+        loads
+            The loads, see :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.collectLoads`.
+        U
+            The solution the loads and the constraints are evaluated with.
+        dU
+            The increment they are evaluated with.
+        timeStep
+            The increment.
+
+        Returns
+        -------
+        DofVector
+            The net force.
+        """
+
         netForce[:] = internalForce
-        netForce, _ = self.assembleLoads(loads, U_n, dU, netForce, None, timeStep)
-        netForce = self.assembleConstraintForces(self.system.constraints, U_n, dU, netForce, timeStep)
+        netForce, _ = self.assembleLoads(loads, U, dU, netForce, None, timeStep)
+        netForce = self.assembleConstraintForces(self.system.constraints, U, dU, netForce, timeStep)
         netForce[:] = -netForce[:]
 
-        # Fold slave forces onto their masters here, so the next increment's Dirichlet handling sees
-        # the folded vector.
         if self.mpcTransformation is not None:
             with performancetiming.timeit("mpc force fold"):
                 netForce[:] = self.mpcTransformation.foldExplicitForce(netForce)
 
-        if timeStep.number % self.options["output-frequency"] == 0:
-            Wint = psi
+        return netForce
 
-            Wkin = self.kineticEnergy(V)
+    def reportEnergyBalance(self, V: DofVector, timeStep: TimeStep):
+        """Print the energy balance of a reporting increment (see the module documentation, "Energy balance"), and
+        stop the step if it is no longer finite.
 
-            Wext = self._externalWork
+        Parameters
+        ----------
+        V
+            The velocity.
+        timeStep
+            The increment.
 
-            # What the step can draw on: the energy the model held at its start, and the work done on it since.
-            E0 = self._energyAtStepStart
-            suppliedEnergy = E0 + Wext
+        Raises
+        ------
+        StepFailed
+            If the balance is no longer a finite number: the solution has diverged.
+        """
 
-            # Unpublished strain energy, dissipation and damage; negative means energy is being created.
-            unaccounted = suppliedEnergy - Wkin - Wint
+        Wint = self._internalEnergy
 
-            def _share(value):
-                return "{:7.2f} %".format(value / suppliedEnergy * 100) if suppliedEnergy > 0.0 else "      -- "
+        Wkin = self.kineticEnergy(V)
 
-            energyRows = [
-                ["energy", "value", "share of E_0 + W_ext"],
-                ["at the step start E_0", "{:+.6e}".format(E0), _share(E0)],
-                ["external work W_ext", "{:+.6e}".format(Wext), _share(Wext)],
-                ["kinetic", "{:+.6e}".format(Wkin), _share(Wkin)],
-                ["internal (strain)", "{:+.6e}".format(Wint), _share(Wint)],
-                ["unaccounted", "{:+.6e}".format(unaccounted), _share(unaccounted)],
-            ]
+        Wext = self._externalWork
 
-            # One row per non-mechanical second-order field, kept out of the total: for a hyperbolic
-            # non-local field the inertia is a time squared, so 0.5 * m * rate**2 is a volume.
-            for fieldName in self.nonMechanicalSecondOrderFields:
-                indices = self.system.numbering.idcsOfFieldsInDofVector[fieldName]
-                energyRows.append(
-                    [
-                        fieldName,
-                        "{:+.6e}".format(0.5 * float(np.sum(self._rawLumpedMass[indices] * V[indices] ** 2))),
-                        "not an energy",
-                    ]
-                )
+        # What the step can draw on: the energy the model held at its start, and the work done on it since.
+        E0 = self._energyAtStepStart
+        suppliedEnergy = E0 + Wext
 
-            self.journal.printTable(
-                energyRows,
-                self.identification,
-                2,
+        # Unpublished strain energy, dissipation and damage; negative means energy is being created.
+        unaccounted = suppliedEnergy - Wkin - Wint
+
+        def _share(value):
+            return "{:7.2f} %".format(value / suppliedEnergy * 100) if suppliedEnergy > 0.0 else "      -- "
+
+        energyRows = [
+            ["energy", "value", "share of E_0 + W_ext"],
+            ["at the step start E_0", "{:+.6e}".format(E0), _share(E0)],
+            ["external work W_ext", "{:+.6e}".format(Wext), _share(Wext)],
+            ["kinetic", "{:+.6e}".format(Wkin), _share(Wkin)],
+            ["internal (strain)", "{:+.6e}".format(Wint), _share(Wint)],
+            ["unaccounted", "{:+.6e}".format(unaccounted), _share(unaccounted)],
+        ]
+
+        # One row per non-mechanical second-order field, kept out of the total: for a hyperbolic
+        # non-local field the inertia is a time squared, so 0.5 * m * rate**2 is a volume.
+        for fieldName in self.nonMechanicalSecondOrderFields:
+            indices = self.system.numbering.idcsOfFieldsInDofVector[fieldName]
+            energyRows.append(
+                [
+                    fieldName,
+                    "{:+.6e}".format(0.5 * float(np.sum(self._rawLumpedMass[indices] * V[indices] ** 2))),
+                    "not an energy",
+                ]
             )
 
-            # KE <= E_0 + W_ext holds in the continuum; a violation means the time step is above the true
-            # stability limit. NaN is checked first, since every comparison against NaN is False.
-            if not (np.isfinite(Wext) and np.isfinite(Wkin)):
-                raise StepFailed(
-                    "THE SOLUTION HAS DIVERGED in increment {:}: the energy balance is no longer a "
-                    "finite number (external work {:e}, kinetic {:e}), which means the state itself "
-                    "is not. The time step is above the true stability limit -- and dt_crit does not "
-                    "see all of it: it never sees contact penalty stiffness, and it sees the nonlocal "
-                    "field only where that field carries a non-mechanical inertia, a first-order one "
-                    "having a forward-Euler limit that nothing checks. Resume from a checkpoint with "
-                    "a smaller courant-number.".format(timeStep.number, Wext, Wkin)
-                )
+        self.journal.printTable(
+            energyRows,
+            self.identification,
+            2,
+        )
 
-            # Checked only while the prescribed degrees of freedom do work in this step: the work of the loads is not
-            # accumulated, so a step they drive has no bound to check against, whatever energy it started with.
-            if Wext > 0.0 and Wkin > suppliedEnergy * (1.0 + _ENERGY_CREATION_TOLERANCE):
-                self.journal.message(
-                    "ENERGY IS BEING CREATED: the kinetic energy {:e} exceeds the energy at the start of "
-                    "the step plus the external work, {:e}, by {:.1f} %. That is impossible -- the "
-                    "unreported terms (strain energy, dissipation, damage) can only add to the balance. "
-                    "The time step is above the true stability limit, which dt_crit does not see in "
-                    "full: it ignores the nonlocal field entirely and never sees contact penalty "
-                    "stiffness. Reduce courant-number, or resume from a checkpoint with a smaller "
-                    "one.".format(Wkin, suppliedEnergy, (Wkin / suppliedEnergy - 1.0) * 100),
-                    self.identification,
-                    0,
-                )
+        # KE <= E_0 + W_ext holds in the continuum; a violation means the time step is above the true
+        # stability limit. NaN is checked first, since every comparison against NaN is False.
+        if not (np.isfinite(Wext) and np.isfinite(Wkin)):
+            raise StepFailed(
+                "THE SOLUTION HAS DIVERGED in increment {:}: the energy balance is no longer a "
+                "finite number (external work {:e}, kinetic {:e}), which means the state itself "
+                "is not. The time step is above the true stability limit -- and dt_crit does not "
+                "see all of it: it never sees contact penalty stiffness, and it sees the nonlocal "
+                "field only where that field carries a non-mechanical inertia, a first-order one "
+                "having a forward-Euler limit that nothing checks. Resume from a checkpoint with "
+                "a smaller courant-number.".format(timeStep.number, Wext, Wkin)
+            )
 
-            # Warn once when the energy-creation check cannot fire: external work accumulates only at
-            # prescribed DOFs, so it is zero for models not driven by displacements, and negative for
-            # one returning work at its boundary.
-            if Wext <= 0.0 and not self._warnedAboutMissingExternalWork:
-                self._warnedAboutMissingExternalWork = True
-                self.journal.message(
-                    "The external work is {:}: only work done at prescribed degrees of freedom is "
-                    "accumulated, so this model is either not displacement-driven or is currently "
-                    "returning work at its prescribed degrees of freedom. The energy balance above "
-                    "is NOT usable, and in particular the energy-creation check -- the one that "
-                    "catches the stability contributions dt_crit does not see -- cannot fire. "
-                    "Watch the kinetic energy history directly instead.".format(
-                        "identically zero" if Wext == 0.0 else "negative ({:e})".format(Wext)
-                    ),
-                    self.identification,
-                    1,
-                )
+        # Checked only while the prescribed degrees of freedom do work in this step: the work of the loads is not
+        # accumulated, so a step they drive has no bound to check against, whatever energy it started with.
+        if Wext > 0.0 and Wkin > suppliedEnergy * (1.0 + _ENERGY_CREATION_TOLERANCE):
+            self.journal.message(
+                "ENERGY IS BEING CREATED: the kinetic energy {:e} exceeds the energy at the start of "
+                "the step plus the external work, {:e}, by {:.1f} %. That is impossible -- the "
+                "unreported terms (strain energy, dissipation, damage) can only add to the balance. "
+                "The time step is above the true stability limit, which dt_crit does not see in "
+                "full: it ignores the nonlocal field entirely and never sees contact penalty "
+                "stiffness. Reduce courant-number, or resume from a checkpoint with a smaller "
+                "one.".format(Wkin, suppliedEnergy, (Wkin / suppliedEnergy - 1.0) * 100),
+                self.identification,
+                0,
+            )
 
-            if Wint == 0.0 and not self._warnedAboutMissingInternalEnergy:
-                self._warnedAboutMissingInternalEnergy = True
-                self.journal.message(
-                    "The internal energy is identically zero: no material in this model populates a "
-                    "strain energy, so the internal/kinetic split above is NOT usable as a "
-                    "quasi-static criterion. Integrate a reaction force against its prescribed "
-                    "displacement instead -- both are available as saveHistory field outputs.",
-                    self.identification,
-                    1,
-                )
+        # Warn once when the energy-creation check cannot fire: external work accumulates only at
+        # prescribed DOFs, so it is zero for models not driven by displacements, and negative for
+        # one returning work at its boundary.
+        if Wext <= 0.0 and not self._warnedAboutMissingExternalWork:
+            self._warnedAboutMissingExternalWork = True
+            self.journal.message(
+                "The external work is {:}: only work done at prescribed degrees of freedom is "
+                "accumulated, so this model is either not displacement-driven or is currently "
+                "returning work at its prescribed degrees of freedom. The energy balance above "
+                "is NOT usable, and in particular the energy-creation check -- the one that "
+                "catches the stability contributions dt_crit does not see -- cannot fire. "
+                "Watch the kinetic energy history directly instead.".format(
+                    "identically zero" if Wext == 0.0 else "negative ({:e})".format(Wext)
+                ),
+                self.identification,
+                1,
+            )
 
-        return U_n, V, netForce
+        if Wint == 0.0 and not self._warnedAboutMissingInternalEnergy:
+            self._warnedAboutMissingInternalEnergy = True
+            self.journal.message(
+                "The internal energy is identically zero: no material in this model populates a "
+                "strain energy, so the internal/kinetic split above is NOT usable as a "
+                "quasi-static criterion. Integrate a reaction force against its prescribed "
+                "displacement instead -- both are available as saveHistory field outputs.",
+                self.identification,
+                1,
+            )
+
+    def _advanceEntitiesWithOwnInertia(self, dU: DofVector, timeStep: TimeStep):
+        """Advance the entities that carry their own inertia by the increment, on the connectivity of its start; see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia`.
+
+        Parameters
+        ----------
+        dU
+            The increment.
+        timeStep
+            The increment of time.
+        """
+
+        if self.system.entitiesWithOwnInertia:
+            with performancetiming.timeit("entities with own inertia"):
+                self.system.advanceEntitiesWithOwnInertia(dU, timeStep, self.forEachChunk)
 
     @performancetiming.timeit("elements")
     def computeElements(
@@ -1208,6 +1593,12 @@ class NED(NonlinearSolverBase):
         (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it takes no
         part in the step, and its scalar variables leave the discrete system with it. One that is switched on is
         refused even while it is out of reach: it may come within reach during the step.
+
+        A **constraint that does not act in an explicit analysis**
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis`): in a model with
+        entities that carry their own inertia, the constraints are evaluated at the configuration just accepted, where
+        the nodes of the entities carry neither a solution nor an increment, so a constraint on them that reads these
+        would act as if nothing had moved (see the module documentation, "Entities that carry their own inertia").
 
         Parameters
         ----------
@@ -1284,6 +1675,15 @@ class NED(NonlinearSolverBase):
                     "has no equation of motion for. Only constraints acting through nodal forces "
                     "(penalty formulations) are supported here."
                 )
+            if not constraint.actsInExplicitAnalysis:
+                raise NotImplementedError(
+                    f"Constraint '{constraintName}' ({type(constraint).__name__}) does not act in an explicit "
+                    f"analysis: {self.identification} evaluates the constraints on the nodes of particles at the "
+                    "configuration just accepted, where these nodes carry neither a solution nor an increment, so a "
+                    "constraint that reads them would act as if nothing had moved. A constraint that acts here "
+                    "measures its condition at the particles' current positions, see "
+                    "ConstraintBase.actsInExplicitAnalysis."
+                )
 
     @performancetiming.timeit("write results to nodes")
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector | None, V: DofVector, A: DofVector | None):
@@ -1322,41 +1722,70 @@ class NED(NonlinearSolverBase):
 
     def forgetDiscreteSystem(self) -> None:
         """Drop the discrete system, and everything that belongs to it, before the next one is built: the vectors, the
-        lumped operators and what is derived from them (the classification of the fields by time derivative, the
-        stable time increment); see
+        lumped operators and the indices of the fields by time derivative; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forgetDiscreteSystem`. Everything
         :meth:`onNewNumbering` builds is gone, so that no array of the previous numbering is left to be mistaken for
-        one of the next. The net force, which a resumed step finds from its checkpoint, is dropped as well: whoever
-        needs it takes it before the build (see :meth:`prepareIncrement`)."""
+        one of the next. The net force and the mass of the entities that carry their own inertia, which a resumed step
+        finds from its checkpoint, are dropped as well: whoever needs them takes them before the build (see
+        :meth:`prepareIncrement`). What is derived from the mesh, the stable time increment and the classification of
+        the fields by time derivative, is no array of the numbering: it is derived again when the mesh changed (see
+        :meth:`onNewNumbering`)."""
 
         super().forgetDiscreteSystem()
         self._U = self._dU = self._V = self._A = self._netForce = self._internalForce = None
         self._Minv = self._lumpedMass = self._rawLumpedMass = None
         self._dampingRate = self._halfDampingRate = self._secondOrderMask = None
         self._inertia = self._damping = None
-        self._criticalTimeStep = None
-        self.firstOrderFields, self.secondOrderFields = [], []
-        self.linearMomentumFields, self.nonMechanicalSecondOrderFields = [], []
-        self.ids_1st = self.ids_2nd = self.ids_mechanicalEnergy = None
+        self.ids_1st = self.ids_2nd = self.ids_mechanicalEnergy = self.ids_inertiaOfEntities = None
+        self._massOfEntitiesWithOwnInertia = None
         self._numberingOfNetForce = None
 
     def onNewNumbering(self):
         """Build what is sized by the numbering of the new discrete system: the multi-point-constraint condensation,
-        the lumped operators the increment divides by and the classification of the fields by time derivative that
-        follows from them (see :meth:`_assembleLumpedOperators`), the vectors of the increments (the solution, the
-        velocity and the acceleration read from the model, which holds the state a mesh change interpolated onto its
-        new nodes; the net force and the internal force zero, see the module documentation, "The net force is solver
-        state, and a step starts from the model's state"), and the stable time increment of the new mesh.
+        the degrees of freedom whose inertia the entities that carry their own inertia lump to them, the lumped
+        operators the increment divides by and the classification of the fields by time derivative that follows from
+        them (see :meth:`_assembleLumpedOperators`), the vectors of the increments (the solution, the velocity and the
+        acceleration read from the model, which holds the state a mesh change interpolated onto its new nodes; the net
+        force and the internal force zero, see the module documentation, "The net force is solver state, and a step
+        starts from the model's state"), and the stable time increment of the new mesh.
 
         The lumped operators are functions of the elements and of the numbering: new locations on the same numbering
-        keep them.
+        keep them. What is derived from the mesh -- the stable time increment, an element pass that evaluates the
+        materials, and the classification of the fields -- is derived for the first numbering of a step and for a new
+        mesh, not for a new numbering of the same mesh, e.g. when the particles of a meshfree model reach other nodes.
 
         See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewNumbering`.
+
+        Raises
+        ------
+        NotImplementedError
+            If the discrete system holds entities this solver does not integrate: material points, cells or cell
+            elements of a meshfree model; or entities that carry their own inertia together with model modifiers that
+            act after the start of the analysis.
         """
 
         system = self.system
 
+        integrated = len(system.elementsWithNodalInertia) + len(system.entitiesWithOwnInertia)
+        if system.materialPoints or len(system.elements) != integrated:
+            raise NotImplementedError(
+                "The model has entities that {:} does not integrate: it integrates finite elements and entities that "
+                "carry their own inertia (the particles of a meshfree model), not material points, background cells "
+                "or cell elements.".format(self.identification)
+            )
+        if system.entitiesWithOwnInertia and self._liveTopologyModifiers:
+            raise NotImplementedError(
+                "The model modifier(s) {:} act after the start of the analysis, which {:} does not support in a model "
+                "with entities that carry their own inertia.".format(
+                    ", ".join(sorted(modifier.name for modifier in self._liveTopologyModifiers)), self.identification
+                )
+            )
+
         self.buildAndCheckMPCTransformation()
+
+        self.ids_inertiaOfEntities = np.setdiff1d(
+            self._dofIndicesOfFields(system.numbering.fields), system.dofsWithNodalInertia(system.numbering.fields)
+        )
 
         self._assembleLumpedOperators()
 
@@ -1373,10 +1802,23 @@ class NED(NonlinearSolverBase):
         # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
         system.readStateFromModel(self._U, self._V, self._A)
 
-        self._criticalTimeStep = self.options["courant-number"] * self.getCriticalTimeStepForExplicitDynamics(self._U)
-        self.journal.message(
-            "Critical time step for explicit dynamics: {:e}".format(self._criticalTimeStep), self.identification, 1
-        )
+        if self._versionOfTheMesh != system.model.topology.version:
+            self._criticalTimeStep = self.options["courant-number"] * self.getCriticalTimeStepForExplicitDynamics(
+                self._U
+            )
+            self.journal.message(
+                "Critical time step for explicit dynamics: {:e}".format(self._criticalTimeStep), self.identification, 1
+            )
+            if system.entitiesWithOwnInertia:
+                self.journal.message(
+                    "The critical time step covers the finite elements only: the {:} entities that carry their own "
+                    "inertia report none, so the time increment is not checked for them.".format(
+                        len(system.entitiesWithOwnInertia)
+                    ),
+                    self.identification,
+                    1,
+                )
+            self._versionOfTheMesh = system.model.topology.version
 
     def onNewLocations(self):
         """Wrap the vectors of the increments with the new locations, their values kept: the increments continue from
@@ -1405,7 +1847,12 @@ class NED(NonlinearSolverBase):
         divides by, the lumped mass with and without the fold (the latter for the diagnostics), the damping rate, the
         inertia and the damping of every degree of freedom, and the factors of the velocity update; and the derived
         classification and the field index sets. The mass is that of the start of the step: nothing assembles it again
-        before the next numbering, which every step starts with.
+        before the next numbering, which every step starts with. The classification is a property of the mesh, derived
+        for the first numbering of a step and for a new mesh (see :meth:`onNewNumbering`); the index sets of the fields
+        follow every numbering.
+
+        The degrees of freedom of the entities that carry their own inertia (:attr:`ids_inertiaOfEntities`) get no
+        element mass: theirs is taken in every increment (:meth:`_takeLumpedMassOfEntitiesWithOwnInertia`).
         """
 
         locations = self.system.locations
@@ -1442,27 +1889,28 @@ class NED(NonlinearSolverBase):
             )
 
         # A field with an inertia is second order, one with only a damping first order.
-        self.firstOrderFields, self.secondOrderFields = self._classifyFieldsByScheme(M, damping)
+        if self._versionOfTheMesh != self.system.model.topology.version:
+            self.firstOrderFields, self.secondOrderFields = self._classifyFieldsByScheme(M, damping)
+
+            self.journal.message(
+                "Time integration, derived from the assembled operators: central difference for {:}; "
+                "forward Euler for {:}".format(
+                    ", ".join(self.secondOrderFields) or "(no field)",
+                    ", ".join(self.firstOrderFields) or "(no field)",
+                ),
+                self.identification,
+                1,
+            )
+
+            self._checkDerivedSchemeAgainstTheDeck()
+
+            # Which second-order fields enter the linear momentum and the energy balance is a property of
+            # the field, taken from the registry; see phenomena.inertiaKind.
+            self.linearMomentumFields = [f for f in self.secondOrderFields if carriesLinearMomentum(f)]
+            self.nonMechanicalSecondOrderFields = [f for f in self.secondOrderFields if not carriesKineticEnergy(f)]
 
         self.ids_1st = self._dofIndicesOfFields(self.firstOrderFields)
         self.ids_2nd = self._dofIndicesOfFields(self.secondOrderFields)
-
-        self.journal.message(
-            "Time integration, derived from the assembled operators: central difference for {:}; "
-            "forward Euler for {:}".format(
-                ", ".join(self.secondOrderFields) or "(no field)",
-                ", ".join(self.firstOrderFields) or "(no field)",
-            ),
-            self.identification,
-            1,
-        )
-
-        self._checkDerivedSchemeAgainstTheDeck()
-
-        # Which second-order fields enter the linear momentum and the energy balance is a property of
-        # the field, taken from the registry; see phenomena.inertiaKind.
-        self.linearMomentumFields = [f for f in self.secondOrderFields if carriesLinearMomentum(f)]
-        self.nonMechanicalSecondOrderFields = [f for f in self.secondOrderFields if not carriesKineticEnergy(f)]
         self.ids_mechanicalEnergy = self._dofIndicesOfFields(
             [f for f in self.secondOrderFields if carriesKineticEnergy(f)]
         )
@@ -1475,14 +1923,16 @@ class NED(NonlinearSolverBase):
         # all nodes (including tied slaves) rather than master-placed folded mass.
         self._rawLumpedMass = M.copy()
 
-        # compute inverses
-        if np.any(M == 0.0):
+        # compute inverses; the entities that carry their own inertia give theirs in every increment
+        withoutCoefficient = M == 0.0
+        withoutCoefficient[self.ids_inertiaOfEntities] = False
+        if np.any(withoutCoefficient):
             raise ValueError(
                 "Zero found in the vector the increment divides by, at {:} of {:} degrees of freedom. "
                 "Every FIELD is covered by the classification above, which refuses a field carrying "
                 "neither coefficient, so what is left here are degrees of freedom belonging to no field "
                 "-- scalar variables, which this solver has no equation of motion for.".format(
-                    int(np.count_nonzero(np.asarray(M) == 0.0)), M.shape[0]
+                    int(np.count_nonzero(withoutCoefficient)), M.shape[0]
                 )
             )
 
@@ -1676,6 +2126,10 @@ class NED(NonlinearSolverBase):
         to do by accident, and integrating part of a field as a wave equation and the rest as a
         diffusion one is not a scheme anybody chose. Such a field is refused rather than split.
 
+        Only the degrees of freedom whose inertia the elements assemble decide. Those of the entities that carry their
+        own inertia (:attr:`ids_inertiaOfEntities`) are integrated by central differences without damping: the
+        entities report a mass and nothing else. A field that only these entities carry is therefore second order.
+
         Parameters
         ----------
         inertia
@@ -1700,7 +2154,12 @@ class NED(NonlinearSolverBase):
         firstOrderFields = []
         secondOrderFields = []
 
-        for fieldName, indices in self.system.numbering.idcsOfFieldsInDofVector.items():
+        dofs = np.arange(self.system.numbering.nDof)
+        hasNodalInertia = np.ones(dofs.size, dtype=bool)
+        hasNodalInertia[self.ids_inertiaOfEntities] = False
+
+        for fieldName, indicesOfField in self.system.numbering.idcsOfFieldsInDofVector.items():
+            indices = dofs[indicesOfField][hasNodalInertia[indicesOfField]]
             carriesInertia = np.asarray(inertia[indices]) != 0.0
             carriesDamping = np.asarray(damping[indices]) != 0.0
 

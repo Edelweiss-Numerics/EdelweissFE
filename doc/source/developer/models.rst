@@ -32,6 +32,12 @@ system, the solver takes:
   (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`), and, at the
   start of a step, where the model holds their motion
   (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`);
+* the entities that carry their own inertia and couple other nodes as they move
+  (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia`), which ``NED`` advances by the
+  increment (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia`) and evaluates,
+  after the model has reconnected them, for their internal force and their lumped momentum
+  (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`)
+  and their lumped mass;
 * the state from which the solution vector (and the velocity and the acceleration of a dynamic solver) starts after a
   new numbering (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.readStateFromModel`), and the destination
   of the results of an accepted increment (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.writeResultsToModel`;
@@ -43,11 +49,12 @@ system, the solver takes:
 In every evaluation of the model, i.e., in every Newton iteration and in every trial state of a line search, ``NIST``
 and the solvers derived from it call :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`
 right before they compute the elements (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`).
-``NED`` evaluates the elements of a finite element model itself and does not call it. The loops over the entities
-remain with the solver: ``NIST`` computes the elements one after the other, ``NISTParallel`` on all threads, each
-element into its own part of the residual and its own block of the system matrix (:ref:`system-matrix-assembly`). A
-discrete system that updates material points loops over them through the solver's
-:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`, so that they are evaluated on the same threads.
+``NED`` integrates no material points and does not call it. The loops over the entities remain with the solver:
+``NIST`` computes the elements one after the other, ``NISTParallel`` on all threads, each element into its own part of
+the residual and its own block of the system matrix (:ref:`system-matrix-assembly`). A discrete system that updates
+material points, or advances and evaluates the entities that carry their own inertia, loops over them through the
+solver's :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forEachChunk`, so that they are
+evaluated on the same threads.
 
 At the start of every step, the implicit solvers and ``NEST`` give the entities of the model that integrate their own
 inertia their Newmark parameters (:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`).
@@ -80,8 +87,9 @@ A model of EdelweissMeshfree answers differently, and is solved by the same solv
   the kernel functions are coefficients of one increment, and start at zero in every new discrete system.
 * Before the cells are computed, each cell interpolates the solution increment to its material points, and the
   material points evaluate their material. The cells then integrate the result.
-* ``MeshfreeExplicitDynamic`` updates its discrete system after the particles have moved, on the kernel functions
-  they reach then.
+* Its particles are entities that carry their own inertia. ``NED`` advances them, lets the model reconnect them after
+  every increment, and updates its discrete system on the kernel functions they reach then (see the documentation of
+  :class:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED`, "Entities that carry their own inertia").
 
 ``FEModel`` - A classical finite element model
 ----------------------------------------------

@@ -119,9 +119,10 @@ class DiscreteSystem:
     @property
     def elementsWithNodalInertia(self) -> list:
         """The entities whose inertia, damping and stable time increment a solver assembles element by element, at the
-        nodes (``NID``, ``NED``). In a finite element model, these are the :attr:`elements`; a meshfree model names its
-        finite elements only, since its cells and particles contribute nothing there, and the particles integrate
-        their own inertia (see :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`).
+        nodes (``NID``, ``NED``), and whose forces ``NED`` computes in its pass over the elements. In a finite element
+        model, these are the :attr:`elements`; a meshfree model names its finite elements only, since its cells and
+        particles contribute nothing there, and the particles integrate their own inertia (see
+        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia` and :attr:`entitiesWithOwnInertia`).
 
         Returns
         -------
@@ -260,9 +261,10 @@ class DiscreteSystem:
         state of a solver that integrates in time, go through :meth:`writeVelocityAndAccelerationToModel`.
 
         A solver whose increment ends on another discrete system than it started on writes in two parts, each through
-        the discrete system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the
-        kernel functions the particles reached at its start, and evaluates the force on those they reach at its end.
-        It passes None for the entries the other part writes.
+        the discrete system that holds the values: ``NED``, in a model whose particles reconnect with every increment,
+        takes the increment on the kernel functions the particles reached at its start, and evaluates the force on
+        those they reach at its end (see :meth:`advanceEntitiesWithOwnInertia`). It passes None for the entries the
+        other part writes.
 
         Parameters
         ----------
@@ -411,9 +413,10 @@ class DiscreteSystem:
     def carriersOfTheMotion(self) -> set[str]:
         """Where the model holds the motion of its entities that integrate their own inertia: ``"entities"`` if such
         an entity carries a velocity or an acceleration in its own state, ``"nodes"`` if a node these entities couple
-        carries one in the entries ``V`` and ``A`` of the model's node fields. Asked by the implicit dynamic solver at
-        the start of a step: it takes the motion from one of the two, as its option ``inertia`` says, and nothing
-        transfers it from the other.
+        carries one in the entries ``V`` and ``A`` of the model's node fields. Asked by the dynamic solvers at the start
+        of a step: the implicit dynamic solver takes the motion from one of the two, as its option ``inertia`` says,
+        and nothing transfers it from the other; ``NED`` continues the motion of the nodes if they hold it, and
+        otherwise projects their velocity from the entities' momentum.
 
         A finite element model has no such entity: none.
 
@@ -425,6 +428,75 @@ class DiscreteSystem:
 
         return set()
 
+    @property
+    def entitiesWithOwnInertia(self) -> list:
+        """The entities that carry their state, and with it their inertia, in themselves, and couple other nodes as they
+        move: the explicit dynamic solver ``NED`` advances them by the increment of the nodes they couple
+        (:meth:`advanceEntitiesWithOwnInertia`), the model reconnects them after every increment, and they return their
+        force, their lumped mass and their lumped momentum on the nodes they couple then
+        (:meth:`assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,
+        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`). The nodes they couple carry no total solution: their
+        values are the coefficients of one increment, and no element assembles a mass there (see
+        :meth:`dofsWithNodalInertia`).
+
+        A finite element model has no such entity: none. A meshfree model of EdelweissMeshfree names its particles
+        (RKPM).
+
+        Returns
+        -------
+        list
+            The entities, a list the solver hands out in chunks.
+        """
+
+        return []
+
+    def advanceEntitiesWithOwnInertia(
+        self, dU: DofVector, timeStep: TimeStep, forEachChunk: Callable[[list, Callable], None]
+    ):
+        """Let every entity that carries its own inertia (:attr:`entitiesWithOwnInertia`) take the increment ``dU`` of
+        the nodes it couples, on the connectivity it has at the start of the increment, and move with it. Called by
+        ``NED`` in every increment, after its kinematic update; in the zero increment, which starts a step, with a
+        zero increment, from which the entities evaluate the force of their state. The model accepts the advanced state
+        and reconnects the entities; their force follows on the new connectivity
+        (:meth:`assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`).
+
+        A finite element model has no such entity: nothing to do.
+
+        Parameters
+        ----------
+        dU
+            The increment of the solution.
+        timeStep
+            The increment.
+        forEachChunk
+            The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
+        """
+
+    def assembleInternalForceAndMomentumOfEntitiesWithOwnInertia(
+        self, forEachChunk: Callable[[list, Callable], None]
+    ) -> tuple[DofVector, DofVector] | None:
+        """The internal force of the entities that carry their own inertia (:attr:`entitiesWithOwnInertia`), their
+        residual contribution at the state they accepted, and their lumped momentum, both at the nodes they couple now:
+        what ``NED`` evaluates after every increment, once the model has reconnected them, with their lumped mass
+        (:meth:`assembleLumpedMassOfEntitiesWithOwnInertia`). The momentum is what the velocity of these nodes is
+        projected from where the model does not hold it (see :meth:`carriersOfTheMotion`).
+
+        A finite element model has no such entity: None.
+
+        Parameters
+        ----------
+        forEachChunk
+            The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
+
+        Returns
+        -------
+        tuple[DofVector, DofVector] | None
+            The internal force and the lumped momentum, one value per degree of freedom; None if the model has no such
+            entity.
+        """
+
+        return None
+
     def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep, forEachChunk: Callable[[list, Callable], None]):
         """Bring the material points that belong to no element up to date with the trial solution increment, right
         before the solver computes the elements. Called whenever ``NIST``, or a solver derived from it (``NEST``,
@@ -435,7 +507,7 @@ class DiscreteSystem:
 
         The loops over the entities belong to the solver, as the loop over the elements does: ``forEachChunk(entities,
         work)`` calls ``work(chunk)`` for chunks that together hold all ``entities``, in the calling thread or on the
-        threads of a parallel solver (see :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`). A
+        threads of a parallel solver (see :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forEachChunk`). A
         discrete system loops through it over entities that are independent of each other.
 
         A finite element model has no such material points: every element evaluates the material at its own quadrature

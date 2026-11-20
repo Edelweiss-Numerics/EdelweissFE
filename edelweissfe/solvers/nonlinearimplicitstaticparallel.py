@@ -65,7 +65,7 @@ class NISTParallel(NIST):
     def forEachChunk(self, entities: list, work):
         """Call ``work(chunk)`` for chunks of ``entities`` on the available threads, as the elements are computed (see
         :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`); otherwise as
-        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`."""
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forEachChunk`."""
 
         mapChunksInParallel(entities, work)
 
