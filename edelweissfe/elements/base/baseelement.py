@@ -450,6 +450,39 @@ class BaseElement(BaseNodeCouplingEntity, SystemMatrixContributorBase):
             The internal energy.
         """
 
+    @property
+    def providesEnergyGradients(self) -> bool:
+        """Whether the element writes the gradients of its elastic energy and its dissipation wrt its degrees of freedom
+        in every evaluation of its kernels, see :meth:`assignEnergyGradientOutput`. Elements without this capability
+        return False.
+
+        Returns
+        -------
+        bool
+            True if the element can provide the energy gradients.
+        """
+        return False
+
+    def assignEnergyGradientOutput(self, dElasticEnergy_dQ: np.ndarray | None, dDissipation_dQ: np.ndarray | None):
+        """Assign the arrays to which every evaluation of the kernels writes the gradients of the element's elastic
+        energy and dissipation wrt its degrees of freedom, e.g. for dissipation-based arc length control
+        (:mod:`~edelweissfe.stepactions.dissipationcontrol`).
+
+        Parameters
+        ----------
+        dElasticEnergy_dQ
+            The gradient of the elastic energy, of size ``nDof``; None, together with ``dDissipation_dQ``, stops the
+            output.
+        dDissipation_dQ
+            The gradient of the dissipation, of size ``nDof``.
+
+        Raises
+        ------
+        NotImplementedError
+            If the element cannot provide the gradients (:attr:`providesEnergyGradients` is False).
+        """
+        raise NotImplementedError(f"element {self.elNumber} ({self.elType}) provides no energy gradients")
+
     @abstractmethod
     def computeBodyForce(
         self,

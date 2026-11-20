@@ -17,12 +17,12 @@ from edelweissfe.adaptivity.refinement import AdaptiveMesh
 class AdaptiveMeshBuilder:
     """An :class:`AdaptiveMesh` (``.mesh``) whose roots are added by coordinates."""
 
-    def __init__(self, splitFactor: int = 2):
-        self.mesh = AdaptiveMesh(splitFactor=splitFactor, topology=Hex20Topology())
+    def __init__(self, splitFactor: int = 2, topology=None):
+        self.mesh = AdaptiveMesh(splitFactor=splitFactor, topology=topology or Hex20Topology())
         self._labelOfPoint = {}  # (componentId, coordinates) -> label
 
     def addRoot(self, coords, componentId: int = 0) -> int:
-        """Add a root element from its 20 node coordinates; returns its eid."""
+        """Add a root element from its node coordinates (20 for HEX20, 8 for QUAD8); returns its eid."""
         labels = []
         for x in np.asarray(coords, dtype=float):
             point = (componentId, tuple(float(v) for v in x))

@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       # Installs exactly what conda-lock.yml pins (conda packages, no solving).
       - uses: ./.github/actions/setup-locked-env
@@ -33,14 +33,14 @@ jobs:
           sphinx-build ./doc/source/ ./docs -b html
 
       - name: Upload documentation artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: documentation
           path: ./docs
 
       - name: Deploy
         if: github.ref == 'refs/heads/master'
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN}}
           publish_dir: ./docs

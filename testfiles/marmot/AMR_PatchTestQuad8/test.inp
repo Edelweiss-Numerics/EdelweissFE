@@ -1,0 +1,78 @@
+** Patch test of 2D h-adaptivity: uniform tension on a distorted CPS8R mesh with hanging nodes.
+** The bottom right element, which carries part of the loaded edge, is refined live: at the step start and
+** again after the first increment, two levels deep, so hanging nodes sit on coarse edges of straight but
+** skewed elements, in a chain, and the traction acts on a refined surface. Plane stress, thickness 2: the
+** solution is the linear field u = sigma / E x, v = -nu sigma / E y, which tests/test_hadaptivity_quad8.py
+** checks node by node.
+*material, name=linearelastic, id=mat
+30000, 0.2
+
+*section, name=sec, material=mat, type=plane, thickness=2.0
+all
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=elementSet, elSet=refined
+maxLevel=2
+
+*job, name=amr, domain=2d
+*solver, solver=NIST, name=S
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=U
+
+*step, solver=S
+maxInc=0.5, minInc=0.5, maxNumInc=2, maxIter=5
+>>dirichlet, name=left, nSet=left, field=displacement, 1=0.0
+>>dirichlet, name=origin, nSet=origin, field=displacement, 2=0.0
+>>distributedload, name=tension, surface=rightEdge, type=pressure, magnitude=-30.0
+
+*node
+1, 0, 0
+2, 0.9, 0
+3, 1.15, 0.9
+4, 0, 1
+5, 0.45, 0
+6, 1.025, 0.45
+7, 0.575, 0.95
+8, 0, 0.5
+9, 2.1, 0
+10, 1.9, 1.1
+11, 1.5, 0
+12, 2, 0.55
+13, 1.525, 1
+14, 3, 0
+15, 3, 0.85
+16, 2.55, 0
+17, 3, 0.425
+18, 2.45, 0.975
+19, 1.1, 2
+20, 0, 2
+21, 1.125, 1.45
+22, 0.55, 2
+23, 0, 1.5
+24, 1.85, 2
+25, 1.875, 1.55
+26, 1.475, 2
+27, 3, 2
+28, 3, 1.425
+29, 2.425, 2
+*element, type=CPS8R
+1, 1, 2, 3, 4, 5, 6, 7, 8
+2, 2, 9, 10, 3, 11, 12, 13, 6
+3, 9, 14, 15, 10, 16, 17, 18, 12
+4, 4, 3, 19, 20, 7, 21, 22, 23
+5, 3, 10, 24, 19, 13, 25, 26, 21
+6, 10, 15, 27, 24, 18, 28, 29, 25
+*elSet, elSet=all, generate
+1, 6, 1
+*nSet, nSet=left
+1, 4, 8, 20, 23
+*nSet, nSet=right
+14, 15, 17, 27, 28
+*nSet, nSet=origin
+1
+*elSet, elSet=rightColumn
+3, 6
+*elSet, elSet=refined
+3
+*surface, type=element, name=rightEdge
+rightColumn, 2

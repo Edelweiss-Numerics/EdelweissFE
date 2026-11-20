@@ -354,7 +354,7 @@ _BRACKET_MODULE_SPECS = [
         "modelmodifier",
         "hadaptivity",
         "hadaptivity",
-        "Dynamic hanging-node h-adaptivity model modifier for HEX20 elements.",
+        "Dynamic hanging-node h-adaptivity model modifier for HEX20 and QUAD8 elements.",
     ),
     _BracketModuleSpec(
         "edelweissfe.outputmanagers.computetimemonitor",
@@ -503,6 +503,12 @@ _STEP_ACTION_SPECS = [
         "updateDirichlet",
         "Update a previously defined dirichlet definition.",
         "UpdateDirichletSchema",
+    ),
+    _StepActionModuleSpec(
+        "edelweissfe.stepactions.dissipationcontrol",
+        "dissipationcontrol",
+        "dissipationcontrol",
+        "Dissipation controller for the NISTPArcLength solver.",
     ),
     _StepActionModuleSpec(
         "edelweissfe.stepactions.distributedload",

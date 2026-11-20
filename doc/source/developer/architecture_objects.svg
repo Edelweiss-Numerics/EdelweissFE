@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 836" width="1060" height="836" role="img" aria-label="The objects of a run with the implicit static solver NIST. Nesting shows which object holds which; the fill shows how long an object lives: per job, per step, per numbering, per locations, per increment or per Newton iteration. The driver, finiteElementSimulation, holds the StepManager with the step actions, the current Step with its TimeStepper, the FEModel with nodes, node fields, elements and constraints, the output managers, the journal, and the solver. The solver holds its options (per job), its convergence criterion and its LinearSolver (per step), the multi-point-constraint condensation (per numbering), the SystemMatrixAssembly and the vectors U, dU, P (per locations, the values carried over), and its DiscreteSystem (per locations), which holds the DofLocations (per locations), which hold the DofNumbering (per numbering): the numbering outlives its holders. The LinearSolver holds the DOF layout of the model (per numbering) and its factorization (by default per iteration). The local variables of solveIncrement are R and U_np (per increment) and the condensed matrix K_ and the correction ddU (per iteration). Green: the creator, where it is not the holder: the StepManager creates each Step (generateSteps), the FEModel creates the DiscreteSystem (buildDiscreteSystem), the DiscreteSystem creates its successor (withNewLocations), and the DofLocations create the vectors (constructDofVector).">
+<title>The objects of a run with the implicit static solver NIST. Nesting shows which object holds which; the fill shows how long an object lives: per job, per step, per numbering, per locations, per increment or per Newton iteration. The driver, finiteElementSimulation, holds the StepManager with the step actions, the current Step with its TimeStepper, the FEModel with nodes, node fields, elements and constraints, the output managers, the journal, and the solver. The solver holds its options (per job), its convergence criterion and its LinearSolver (per step), the multi-point-constraint condensation (per numbering), the SystemMatrixAssembly and the vectors U, dU, P (per locations, the values carried over), and its DiscreteSystem (per locations), which holds the DofLocations (per locations), which hold the DofNumbering (per numbering): the numbering outlives its holders. The LinearSolver holds the DOF layout of the model (per numbering) and its factorization (by default per iteration). The local variables of solveIncrement are R and U_np (per increment) and the condensed matrix K_ and the correction ddU (per iteration). Green: the creator, where it is not the holder: the StepManager creates each Step (generateSteps), the FEModel creates the DiscreteSystem (buildDiscreteSystem), the DiscreteSystem creates its successor (withNewLocations), and the DofLocations create the vectors (constructDofVector).</title>
+<defs><marker id="arrow1a7f37" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1a7f37"/></marker><marker id="arrow6e7781" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6e7781"/></marker></defs>
+<rect x="0" y="0" width="1060" height="836" fill="#ffffff"/>
+<text x="10" y="18" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" fill="#1f2328" text-anchor="start">Nesting: who holds whom.   Fill: how long it lives.   Green: who creates it, if not the holder.</text>
+<rect x="10.0" y="33" width="24" height="16" rx="4" fill="#e7eaee" stroke="#6e7781" stroke-width="1.6"/>
+<text x="42.0" y="46" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">per job</text>
+<rect x="183.33333333333334" y="33" width="24" height="16" rx="4" fill="#f6e7c1" stroke="#9a6700" stroke-width="1.6"/>
+<text x="215.33333333333334" y="46" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">per step</text>
+<rect x="356.6666666666667" y="33" width="24" height="16" rx="4" fill="#a8d1fb" stroke="#0969da" stroke-width="1.6"/>
+<text x="388.6666666666667" y="46" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">per numbering</text>
+<rect x="530.0" y="33" width="24" height="16" rx="4" fill="#dbeefe" stroke="#3d8fe0" stroke-width="1.6"/>
+<text x="562.0" y="46" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">per locations</text>
+<rect x="703.3333333333334" y="33" width="24" height="16" rx="4" fill="#fde0d6" stroke="#c4432b" stroke-width="1.6"/>
+<text x="735.3333333333334" y="46" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">per increment</text>
+<rect x="876.6666666666667" y="33" width="24" height="16" rx="4" fill="#ffffff" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="908.6666666666667" y="46" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">per Newton iteration</text>
+<text x="10" y="74" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">Change.NUMBERING and .MESH renew both blues, Change.LOCATIONS the light blue.   Grey monospace: the attribute in the code.</text>
+<rect x="10" y="92" width="1040" height="734" rx="7" fill="#e7eaee" stroke="#6e7781" stroke-width="1.6"/>
+<text x="22" y="113" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="14" font-weight="bold" fill="#1f2328" text-anchor="start">finiteElementSimulation</text>
+<text x="22" y="129" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">the driver</text>
+<rect x="26" y="148" width="270" height="112" rx="7" fill="#e7eaee" stroke="#6e7781" stroke-width="1.6"/>
+<text x="38" y="169" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">StepManager</text>
+<text x="38" y="186" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">stepManager</text>
+<rect x="42" y="198" width="238" height="34" rx="7" fill="#e7eaee" stroke="#6e7781" stroke-width="1.6"/>
+<text x="54" y="218" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">step actions, shared with the solver</text>
+<text x="38" y="250" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#1a7f37" text-anchor="start">generateSteps()</text>
+<rect x="26" y="302" width="270" height="102" rx="7" fill="#f6e7c1" stroke="#9a6700" stroke-width="1.6"/>
+<text x="38" y="323" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">Step</text>
+<text x="38" y="340" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">step</text>
+<rect x="42" y="354" width="238" height="34" rx="7" fill="#f6e7c1" stroke="#9a6700" stroke-width="1.6"/>
+<text x="54" y="376" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">TimeStepper</text>
+<rect x="26" y="430" width="270" height="142" rx="7" fill="#e7eaee" stroke="#6e7781" stroke-width="1.6"/>
+<text x="38" y="451" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">FEModel</text>
+<text x="38" y="468" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">model</text>
+<text x="38" y="484" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">nodes, node fields, elements,</text>
+<text x="38" y="500" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">constraints, and their state;</text>
+<text x="38" y="516" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">refers to the solvers and the</text>
+<text x="38" y="532" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">field output controller</text>
+<text x="38" y="548" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#1a7f37" text-anchor="start">buildDiscreteSystem()</text>
+<rect x="26" y="598" width="270" height="34" rx="7" fill="#e7eaee" stroke="#6e7781" stroke-width="1.6"/>
+<text x="38" y="619" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">output managers</text>
+<rect x="26" y="646" width="270" height="34" rx="7" fill="#e7eaee" stroke="#6e7781" stroke-width="1.6"/>
+<text x="38" y="667" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">journal</text>
+<rect x="372" y="148" width="662" height="662" rx="7" fill="#e7eaee" stroke="#6e7781" stroke-width="2.2"/>
+<text x="384" y="169" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="14" font-weight="bold" fill="#1f2328" text-anchor="start">NIST</text>
+<text x="384" y="186" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">solvers[name]</text>
+<text x="384" y="202" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">the solver; one per *solver line</text>
+<rect x="388" y="218" width="96" height="58" rx="7" fill="#e7eaee" stroke="#6e7781" stroke-width="1.6"/>
+<text x="400" y="239" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">options</text>
+<rect x="498" y="218" width="173.0" height="58" rx="7" fill="#f6e7c1" stroke="#9a6700" stroke-width="1.6"/>
+<text x="510" y="239" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">convergence</text>
+<text x="510" y="256" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">criterion</text>
+<rect x="735.0" y="218" width="283.0" height="58" rx="7" fill="#a8d1fb" stroke="#0969da" stroke-width="1.6"/>
+<text x="747.0" y="239" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">mpcTransformation</text>
+<text x="747.0" y="255" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">the MPC condensation</text>
+<rect x="388" y="302" width="283.0" height="180" rx="7" fill="#f6e7c1" stroke="#9a6700" stroke-width="1.6"/>
+<text x="400" y="323" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">LinearSolver</text>
+<text x="400" y="340" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">self.linSolver</text>
+<rect x="404" y="356" width="251.0" height="50" rx="7" fill="#a8d1fb" stroke="#0969da" stroke-width="1.6"/>
+<text x="416" y="376" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">DOF layout of the model</text>
+<text x="416" y="393" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">setModel()</text>
+<rect x="404" y="416" width="251.0" height="50" rx="7" fill="#ffffff" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="416" y="436" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">factorization: by default</text>
+<text x="416" y="453" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start"></text>
+<text x="416" y="453" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">built in every solve</text>
+<rect x="735.0" y="302" width="283.0" height="80" rx="7" fill="#dbeefe" stroke="#3d8fe0" stroke-width="1.6"/>
+<text x="747.0" y="323" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">SystemMatrixAssembly</text>
+<text x="747.0" y="340" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">self._K</text>
+<text x="747.0" y="356" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">new values in every iteration</text>
+<rect x="735.0" y="408" width="283.0" height="194" rx="7" fill="none" stroke="#8c959f" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="747.0" y="429" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">solveIncrement()</text>
+<text x="747.0" y="446" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">local variables, held by no object</text>
+<rect x="751.0" y="460" width="251.0" height="52" rx="7" fill="#fde0d6" stroke="#c4432b" stroke-width="1.6"/>
+<text x="763.0" y="481" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">R, U_np</text>
+<text x="763.0" y="497" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">residual; U_np = U + dU</text>
+<rect x="751.0" y="524" width="251.0" height="62" rx="7" fill="#ffffff" stroke="#8c959f" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="763.0" y="545" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">K_, ddU</text>
+<text x="763.0" y="561" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">condensed matrix (CSR);</text>
+<text x="763.0" y="577" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">Newton correction</text>
+<rect x="388" y="508" width="283.0" height="286" rx="7" fill="#dbeefe" stroke="#3d8fe0" stroke-width="1.6"/>
+<text x="400" y="529" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">DiscreteSystem</text>
+<text x="400" y="546" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">self.system</text>
+<text x="400" y="564" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#1a7f37" text-anchor="start">withNewLocations()</text>
+<text x="400" y="580" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1a7f37" text-anchor="start">on Change.LOCATIONS, creates the next</text>
+<text x="400" y="596" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1a7f37" text-anchor="start">DiscreteSystem: new DofLocations,</text>
+<text x="400" y="612" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1a7f37" text-anchor="start">the same DofNumbering</text>
+<rect x="404" y="626" width="251.0" height="152" rx="7" fill="#dbeefe" stroke="#3d8fe0" stroke-width="1.6"/>
+<text x="416" y="647" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">DofLocations</text>
+<text x="416" y="664" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">.locations   (LM)</text>
+<text x="416" y="680" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#1a7f37" text-anchor="start">constructDofVector()</text>
+<rect x="420" y="694" width="219.0" height="68" rx="7" fill="#a8d1fb" stroke="#0969da" stroke-width="1.6"/>
+<text x="432" y="715" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">DofNumbering</text>
+<text x="432" y="732" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">.numbering   (ID)</text>
+<text x="432" y="748" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">outlives its holders</text>
+<rect x="735.0" y="637" width="283.0" height="80" rx="7" fill="#dbeefe" stroke="#3d8fe0" stroke-width="1.6"/>
+<text x="747.0" y="658" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="13" font-weight="bold" fill="#1f2328" text-anchor="start">U, dU, P</text>
+<text x="747.0" y="675" xml:space="preserve" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="11.5" font-weight="normal" fill="#57606a" text-anchor="start">self._U, self._dU, self._P</text>
+<text x="747.0" y="691" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="normal" fill="#1f2328" text-anchor="start">values carried over</text>
+<path d="M96,256 V300" fill="none" stroke="#1a7f37" stroke-width="2.2" marker-end="url(#arrow1a7f37)"/>
+<path d="M206,544 H386" fill="none" stroke="#1a7f37" stroke-width="2.2" marker-end="url(#arrow1a7f37)"/>
+<path d="M570,677 H733.0" fill="none" stroke="#1a7f37" stroke-width="2.2" marker-end="url(#arrow1a7f37)"/>
+</svg>

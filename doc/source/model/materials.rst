@@ -6,64 +6,26 @@ Relevant module: ``edelweissfe.config.materiallibrary``
 Materials are defined in EdelweissFE using the ``*material`` or ``*advancedmaterial`` keyword.
 Arguments for the ``*material`` keyword are
 
-.. list-table:: ``*material`` : definition of a material
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
-
-    * - Option
-      - Type
-      - Description
-    * - ``id``
-      - ``string``
-      - A unique ID, which is used for referencing the material in EdelweissFE.
-    * - ``name``
-      - ``string``
-      - The name of of the material.
-    * - ``datalines``
-      - ``numpy float array``
-      - The material properties as a float vector, multiline possible.
-    * - ``provider``
-      - ``string``
-      - (optional) The material provider.
+.. pprint:: keyword:material
 
 The material properties for materials using the ``*material`` keyword are assigned as seen here:
 
 .. code-block:: edelweiss
     :caption: Use different non-advanced materials. Example:
 
-    *material, name=neohookeplastic, id=Mat1, provider=edelweissmaterial
+    *material, name=neohookeplastic, id=Mat1, provider=edelweiss
     1, 91304.34783, 100000., 260, 70, 320, 9
 
 Arguments for the ``*advancedmaterial`` keyword are
 
-.. list-table:: ``*advancedmaterial`` : definition of a material
-    :width: 100%
-    :widths: 25 25 40
-    :header-rows: 1
-
-    * - Option
-      - Type
-      - Description
-    * - ``id``
-      - ``string``
-      - A unique ID, which is used for referencing the material in EdelweissFE.
-    * - ``name``
-      - ``string``
-      - The name of of the material.
-    * - ``datalines``
-      - ``string``
-      - The material properties as a vector of strings, multiline possible.
-    * - ``provider``
-      - ``string``
-      - (optional) The material provider.
+.. pprint:: keyword:advancedmaterial
 
 The material properties for materials using the ``*advancedmaterial`` keyword are assigned as seen here:
 
 .. code-block:: edelweiss
     :caption: Use different advanced materials. Example:
 
-    *advancedmaterial, name=hyperplasticadvanced, id=hyperplasticadvanced, provider=edelweissmaterial
+    *advancedmaterial, name=hyperplasticadvanced, id=hyperplasticadvanced, provider=edelweiss
     psi_e='mu/2 * (I1/J**(2/3) - 3) + K/8 * (J**2 + 1/J**2 - 2)'
     mu=91304.34783, K=100000., fy0=260, HLin=70, dfy=320, delta=9
     a='2,3,4'
@@ -74,6 +36,22 @@ Provider ``marmotmaterial``
 ---------------------------
 
 Relevant module: `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_.
+
+The material is created by the Marmot element itself, from the material name and the properties; it is therefore only
+used with Marmot elements (element provider ``marmot``).
+
+Provider ``marmothypoelastic``
+------------------------------
+
+Relevant module: ``edelweissfe.materials.marmot.marmothypoelastic``
+
+A hypoelastic Marmot material (e.g. ``LinearElastic``), named as Marmot registers it, used by an EdelweissFE element,
+e.g. the displacement elements of the provider ``edelweiss``. Requires EdelweissFE to be built with Marmot.
+
+.. code-block:: edelweiss
+
+    *material, name=LinearElastic, id=myMaterial, provider=marmothypoelastic
+    1.8e4, 0.22
 
 .. _provider_edelweiss_materials:
 
@@ -123,6 +101,7 @@ This material needs the following material properties in the correct order
 
 #. **E**       - Elasticity module (Young's modulus).
 #. :math:`\mathbf{\nu}`       - Poisson's ratio.
+#. :math:`\rho`      - (Optional) Density, needed for dynamic analyses.
 
 For the 2D plane strain and 3D material the following law in voigt notation is used
 
@@ -168,6 +147,7 @@ This material needs the following material properties in the correct order
 #. :math:`\mathbf{H_{lin}}`      - Linear plastic hardening parameter.
 #. :math:`\mathbf{\Delta f_y}`   - Multiplicator for nonlinear isotropic hardening.
 #. :math:`\mathbf{\delta}`       - Exponent for nonlinear isotropic hardening.
+#. :math:`\rho`      - (Optional) Density, needed for dynamic analyses.
 
 The law used for nonlinear isotropic hardening in this material is :math:`f_y(\kappa)=f_{y0}+H_{lin}\kappa+\Delta f_{y} e^{-\delta\kappa}`
 with :math:`\kappa` as the hardening parameter.
@@ -197,6 +177,7 @@ This material needs the following parameters as input data in the correct order:
 #. **formulation** - Selects the energy density function: 1 for :math:`W_a`, 2 for :math:`W_b`, 3 for :math:`W_c` (see below).
 #. :math:`\mu`       - Shear modulus.
 #. :math:`\kappa`    - Bulk modulus.
+#. :math:`\rho`      - (Optional) Density, needed for dynamic analyses.
 
 This material bases on a energy density function :math:`W(I_1, J)`, where :math:`I_1=\text{trace}(\mathbf{b})` is the first
 and :math:`J=\det(\mathbf{F})` is the second invariant of the left Cauchy-Green tensor :math:`\mathbf{b}=\mathbf{FF}^\text{T}`
@@ -271,13 +252,14 @@ These materials need the following parameters as input data using keywords:
 #. ``K``        - Bulk modulus.
 #. ``psi_e``    - Energy density function.
 #. ``a``        - (Optional) your own parameters in ``psi_e`` (assignment with commas and quotation mark: ``a = '1.,2.,3'``).
+#. ``density``  - (Optional) Density, needed for dynamic analyses.
 
 The right Cauchy-Green tensor is defined as :math:`\mathbf{C}=\mathbf{F}^\text{T}\mathbf{F}`. These materials use the Kirchhoff stress and its corresponding tangent modulus.
 
 **Hyperelastic advanced material**
 
 This material class allows the user to input their own energy density function, as seen for the Neo-Hookean materials in the last section.
-This can be achieved by using the extra input parameter W='f(C)' in the input file. This material needs :math:`\kappa` and :math:`\mu` as input data.
+This can be achieved by giving the energy density function as the parameter ``psi_e`` in the input file. This material needs :math:`\kappa` and :math:`\mu` as input data.
 The energy density function must be a function of the form
 
 .. math::
@@ -298,7 +280,7 @@ parameter in the function in the input file.
 
 This material class allows the user to input their own energy density function. Compared to the ``HyperelasticAdvancedMaterial``, this material allows
 the second invariant :math:`I_2` and :math:`\mathbf{C}` itself to be used in the energy density function.
-This can be achieved by using the extra input parameter W='f(C)' in the input file. This material needs :math:`\kappa` and :math:`\mu` as input data.
+This can be achieved by giving the energy density function as the parameter ``psi_e`` in the input file. This material needs :math:`\kappa` and :math:`\mu` as input data.
 The energy density function must be a function of the form
 
 .. math::
@@ -331,6 +313,7 @@ This material needs the following material properties in the correct order:
 #. :math:`\mathbf{H_{lin}}`      - Linear plastic hardening parameter.
 #. :math:`\mathbf{\Delta f_y}`   - Multiplicator for nonlinear isotropic hardening.
 #. :math:`\mathbf{\delta}`       - Exponent for nonlinear isotropic hardening.
+#. :math:`\rho`      - (Optional) Density, needed for dynamic analyses.
 
 These three material formulations solve for the residual:
 
@@ -348,7 +331,7 @@ Advanced hyperelastic-plastic material
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This material class allows the user to input their own energy density function.
-This can be achieved by using the extra input parameter W='f(C)' in the input file. This material needs the following material properties in the correct order
+This can be achieved by giving the energy density function as the parameter ``psi_e`` in the input file. This material needs the following material properties in the correct order
 The algorithm from the section :ref:`Elastic-plastic Neo-Hookean W(I1, J) Pence-Gou [a] materials` is used.
 For this material, only the elastic part is differentiated by using automatic differentiation, the plastic part still uses analytical derivatives.
 This material needs the following parameters as input data using keywords:
