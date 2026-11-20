@@ -64,7 +64,8 @@ and deleting those lines is the whole of the migration.
 The stable increment is computed once per mesh as the smallest of the elements' own bounds
 (``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum element, two over the square root
 of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) and scaled by
-``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed
+``courant-number``; it is enforced where it is below the largest increment the step allows, and a step that asks for
+smaller increments keeps them. It is recomputed whenever the mesh changes and deliberately *not* recomputed
 when it has not -- neither for a new numbering of the same mesh: as a material softens the true limit
 only grows, so reusing it is the conservative direction, and re-deriving it costs a full element pass.
 
@@ -102,8 +103,8 @@ only the locations they are wrapped with are new (:meth:`NED.onNewLocations`). T
 the ones of the discrete system, those that carry kernels.
 
 **Entities that carry their own inertia.** A model may hold, besides finite elements, entities that carry their state,
-and with it their inertia, in themselves, and couple other nodes as they move: the RKPM particles of an EdelweissMeshfree
-model, whose kernel functions move with them
+and with it their inertia, in themselves, and couple other nodes as they move: the RKPM particles of an
+EdelweissMeshfree model, whose kernel functions move with them
 (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia`). The nodes of their kernel functions
 carry no total solution: their values are the coefficients of one increment, and no element assembles a mass there.
 The leapfrog is the same, on every node; an increment of such a model has three parts:
@@ -116,20 +117,27 @@ The leapfrog is the same, on every node; an increment of such a model has three 
    follows, through the one build path: new locations if the entities reach other nodes of the same numbering, a new
    numbering if the nodes of the active domain changed. The internal force of the elements is carried to a new
    numbering element by element; nothing is evaluated again;
-3. **evaluate**: on the new kernel functions, the entities return their internal force, their lumped mass and their
-   lumped momentum (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,
-   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`), and with the
+3. **evaluate**: on the new kernel functions, the entities return their internal force, their lumped inertia and
+   damping, their lumped momentum and their critical time step
+   (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,
+   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`,
+   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedDampingOfEntitiesWithOwnInertia`,
+   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`), and with the
    internal force of the elements and the forces of the loads and the constraints, they give the net force. The
    configuration is accepted, no increment is left: the loads and the constraints are evaluated with a zero
    increment, so only a constraint that measures its condition at the configuration acts here
    (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis`).
 
-The mass of the entities is assembled anew in every increment -- it is their mass at the kernel functions as they are at
-their current positions, which change in every increment, whether or not the locations do -- and added to the lumped
-operators at their nodes; the mass of the elements is assembled per numbering. No node is both: a node the elements
-couple carries its total solution and their mass, and an entity that lumps mass to it is refused. A node of the
-entities without a positive mass (their kernel function reaches them only where it vanishes) has no equation of motion:
-it gets no velocity, and its ``P`` is its internal force. The velocity of the nodes is the state the next increment
+The inertia and the damping of the entities are assembled anew in every increment -- they are theirs at the kernel
+functions as they are at their current positions, which change in every increment, whether or not the locations do --
+and enter the lumped operators at their nodes; those of the elements are assembled per numbering. The scheme of a
+field follows from both, as for the elements: a field with an inertia is integrated by central differences, damped by
+its damping, one with a damping alone by forward Euler -- e.g. a nonlocal field of gradient-enhanced particles, with or
+without a micro-inertia --, also in a model of particles alone, whose fields are classified in the first evaluation of
+a step. No node is both: a node the elements couple carries its total solution and their operators, and an entity that
+lumps an inertia or a damping to it is refused. A node of the entities without a coefficient (their kernel function
+reaches them only where it vanishes) has no equation of motion: it gets no velocity, and its ``P`` is its internal
+force. The velocity of the nodes is the state the next increment
 starts from, and the model holds it in the entry ``V`` of its node fields, for the nodes of the entities as for those of
 the elements: it is written at acceptance and read back by node whenever the discrete system gets a new numbering, so a
 node keeps its velocity while the active nodes change around it, and a node that has just become active starts at
@@ -137,10 +145,13 @@ rest. With ``project-velocity-every-increment``, the velocity of the nodes of th
 momentum in every increment instead, :math:`\boldsymbol{v} = \boldsymbol{M}^{-1} \boldsymbol{p}`, which dissipates
 more; it is what the material point method does. The nodes of the elements are never projected.
 
-The entities report no stable time increment: the critical time step covers the elements, and in a model of entities
-alone it is infinite, and the time increment is the step's; the journal says so. The first increment of a step must be
-the zero increment: in it, the entities take an increment of zero length, from which they evaluate the force and the
-mass of the configuration the step starts from. Where the model holds the motion of their nodes
+The critical time step is the smaller of the elements' (of the mesh) and the bound of the stable time increment of the
+entities' assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever
+their connectivity changes, and every ``stable-increment-frequency`` increments, and lowers the time increment whenever
+it falls below it. The first
+increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they
+evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.
+Where the model holds the motion of their nodes
 (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`) -- after a step of this solver, or of
 ``NID`` integrating the inertia at the nodes --, the step continues it as at the nodes of elements, from their velocity
 and the net force of their acceleration: the force evaluated in the zero increment would not do, since the entities'
@@ -150,7 +161,8 @@ force evaluated in the zero increment is taken, and the velocity of their nodes 
 nodes of the elements always start from the model's velocity, which is how a projectile gets its initial velocity.
 The kinetic energy of the balance, and the momentum of the diagnostics, are those of the nodal velocity with the
 lumped mass, on the nodes of the entities as on those of the elements: the state the leapfrog integrates. The
-checkpoint holds the mass of the entities with the net force, and a resumed step finds their connectivity again.
+checkpoint holds the inertia and the damping of the entities with the net force, and a resumed step finds their
+connectivity again.
 Model modifiers that act after the start of the analysis are not supported in such a model.
 
 **Energy balance.** Every reporting increment prints the energy the model held at the start of the
@@ -393,6 +405,17 @@ class NEDSchema:
         default=False,
         optionName="project-velocity-every-increment",
     )
+    stableIncrementFrequency: int | None = schemaField(
+        description=(
+            "The increment interval at which the stable time increment of the entities that carry their own inertia "
+            "(the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero "
+            "increment and every increment that changes their connectivity. 1 bounds it in every increment; 0 never, "
+            "so that the increments of the step are taken unchecked for the entities."
+        ),
+        dtype=int,
+        default=100,
+        optionName="stable-increment-frequency",
+    )
 
 
 class NED(NonlinearSolverBase):
@@ -424,20 +447,22 @@ class NED(NonlinearSolverBase):
         "report-performance": False,
         "lumped-quantity-conservation-tolerance": CONSERVATION_TOLERANCE,
         "project-velocity-every-increment": False,
+        "stable-increment-frequency": 100,
         # Lists, so _updateOptions appends the comma-separated items. Empty means "assert nothing".
         "expect-second-order-fields": [],
         "expect-first-order-fields": [],
     }
 
     #: The last completed increment and the net force, both read by the central-difference velocity
-    #: update of the next increment, the lumped mass of the entities that carry their own inertia (the particles of a
-    #: meshfree model), which the next increment divides by, and the external work, an accumulator that cannot be
-    #: reconstructed from the solution, with the energy at the step start it adds to. The velocity and the acceleration
-    #: are the model's (entries ``V`` and ``A`` of its node fields).
+    #: update of the next increment, the lumped inertia and damping of the entities that carry their own inertia (the
+    #: particles of a meshfree model), which the next increment divides by, and the external work, an accumulator that
+    #: cannot be reconstructed from the solution, with the energy at the step start it adds to. The velocity and the
+    #: acceleration are the model's (entries ``V`` and ``A`` of its node fields).
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "_netForce": np.ndarray,
-        "_massOfEntitiesWithOwnInertia": np.ndarray,
+        "_inertiaOfEntities": np.ndarray,
+        "_dampingOfEntities": np.ndarray,
         "_numberingOfNetForce": str,
         "_externalWork": float,
         "_energyAtStepStart": float,
@@ -468,17 +493,29 @@ class NED(NonlinearSolverBase):
         #: separately and kept out of both balances; see phenomena.inertiaKind.
         self.nonMechanicalSecondOrderFields = []
         #: The DOFs whose inertia the entities that carry their own inertia lump to them (the nodes of the kernel
-        #: functions of a meshfree model's particles), and no element; empty in a finite element model. Their mass is
-        #: assembled in every increment (see :meth:`_takeLumpedMassOfEntitiesWithOwnInertia`).
+        #: functions of a meshfree model's particles), and no element; empty in a finite element model. Their inertia
+        #: and damping are assembled in every increment (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`).
         self.ids_inertiaOfEntities = None
-        #: The lumped mass of the entities that carry their own inertia at the configuration last accepted, a vector of
-        #: the numbering; None before their first evaluation in a discrete system, and in a finite element model.
-        self._massOfEntitiesWithOwnInertia = None
-        #: The version of the model's topology (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`)
-        #: the stable time increment and the classification of the fields are derived for: both are properties of the
-        #: mesh, derived again when it changed, and at the start of every step, not for a new numbering of the same
-        #: mesh. None until the first discrete system of a step.
-        self._versionOfTheMesh = None
+        #: The lumped inertia and damping of the elements, unfolded, vectors of the numbering, assembled for every
+        #: numbering (see :meth:`_assembleLumpedOperators`).
+        self._inertiaOfTheElements = None
+        self._dampingOfTheElements = None
+        #: The lumped inertia and damping of the entities that carry their own inertia at the configuration last
+        #: accepted, vectors of the numbering; None before their first evaluation in a discrete system, and in a finite
+        #: element model.
+        self._inertiaOfEntities = None
+        self._dampingOfEntities = None
+        #: The versions of the model's topology
+        #: (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`) the classification of the fields and
+        #: the critical time step of the elements are derived for: both are properties of the mesh, derived again when
+        #: it changed, and at the start of every step, not for a new numbering of the same mesh. None until they are
+        #: first derived in a step.
+        self._meshOfTheClassification = None
+        self._meshOfTheCriticalTimeStep = None
+        #: The critical time steps of the elements (of the mesh) and of the entities that carry their own inertia (of
+        #: their configuration last accepted, in every increment), unscaled; infinite where there is none.
+        self._criticalTimeStepOfTheElements = np.inf
+        self._stableTimeIncrementOfEntities = np.inf
         #: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.
         self._internalEnergy = 0.0
         #: The operators of the explicit update, arrays of the length of the numbering, assembled by
@@ -525,8 +562,8 @@ class NED(NonlinearSolverBase):
         #: :meth:`_assembleLumpedOperators`.
         self._inertia = None
         self._damping = None
-        #: The stable time increment of the current mesh, already scaled by the courant number; infinite if no
-        #: element reports one, i.e. in a model of particles alone.
+        #: The stable time increment, the smaller of the elements' and the entities', scaled by the courant number;
+        #: infinite if neither reports one.
         self._criticalTimeStep = None
         #: The vectors the increments work on, of the current discrete system, wrapped with its locations. They are the
         #: solution, its increment, the velocity (staggered half an increment behind the solution) and the
@@ -575,7 +612,8 @@ class NED(NonlinearSolverBase):
         self.prevTimeStep = None
         # The stable time increment and the classification of the fields are derived anew for every step: a change of a
         # material property takes effect at the next step.
-        self._versionOfTheMesh = None
+        self._meshOfTheClassification = self._meshOfTheCriticalTimeStep = None
+        self._stableTimeIncrementOfEntities = np.inf
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
@@ -630,14 +668,15 @@ class NED(NonlinearSolverBase):
             self.updateTopologyAndConnectivity(model, step)
 
         if self.system is None:
-            # The net force and the mass of the entities that carry their own inertia of the checkpoint on a resumed
-            # step, None on a cold one.
-            resumedNetForce, resumedMassOfEntities, numberingOfResumedNetForce = (
+            # The net force, and the inertia and the damping of the entities that carry their own inertia, of the
+            # checkpoint on a resumed step, None on a cold one.
+            resumedNetForce, resumedInertiaOfEntities, resumedDampingOfEntities, numberingOfResumedNetForce = (
                 self._netForce,
-                self._massOfEntitiesWithOwnInertia,
+                self._inertiaOfEntities,
+                self._dampingOfEntities,
                 self._numberingOfNetForce,
             )
-            if resumedMassOfEntities is not None:
+            if resumedInertiaOfEntities is not None:
                 # A model with entities that carry their own inertia: the checkpoint does not hold their connectivity,
                 # which follows from their positions; the resumed step finds it, as every increment does.
                 model.updateConnectivity()
@@ -646,17 +685,18 @@ class NED(NonlinearSolverBase):
             if resumedNetForce is not None:
                 self.checkNumberingOfRestartedVectors(numberingOfResumedNetForce)
                 self._netForce[:] = resumedNetForce
-                if resumedMassOfEntities is not None:
-                    self._takeLumpedMassOfEntitiesWithOwnInertia(resumedMassOfEntities)
-            else:
-                # With entities that carry their own inertia, formed again in the zero increment, once their mass is
-                # evaluated (see _startTheMotionOfEntitiesWithOwnInertia).
+                if resumedInertiaOfEntities is not None:
+                    self._takeLumpedOperatorsOfEntitiesWithOwnInertia(
+                        resumedInertiaOfEntities, resumedDampingOfEntities
+                    )
+            elif not self.system.entitiesWithOwnInertia:
+                # With entities that carry their own inertia, formed in the zero increment, once their inertia and
+                # damping are evaluated (see _startTheMotionOfEntitiesWithOwnInertia).
                 self.formNetForceOfTheModelsState(step.actions["dirichlet"].values())
                 self._energyAtStepStart = self.energyOfTheModelsState()
-            # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own. A model
-            # without elements has none to enforce: its time increment is the step's.
-            if np.isfinite(self._criticalTimeStep) and step.timeStepper.enforcedTimeIncrement is None:
-                step.timeStepper.enforceTimeIncrement(self._criticalTimeStep)
+            # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.
+            if step.timeStepper.enforcedTimeIncrement is None:
+                self._enforceTheCriticalTimeStep(step, "The critical time step")
 
         # --- h-adaptivity, mid-run ----------------------------------------------------------------
         # After every topology-check-frequency-th increment, i.e. after its output: the marker reads the
@@ -683,15 +723,7 @@ class NED(NonlinearSolverBase):
         if change == Change.MESH:
             self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, self._V, model)
 
-            # Lower only: refinement tightens the limit; a raised limit is not taken up mid-step.
-            if self._criticalTimeStep < step.timeStepper.enforcedTimeIncrement:
-                self.journal.message(
-                    "Refinement lowered the stable time increment from {:e} to "
-                    "{:e}".format(step.timeStepper.enforcedTimeIncrement, self._criticalTimeStep),
-                    self.identification,
-                    1,
-                )
-                step.timeStepper.enforceTimeIncrement(self._criticalTimeStep)
+            self._enforceTheCriticalTimeStep(step, "Refinement")
 
     def isOutputIncrement(self, timeStep: TimeStep) -> bool:
         """Only every ``output-frequency``-th increment: an explicit run has millions.
@@ -761,7 +793,7 @@ class NED(NonlinearSolverBase):
             and timeStep.number % topologyCheckFrequency == 0
         )
 
-        if self.system.entitiesWithOwnInertia and self._massOfEntitiesWithOwnInertia is None and timeStep.timeIncrement:
+        if self.system.entitiesWithOwnInertia and self._inertiaOfEntities is None and timeStep.timeIncrement:
             raise ValueError(
                 "The first increment of a step must be the zero increment for {:} in a model with entities that carry "
                 "their own inertia (particles): in it, they evaluate the force and the mass of the configuration the "
@@ -923,17 +955,18 @@ class NED(NonlinearSolverBase):
             for element in self.system.elementsWithNodalInertia:
                 self._internalForce[element] = internalForceOfTheElements[element]
 
-        self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep)
+        self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep, change)
 
         P, A = self._forceAndAccelerationToPublish(step, timeStep)
         self.writeResultsToModel(self._U, None, P, self._V, A)
 
     @performancetiming.timeit("entities with own inertia")
-    def _evaluateTheNetForceOnTheNewConnectivity(self, step, timeStep: TimeStep):
+    def _evaluateTheNetForceOnTheNewConnectivity(self, step, timeStep: TimeStep, change: Change):
         """Evaluate, at the configuration just accepted and on the connectivity the entities that carry their own
         inertia reach now, what the next increment starts from: their internal force, their lumped momentum and their
-        lumped mass (see :meth:`_takeLumpedMassOfEntitiesWithOwnInertia`), and, with the internal force of the elements
-        of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The configuration is
+        lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), the bound of their
+        stable time increment when it is due (:meth:`_stableTimeIncrementIsDue`), and, with the internal force of the
+        elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The configuration is
         accepted: no increment is left, so the loads and the constraints are evaluated with a zero increment, and the
         nodes of the entities carry no total solution.
 
@@ -948,6 +981,8 @@ class NED(NonlinearSolverBase):
             The step being solved.
         timeStep
             The increment just accepted.
+        change
+            What the reconnection after it changed.
         """
 
         system = self.system
@@ -957,9 +992,16 @@ class NED(NonlinearSolverBase):
         internalForceOfEntities, momentum = system.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia(
             self.forEachChunk
         )
-        self._takeLumpedMassOfEntitiesWithOwnInertia(
-            system.assembleLumpedMassOfEntitiesWithOwnInertia(self.forEachChunk)
+        self._takeLumpedOperatorsOfEntitiesWithOwnInertia(
+            system.assembleLumpedMassOfEntitiesWithOwnInertia(self.forEachChunk),
+            system.assembleLumpedDampingOfEntitiesWithOwnInertia(self.forEachChunk),
         )
+        if self._stableTimeIncrementIsDue(timeStep, change):
+            with performancetiming.timeit("stable time increment of entities"):
+                self._stableTimeIncrementOfEntities = system.stableTimeIncrementOfEntitiesWithOwnInertia(
+                    self.forEachChunk
+                )
+            self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia")
 
         self._internalForce += internalForceOfEntities
         noIncrement = system.locations.constructDofVector()
@@ -1008,48 +1050,99 @@ class NED(NonlinearSolverBase):
 
         self._energyAtStepStart = self.energyOfTheModelsState()
 
-    def _takeLumpedMassOfEntitiesWithOwnInertia(self, massOfEntities: np.ndarray):
-        """Take the lumped mass of the entities that carry their own inertia into the operators of the explicit update,
-        at their nodes (:attr:`ids_inertiaOfEntities`): the inertia, the lumped mass with and without the fold, which no
-        multi-point constraint touches there, and the inverse the increment divides by, zero where the mass is not
-        positive. Their mass is that of the entities at their current positions, so it is taken in every increment,
-        and from the checkpoint by a resumed step; the operators of the elements are assembled per numbering.
+    def _takeLumpedOperatorsOfEntitiesWithOwnInertia(
+        self, inertiaOfEntities: np.ndarray, dampingOfEntities: np.ndarray
+    ):
+        """Take the lumped inertia and the lumped damping of the entities that carry their own inertia at their nodes
+        (:attr:`ids_inertiaOfEntities`), and derive the operators of the explicit update with them
+        (:meth:`_deriveLumpedOperators`); in the first evaluation of a step, this classifies the fields, those only the
+        entities carry included. They are those of the entities at their current positions, so they are taken in every
+        increment, and from the checkpoint by a resumed step; the elements' are assembled per numbering.
 
         Parameters
         ----------
-        massOfEntities
-            The lumped mass of the entities, one value per degree of freedom
+        inertiaOfEntities
+            The lumped inertia of the entities, one value per degree of freedom
             (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`).
+        dampingOfEntities
+            Their lumped damping, likewise
+            (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedDampingOfEntitiesWithOwnInertia`).
 
         Raises
         ------
         NotImplementedError
-            If an entity lumps mass to a node of a finite element, which carries its total solution and the elements'
-            mass.
+            If an entity lumps an inertia or a damping to a node of a finite element, which carries its total solution
+            and the elements' operators.
         """
 
         ids = self.ids_inertiaOfEntities
-        mass = np.asarray(massOfEntities)
-        if np.count_nonzero(mass[ids]) != np.count_nonzero(mass):
-            raise NotImplementedError(
-                "An entity that carries its own inertia lumps its mass to a node of a finite element. {:} integrates "
-                "the nodes of finite elements, which carry their total solution and the elements' mass, apart from the "
-                "nodes of these entities, which carry the coefficients of one increment: a node cannot be both.".format(
-                    self.identification
+        for operator in (np.asarray(inertiaOfEntities), np.asarray(dampingOfEntities)):
+            if np.count_nonzero(operator[ids]) != np.count_nonzero(operator):
+                raise NotImplementedError(
+                    "An entity that carries its own inertia lumps its inertia or damping to a node of a finite "
+                    "element. {:} integrates the nodes of finite elements, which carry their total solution and the "
+                    "elements' operators, apart from the nodes of these entities, which carry the coefficients of one "
+                    "increment: a node cannot be both.".format(self.identification)
                 )
-            )
 
-        massAtTheNodes = mass[ids]
-        self._rawLumpedMass[ids] = massAtTheNodes
-        self._lumpedMass[ids] = massAtTheNodes
-        self._inertia[ids] = massAtTheNodes * self._secondOrderMask[ids]
+        self._inertiaOfEntities = inertiaOfEntities
+        self._dampingOfEntities = dampingOfEntities
+        self._deriveLumpedOperators()
 
-        inverseMass = np.zeros(ids.size)
-        hasInertia = massAtTheNodes > 0.0
-        inverseMass[hasInertia] = 1.0 / massAtTheNodes[hasInertia]
-        self._Minv[ids] = inverseMass
+    def _stableTimeIncrementIsDue(self, timeStep: TimeStep, change: Change) -> bool:
+        """Whether the stable time increment of the entities that carry their own inertia is bounded anew after this
+        increment, unless ``stable-increment-frequency`` is 0: in the zero increment; whenever the connectivity of the
+        entities changed, since a node their kernel functions reach only at the edge of a support carries a small mass
+        and may lower the bound a lot; and after every ``stable-increment-frequency``-th increment, for the gradual
+        change of the entities' size and stiffness in between, which the courant number covers.
 
-        self._massOfEntitiesWithOwnInertia = massOfEntities
+        Parameters
+        ----------
+        timeStep
+            The increment just accepted.
+        change
+            What the reconnection after it changed.
+
+        Returns
+        -------
+        bool
+            True if it is due.
+        """
+
+        frequency = self.options["stable-increment-frequency"]
+        if not frequency:
+            return False
+        return timeStep.timeIncrement == 0.0 or change > Change.NONE or timeStep.number % frequency == 0
+
+    def _enforceTheCriticalTimeStep(self, step, cause: str):
+        """Make the time increment of the step the critical time step, the smaller of the elements' and the entities'
+        scaled by the courant number, if it is below the increment the step takes now: the one enforced before, or
+        else the largest the step allows. A step that asks for smaller increments keeps them, and the increment is
+        lowered only, never raised within a step.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        cause
+            What changed the critical time step, for the journal.
+        """
+
+        self._criticalTimeStep = self.options["courant-number"] * min(
+            self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
+        )
+        enforced = step.timeStepper.enforcedTimeIncrement
+        current = enforced if enforced is not None else step.maxIncrementSize * step.length
+        if self._criticalTimeStep < current:
+            if enforced is not None:
+                self.journal.message(
+                    "{:} lowered the stable time increment from {:e} to {:e}".format(
+                        cause, enforced, self._criticalTimeStep
+                    ),
+                    self.identification,
+                    1 if cause == "Refinement" else 2,
+                )
+            step.timeStepper.enforceTimeIncrement(self._criticalTimeStep)
 
     def endStep(self, step, model: FEModel):
         """Leave the model's state at the end time of the step, and report the step's performance timing.
@@ -1359,9 +1452,10 @@ class NED(NonlinearSolverBase):
         dU: DofVector,
         timeStep: TimeStep,
     ) -> DofVector:
-        """The net force that accelerates the nodes, :math:`\\boldsymbol{f}_\\mathrm{net} = \\boldsymbol{f}_\\mathrm{ext}
-        - \\boldsymbol{f}_\\mathrm{int}`: every element, entity, load and constraint adds its residual contribution,
-        and the net force is the negative of their sum. The forces of the multi-point-constraint slaves are folded onto
+        """The net force that accelerates the nodes,
+        :math:`\\boldsymbol{f}_\\mathrm{net} = \\boldsymbol{f}_\\mathrm{ext} - \\boldsymbol{f}_\\mathrm{int}`: every
+        element, entity, load and constraint adds its residual contribution, and the net force is the negative of their
+        sum. The forces of the multi-point-constraint slaves are folded onto
         their masters, so that the next increment's Dirichlet handling sees the folded vector.
 
         Parameters
@@ -1737,7 +1831,8 @@ class NED(NonlinearSolverBase):
         self._dampingRate = self._halfDampingRate = self._secondOrderMask = None
         self._inertia = self._damping = None
         self.ids_1st = self.ids_2nd = self.ids_mechanicalEnergy = self.ids_inertiaOfEntities = None
-        self._massOfEntitiesWithOwnInertia = None
+        self._inertiaOfTheElements = self._dampingOfTheElements = None
+        self._inertiaOfEntities = self._dampingOfEntities = None
         self._numberingOfNetForce = None
 
     def onNewNumbering(self):
@@ -1802,23 +1897,19 @@ class NED(NonlinearSolverBase):
         # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
         system.readStateFromModel(self._U, self._V, self._A)
 
-        if self._versionOfTheMesh != system.model.topology.version:
-            self._criticalTimeStep = self.options["courant-number"] * self.getCriticalTimeStepForExplicitDynamics(
-                self._U
+        if self._meshOfTheCriticalTimeStep != system.model.topology.version:
+            self._criticalTimeStepOfTheElements = self.getCriticalTimeStepForExplicitDynamics(self._U)
+            self._criticalTimeStep = self.options["courant-number"] * min(
+                self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
             )
             self.journal.message(
-                "Critical time step for explicit dynamics: {:e}".format(self._criticalTimeStep), self.identification, 1
+                "Critical time step of the elements for explicit dynamics: {:e}".format(
+                    self.options["courant-number"] * self._criticalTimeStepOfTheElements
+                ),
+                self.identification,
+                1,
             )
-            if system.entitiesWithOwnInertia:
-                self.journal.message(
-                    "The critical time step covers the finite elements only: the {:} entities that carry their own "
-                    "inertia report none, so the time increment is not checked for them.".format(
-                        len(system.entitiesWithOwnInertia)
-                    ),
-                    self.identification,
-                    1,
-                )
-            self._versionOfTheMesh = system.model.topology.version
+            self._meshOfTheCriticalTimeStep = system.model.topology.version
 
     def onNewLocations(self):
         """Wrap the vectors of the increments with the new locations, their values kept: the increments continue from
@@ -1838,21 +1929,15 @@ class NED(NonlinearSolverBase):
         self._internalForce = self._internalForce.onLocations(locations)
 
     def _assembleLumpedOperators(self):
-        """Assemble everything the explicit update divides by, and everything derived from it, for the new numbering.
+        """Assemble the lumped inertia and the lumped damping of the elements for the new numbering, and, in a model
+        without entities that carry their own inertia, everything the explicit update divides by
+        (:meth:`_deriveLumpedOperators`). The mass is that of the start of the step: nothing assembles it again before
+        the next numbering, which every step starts with.
 
-        The lumped inertia and the lumped damping are summed from the elements, checked, and used
-        to decide which time derivative each field carries; the multi-point-constraint
-        transformation (:attr:`mpcTransformation`) folds the slave degrees of freedom's mass onto their masters.
-        This leaves on the solver, as arrays of the length of the numbering, the inverse lumped mass the increment
-        divides by, the lumped mass with and without the fold (the latter for the diagnostics), the damping rate, the
-        inertia and the damping of every degree of freedom, and the factors of the velocity update; and the derived
-        classification and the field index sets. The mass is that of the start of the step: nothing assembles it again
-        before the next numbering, which every step starts with. The classification is a property of the mesh, derived
-        for the first numbering of a step and for a new mesh (see :meth:`onNewNumbering`); the index sets of the fields
-        follow every numbering.
-
-        The degrees of freedom of the entities that carry their own inertia (:attr:`ids_inertiaOfEntities`) get no
-        element mass: theirs is taken in every increment (:meth:`_takeLumpedMassOfEntitiesWithOwnInertia`).
+        In a model with entities that carry their own inertia, the operators are derived whenever their inertia and
+        damping are taken, in every increment (:meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`); the elements'
+        part is the one of this numbering. The degrees of freedom of the entities (:attr:`ids_inertiaOfEntities`) get
+        no element inertia or damping.
         """
 
         locations = self.system.locations
@@ -1888,8 +1973,34 @@ class NED(NonlinearSolverBase):
                 )
             )
 
+        self._inertiaOfTheElements = M
+        self._dampingOfTheElements = damping
+
+        if not self.system.entitiesWithOwnInertia:
+            self._deriveLumpedOperators()
+
+    def _deriveLumpedOperators(self):
+        """Derive everything the explicit update divides by from the lumped inertia and damping of the elements and of
+        the entities that carry their own inertia: the classification of the fields by time derivative, a property of
+        the mesh derived for the first numbering of a step and for a new mesh (see :meth:`onNewNumbering`), with the
+        entities' operators once they are known; the index sets of the fields; and, as arrays of the length of the
+        numbering, the inverse lumped mass the increment divides by, the lumped mass with and without the
+        multi-point-constraint fold (:attr:`mpcTransformation`; the unfolded one for the diagnostics), the damping
+        rate, the inertia and the damping of every degree of freedom, and the factors of the velocity update.
+        """
+
+        nDof = self.system.numbering.nDof
+        ids = self.ids_inertiaOfEntities
+
+        M = self._inertiaOfTheElements.copy()
+        damping = self._dampingOfTheElements.copy()
+        if self._inertiaOfEntities is not None:
+            M[ids] = self._inertiaOfEntities[ids]
+            damping[ids] = self._dampingOfEntities[ids]
+
         # A field with an inertia is second order, one with only a damping first order.
-        if self._versionOfTheMesh != self.system.model.topology.version:
+        if self._meshOfTheClassification != self.system.model.topology.version:
+            self._meshOfTheClassification = self.system.model.topology.version
             self.firstOrderFields, self.secondOrderFields = self._classifyFieldsByScheme(M, damping)
 
             self.journal.message(
@@ -2154,12 +2265,15 @@ class NED(NonlinearSolverBase):
         firstOrderFields = []
         secondOrderFields = []
 
+        # The DOFs of the elements decide, and those of the entities that carry their own inertia where these give a
+        # coefficient: a node their kernel functions reach only where they vanish has none, and no equation of motion.
         dofs = np.arange(self.system.numbering.nDof)
-        hasNodalInertia = np.ones(dofs.size, dtype=bool)
-        hasNodalInertia[self.ids_inertiaOfEntities] = False
+        decides = np.ones(dofs.size, dtype=bool)
+        ids = self.ids_inertiaOfEntities
+        decides[ids] = (np.asarray(inertia)[ids] != 0.0) | (np.asarray(damping)[ids] != 0.0)
 
         for fieldName, indicesOfField in self.system.numbering.idcsOfFieldsInDofVector.items():
-            indices = dofs[indicesOfField][hasNodalInertia[indicesOfField]]
+            indices = dofs[indicesOfField][decides[indicesOfField]]
             carriesInertia = np.asarray(inertia[indices]) != 0.0
             carriesDamping = np.asarray(damping[indices]) != 0.0
 

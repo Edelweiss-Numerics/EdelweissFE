@@ -396,7 +396,8 @@ def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built()
     solver._Minv = solver._lumpedMass = solver._rawLumpedMass = np.ones(3)
     solver._dampingRate = solver._halfDampingRate = solver._secondOrderMask = np.ones(3)
     solver._inertia = solver._damping = np.ones(3)
-    solver._massOfEntitiesWithOwnInertia = np.ones(3)
+    solver._inertiaOfTheElements = solver._dampingOfTheElements = np.ones(3)
+    solver._inertiaOfEntities = solver._dampingOfEntities = np.ones(3)
     solver._criticalTimeStep = 1.0
     solver.firstOrderFields, solver.secondOrderFields = ["pressure"], ["displacement"]
     solver.linearMomentumFields, solver.nonMechanicalSecondOrderFields = ["displacement"], ["pressure"]
@@ -417,7 +418,10 @@ def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built()
             solver._secondOrderMask,
             solver._inertia,
             solver._damping,
-            solver._massOfEntitiesWithOwnInertia,
+            solver._inertiaOfTheElements,
+            solver._dampingOfTheElements,
+            solver._inertiaOfEntities,
+            solver._dampingOfEntities,
             solver.ids_1st,
             solver.ids_2nd,
             solver.ids_mechanicalEnergy,
