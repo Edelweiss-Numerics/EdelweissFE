@@ -37,6 +37,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfThreads,
+    mapChunksInParallel,
     reportThreadAvailability,
 )
 from edelweissfe.solvers.base.parallelelementcomputation import (
@@ -52,6 +53,13 @@ class NEDParallel(NED):
     def beginStep(self, step, model, fieldOutputController, outputmanagers):
         reportThreadAvailability(getNumberOfThreads(), self.journal, self.identification)
         return super().beginStep(step, model, fieldOutputController, outputmanagers)
+
+    def forEachChunk(self, entities: list, work):
+        """Call ``work(chunk)`` for chunks of ``entities`` on the available threads, as the elements are computed (see
+        :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`); otherwise as
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forEachChunk`."""
+
+        mapChunksInParallel(entities, work)
 
     @performancetiming.timeit("elements")
     def computeElements(

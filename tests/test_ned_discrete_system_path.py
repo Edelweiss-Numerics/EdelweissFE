@@ -388,17 +388,19 @@ def test_a_refinement_of_the_mesh_builds_a_new_numbering_with_a_zero_net_force_a
 
 def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built():
     """What a new numbering builds is sized by it: none of it is left standing, as an array of the old numbering, until
-    the next build."""
+    the next build. What is derived from the mesh -- the stable time increment and the classification of the fields --
+    is no array of the numbering, and stays: a new numbering of the same mesh does not derive it again."""
 
     solver = NED(loadConfiguration({}), Journal(verbose=False))
     solver.system = object()
     solver._Minv = solver._lumpedMass = solver._rawLumpedMass = np.ones(3)
     solver._dampingRate = solver._halfDampingRate = solver._secondOrderMask = np.ones(3)
     solver._inertia = solver._damping = np.ones(3)
+    solver._massOfEntitiesWithOwnInertia = np.ones(3)
     solver._criticalTimeStep = 1.0
     solver.firstOrderFields, solver.secondOrderFields = ["pressure"], ["displacement"]
     solver.linearMomentumFields, solver.nonMechanicalSecondOrderFields = ["displacement"], ["pressure"]
-    solver.ids_1st = solver.ids_2nd = solver.ids_mechanicalEnergy = np.arange(3)
+    solver.ids_1st = solver.ids_2nd = solver.ids_mechanicalEnergy = solver.ids_inertiaOfEntities = np.arange(3)
     solver.mpcTransformation = object()
 
     solver.forgetDiscreteSystem()
@@ -415,18 +417,16 @@ def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built()
             solver._secondOrderMask,
             solver._inertia,
             solver._damping,
-            solver._criticalTimeStep,
+            solver._massOfEntitiesWithOwnInertia,
             solver.ids_1st,
             solver.ids_2nd,
             solver.ids_mechanicalEnergy,
+            solver.ids_inertiaOfEntities,
         )
     )
-    assert not (
-        solver.firstOrderFields
-        or solver.secondOrderFields
-        or solver.linearMomentumFields
-        or solver.nonMechanicalSecondOrderFields
-    )
+    assert solver._criticalTimeStep == 1.0
+    assert solver.firstOrderFields == ["pressure"] and solver.secondOrderFields == ["displacement"]
+    assert solver.linearMomentumFields == ["displacement"] and solver.nonMechanicalSecondOrderFields == ["pressure"]
 
 
 def _writeCheckpointAndResume(tmp_path, monkeypatch, tamper=None):

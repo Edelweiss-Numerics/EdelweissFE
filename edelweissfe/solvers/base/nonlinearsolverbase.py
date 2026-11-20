@@ -28,6 +28,7 @@
 
 import dataclasses
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 import numpy as np
 from numpy import ndarray
@@ -417,6 +418,25 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         return P, K
 
     @performancetiming.timeit("assemble constraints")
+    def forEachChunk(self, entities: list, work: Callable[[list], None]):
+        """Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent
+        entities, other than the elements, that the model's discrete system evaluates, e.g. the material points of a
+        material point model (see :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`), or
+        the particles of an RKPM model, which ``NED`` advances and evaluates (see
+        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia`). Here, one chunk of all
+        entities, in the calling thread, as the elements are computed; a parallel solver hands the chunks out to its
+        threads.
+
+        Parameters
+        ----------
+        entities
+            The entities, a list.
+        work
+            Called for each chunk; it must write only to what belongs to the entities of its chunk.
+        """
+
+        work(entities)
+
     def assembleConstraintForces(
         self,
         constraints: list,
