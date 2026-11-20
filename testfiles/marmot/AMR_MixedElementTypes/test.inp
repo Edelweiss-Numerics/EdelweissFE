@@ -1,3 +1,8 @@
+** requires: marmot-module AT2PhaseField
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** h-adaptivity on a multi-material mesh with two element families: a GC3D20R (AT2 phase field)
 ** element tied conformingly to a C3D20R (linear elastic) element. Uniform initial refinement must
 ** give each child its own parent's element type -- a C3D20R child refined as GC3D20R cannot take a

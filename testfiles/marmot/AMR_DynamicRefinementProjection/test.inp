@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Dynamic h-adaptivity exercising the PER-STATE-VARIABLE transfer device: one named state variable
 ** is routed to a different transfer strategy while all others are copied from the nearest parent
 ** quadrature point. This is a MECHANISM test -- the variable named below is arbitrary (chosen only

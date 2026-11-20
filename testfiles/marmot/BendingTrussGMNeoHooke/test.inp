@@ -1,3 +1,5 @@
+** requires: marmot-module BOKU-private
+
 ** *include, input=mesh_quad.inp
 ** *include, input=mesh_quad_fine.inp
 *include, input=mesh_lin.inp

@@ -1,3 +1,6 @@
+** requires: marmot-module B4
+** requires: marmot-module DisplacementFiniteElement
+
 *modelGenerator, generator=planeRectQuad, name=gen
 l=100
 h=200

@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** AMR + tie-constraint integration test, shear variant: two C3D20 blocks with a NON-CONFORMING
 ** interface mesh (fixed block: 2x2 in-plane at the tie face; shear block: 3x3 in-plane at the tie
 ** face), tied together via DOF-elimination tie (adjust=False, real 0.05 gap -- flush geometry

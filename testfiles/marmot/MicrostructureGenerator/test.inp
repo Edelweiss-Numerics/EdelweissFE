@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 *modelGenerator, generator=microstructuregenerator, name=gen
 unitCellMeshFile=mesh_quadratic.inp,
 nX=2,

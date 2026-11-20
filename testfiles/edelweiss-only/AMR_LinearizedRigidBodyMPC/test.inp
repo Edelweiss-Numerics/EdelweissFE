@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** AMR + linearizedRigidBodyMPC: a C3D20 block, its front face a rigid body driven by a reference
 ** point (displacement and rotation). The elements at the front face are refined, which adds nodes to
 ** the rigid node set; the constraint rebuilds its records from the grown set, so the new nodes are

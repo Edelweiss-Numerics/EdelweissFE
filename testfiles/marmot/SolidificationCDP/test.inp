@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module DisplacementFiniteElement
+
 *material, name=solidificationcdp, id=cdp
 ** nu
 0.15

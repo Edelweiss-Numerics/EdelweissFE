@@ -1,3 +1,5 @@
+** requires: extension edelweissfe.linsolve.amgcl.amgcl
+
 ** Regression test for the blockamg field-split block-AMG linear solver, on a single-field 2D
 ** linear-elastic cantilever (610 displacement dofs). Exercises the solver end-to-end through the
 ** Newton loop: diagonal scaling, per-field AMGCL hierarchy with the rigid-body translations as near

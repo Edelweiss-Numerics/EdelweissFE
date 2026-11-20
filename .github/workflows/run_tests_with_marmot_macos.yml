@@ -62,5 +62,5 @@ jobs:
       - name: Run tests
         shell: bash -leo pipefail {0}
         run: |
-          run_tests_edelweissfe ./testfiles/marmot/
-          run_tests_edelweissfe ./testfiles/edelweiss-only/
+          run_tests_edelweissfe ./testfiles/marmot/ --expected-skips .github/expected-skips/run_tests_with_marmot_macos.txt
+          run_tests_edelweissfe ./testfiles/edelweiss-only/ --expected-skips .github/expected-skips/run_tests_with_marmot_macos.txt

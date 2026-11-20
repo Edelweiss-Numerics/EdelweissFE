@@ -72,7 +72,7 @@ maxInc=0.5, minInc=1e-5, maxNumInc=10, maxIter=25
 # 1. Generate reference solution:
 run_tests_edelweissfe ./testfiles/edelweiss-only/ --tests <TestName> --create
 
-# 2. Verify test passes (< 1e-6 residual):
+# 2. Verify test passes (largest difference below 1e-6 times the largest magnitude of U.ref):
 run_tests_edelweissfe ./testfiles/edelweiss-only/ --tests <TestName>
 
 # 3. Run full regression suite:

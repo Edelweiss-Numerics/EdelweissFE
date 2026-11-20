@@ -1,3 +1,5 @@
+** requires: extension edelweissfe.linsolve.amgcl.amgcl
+
 ** Regression test for the corner-node two-level cycle with a composed coarse solve (see solver.py): a slender 3D linear-elastic
 ** cantilever of quadratic hexahedra (C3D20, 3663 displacement dofs), preconditioned by
 ** TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())))): the corner-node

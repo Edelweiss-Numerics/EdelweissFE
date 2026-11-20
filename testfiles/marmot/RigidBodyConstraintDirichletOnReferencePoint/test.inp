@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Regression test for the rigid body constraint with a Dirichlet BC on the reference point.
 **
 ** One linear-elastic C3D20R element. The x=0 face is fully fixed. The x=1 face is tied by a

@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module LinearElastic
+
 *material, name=linearelastic, id=linearelastic
 30000.0, 0.4
 

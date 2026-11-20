@@ -1,3 +1,5 @@
+** requires: extension edelweissfe.linsolve.amgcl.amgcl
+
 ** Regression test for the rigid-body coarse level of the blockamg linear solver (rigidBodyModesPerAggregate), on a
 ** slender 3D linear-elastic cantilever of quadratic hexahedra (C3D20, 3663 displacement dofs): a bending-dominated
 ** structure, whose slowly converging error rotates every aggregate of nodes almost as a rigid body. Exercises the

@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 *job, name=job, domain=3d
 
 *solver, solver=NISTPArcLength, name=NISTPArcLen

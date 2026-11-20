@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** A step that ENDS BETWEEN a topology change and the next output increment.
 **
 ** Same model as NEDLiveAMR, with a shorter step: it ends after 30 increments rather than 100, which is

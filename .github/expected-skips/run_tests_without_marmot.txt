@@ -1,0 +1,8 @@
+# The decks this workflow expects run_tests_edelweissfe to skip (--expected-skips): one <test directory>/<deck> per line.
+edelweiss-only/AMR_InitialRefine  # needs Marmot
+edelweiss-only/AMR_LinearizedRigidBodyMPC  # needs Marmot
+edelweiss-only/AMR_MaterialParameterFromField  # needs Marmot
+edelweiss-only/AMR_SurfaceSnap  # needs Marmot
+edelweiss-only/CantileverBeamQuad8NeoHookeAdvanced  # num_dual is not in the environment
+edelweiss-only/CantileverBeamQuad8NeoHookeAdvancedI2Extended  # num_dual is not in the environment
+edelweiss-only/CantileverBeamQuad8NeoHookeAdvancedPlastic  # num_dual is not in the environment

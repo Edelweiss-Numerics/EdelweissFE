@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Live (mid-run) h-adaptivity under the explicit dynamic solver -- the EXACTNESS test.
 **
 ** The whole bar is given the same prescribed x-velocity, so it translates rigidly: the velocity field

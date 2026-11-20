@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteStrainULElement
+** requires: marmot-module VonMises
+
 ** Hughes-Winget wrapper: Marmot's small-strain VonMises model driven inside an updated-Lagrangian
 ** finite-strain element (C3D8UL) through HughesWingetWrapper, registered as VONMISES/HUGHES-WINGET.
 **

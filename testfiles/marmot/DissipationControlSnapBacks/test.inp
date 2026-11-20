@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module VonMises
+
 ** Dissipation control through three snap-backs (combined constraint with a displacement limit).
 ** A bar of ten plane strain elements (length 1000, height 100, thickness 1) in uniaxial strain: the lateral
 ** displacements are fixed, and the right end is pulled. Three weak elements soften and harden again (von Mises with

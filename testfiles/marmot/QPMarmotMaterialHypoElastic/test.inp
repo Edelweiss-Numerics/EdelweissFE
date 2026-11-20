@@ -1,3 +1,6 @@
+** requires: extension edelweissfe.materials.marmot.marmothypoelastic
+** requires: marmot-module LinearElastic
+
 *material, name=LinearElastic, id=myMaterial
 **Isotropic
 **E   | nu |

@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** AMR + deformable-surface contact integration test (PLAN_AMR_CONTACT.md §5/§6 test 4): two
 ** GC3D20/C3D20 blocks in node-to-deformable-surface penalty contact; the lower (master) block is
 ** refined mid-run by hAdaptivity while contact is already engaged. Exercises the reconcile() path

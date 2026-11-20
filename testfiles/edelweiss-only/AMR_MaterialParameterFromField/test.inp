@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** AMR children get the field-modified material (materialParameterFromField), evaluated at their
 ** own center, not the nominal section material: E varies 10x along x, and the initial refinement
 ** splits the elements at the loaded end. With children reverting to E=18000 the displacement field

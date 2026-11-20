@@ -1,3 +1,7 @@
+** requires: extension edelweissfe.linsolve.amgcl.amgcl
+** requires: marmot-module GradientEnhancedCompressibleNeoHookeDamage
+** requires: marmot-module GradientEnhancedFiniteStrainDisplacementElement
+
 ** A composed linear solver with the Schur complement condensation of a softening zone, chosen by a fieldOutput
 ** marker (see solver.py): a strip of GCPE8UL elements (finite-strain gradient-enhanced damage, Marmot's
 ** GradientEnhancedCompressibleNeoHookeDamage) with a weaker centre is pulled to 2 % nominal strain. Damage localizes

@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 ** Simulation of creep test (24h) by Neuner et al. 2017 -- nonlocal version for shotleon v2
 
 *modelGenerator, generator=planeRectQuad, name=gen

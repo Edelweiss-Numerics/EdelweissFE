@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 ** Explicit-dynamic (NED) gradient-enhanced damage test combining the HYPERBOLIC non-local field
 ** with h-adaptivity: the GCDPNEDExplicitHyperbolic bar, with the elements at one end refined once
 ** before the increment loop starts.

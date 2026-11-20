@@ -38,7 +38,8 @@ jobs:
           # See run_tests_with_marmot.yml: invoke the installed console script directly, not via
           # `python -m ...`, to avoid the repo root's uncompiled edelweissfe/ source tree
           # shadowing the properly built package installed into site-packages.
-          coverage run "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/
+          coverage run "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/ \
+            --expected-skips .github/expected-skips/run_tests_without_marmot.txt
           coverage xml
 
       - name: Upload coverage to Codecov

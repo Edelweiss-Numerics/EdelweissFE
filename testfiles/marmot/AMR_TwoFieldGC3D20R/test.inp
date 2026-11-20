@@ -1,3 +1,6 @@
+** requires: marmot-module AT2PhaseField
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 *material, name=AT2PHASEFIELD, id=mat
 20000, 0.2, 0.1, 5
 

@@ -1,3 +1,6 @@
+** requires: marmot-module CompressibleNeoHooke
+** requires: marmot-module DisplacementFiniteStrainULElement
+
 *modelGenerator, generator=cuboidlatticegenerator, name=gen
 lX=5
 lY=5

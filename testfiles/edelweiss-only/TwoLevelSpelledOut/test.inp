@@ -1,3 +1,5 @@
+** requires: extension edelweissfe.linsolve.amgcl.amgcl
+
 ** A two-level cycle spelled out in the solver script (see solver.py): damped Jacobi, a coarse correction on the
 ** linear (P1) interpolant of the quadratic mesh -- its prolongation P built in the script from the corner/midside
 ** map of the displacement field, which also says that the coarse dofs are the displacement field on the corner nodes --

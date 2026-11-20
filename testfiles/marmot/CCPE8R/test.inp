@@ -1,3 +1,5 @@
+** requires: marmot-module BOKU-private
+
 *material, name=cosseratDruckerPrager, id=cosseratDruckerPrager
 **E, nu, GcToG, lb,  lBending, lJ2, polarRatio, cohesion, phi(deg), psi(deg)
 10000, 0.20, 1., 4,  8,        4.0,     1.4999,      1,         25,      5

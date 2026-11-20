@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** minMarkedElements regression test -- same cantilever/marker setup as AMR_DynamicRefinement, but
 ** with minMarkedElements=2 while only ONE of the two coarse C3D20 elements ever crosses the
 ** stress threshold (bending concentrates stress at the fixed end only). Refinement must therefore

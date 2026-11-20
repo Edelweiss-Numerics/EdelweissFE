@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 ** Explicit-dynamic (NED) gradient-enhanced damage test: a GC3D20R bar stretched by a prescribed
 ** velocity until the GCDP material softens.
 **

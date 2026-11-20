@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Live (mid-run) h-adaptivity under the Newmark-beta implicit dynamic solver (NID).
 **
 ** A short bar of two C3D20R, fixed at x = 0 and pulled at x = L, refined TWICE while the run is in

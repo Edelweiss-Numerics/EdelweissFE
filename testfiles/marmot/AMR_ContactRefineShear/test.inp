@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** AMR + frictional-contact integration test, companion to AMR_TieRefineShear: two C3D20 blocks
 ** with a NON-CONFORMING interface mesh (fixed block: 2x2 in-plane at the contact face; moving
 ** block: 3x3 in-plane at the contact face) interacting through nodeToDeformableSurfacePenalty

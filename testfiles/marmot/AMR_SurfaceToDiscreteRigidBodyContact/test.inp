@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Integrated contact against a DISCRETE RIGID BODY under live AMR of the SLAVE side: a hexa20 block
 ** is pressed onto a fixed rigid box (top face at z = 1) and refined once contact has built up the
 ** stress. The contact points are the quadrature points of the slave facets, which are regenerated

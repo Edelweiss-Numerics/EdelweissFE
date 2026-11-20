@@ -56,4 +56,5 @@ jobs:
           # Invoke the installed console scripts directly, not `python -m ...`, so that the repository's
           # uncompiled edelweissfe/ source tree does not shadow the installed package (see run_tests_with_marmot.yml).
           # Like run_tests_without_marmot.yml: no pytest, since parts of that suite require Marmot.
-          "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/
+          "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/ \
+            --expected-skips .github/expected-skips/run_tests_windows.txt

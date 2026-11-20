@@ -1,3 +1,6 @@
+** requires: extension edelweissfe.materials.marmot.marmotgradientenhancedhypoelastic
+** requires: marmot-module BOKU-private
+
 *material, name=GCDP, id=myMaterial
 **E         nu      fcy         fcu         fbu         ftu         Df          Ah
 30000.0,    0.15,   13,         47.4,       55,         4.74,       0.85,       0.12,

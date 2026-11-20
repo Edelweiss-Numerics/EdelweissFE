@@ -41,8 +41,13 @@ run_tests_edelweissfe ./testfiles/edelweiss-only/      # tests that don't need M
 run_tests_edelweissfe ./testfiles/marmot/              # tests that need Marmot
 run_tests_edelweissfe ./testfiles/marmot/ --tests ADVonMises,ADLinearElastic
 run_tests_edelweissfe ./testfiles/marmot/ --create     # (re)generate U.ref reference solutions
+run_tests_edelweissfe ./testfiles/marmot/ --expected-skips .github/expected-skips/run_tests_with_marmot.txt
 pytest edelweissfe/numerics/test_numerics.py           # unit tests
 ```
+
+A deck declares what it needs (`** requires: marmot-module|extension|python-module <name>`); one with a missing
+requirement is skipped, every other failure fails it, and its solution is compared with `U.ref` relative to the
+largest magnitude of `U.ref`. Each CI workflow lists the decks it expects to skip in `.github/expected-skips/`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#adding--running-tests) for test creation guidelines, and [CONTRIBUTING.md](CONTRIBUTING.md#pull-requests) for CI Marmot branch resolution and the PR target branch (`master`).
 
@@ -59,7 +64,7 @@ Specialized runbooks and checklists for development workflows are available unde
 - **[`ew-add-module`](.agents/skills/ew-add-module/SKILL.md)**: Universal entry point and architectural lifecycle for adding or extending any kind of functionality (solvers, linear solvers, step actions, constraints, AMR markers, output managers, generators, analytical fields), and routing to specialized skills.
 - **[`ew-add-material`](.agents/skills/ew-add-material/SKILL.md)**: Use when creating, refactoring, or registering a new material model (elastic, hyperelastic, hypoelastic, plastic, damage). Follow this skill to reuse tensor utilities, inherit from base classes, register lazily in `materiallibrary.py`, and document in Sphinx.
 - **[`ew-add-element`](.agents/skills/ew-add-element/SKILL.md)**: Use when implementing new finite element formulations (continuum, structural, mixed/EAS, Marmot wrappers). Follow this skill for node numbering conventions, quadrature/shape function reuse, `*elementproperty` support, and registration in `elementlibrary.py`.
-- **[`ew-create-regression-test`](.agents/skills/ew-create-regression-test/SKILL.md)**: Use when creating or updating regression test decks (`test.inp` + `U.ref`) for bug fixes, new features, or solver benchmarking. Follow this skill for fast-running mesh guidelines, running `run_tests_edelweissfe --create`, and residual checks.
+- **[`ew-create-regression-test`](.agents/skills/ew-create-regression-test/SKILL.md)**: Use when creating or updating regression test decks (`test.inp` + `U.ref`) for bug fixes, new features, or solver benchmarking. Follow this skill for fast-running mesh guidelines, running `run_tests_edelweissfe --create`, the `** requires:` lines of a deck, and the relative comparison with `U.ref`.
 - **[`ew-documentation`](.agents/skills/ew-documentation/SKILL.md)**: Use when writing, extending, or verifying Sphinx documentation (`.rst` files), input keyword catalogs, mathematical equations, and NumPy-style docstrings.
 - **[`ew-code-review`](.agents/skills/ew-code-review/SKILL.md)**: Use when reviewing code, checking pre-commit compliance, inspecting free-threading safety, or preparing PR submissions. Follow this skill to verify zero-GIL re-enabling imports, in-place CSR assembly, documentation updates, and agent guidance maintenance.
 

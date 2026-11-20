@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 *modelGenerator, generator=boxGen, name=gen
 lX=100
 lY=10

@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module VonMises
+
 ** Dissipation control through three snap-backs, without a displacement limit: the load parameter is controlled
 ** until the hardening element dissipates, then the dissipation.
 ** A bar of ten plane strain elements (length 1000, height 100, thickness 1) in uniaxial strain: the lateral

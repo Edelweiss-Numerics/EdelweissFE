@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module VonMises
+
 *modelGenerator, generator=planeRectQuad, name=gen
 elType=CPE4
 nX=20
