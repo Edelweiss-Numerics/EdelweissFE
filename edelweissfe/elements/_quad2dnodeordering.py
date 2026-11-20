@@ -109,19 +109,24 @@ def quad8N(xi, eta):
     -------
     np.ndarray
         Shape ``(8, ...)``: the 8 shape function values (leading dimension), broadcasting over any
-        additional shape of the inputs."""
+        additional shape of the inputs. At :class:`~fractions.Fraction` coordinates the values are exact
+        fractions (an ``object`` array), as adaptive refinement needs them."""
 
-    return 0.25 * np.array(
-        [
-            (1 - xi) * (1 - eta) * (-xi - eta - 1),
-            (1 + xi) * (1 - eta) * (xi - eta - 1),
-            (1 + xi) * (1 + eta) * (xi + eta - 1),
-            (1 - xi) * (1 + eta) * (-xi + eta - 1),
-            2 * (1 - xi**2) * (1 - eta),
-            2 * (1 + xi) * (1 - eta**2),
-            2 * (1 - xi**2) * (1 + eta),
-            2 * (1 - xi) * (1 - eta**2),
-        ]
+    # divided by 4, not multiplied by 0.25: exact for fractions, the same floats otherwise
+    return (
+        np.array(
+            [
+                (1 - xi) * (1 - eta) * (-xi - eta - 1),
+                (1 + xi) * (1 - eta) * (xi - eta - 1),
+                (1 + xi) * (1 + eta) * (xi + eta - 1),
+                (1 - xi) * (1 + eta) * (-xi + eta - 1),
+                2 * (1 - xi**2) * (1 - eta),
+                2 * (1 + xi) * (1 - eta**2),
+                2 * (1 - xi**2) * (1 + eta),
+                2 * (1 - xi) * (1 - eta**2),
+            ]
+        )
+        / 4
     )
 
 

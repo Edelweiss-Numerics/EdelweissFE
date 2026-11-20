@@ -34,6 +34,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.sets.nodeset import NodeSet
@@ -221,7 +222,7 @@ class StepAction(IndirectDisplacementControlBase):
 
         return np.hstack([n.fields["displacement"].values[:2] for n in self.contractionNSet])
 
-    def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, numbering):
+    def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, system: DiscreteSystem):
         """Called once an increment has converged; this controller keeps nothing from one increment to the next.
 
         Parameters
@@ -234,8 +235,8 @@ class StepAction(IndirectDisplacementControlBase):
             The increment of the load parameter.
         timeStep
             The current time step.
-        numbering
-            The numbering of the degrees of freedom of the current discrete system.
+        system
+            The current discrete system.
         """
 
     def updateStepAction(self, contractionNSet: NodeSet, L: float):

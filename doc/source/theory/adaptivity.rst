@@ -176,7 +176,7 @@ it,
           {\sum_{K \ni a} V_K},
 
 and :math:`\nabla\bar e^{*}` elsewhere is the shape-function interpolation of these nodal values.
-Cheap and robust; the default. See :func:`~edelweissfe.adaptivity.marking._recover_averaging`.
+Cheap and robust; the default. See :func:`~edelweissfe.adaptivity.marking._recoverAveraging`.
 
 **Superconvergent patch recovery** (``recovery='spr'``, Zienkiewicz--Zhu 1992). For each corner
 (vertex) node :math:`a` a *patch* :math:`\omega_a` is formed from the elements sharing it, and a
@@ -200,7 +200,7 @@ term :math:`\mathbf a_0`). Edge-**midside** nodes, which are not patch centres, 
 averaging the fits of the two corner patches at each end of the edge, evaluated at the midside
 location. Boundary patches with too few sampling points for a full quadratic fall back to a linear
 fit, and, failing that, to the plain mean. See
-:func:`~edelweissfe.adaptivity.marking._recover_spr`.
+:func:`~edelweissfe.adaptivity.marking._recoverSpr`.
 
 SPR is the sharper choice for the serendipity hexahedron and typically has near-unit *effectivity*
 (estimated / true error :math:`\approx 1`), at the cost of a small least-squares solve per patch.
@@ -239,8 +239,8 @@ refine the worst ones", which is precisely :eq:`doerfler`. A single-level split 
 ``splitFactor=3`` (a :math:`3\times3\times3 = 27`-child subdivision, exactly hanging-node coupled)
 delivers a three-fold local resolution increase in one step, often all that is affordable.
 
-**Why the budget cap matters with a direct solver.** EdelweissFE assembles a single sparse system
-and factorises it with a direct solver (PARDISO). Each refinement changes the sparsity pattern,
+**Why the budget cap matters with a direct solver.** EdelweissFE assembles a single sparse system;
+with a direct linear solver such as PARDISO, it factorises it. Each refinement changes the sparsity pattern,
 forcing a fresh symbolic factorisation, and direct-solve cost grows super-linearly in the number of
 unknowns. ``maxRefinedFraction`` bounds how many elements a single pass may add, keeping the
 per-increment factorisation cost predictable.
@@ -339,12 +339,12 @@ Implementation
 Per increment the marker gathers, for every eligible 20-node element, its node coordinates and
 nonlocal-field values plus a compact global node index, then evaluates the indicator
 :eq:`indicator` for the whole element set at once in
-:func:`~edelweissfe.adaptivity.marking._recovery_indicators`: all per-element :math:`3\times3`
+:func:`~edelweissfe.adaptivity.marking._recoveryIndicators`: all per-element :math:`3\times3`
 Jacobians, gradients and the nodal-averaging accumulation are batched into single ``numpy`` calls
 (``einsum`` and a stacked ``linalg.inv``), so there is no Python-level per-element loop for the
 default path. The recovery step is delegated to
-:func:`~edelweissfe.adaptivity.marking._recover_averaging` or
-:func:`~edelweissfe.adaptivity.marking._recover_spr`, and the Dörfler selection :eq:`doerfler` and
+:func:`~edelweissfe.adaptivity.marking._recoverAveraging` or
+:func:`~edelweissfe.adaptivity.marking._recoverSpr`, and the Dörfler selection :eq:`doerfler` and
 budget cap are applied to the resulting ranking.
 
 
