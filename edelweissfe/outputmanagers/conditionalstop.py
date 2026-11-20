@@ -47,7 +47,7 @@ Useful, e.g., for indirect displacement control.
 .. code-block:: edelweiss
     :caption: Example:
 
-    *output, type=conditionalstop, jobName=myJob, name=condStop
+    *output, type=conditionalstop, name=condStop
         stop='fieldOutputs["damage"]  >= .99'
         stop='fieldOutputs["displacement"]  < -5'
 """

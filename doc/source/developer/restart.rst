@@ -33,8 +33,8 @@ writing one never leaves a truncated checkpoint behind. Each carries a serial nu
 restart writer finds the oldest one to replace -- not by file times, which copying changes.
 
 Whatever cannot keep the rule refuses to resume, with a :class:`~edelweissfe.utils.exceptions.RestartError`:
-a solver that does not checkpoint its state (the default of
-:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.readRestart`), and a
+a solver that does not declare the state it checkpoints
+(:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.getRestartData` raises then), and a
 checkpoint of another format version (every checkpoint carries one, and a run reads its own only),
 and a resume past a ``modelupdate`` -- it executes an arbitrary expression whose effect no checkpoint
 records, so a run is resumed only from checkpoints written in steps before the first one.
