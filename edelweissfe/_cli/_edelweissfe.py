@@ -40,6 +40,7 @@ import numpy as np
 
 from edelweissfe.config import registry
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.utils.exceptions import StepFailed
 from edelweissfe.utils.inputfileparser import keywordIdentifier, parseInputFile
 from edelweissfe.utils.printdocumentation import printDocumentation
 from edelweissfe.utils.schema import datalineFieldMeta
@@ -117,9 +118,13 @@ def main():
         inputFiles.append(inputFile)
 
     for inputFile in inputFiles:
-        model, fieldOutputController = finiteElementSimulation(
-            inputFile, verbose=args.verbose, suppressPlots=args.noplot
-        )
+        try:
+            model, fieldOutputController = finiteElementSimulation(
+                inputFile, verbose=args.verbose, suppressPlots=args.noplot
+            )
+        except StepFailed:
+            # The driver has reported the failure; a failed run writes no --output and exits non-zero.
+            sys.exit(1)
 
         if args.output:
             U = np.hstack(

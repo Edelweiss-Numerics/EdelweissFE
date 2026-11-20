@@ -42,7 +42,7 @@ from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
-from edelweissfe.utils.exceptions import DivergingSolution
+from edelweissfe.utils.exceptions import DivergingSolution, StepFailed
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 
@@ -208,8 +208,8 @@ def test_a_negative_start_of_the_line_search_is_refused(tmp_path):
 
 
 def test_without_the_fallback_a_diverging_increment_is_cut_back_until_the_step_fails(tmp_path):
-    model = run(tmp_path, deck(stepOptions=", maxGrowIter=0"))
-    assert model.time < 1.0
+    with pytest.raises(StepFailed):
+        run(tmp_path, deck(stepOptions=", maxGrowIter=0"))
 
 
 def test_the_fallback_continues_with_the_tangent_of_the_first_iteration(tmp_path, solves):

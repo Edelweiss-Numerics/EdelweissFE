@@ -73,7 +73,7 @@ from edelweissfe.stepactions.nodeforces import StepAction as NodeForcesStepActio
 from edelweissfe.steps.adaptivestep import AdaptiveStep
 from edelweissfe.steps.stepmanager import StepActionCollection
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import ReachedMaxIterations
+from edelweissfe.utils.exceptions import ReachedMaxIterations, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputfileparser import parseInputFile
 from edelweissfe.variables.fieldvariable import FieldVariable
@@ -586,7 +586,8 @@ def test_the_fallback_continues_with_the_tangent_of_the_first_iteration(tmp_path
 
     reference = run(tmp_path, deck())
 
-    assert run(tmp_path, deck(stepOptions=", maxGrowIter=0")).time < 1.0
+    with pytest.raises(StepFailed):
+        run(tmp_path, deck(stepOptions=", maxGrowIter=0"))
 
     attempts.matrices.clear()
     fallBack = run(tmp_path, deck(stepOptions=", maxGrowIter=0", solverOptions=", fallBackToQuasiNewton=True"))

@@ -134,7 +134,8 @@ the `edelweissfe` CLI and `run_tests_edelweissfe`):
 3. **Step Execution**: A `StepManager` (from `*step` blocks) yields `Step` objects one at a time; each step collects
    its step-actions (`>>dirichlet`, `>>nodeforces`, `>>options`, ...) and calls `step.solve()` against its assigned solver.
 4. **Finalization**: Field outputs and output managers (Ensight, Paraview, CSV, matplotlib, ...) are finalized after
-   all steps, or on failure (`StepFailed`) / `KeyboardInterrupt`.
+   all steps, or on failure (`StepFailed`) / `KeyboardInterrupt`, which are then re-raised: the `edelweissfe` command
+   exits non-zero, and `run_tests_edelweissfe` counts the deck as FAILED.
 
 #### Solvers & Parallelization
 - **Nonlinear Solvers** (`edelweissfe/solvers/`): Implicit/explicit static/dynamic solvers (`NIST`, `NEST`, `NED`),

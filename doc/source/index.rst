@@ -127,7 +127,9 @@ Run a simulation simply by calling
 
     PYTHON_GIL=0 edelweissfe inputfile.inp
 
-See :doc:`analysis/parallelization` for the number of threads.
+See :doc:`analysis/parallelization` for the number of threads. A simulation whose step fails exits with a non-zero
+code, after writing the output up to its last accepted increment; ``--output`` (the final solution) is written for a
+finished simulation only.
 
 Example input file
 ******************
