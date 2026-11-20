@@ -654,6 +654,22 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         return True
 
+    def isUnderArcLengthControl(self) -> bool:
+        """Whether the step being solved is under arc length control: its loads are scaled by a load parameter that
+        the solver determines, instead of following their amplitudes in time.
+
+        Such a step may end by reaching its maximum number of increments, with its loads at the load parameter it
+        reached. Any other step must reach its end: there, the loads follow the progress of the time stepper, and
+        every load keeps its value at the end of the step for the next one.
+
+        Returns
+        -------
+        bool
+            False, unless the solver controls the load parameter.
+        """
+
+        return False
+
     @abstractmethod
     def endStep(self, step, model: FEModel):
         """Finish a step, however it ended.

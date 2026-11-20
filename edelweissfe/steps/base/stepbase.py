@@ -68,7 +68,14 @@ class StepIncrementationSchema:
     minInc: float = schemaField(
         description="The minimal fraction of the step to be computed.", dtype=float, default=1e-4
     )
-    maxNumInc: int = schemaField(description="The maximal number of increments allowed.", dtype=int, default=1000)
+    maxNumInc: int = schemaField(
+        description=(
+            "The maximal number of increments allowed: a step that has not reached its end after them fails, unless "
+            "it is under arc length control."
+        ),
+        dtype=int,
+        default=1000,
+    )
     maxIter: int = schemaField(description="The maximal number of iterations allowed.", dtype=int, default=10)
     criticalIter: int = schemaField(
         description="Increments needing at least this many iterations keep the next increment from growing.",
@@ -216,6 +223,9 @@ class StepBase(ABC):
         this loop. It begins like any step, and then takes over the checkpointed state, in this one
         place.
 
+        A step that reaches its maximum number of increments before its end fails, unless it is under arc length
+        control (see :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.isUnderArcLengthControl`).
+
         An increment that fails at the minimum increment size fails the step, unless the step may
         fall back to a checkpoint (``maxCheckpointFallbacks``, see :meth:`fallBackToCheckpoint`):
         it then continues from its latest restart checkpoint, as a resumed step would, with a
@@ -226,6 +236,12 @@ class StepBase(ABC):
         resumeFrom
             The :class:`~edelweissfe.utils.checkpoint.ResumeCheckpoint` this step continues from, or
             None.
+
+        Raises
+        ------
+        StepFailed
+            If an increment fails at the minimum increment size, or if the step reaches its maximum number of
+            increments before its end without arc length control.
         """
 
         model = self.model
@@ -298,7 +314,12 @@ class StepBase(ABC):
                                     manager.finalizeIncrement(statusInfoDict=solver.incrementStatus)
 
             except ReachedMaxIncrements:
-                pass
+                if not solver.isUnderArcLengthControl():
+                    raise StepFailed(
+                        "step {:}: maxNumInc reached at step progress {:.4g}".format(
+                            self.number, timeStepper.finishedStepProgress
+                        )
+                    )
             except ReachedMinIncrementSize:
                 journal.errorMessage("Incrementation failed", solver.identification)
                 raise StepFailed()

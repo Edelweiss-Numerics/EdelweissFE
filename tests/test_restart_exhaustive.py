@@ -260,17 +260,17 @@ topology-check-frequency={topologyCheckFrequency}
 _STEP = {
     "implicit": """
 *step, solver=theSolver
-startInc={startInc}, maxInc={maxInc}, minInc=1e-6, maxNumInc=1000, maxIter={maxIter}, stepLength=1
+startInc={startInc}, maxInc={maxInc}, minInc=1e-6, maxNumInc=1000, maxIter={maxIter}, stepLength={stepLength!r}
 """,
     "explicit": """
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
-maxInc=1, minInc=1e-14, maxNumInc={maxNumInc}, maxIter=25, stepLength=1.0
+maxInc=1, minInc=1e-14, maxNumInc=1000, maxIter=25, stepLength={stepLength!r}
 """,
 }
 _STEP["NID"] = _STEP["implicit"]
 _STEP["arcLength"] = _STEP["implicit"]
 
-#: The prescribed displacement at the end of a step. The explicit run covers a far shorter time
+#: The prescribed displacement per unit time of a step. The explicit run covers a far shorter time
 #: span within its increments, so it is loaded correspondingly faster.
 _AMPLITUDE = {"implicit": 0.05, "NID": 0.05, "arcLength": 0.05, "explicit": 50.0}
 
@@ -508,6 +508,9 @@ _SCENARIOS = {
         blocks=[_PLASTIC_BEAM, _AMR],
         threshold={"explicit": 20.0},
         steps=[_LOADS_BEND],
+        # One increment more than the other explicit runs, which solves the refinement of the topology check after
+        # the 20th, the second one: 21 increments after the zero increment.
+        nCheckpoints={"explicit": 22},
         check=_all(_refinesRepeatedly, _isPlastic, _timeIncrementLowered),
     ),
     # (l) A penalty constraint on a node set that live AMR refines.
@@ -580,6 +583,22 @@ _SCENARIOS = {
 #: increments for the load (and AMR) to develop, and to put most checkpoints off the topology cycle.
 _N_INCREMENTS = {"implicit": 10, "NID": 10, "arcLength": 10, "explicit": 20}
 
+#: The length of the steps of the implicit runs.
+_STEP_LENGTH = 1.0
+
+#: The length of the step of an explicit run, which takes the stable time increment of its mesh: it ends between the
+#: end of its increment before the last and the end of its last one, after _N_INCREMENTS["explicit"] increments (one
+#: more for amrPlasticExplicit, see there).
+_EXPLICIT_STEP_LENGTH = {
+    "amr": 9.2e-5,
+    "amrRigidContact": 1.27e-4,
+    "amrMinMarked": 1.27e-4,
+    "amrRigidContactSearchEvery3": 1.27e-4,
+    "amrPlasticExplicit": 1.65e-4,
+    "amrWriteEvery3": 9.2e-5,
+    "deformableFrictionalContact": 1.82e-4,
+}
+
 #: How often an element may be split. The explicit runs need a second level to refine more than once
 #: within their short time span; the implicit ones refine repeatedly with one level, which keeps
 #: their meshes -- and so the test's runtime -- small.
@@ -641,15 +660,17 @@ def _deck(directory: Path, scenario: str, solver: str, assembly: str | None, ext
         topologyCheckFrequency=TOPOLOGY_CHECK_FREQUENCY,
     )
     dt = 1.0 / _N_INCREMENTS[solver]
+    stepLength = _EXPLICIT_STEP_LENGTH[scenario] if solver == "explicit" else _STEP_LENGTH
     step = _STEP[solver].format(
         startInc=spec.get("startInc", dt),
         maxInc=spec.get("maxInc", dt),
         maxIter=spec.get("maxIter", 25),
-        maxNumInc=_N_INCREMENTS[solver],
+        stepLength=stepLength,
     )
     amplitude = spec.get("amplitude", _AMPLITUDE[solver])
     if isinstance(amplitude, dict):
         amplitude = amplitude[solver]
+    amplitude *= stepLength
     steps = "".join(step + loads.format(amplitude=amplitude) for loads in spec["steps"])
     return _MATERIAL + blocks + _export(directory) + extra + _JOB + solverBlock + steps
 

@@ -42,8 +42,10 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.utils.exceptions import StepFailed
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 #: A flat rigid plate under the box: a closed cuboid, as 12 triangles.
@@ -74,7 +76,13 @@ def _writePlateStl(path: Path):
     path.write_text(_PLATE_STL.format("\n".join(facets)))
 
 
+#: The end of the step, after about 370 increments; the prescribed displacements grow at 0.2 (the slide of the support)
+#: and -0.4 (the push down) per unit time.
+STEP_LENGTH = 0.0825
+
+
 def _deck(stl: Path, maxNumInc: int, extra: str = "") -> str:
+    """The deck; its step ends after about 370 increments, unless its maxNumInc interrupts it before."""
     return f"""
 *material, name=LinearElastic, id=linearelastic
 1.8e4, 0.3, 1.0
@@ -121,10 +129,10 @@ maxLevel=1
 slaveSurface=slaveSurf_facets, rigidBody=support, penalty=5e4, type=linear, searchDistance=2.0
 {extra}
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
-maxInc=1, minInc=1e-12, maxNumInc={maxNumInc}, maxIter=25, stepLength=0.5
->>dirichlet, name=slideSupport, nSet=support_rp, field=displacement, 1=0.1, 2=0, 3=0
+maxInc=1, minInc=1e-12, maxNumInc={maxNumInc}, maxIter=25, stepLength={STEP_LENGTH!r}
+>>dirichlet, name=slideSupport, nSet=support_rp, field=displacement, 1={0.2 * STEP_LENGTH!r}, 2=0, 3=0
 >>dirichlet, name=fixSupportRotation, nSet=support_rp, field=rotation, 1=0, 2=0, 3=0
->>dirichlet, name=pushDown, nSet=upper_front, field=displacement, 3=-0.2
+>>dirichlet, name=pushDown, nSet=upper_front, field=displacement, 3={-0.4 * STEP_LENGTH!r}
 >>dirichlet, name=pinUpperXY, nSet=upper_bottomLeftBack, field=displacement, 1=0.0, 2=0.0
 >>dirichlet, name=pinUpperRotZ, nSet=upper_bottomRightBack, field=displacement, 2=0.0
 """
@@ -137,26 +145,29 @@ def _run(path: Path, text: str):
 
 
 #: The refinement happens at the first topology check (increment 100), after the support has started
-#: to slide; the checkpoint falls between two later checks.
-N_INCREMENTS_FULL = 400
+#: to slide; the checkpoint of the interrupted run falls between two later checks.
 N_INCREMENTS_TRUNCATED = 340
+
+#: Enough increments for a run to reach the end of its step.
+MAX_NUM_INC = 100000
 
 
 def test_resume_across_refinement_next_to_a_moving_rigid_body(tmp_path):
     stl = tmp_path / "plate.stl"
     _writePlateStl(stl)
 
-    reference = _run(tmp_path / "full.inp", _deck(stl, N_INCREMENTS_FULL))
+    reference = _run(tmp_path / "full.inp", _deck(stl, MAX_NUM_INC))
 
     writer = (
         f"*output, type=restart, name=restart\nwriteInterval=1, baseName={tmp_path / 'ckpt'}, numberOfFilesToKeep=1\n"
     )
-    _run(tmp_path / "truncated.inp", _deck(stl, N_INCREMENTS_TRUNCATED, writer))
+    with pytest.raises(StepFailed, match="maxNumInc reached"):
+        _run(tmp_path / "truncated.inp", _deck(stl, N_INCREMENTS_TRUNCATED, writer))
     (checkpoint,) = tmp_path.glob("ckpt_*.h5")
     with h5py.File(checkpoint, "r") as f:
         assert f.attrs["time"] > 0.0
 
-    resumed = _run(tmp_path / "resumed.inp", _deck(stl, N_INCREMENTS_FULL, f"*restart, readFrom={checkpoint}"))
+    resumed = _run(tmp_path / "resumed.inp", _deck(stl, MAX_NUM_INC, f"*restart, readFrom={checkpoint}"))
 
     # The slave body was refined before the checkpoint, and the support had moved by then.
     assert len(resumed.elements) > 2 * 27

@@ -34,7 +34,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
-from edelweissfe.utils.exceptions import RestartError
+from edelweissfe.utils.exceptions import RestartError, StepFailed
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 
@@ -80,7 +80,18 @@ def _writeRidgeStl(path: Path):
     path.write_text("\n".join(lines + ["endsolid ridge"]) + "\n")
 
 
-def _deck(directory: Path, constraintType: str, maxNumInc: int, extra: str = "", amr: bool = False) -> str:
+#: The end of the step without refinement, after about 290 increments.
+STEP_LENGTH = 0.35
+
+#: The end of the step with live refinement, after about 1420 increments.
+STEP_LENGTH_LIVE_REFINEMENT = 0.267
+
+#: Enough increments for every run to reach the end of its step; a truncated run stops earlier, by its maxNumInc.
+MAX_NUM_INC = 100000
+
+
+def _deck(directory: Path, constraintType: str, stepLength: float, maxNumInc: int, extra: str = "", amr=False) -> str:
+    """The deck; its prescribed displacements grow at the same rate whatever the length of its step."""
     # Live refinement needs Marmot's C3D20R, whose refined surface also needs a smaller time increment.
     elProvider = "" if amr else "elProvider=edelweiss"
     upper = _box("upper", (0.3, 1.1, 1.05), (0.6, 0.6, 1), elProvider, "C3D20R" if amr else "C3D8")
@@ -104,7 +115,7 @@ upper_all
         master = "rigidBody=support"
         # The ridge passes a contact point shortly before the checkpoint.
         supports = (
-            ">>dirichlet, name=slideSupport, nSet=support_rp, field=displacement, 1=0.1, 2=0, 3=0\n"
+            f">>dirichlet, name=slideSupport, nSet=support_rp, field=displacement, 1={0.2 * stepLength}, 2=0, 3=0\n"
             ">>dirichlet, name=fixSupportRotation, nSet=support_rp, field=rotation, 1=0, 2=0, 3=0"
         )
     else:
@@ -129,9 +140,9 @@ contact-update-frequency=7
 slaveSurface=slaveSurf_facets, {master}, penalty=5e4, type=linear, searchDistance=2.0
 {extra}
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
-maxInc=1, minInc=1e-12, maxNumInc={maxNumInc}, maxIter=25, stepLength=0.5
+maxInc=1, minInc=1e-12, maxNumInc={maxNumInc}, maxIter=25, stepLength={stepLength}
 {supports}
->>dirichlet, name=pushDown, nSet=upper_front, field=displacement, 3=-0.2
+>>dirichlet, name=pushDown, nSet=upper_front, field=displacement, 3={-0.4 * stepLength}
 >>dirichlet, name=pinUpperXY, nSet=upper_bottomLeftBack, field=displacement, 1=0.0, 2=0.0
 >>dirichlet, name=pinUpperRotZ, nSet=upper_bottomRightBack, field=displacement, 2=0.0
 """
@@ -148,8 +159,9 @@ def _fields(model) -> dict:
     return {(name, entry): np.array(field[entry]) for name, field in model.nodeFields.items() for entry in "UP"}
 
 
-def _truncateAndResume(directory: Path, constraintType: str, nFull: int, nTruncated: int, extra="", amr=False):
-    """Run nTruncated increments writing checkpoints, then resume from the last one to nFull.
+def _truncateAndResume(directory: Path, constraintType: str, stepLength: float, nTruncated: int, extra="", amr=False):
+    """Run nTruncated increments writing checkpoints, until the run fails by reaching its maxNumInc, then resume from
+    the last checkpoint to the end of the step.
 
     The contact-update frequency (7) is no divisor of the output frequency (5), so a checkpoint
     usually falls between two searches."""
@@ -157,9 +169,12 @@ def _truncateAndResume(directory: Path, constraintType: str, nFull: int, nTrunca
     writer = (
         f"*output, type=restart, name=restart\nwriteInterval=1, baseName={directory / 'ckpt'}, numberOfFilesToKeep=1\n"
     )
-    _run(directory, "truncated", constraintType, nTruncated, extra + writer, amr)
+    with pytest.raises(StepFailed, match="maxNumInc reached"):
+        _run(directory, "truncated", constraintType, stepLength, nTruncated, extra + writer, amr)
     (checkpoint,) = directory.glob("ckpt_*.h5")
-    resumed = _run(directory, "resumed", constraintType, nFull, extra + f"*restart, readFrom={checkpoint}", amr)
+    resumed = _run(
+        directory, "resumed", constraintType, stepLength, MAX_NUM_INC, extra + f"*restart, readFrom={checkpoint}", amr
+    )
     return resumed, checkpoint
 
 
@@ -168,12 +183,12 @@ def _truncateAndResume(directory: Path, constraintType: str, nFull: int, nTrunca
     params=["nodeToDeformableSurfacePenalty", "surfaceToDeformableSurfacePenalty", "surfaceToDiscreteRigidBodyPenalty"],
 )
 def resumedContact(request, tmp_path_factory):
-    """(uninterrupted fields, resumed fields, resumed model, checkpoint) of a 300-increment run
-    resumed from increment 250."""
+    """(uninterrupted fields, resumed fields, resumed model, checkpoint) of a run of about 290 increments resumed from
+    increment 250."""
 
     directory = tmp_path_factory.mktemp(request.param)
-    reference = _fields(_run(directory, "full", request.param, 300))
-    resumed, checkpoint = _truncateAndResume(directory, request.param, 300, 250)
+    reference = _fields(_run(directory, "full", request.param, STEP_LENGTH, MAX_NUM_INC))
+    resumed, checkpoint = _truncateAndResume(directory, request.param, STEP_LENGTH, 250)
     return reference, _fields(resumed), resumed, checkpoint
 
 
@@ -230,7 +245,17 @@ maxLevel=1
 @pytest.fixture(scope="module")
 def liveRefinementReference(tmp_path_factory):
     directory = tmp_path_factory.mktemp("liveRefinement")
-    return _fields(_run(directory, "full", "surfaceToDeformableSurfacePenalty", 1500, _LIVE_REFINEMENT, amr=True))
+    return _fields(
+        _run(
+            directory,
+            "full",
+            "surfaceToDeformableSurfacePenalty",
+            STEP_LENGTH_LIVE_REFINEMENT,
+            MAX_NUM_INC,
+            _LIVE_REFINEMENT,
+            amr=True,
+        )
+    )
 
 
 @pytest.mark.parametrize(
@@ -243,7 +268,12 @@ def test_resume_after_live_refinement(tmp_path, liveRefinementReference, nTrunca
     which rebuilds its contact points; the check at 1000 changes only the contact connectivity."""
 
     resumed, _ = _truncateAndResume(
-        tmp_path, "surfaceToDeformableSurfacePenalty", 1500, nTruncated, _LIVE_REFINEMENT, amr=True
+        tmp_path,
+        "surfaceToDeformableSurfacePenalty",
+        STEP_LENGTH_LIVE_REFINEMENT,
+        nTruncated,
+        _LIVE_REFINEMENT,
+        amr=True,
     )
     assert len(resumed.elements) > 2 * 27
     fields = _fields(resumed)

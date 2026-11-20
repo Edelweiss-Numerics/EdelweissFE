@@ -1,7 +1,7 @@
 ** A step that ENDS BETWEEN a topology change and the next output increment.
 **
-** Same model as NEDLiveAMR, with one number changed: maxNumInc is 30 rather than 100, which is not
-** a multiple of output-frequency=20. That is the whole point.
+** Same model as NEDLiveAMR, with a shorter step: it ends after 30 increments rather than 100, which is
+** not a multiple of output-frequency=20. That is the whole point.
 **
 ** The output managers write one final frame when a step ends, from the result each field output has
 ** stored. Field outputs store one every output-frequency increments. Live h-adaptivity refines on a
@@ -11,8 +11,8 @@
 **
 **   Variable displacement result size (32) does not match the number of nodes (141)
 **
-** NEDLiveAMR itself cannot catch that: its maxNumInc=100 is an exact multiple of its
-** output-frequency=20, so its step always ends ON an output increment, where the stored result and
+** NEDLiveAMR itself cannot catch that: its step ends after 100 increments, an exact multiple of its
+** output-frequency=20, so it ends ON an output increment, where the stored result and
 ** the mesh agree. Every other h-adaptivity case in testfiles/ is either implicit -- writing an
 ** output every increment, so nothing is ever stale -- or uses initialOnly markers, so the mesh never
 ** changes mid-run. The combination this case pins was reachable only from a real pry-out deck.
@@ -95,5 +95,5 @@ fieldOutput=Ux
 >>configuration, overwrite=yes
 
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
-maxInc=1, minInc=1e-14, maxNumInc=30, maxIter=25, stepLength=1e-3
->>dirichlet, name=rigidTranslation, nSet=all, field=displacement, 1=0.05, 2=0, 3=0
+maxInc=1, minInc=1e-14, maxNumInc=1000, maxIter=25, stepLength=6.8e-6
+>>dirichlet, name=rigidTranslation, nSet=all, field=displacement, 1=3.4e-4, 2=0, 3=0
