@@ -145,8 +145,8 @@ more; it is what the material point method does. The nodes of the elements are n
 
 The critical time step is the smaller of the elements' (of the mesh) and the bound of the stable time increment of the
 entities' assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever
-their connectivity changes, and every ``stable-increment-frequency`` increments, and lowers the time increment whenever
-it falls below it. The first
+the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every
+``stable-increment-frequency`` increments, and lowers the time increment whenever it falls below it. The first
 increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they
 evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.
 Where the model holds the motion of their nodes
@@ -407,8 +407,9 @@ class NEDSchema:
         description=(
             "The increment interval at which the stable time increment of the entities that carry their own inertia "
             "(the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero "
-            "increment and every increment that changes their connectivity. 1 bounds it in every increment; 0 never, "
-            "so that the increments of the step are taken unchecked for the entities."
+            "increment and every increment after which the entities couple other nodes (a change of the constraints' "
+            "connectivity alone does not count). 1 bounds it in every increment; 0 never, so that the increments of the "
+            "step are taken unchecked for the entities."
         ),
         dtype=int,
         default=100,
@@ -953,13 +954,13 @@ class NED(NonlinearSolverBase):
             for element in self.system.elementsWithNodalInertia:
                 self._internalForce[element] = internalForceOfTheElements[element]
 
-        self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep, change)
+        self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep)
 
         P, A = self._forceAndAccelerationToPublish(step, timeStep)
         self.writeResultsToModel(self._U, None, P, self._V, A)
 
     @performancetiming.timeit("entities with own inertia")
-    def _evaluateTheNetForceOnTheNewConnectivity(self, step, timeStep: TimeStep, change: Change):
+    def _evaluateTheNetForceOnTheNewConnectivity(self, step, timeStep: TimeStep):
         """Evaluate, at the configuration just accepted and on the connectivity the entities that carry their own
         inertia reach now, what the next increment starts from: their internal force, their lumped momentum and their
         lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), the bound of their
@@ -979,8 +980,6 @@ class NED(NonlinearSolverBase):
             The step being solved.
         timeStep
             The increment just accepted.
-        change
-            What the reconnection after it changed.
         """
 
         system = self.system
@@ -994,7 +993,7 @@ class NED(NonlinearSolverBase):
             system.assembleLumpedMassOfEntitiesWithOwnInertia(self.forEachChunk),
             system.assembleLumpedDampingOfEntitiesWithOwnInertia(self.forEachChunk),
         )
-        if self._stableTimeIncrementIsDue(timeStep, change):
+        if self._stableTimeIncrementIsDue(timeStep):
             with performancetiming.timeit("stable time increment of entities"):
                 self._stableTimeIncrementOfEntities = system.stableTimeIncrementOfEntitiesWithOwnInertia(
                     self.forEachChunk
@@ -1087,19 +1086,19 @@ class NED(NonlinearSolverBase):
         self._dampingOfEntities = dampingOfEntities
         self._deriveLumpedOperators()
 
-    def _stableTimeIncrementIsDue(self, timeStep: TimeStep, change: Change) -> bool:
+    def _stableTimeIncrementIsDue(self, timeStep: TimeStep) -> bool:
         """Whether the stable time increment of the entities that carry their own inertia is bounded anew after this
-        increment, unless ``stable-increment-frequency`` is 0: in the zero increment; whenever the connectivity of the
-        entities changed, since a node their kernel functions reach only at the edge of a support carries a small mass
-        and may lower the bound a lot; and after every ``stable-increment-frequency``-th increment, for the gradual
-        change of the entities' size and stiffness in between, which the courant number covers.
+        increment, unless ``stable-increment-frequency`` is 0: in the zero increment; whenever the entities couple
+        other nodes (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertiaCoupleOtherNodes`),
+        since a node their kernel functions reach only at the edge of a support carries a small mass and may lower the
+        bound a lot; and after every ``stable-increment-frequency``-th increment, for the gradual change of the
+        entities' size and stiffness in between, which the courant number covers. A change of the connectivity of the
+        constraints alone, e.g. a contact paired anew, leaves the entities' system, and with it the bound, as it is.
 
         Parameters
         ----------
         timeStep
             The increment just accepted.
-        change
-            What the reconnection after it changed.
 
         Returns
         -------
@@ -1110,7 +1109,11 @@ class NED(NonlinearSolverBase):
         frequency = self.options["stable-increment-frequency"]
         if not frequency:
             return False
-        return timeStep.timeIncrement == 0.0 or change > Change.NONE or timeStep.number % frequency == 0
+        return (
+            timeStep.timeIncrement == 0.0
+            or self.system.entitiesWithOwnInertiaCoupleOtherNodes()
+            or timeStep.number % frequency == 0
+        )
 
     def _enforceTheCriticalTimeStep(self, step, cause: str):
         """Make the time increment of the step the critical time step, the smaller of the elements' and the entities'
