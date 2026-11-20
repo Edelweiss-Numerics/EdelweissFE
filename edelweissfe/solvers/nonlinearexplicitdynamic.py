@@ -996,7 +996,7 @@ class NED(NonlinearSolverBase):
         if self._stableTimeIncrementIsDue(timeStep):
             with performancetiming.timeit("stable time increment of entities"):
                 self._stableTimeIncrementOfEntities = system.stableTimeIncrementOfEntitiesWithOwnInertia(
-                    self.forEachChunk
+                    self._inertiaOfEntities, self._dampingOfEntities, self.forEachChunk
                 )
             self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia")
 

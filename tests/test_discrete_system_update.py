@@ -145,6 +145,8 @@ def test_a_vector_wrapped_on_new_locations_keeps_its_values_and_sees_the_new_loc
     assert rewrapped[model.elements[1]].tolist() == vector[model.elements[1]].tolist()
     # the scatter layout follows the locations the vector is wrapped with
     assert rewrapped.createScatterVector().offsetMap.keys() == newLocations.ofEntity.keys()
+    # the layout belongs to the locations: every vector of them shares the one made at the first request
+    assert vector.createScatterVector().offsetMap is locations.constructDofVector().createScatterVector().offsetMap
     rewrapped[0] = -1.0
     assert vector[0] == -1.0, "the same buffer"
 

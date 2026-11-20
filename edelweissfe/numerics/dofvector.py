@@ -71,7 +71,6 @@ class DofVector(np.ndarray):
     def __new__(cls, nDof: int, locations: "DofLocations | None" = None):
         obj = np.zeros(nDof, dtype=float).view(cls)
         obj.locations = locations if locations is not None else _WITHOUT_LOCATIONS
-        obj._scatterTemplate = None
         #: Plain-ndarray alias of the same buffer, built lazily on first entity access so
         #: that the hot path never triggers numpy subclass wrapping. See __getitem__.
         obj._plainView = None
@@ -81,7 +80,6 @@ class DofVector(np.ndarray):
         if obj is None:
             return
         self.locations = getattr(obj, "locations", _WITHOUT_LOCATIONS)
-        self._scatterTemplate = getattr(obj, "_scatterTemplate", None)
         self._plainView = None
 
     def onLocations(self, locations: "DofLocations") -> "DofVector":
@@ -104,7 +102,6 @@ class DofVector(np.ndarray):
 
         rewrapped = self.view(DofVector)
         rewrapped.locations = locations
-        rewrapped._scatterTemplate = None
         rewrapped._plainView = None
 
         return rewrapped
@@ -169,20 +166,15 @@ class DofVector(np.ndarray):
         """
         Create a scatter vector for ALL entities located in the locations of this DofVector.
 
-        The underlying layout (entity lookup map and scatter indices) is computed once
-        and cached, so repeated calls (e.g. once per Newton iteration) only allocate
-        the zero-initialized data buffer.
+        Its layout (entity lookup map and scatter indices) belongs to the locations, which make it once
+        (:attr:`~edelweissfe.numerics.doflocations.DofLocations.scatterTemplate`): every vector of the same locations,
+        e.g. the force, the momentum and the lumped mass of one increment, shares it, and a call only allocates the
+        zero-initialized data buffer.
 
         Returns
         -------
         ScatterDofVector
-            A `ScatterDofVector` initialized with this vector's locations and total DOF count.
+            A `ScatterDofVector` with the layout of this vector's locations.
         """
 
-        # The template is inherited across views/copies, but the vector may since have been wrapped with other
-        # locations: do not reuse a template built for stale locations.
-        if self._scatterTemplate is None or self._scatterTemplate.locations is not self.locations:
-            self._scatterTemplate = edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate(
-                self.locations, self.size
-            )
-        return edelweissfe.numerics.scatterdofvector.ScatterDofVector(self._scatterTemplate)
+        return edelweissfe.numerics.scatterdofvector.ScatterDofVector(self.locations.scatterTemplate)

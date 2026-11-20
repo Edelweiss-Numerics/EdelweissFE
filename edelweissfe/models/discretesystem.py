@@ -525,7 +525,10 @@ class DiscreteSystem:
         return None
 
     def stableTimeIncrementOfEntitiesWithOwnInertia(
-        self, forEachChunk: Callable[[list, Callable], None]
+        self,
+        lumpedMass: DofVector,
+        lumpedDamping: DofVector,
+        forEachChunk: Callable[[list, Callable], None],
     ) -> float | None:
         """A bound of the stable time increment of the explicit scheme for the entities that carry their own inertia
         (:attr:`entitiesWithOwnInertia`) at their current configuration. A property of their assembled system, not of
@@ -536,6 +539,11 @@ class DiscreteSystem:
 
         Parameters
         ----------
+        lumpedMass
+            The lumped mass of the entities at their current configuration, as
+            :meth:`assembleLumpedMassOfEntitiesWithOwnInertia` returns it: the solver has just assembled it.
+        lumpedDamping
+            Their lumped damping, likewise (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`).
         forEachChunk
             The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
 
