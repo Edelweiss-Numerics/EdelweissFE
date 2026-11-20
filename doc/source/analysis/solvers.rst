@@ -464,9 +464,11 @@ inertia, whose kernel functions move with them. ``NED`` integrates both in one l
 own inertia" above. Every increment advances the particles and computes the elements, accepts, reconnects the
 particles, and evaluates them on the new kernel functions; their lumped mass is assembled in every increment, the
 elements' in every numbering. A projectile of finite elements gets its initial velocity from the model's velocity at its
-nodes, a body of particles from the velocity of its particles. The particles report no stable time increment, so the
-critical time step covers the finite elements only. With ``project-velocity-every-increment``, the velocity of the
-particles' nodes is projected from their momentum in every increment.
+nodes, a body of particles from the velocity of its particles. The particles' lumped damping is taken like their mass,
+so a nonlocal field of gradient-enhanced particles is integrated by its own scheme, and their critical time step,
+evaluated in every increment, enters the critical time step with the elements'. With
+``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum in every
+increment.
 
 Work per increment outside the elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -435,7 +435,8 @@ class DiscreteSystem:
         (:meth:`advanceEntitiesWithOwnInertia`), the model reconnects them after every increment, and they return their
         force, their lumped mass and their lumped momentum on the nodes they couple then
         (:meth:`assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,
-        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`). The nodes they couple carry no total solution: their
+        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`, :meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`,
+        :meth:`stableTimeIncrementOfEntitiesWithOwnInertia`). The nodes they couple carry no total solution: their
         values are the coefficients of one increment, and no element assembles a mass there (see
         :meth:`dofsWithNodalInertia`).
 
@@ -478,7 +479,9 @@ class DiscreteSystem:
         """The internal force of the entities that carry their own inertia (:attr:`entitiesWithOwnInertia`), their
         residual contribution at the state they accepted, and their lumped momentum, both at the nodes they couple now:
         what ``NED`` evaluates after every increment, once the model has reconnected them, with their lumped mass
-        (:meth:`assembleLumpedMassOfEntitiesWithOwnInertia`). The momentum is what the velocity of these nodes is
+        (:meth:`assembleLumpedMassOfEntitiesWithOwnInertia`), their lumped damping
+        (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`) and the stable time increment of their assembled system
+        (:meth:`stableTimeIncrementOfEntitiesWithOwnInertia`). The momentum is what the velocity of these nodes is
         projected from where the model does not hold it (see :meth:`carriersOfTheMotion`).
 
         A finite element model has no such entity: None.
@@ -493,6 +496,53 @@ class DiscreteSystem:
         tuple[DofVector, DofVector] | None
             The internal force and the lumped momentum, one value per degree of freedom; None if the model has no such
             entity.
+        """
+
+        return None
+
+    def assembleLumpedDampingOfEntitiesWithOwnInertia(
+        self, forEachChunk: Callable[[list, Callable], None]
+    ) -> DofVector | None:
+        """The lumped (diagonal) damping, at the nodes they couple, of the entities that carry their own inertia
+        (:attr:`entitiesWithOwnInertia`): the coefficient of each field's first time derivative, as
+        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia` gives the one of the second, e.g. the nonlocal viscosity of a
+        gradient-enhanced particle. ``NED`` takes it in every increment with the mass: a field with a damping alone is
+        integrated by forward Euler, and the damping damps a field with an inertia.
+
+        A finite element model has no such entity: None.
+
+        Parameters
+        ----------
+        forEachChunk
+            The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
+
+        Returns
+        -------
+        DofVector | None
+            The lumped damping, one value per degree of freedom; None if the model has no such entity.
+        """
+
+        return None
+
+    def stableTimeIncrementOfEntitiesWithOwnInertia(
+        self, forEachChunk: Callable[[list, Callable], None]
+    ) -> float | None:
+        """A bound of the stable time increment of the explicit scheme for the entities that carry their own inertia
+        (:attr:`entitiesWithOwnInertia`) at their current configuration. A property of their assembled system, not of
+        one entity: an entity's stiffness may couple nodes at which its own lumped mass vanishes. ``NED`` takes the
+        smaller of it and the elements' critical time step.
+
+        A finite element model has no such entity: None.
+
+        Parameters
+        ----------
+        forEachChunk
+            The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
+
+        Returns
+        -------
+        float | None
+            The stable time increment, unscaled by a courant number; None if the model has no such entity.
         """
 
         return None
