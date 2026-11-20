@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Patch test of 2D h-adaptivity: uniform tension on a distorted CPS8R mesh with hanging nodes.
 ** The bottom right element, which carries part of the loaded edge, is refined live: at the step start and
 ** again after the first increment, two levels deep, so hanging nodes sit on coarse edges of straight but

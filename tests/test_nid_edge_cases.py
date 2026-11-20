@@ -81,7 +81,7 @@ def test_backward_euler_damps_energy_monotonically(tmp_path):
 
     dt = 0.02
     deck = (
-        _deck(dt, maxNumInc=30)
+        _deck(dt, stepLength=30 * dt)
         .replace(f"newmarkGamma={GAMMA}", "newmarkGamma=1.0")
         .replace(f"newmarkBeta={BETA}", "newmarkBeta=1.0")
     )
@@ -107,7 +107,7 @@ def test_warns_but_runs_outside_the_stable_region(tmp_path):
     is then the user's own responsibility, same as an explicit solver's CFL limit."""
 
     dt = 0.02
-    deck = _deck(dt, maxNumInc=5).replace(f"newmarkBeta={BETA}", "newmarkBeta=0.1")
+    deck = _deck(dt, stepLength=5 * dt).replace(f"newmarkBeta={BETA}", "newmarkBeta=0.1")
     # beta=0.1 < 0.25*(0.5+0.5)^2 = 0.25 -- outside the stable region at gamma=1/2 unchanged.
     _, fieldOutputController = _run(tmp_path, "nid_unstable_region", deck)
     t, u, _, _ = _tipHistories(fieldOutputController)
@@ -120,7 +120,7 @@ def test_refuses_a_dynamic_dof_with_no_mass(tmp_path):
     own material raises on -- so this solver carries its own guard: a mass-carrying field left
     with no mass anywhere would otherwise integrate as though it had inertia, silently."""
 
-    deck = _deck(0.02, maxNumInc=1).replace(f"{E!r}, 0.0, {RHO!r}", f"{E!r}, 0.0, 0.0")
+    deck = _deck(0.02, stepLength=1 * 0.02).replace(f"{E!r}, 0.0, {RHO!r}", f"{E!r}, 0.0, 0.0")
     with pytest.raises(ValueError, match="received no mass"):
         _run(tmp_path, "nid_massless", deck)
 
@@ -131,7 +131,7 @@ def test_refuses_an_element_without_a_consistent_mass_with_a_clear_message(tmp_p
     ``NotImplementedError`` of the element base class from deep inside the assembly."""
 
     deck = (
-        _deck(0.02, maxNumInc=1)
+        _deck(0.02, stepLength=1 * 0.02)
         .replace("*material, name=LinearElastic, id=bar", "*material, name=linearelastic, id=bar, provider=edelweiss")
         .replace("elType=C3D8", "elType=C3D8\nelProvider=edelweiss")
     )
@@ -148,7 +148,7 @@ def test_a_reduced_integration_element_starts_under_load(tmp_path):
     stiffness it does not share but whose mass it does."""
 
     def maxima(elType):
-        deck = _deck(0.02, maxNumInc=30).replace("elType=C3D8", f"elType={elType}").replace("nX=1", "nX=3")
+        deck = _deck(0.02, stepLength=30 * 0.02).replace("elType=C3D8", f"elType={elType}").replace("nX=1", "nX=3")
         model, _ = _run(tmp_path, f"nid_loaded_start_{elType}", deck)
         field = model.nodeFields["displacement"]
         return model.time, [float(np.max(np.abs(field[entry]))) for entry in "UVA"]
@@ -193,19 +193,19 @@ def _reportADamping(monkeypatch, value: float):
 def test_refuses_a_non_finite_mass(tmp_path, monkeypatch):
     _corruptTheAssembledMass(monkeypatch, np.nan)
     with pytest.raises(ValueError, match="non-finite entries"):
-        _run(tmp_path, "nid_non_finite_mass", _deck(0.02, maxNumInc=1))
+        _run(tmp_path, "nid_non_finite_mass", _deck(0.02, stepLength=1 * 0.02))
 
 
 def test_refuses_a_non_finite_damping(tmp_path, monkeypatch):
     _reportADamping(monkeypatch, np.inf)
     with pytest.raises(ValueError, match="non-finite entries"):
-        _run(tmp_path, "nid_non_finite_damping", _deck(0.02, maxNumInc=1))
+        _run(tmp_path, "nid_non_finite_damping", _deck(0.02, stepLength=1 * 0.02))
 
 
 def test_refuses_a_negative_damping(tmp_path, monkeypatch):
     _reportADamping(monkeypatch, -1.0)
     with pytest.raises(ValueError, match="negative entries"):
-        _run(tmp_path, "nid_negative_damping", _deck(0.02, maxNumInc=1))
+        _run(tmp_path, "nid_negative_damping", _deck(0.02, stepLength=1 * 0.02))
 
 
 def test_reports_the_assembled_total_mass(tmp_path, monkeypatch):
@@ -218,7 +218,7 @@ def test_reports_the_assembled_total_mass(tmp_path, monkeypatch):
         return totals
 
     monkeypatch.setattr(NonlinearImplicitDynamic, "_totalMassByField", staticmethod(recordingTotalMassByField))
-    _run(tmp_path, "nid_mass_report", _deck(0.02, maxNumInc=1))
+    _run(tmp_path, "nid_mass_report", _deck(0.02, stepLength=1 * 0.02))
 
     assert reported and set(reported[0]) == {"displacement"}
     # the whole unit bar: rho * volume

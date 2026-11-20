@@ -92,7 +92,7 @@ elType=GC3D8
 >>perNode, nSet=gen_right, field=displacement, result=V, name=tipV, f(x)='np.mean(x[:,0])', saveHistory=True
 
 *step, solver=theSolver
-stepLength=1.0, startInc={DT!r}, maxInc={DT!r}, minInc=1e-6, maxNumInc=5, maxIter=25
+stepLength={5 * DT!r}, startInc=0.2, maxInc=0.2, minInc=1e-6, maxNumInc=5, maxIter=25
 >>options, name=theSolver, extrapolation=off
 >>dirichlet, name=fixedEnd, nSet=gen_left, field=displacement, 1=0.0
 >>dirichlet, name=lateral, nSet=all, field=displacement, 2=0.0, 3=0.0

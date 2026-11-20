@@ -1,3 +1,6 @@
+** requires: marmot-module AT2PhaseField
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 ** Dynamic h-adaptivity regression test for the recoveryError marker: a Zienkiewicz-Zhu recovered-
 ** gradient error indicator on the nonlocal damage field, with Doerfler bulk marking. Two coarse
 ** GC3D20 elements form a cantilever; the outer element is stretched 5% (x in [1, 2.05] instead of

@@ -1,3 +1,6 @@
+** requires: marmot-module ADLinearElastic
+** requires: marmot-module DisplacementFiniteElement
+
 *node
 ** Our  nodes
 ** ID   coordinates
@@ -52,7 +55,7 @@ maxInc=1e0, minInc=1e0, maxNumInc=100, maxIter=25, stepLength=1
 *step, solver=theSolver
 maxInc=1e0, minInc=1e0, maxNumInc=10, maxIter=25, stepLength=1
 ** The second step: apply the load
->>distributedload, name=dload, surface=surfaceRight, type=pressure, magnitude=0.15, f(t)='t**2'
+>>distributedload, name=dload, surface=surfaceRight, type=pressure, magnitude=15000.0, f(t)='t**2'
 
 *fieldOutput
 ** The results we are interested in

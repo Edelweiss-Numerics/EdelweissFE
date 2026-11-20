@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Newmark-beta implicit dynamics (NID): one Marmot C3D8 (LinearElastic) as a uniaxial bar under a
 ** suddenly applied end load -- a single-degree-of-freedom oscillator with a closed-form solution.
 **
@@ -11,7 +14,8 @@
 **
 **     u(t) = 0.01 (1 - cos 2 pi t).
 **
-** dt = 0.02 (50 increments per period) over two periods; U.ref pins this one dt. The verification
+** dt = 0.02 (50 increments per period) over two and a half periods, to the largest displacement
+** u = 0.02; U.ref pins this one dt. The verification
 ** proper lives in tests/test_nid_newmark.py, which runs this same problem at several dt and checks
 ** it against the closed form (O(dt^2) convergence), against the exact discrete Newmark recurrence
 ** of the SDOF system (to round-off), and for exact conservation of the discrete energy.
@@ -47,7 +51,7 @@ elType=C3D8
 fieldOutput=tipU
 
 *step, solver=theSolver
-stepLength=2.0, startInc=0.01, maxInc=0.01, minInc=1e-4, maxNumInc=1000, maxIter=25
+stepLength=2.5, startInc=0.008, maxInc=0.008, minInc=1e-4, maxNumInc=1000, maxIter=25
 >>options, name=theSolver, extrapolation=off
 >>dirichlet, name=fixedEnd, nSet=gen_left, field=displacement, 1=0.0
 >>dirichlet, name=lateral, nSet=all, field=displacement, 2=0.0, 3=0.0

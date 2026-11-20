@@ -61,6 +61,7 @@ import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils import performancetiming
+from edelweissfe.utils.exceptions import StepFailed
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 
@@ -109,6 +110,12 @@ def _runInputFile(path: Path):
     return model
 
 
+def _runInterruptedInputFile(path: Path):
+    """Run an input file whose step is interrupted: it fails by reaching its maxNumInc, after writing its checkpoints."""
+    with pytest.raises(StepFailed, match="maxNumInc reached"):
+        _runInputFile(path)
+
+
 def _mostRecentCheckpoint(tmp_path: Path) -> Path:
     checkpoints = list(tmp_path.glob("ckpt_*.h5"))
     assert checkpoints, "the truncated run did not write any restart checkpoint"
@@ -139,9 +146,9 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path, linsolver):
         materialAndMesh + f"\n*output, type=restart, name=restartwriter\n"
         f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n"
         + _STEP_1
-        + _step2(maxNumInc=3)  # deliberately too low: truncates the job before step 2 finishes
+        + _step2(maxNumInc=3)  # deliberately too low: interrupts the job before step 2 finishes
     )
-    _runInputFile(truncatedPath)
+    _runInterruptedInputFile(truncatedPath)
 
     checkpoint = _mostRecentCheckpoint(tmp_path)
 
@@ -219,21 +226,23 @@ def test_restart_resume_matches_uninterrupted_reference_with_amr(tmp_path):
     truncatedPath.write_text(
         _AMR_MATERIAL_AND_MESH + f"\n*output, type=restart, name=restartwriter\n"
         f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n"
-        + _amrStep(maxNumInc=6)  # deliberately too low: truncates before the step finishes
+        + _amrStep(maxNumInc=6)  # deliberately too low: interrupts the step before it finishes
     )
-    truncatedModel = _runInputFile(truncatedPath)
-    # the truncation point must be past the refinement, or this test would not exercise replay at
-    # all -- resuming an unrefined checkpoint doesn't touch the new code paths this is meant to pin.
-    assert len(truncatedModel.elements) > 1, "truncated too early: refinement had not happened yet"
-    assert truncatedModel.time < 1.0, "the step already finished within maxNumInc -- not a real truncation"
+    _runInterruptedInputFile(truncatedPath)
 
     checkpoint = _mostRecentCheckpoint(tmp_path)
+    with h5py.File(checkpoint, "r") as f:
+        checkpointTime = f.attrs["time"]
 
     resumePath = tmp_path / "resume.inp"
     resumePath.write_text(_AMR_MATERIAL_AND_MESH + f"\n*restart, readFrom={checkpoint}\n" + _amrStep(maxNumInc=10000))
     resumedModel = _runInputFile(resumePath)
     resumedU = resumedModel.nodeFields["displacement"]["U"]
 
+    # the interruption must be past the refinement, or this test would not exercise replay at all --
+    # resuming an unrefined checkpoint doesn't touch the new code paths this is meant to pin.
+    assert resumedModel.topology.history, "interrupted too early: refinement had not happened yet"
+    assert resumedModel.topology.history[0].time <= checkpointTime
     assert set(resumedModel.elements.keys()) == set(referenceModel.elements.keys())
     assert set(resumedModel.nodes.keys()) == set(referenceModel.nodes.keys())
     np.testing.assert_allclose(resumedU, referenceU, atol=1e-10)
@@ -286,7 +295,7 @@ def test_restart_replay_is_timed_in_its_own_table(tmp_path, performanceTableRows
         _AMR_MATERIAL_AND_MESH + f"\n*output, type=restart, name=restartwriter\n"
         f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n" + _amrStep(maxNumInc=6)
     )
-    assert len(_runInputFile(truncatedPath).elements) > 1, "truncated too early: refinement had not happened yet"
+    _runInterruptedInputFile(truncatedPath)
     checkpoint = _mostRecentCheckpoint(tmp_path)
 
     # The output managers' rows, one per manager under the name of its *output line, nested in "output".
@@ -316,7 +325,7 @@ def test_restart_without_topology_history_prints_no_restore_table(tmp_path, perf
         _materialAndMesh("pardiso") + f"\n*output, type=restart, name=restartwriter\n"
         f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n" + _STEP_1 + _step2(maxNumInc=3)
     )
-    _runInputFile(truncatedPath)
+    _runInterruptedInputFile(truncatedPath)
     checkpoint = _mostRecentCheckpoint(tmp_path)
     performanceTableRows.clear()
 
@@ -362,9 +371,9 @@ def test_restart_ensight_output_continues_across_resume(tmp_path):
         materialAndMesh + ensightBlock + f"\n*output, type=restart, name=restartwriter\n"
         f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n" + _STEP_1 + _step2(maxNumInc=3)
     )
-    _runInputFile(truncatedPath)
+    _runInterruptedInputFile(truncatedPath)
     truncatedStepCount = _ensightStepCount(ensightName)
-    assert 0 < truncatedStepCount < fullStepCount, "the truncated run should stop partway through"
+    assert 0 < truncatedStepCount < fullStepCount, "the interrupted run should stop partway through"
 
     checkpoint = _mostRecentCheckpoint(tmp_path)
     resumePath = tmp_path / "resume.inp"

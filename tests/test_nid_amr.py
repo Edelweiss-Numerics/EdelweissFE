@@ -79,7 +79,7 @@ def _deck(
     steps: str | None = None,
     nX: int = 1,
     lX: float = 2.0,
-    maxNumInc: int = 5,
+    nIncrements: int = 5,
 ) -> str:
     """A box of ``C3D20R`` with every node's x-motion prescribed, so the displacement field -- and
     with it the velocity and the acceleration -- is a polynomial of degree at most one in space.
@@ -88,6 +88,8 @@ def _deck(
     the uniform-velocity case the explicit solver's own live-adaptivity check uses. With it, the
     value is scaled by the node's ``x``: a uniform extension, whose velocity field is linear rather
     than constant -- a strictly harder case for the interpolation, and still exact.
+
+    The step ends after ``nIncrements`` increments of ``DT``.
     """
 
     field = (
@@ -104,7 +106,7 @@ def _deck(
         steps
         or f"""
 *step, solver=theSolver
-stepLength=1.0, startInc={DT}, maxInc={DT}, minInc=1e-6, maxNumInc={maxNumInc}, maxIter=25
+stepLength={nIncrements * DT!r}, startInc={1 / nIncrements!r}, maxInc={1 / nIncrements!r}, minInc=1e-6, maxNumInc={nIncrements}, maxIter=25
 >>options, name=theSolver, extrapolation=off
 >>dirichlet, name=motion, nSet=all, field=displacement, 1={X_MOTION}, 2=0.0, 3=0.0{dirichletField}
 """
@@ -163,7 +165,7 @@ maxLevel=2
 #: every degree of freedom is prescribed and whose re-equilibrated acceleration is therefore zero.
 _CANTILEVER_STEP = f"""
 *step, solver=theSolver
-stepLength=1.0, startInc={DT}, maxInc={DT}, minInc=1e-6, maxNumInc=5, maxIter=25
+stepLength={5 * DT!r}, startInc=0.2, maxInc=0.2, minInc=1e-6, maxNumInc=5, maxIter=25
 >>options, name=theSolver, extrapolation=off
 >>dirichlet, name=fixedEnd, nSet=gen_left, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=pull, nSet=gen_right, field=displacement, 1={X_MOTION}
@@ -436,13 +438,13 @@ def test_a_hanging_node_interface_refines_and_converges(tmp_path, monkeypatch):
 
 _TWO_STEPS = f"""
 *step, solver=theSolver
-stepLength=1.0, startInc={DT}, maxInc={DT}, minInc=1e-6, maxNumInc=3, maxIter=25
+stepLength={3 * DT!r}, startInc={1 / 3!r}, maxInc={1 / 3!r}, minInc=1e-6, maxNumInc=3, maxIter=25
 >>options, name=theSolver, extrapolation=off
 >>dirichlet, name=motion, nSet=gen_left, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=pull, nSet=gen_right, field=displacement, 1={X_MOTION}
 
 *step, solver=theSolver
-stepLength=1.0, startInc={DT}, maxInc={DT}, minInc=1e-6, maxNumInc=3, maxIter=25
+stepLength={3 * DT!r}, startInc={1 / 3!r}, maxInc={1 / 3!r}, minInc=1e-6, maxNumInc=3, maxIter=25
 >>options, name=theSolver, extrapolation=off
 >>dirichlet, name=motion, nSet=gen_left, field=displacement, 1=0.0, 2=0.0, 3=0.0
 >>dirichlet, name=pull, nSet=gen_right, field=displacement, 1={X_MOTION}, 2=0.0

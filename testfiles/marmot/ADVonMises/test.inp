@@ -1,3 +1,6 @@
+** requires: marmot-module ADVonMises
+** requires: marmot-module DisplacementFiniteElement
+
 *material, name=ADVonMises, id=myMaterial
 210000, 0.3, 550, 1000, 200, 1400
 

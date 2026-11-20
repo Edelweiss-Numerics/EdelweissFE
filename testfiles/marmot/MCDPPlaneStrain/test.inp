@@ -1,3 +1,5 @@
+** requires: marmot-module BOKU-private
+
 *material, name=MCDP, id=MCDP
 **E,        nu,     GcToG,  l,          polarRatio,
 30000.0,    0.15 ,  1.,     4,          1.499999

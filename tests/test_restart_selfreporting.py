@@ -97,23 +97,23 @@ def test_a_solver_that_does_not_declare_its_state_cannot_be_checkpointed():
 
 
 def test_resuming_at_or_past_the_increment_cap_is_reported():
-    """The trap: maxNumInc counts from the start of the analysis, so a resume that does not raise
-    it far enough ends the step on its first check and the job reports success regardless."""
+    """maxNumInc counts from the start of the analysis, so a resume that does not raise it far enough
+    reaches it before its first increment; the error says how far to raise it."""
     for alreadyDone in (60000, 130000):
         journal = _RecordingJournal()
         stepper = _stepper(journal)
         stepper.totalIncrements = alreadyDone
-        stepper._warnIfResumedAtIncrementCap()
+        stepper._reportIfResumedAtIncrementCap()
 
-        assert len(journal.messages) == 1, "no warning at {:} of 60000".format(alreadyDone)
+        assert len(journal.messages) == 1, "no error at {:} of 60000".format(alreadyDone)
         reported = journal.messages[0]
         assert str(alreadyDone) in reported and "60000" in reported
-        assert "without advancing" in reported.lower()
+        assert "raise it above {:}".format(alreadyDone) in reported
 
 
 def test_resuming_below_the_increment_cap_is_silent():
     journal = _RecordingJournal()
     stepper = _stepper(journal)
     stepper.totalIncrements = 59999
-    stepper._warnIfResumedAtIncrementCap()
+    stepper._reportIfResumedAtIncrementCap()
     assert journal.messages == []

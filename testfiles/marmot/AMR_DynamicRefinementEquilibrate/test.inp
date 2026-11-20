@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Dynamic h-adaptivity + constant-load re-equilibration regression test. Same cantilever and marker
 ** as AMR_DynamicRefinement, but with the NIST option equilibrateAfterModelChange=True: after the
 ** octree refinement fires, the solver inserts one zero-time, constant-load re-equilibration increment

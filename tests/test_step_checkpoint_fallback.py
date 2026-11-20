@@ -34,6 +34,7 @@ softening problem whose state depends on the increments that led to it. Cutting 
 increment does not help; going back to a checkpoint and taking a finer path does.
 """
 
+import re
 import shutil
 from pathlib import Path
 
@@ -54,10 +55,13 @@ from test_restart_exhaustive import (
 
 import edelweissfe.outputmanagers.restart as restartOutputManager
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
-from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.utils.checkpoint import ResumeCheckpoint
-from edelweissfe.utils.exceptions import IncrementFailed, MeshChangedSinceCheckpoint
+from edelweissfe.utils.exceptions import (
+    IncrementFailed,
+    MeshChangedSinceCheckpoint,
+    StepFailed,
+)
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 _BEAM = """
@@ -220,10 +224,11 @@ def test_a_resumed_step_falls_back_to_the_checkpoints_of_the_run_it_resumes(tmp_
 
 def test_without_fallbacks_the_step_fails_at_the_minimum_increment(tmp_path, obstacle):
     fallenBackTo = obstacle()
-    model = _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=0))
+    with pytest.raises(StepFailed):
+        _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=0))
 
     assert fallenBackTo == []
-    assert model.time == pytest.approx(0.6)
+    assert _exportedTimes(tmp_path)[-1] == pytest.approx(0.6)
 
 
 def test_the_number_of_fallbacks_is_bounded(tmp_path, obstacle):
@@ -232,10 +237,11 @@ def test_the_number_of_fallbacks_is_bounded(tmp_path, obstacle):
     before that failed increment's start, and the step fails at t = 0.6, with no fallback left."""
 
     fallenBackTo = obstacle(failsAlways=True)
-    model = _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=2))
+    with pytest.raises(StepFailed):
+        _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=2))
 
     assert fallenBackTo == pytest.approx([0.3, 0.525])
-    assert model.time == pytest.approx(0.6)
+    assert _exportedTimes(tmp_path)[-1] == pytest.approx(0.6)
 
 
 def test_a_step_falls_back_to_checkpoints_of_its_own_only(tmp_path, obstacle):
@@ -243,10 +249,11 @@ def test_a_step_falls_back_to_checkpoints_of_its_own_only(tmp_path, obstacle):
     the second step cannot go back to."""
 
     fallenBackTo = obstacle(failsAlways=True, obstacleTime=1.0)
-    model = _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=3, nSteps=2))
+    with pytest.raises(StepFailed):
+        _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=3, nSteps=2))
 
     assert fallenBackTo == []
-    assert model.time == pytest.approx(1.0)
+    assert _exportedTimes(tmp_path)[-1] == pytest.approx(1.0)
 
 
 def test_a_dynamic_step_that_falls_back_to_the_checkpoint_after_its_zero_increment_computes_its_initial_acceleration(
@@ -423,12 +430,8 @@ def test_falling_back_refuses_several_restart_outputs(tmp_path):
         _run(tmp_path, text)
 
 
-def test_a_step_whose_mesh_changed_since_its_checkpoints_fails_and_says_why(tmp_path, obstacle, monkeypatch):
+def test_a_step_whose_mesh_changed_since_its_checkpoints_fails_and_says_why(tmp_path, obstacle):
     """The increment right after a refinement fails at every size: every checkpoint left predates the refinement."""
-
-    errors = []
-    errorMessage = Journal.errorMessage
-    monkeypatch.setattr(Journal, "errorMessage", lambda self, m, s: (errors.append(m), errorMessage(self, m, s)))
 
     def failsAfterARefinement(step, model, startTime):
         history = model.topology.history
@@ -442,14 +445,13 @@ def test_a_step_whose_mesh_changed_since_its_checkpoints_fails_and_says_why(tmp_
         + _JOB
         + _STEP.format(maxCheckpointFallbacks=3)
     )
-    model = _run(tmp_path, text)
+    with pytest.raises(StepFailed, match="cannot fall back") as failure:
+        _run(tmp_path, text)
 
-    assert model.topology.history, "AMR must refine, or there is nothing to test"
     assert fallenBackTo == []
-    failure = next(m for m in errors if "cannot fall back" in m)
-    assert "predates a mesh change (model modifier amr at time {:}".format(model.topology.history[-1].time) in failure
-    assert "a mesh change cannot be undone" in failure
-    assert "No usable checkpoint is left" in failure
+    assert re.search(r"predates a mesh change \(model modifier amr at time [0-9.]+\)", str(failure.value))
+    assert "a mesh change cannot be undone" in str(failure.value)
+    assert "No usable checkpoint is left" in str(failure.value)
 
 
 def _modelTime(checkpoint: Path) -> float:

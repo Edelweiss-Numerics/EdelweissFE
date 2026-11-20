@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 *material, name=gcdp, id=gcdp
 **E         nu      fcy         fcu         fbu         ftu         Df          Ah
 30000.0,    0.15,   13,         47.4,       55,         4.74,       0.85,       0.12,

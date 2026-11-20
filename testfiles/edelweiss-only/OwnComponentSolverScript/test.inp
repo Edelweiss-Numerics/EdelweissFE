@@ -1,3 +1,5 @@
+** requires: extension edelweissfe.linsolve.amgcl.amgcl
+
 ** A composed linear solver with a component written in the solver script itself (see solver.py): a symmetric
 ** Gauss-Seidel smoother, a subclass of Preconditioner, before and after one AMG cycle, accelerated by LGMRES. The
 ** model is a plane-strain cantilever (CPE4, 6834 displacement dofs: on a much smaller model, AMG solves directly)

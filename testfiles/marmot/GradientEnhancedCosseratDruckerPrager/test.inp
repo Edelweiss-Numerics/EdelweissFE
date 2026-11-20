@@ -1,3 +1,5 @@
+** requires: marmot-module BOKU-private
+
 *material, name=GradientEnhancedCosseratDruckerPrager, id=le,
 **E,     nu,    GcToG,  lb,   lt,       lj2,        polarRatio,    cohesion,   phi,    psi,    A,          hExpDelta,      hExp,   hDilationExp
 500,  0.12,   .1,      10,   20,        10,          1.49999,         0.4,         25,      5,      0.00,      1,           1000,      0,

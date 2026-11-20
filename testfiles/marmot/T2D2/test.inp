@@ -1,3 +1,6 @@
+** requires: marmot-module LinearElastic
+** requires: marmot-module TrussElement
+
 *material, name=linearelastic, id=linearelastic,
 30000.0, 0.15
 

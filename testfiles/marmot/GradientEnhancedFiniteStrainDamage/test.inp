@@ -1,3 +1,6 @@
+** requires: marmot-module GradientEnhancedCompressibleNeoHookeDamage
+** requires: marmot-module GradientEnhancedFiniteStrainDisplacementElement
+
 ** Finite-strain gradient-enhanced damage: GradientEnhancedFiniteStrainDisplacementElement (GCPE8UL, plane strain)
 ** with Marmot's GradientEnhancedCompressibleNeoHookeDamage reference material.
 **

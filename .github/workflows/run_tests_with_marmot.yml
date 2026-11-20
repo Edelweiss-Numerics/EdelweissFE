@@ -65,8 +65,10 @@ jobs:
           # The full restart test runs in run_restart_exhaustive.yml; here its representative subset.
           coverage run "$(command -v pytest)" tests -m "not exhaustive" \
             --deselect tests/test_stepoptions.py::test_the_dynamic_options_branch_is_declared_in_exactly_one_place
-          coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/marmot/
-          coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/
+          coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/marmot/ \
+            --expected-skips .github/expected-skips/run_tests_with_marmot.txt
+          coverage run -a "$(command -v run_tests_edelweissfe)" ./testfiles/edelweiss-only/ \
+            --expected-skips .github/expected-skips/run_tests_with_marmot.txt
           coverage xml
 
       - name: Upload coverage to Codecov

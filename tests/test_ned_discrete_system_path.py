@@ -55,7 +55,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.change import Change
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
-from edelweissfe.utils.exceptions import RestartError
+from edelweissfe.utils.exceptions import RestartError, StepFailed
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 #: Two blocks pressed into each other, with a penalty contact between them whose connectivity is
@@ -234,8 +234,8 @@ maxLevel=1
 >>perNode, elSet=gen_all, field=displacement, result=U, name=displacement
 
 *step, type=adaptiveForExplicitSimulations, solver=theSolver
-maxInc=1, minInc=1e-14, maxNumInc=100, maxIter=25, stepLength=1e-3
->>dirichlet, name=rigidTranslation, nSet=all, field=displacement, 1=0.05, 2=0, 3=0
+maxInc=1, minInc=1e-14, maxNumInc=1000, maxIter=25, stepLength=1.64e-5
+>>dirichlet, name=rigidTranslation, nSet=all, field=displacement, 1=8.2e-4, 2=0, 3=0
 """
 
 
@@ -430,8 +430,9 @@ def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built()
 
 
 def _writeCheckpointAndResume(tmp_path, monkeypatch, tamper=None):
-    """Run a few increments of the contact deck writing a checkpoint, let ``tamper`` change the numbering the checkpoint
-    holds with its net force, and resume from it for a few more."""
+    """Run a few increments of the contact deck writing a checkpoint, until the run fails by reaching its maxNumInc, let
+    ``tamper`` change the numbering the checkpoint holds with its net force, and resume from it to the end of the
+    step."""
 
     monkeypatch.setenv("OMP_NUM_THREADS", "1")
     base = tmp_path / "ckpt"
@@ -445,12 +446,13 @@ def _writeCheckpointAndResume(tmp_path, monkeypatch, tamper=None):
         path.write_text(deck)
         finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
 
-    run("truncated", writer, 30)
+    with pytest.raises(StepFailed, match="maxNumInc reached"):
+        run("truncated", writer, 30)
     (checkpoint,) = tmp_path.glob("ckpt_*.h5")
     if tamper is not None:
         with h5py.File(checkpoint, "r+") as f:
             tamper(f["solver"])
-    run("resumed", "*restart, readFrom={:}\n".format(checkpoint), 60)
+    run("resumed", "*restart, readFrom={:}\n".format(checkpoint), 400)
 
     return checkpoint
 

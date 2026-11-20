@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Dynamic h-adaptivity regression test -- exercises the full *modelModifier path end to end:
 ** marking -> octree refinement -> model mutation -> nodal warm-start -> quadrature-point state
 ** transfer -> hanging-node MPC -> discrete system rebuild -> solve on the refined mesh.

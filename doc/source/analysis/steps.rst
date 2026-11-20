@@ -30,6 +30,15 @@ fails, the step fails. Any other increment, including a first increment of nonze
 An explicit step (``AdaptiveStepForExplicitSimulations``) always begins with the zero increment, in which the explicit
 solver builds its initial state, and refuses ``makeZeroIncrementFirst=False``.
 
+Maximum number of increments
+----------------------------
+
+A step must reach its end within ``maxNumInc`` increments: one that has not, fails, with an error naming the step and
+the progress it reached. Its loads and prescribed displacements follow their amplitudes over the step, and every one
+of them keeps its value at the end of the step for the next one, so a step that stopped short of its end would hand
+its full load to the next step. Only a step under arc length control (see :doc:`solvers`) may end by ``maxNumInc``: its
+loads keep the value of the load parameter it reached.
+
 Falling back to a restart checkpoint
 ------------------------------------
 

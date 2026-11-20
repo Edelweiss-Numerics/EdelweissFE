@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 ** Explicit-dynamic (NED) gradient-enhanced damage test with the non-local field made HYPERBOLIC:
 ** the same bar as GCDPNEDExplicit, with a micro-inertia turning the non-local balance from a
 ** viscous, parabolic equation into a damped wave equation.

@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Analytical-surface node snapping regression test -- exercises the full surfaceSnap
 ** *modelModifier path end to end alongside hAdaptivity: a coarse HEX20 sector mesh models a 90
 ** degree, 3-sector arc of a hollow cylindrical shell (inner radius 10, outer radius 16, height 4,

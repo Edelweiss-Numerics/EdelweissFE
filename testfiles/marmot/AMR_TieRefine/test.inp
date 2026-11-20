@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** AMR + tie-constraint integration test (PLAN_AMR_CONTACT.md §5/§6 test 5): two C3D20 blocks tied
 ** together via DOF-elimination tie; the lower (master) block is refined mid-run by hAdaptivity
 ** while already tied. Exercises tie.reconcile(): the master facets (built from surface

@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 *material, name=LINEARELASTIC, id=mat
 200000, 0.3
 

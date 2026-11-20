@@ -1,3 +1,5 @@
+** requires: marmot-module BOKU-private
+
 *material, name=GosfordSandstone, id=le,
 **E,     nu,    GcToG,  lb,   lt,       lj2,        polarRatio,               cohesion,   phi,    psi,    A,          hExpDelta,      hExp,   hDilationExp
 13000,  0.35,   .1,      1,   2,        1,          1.49999,         8,         30,      20,      1.00,      +11,           1.4e3,      1

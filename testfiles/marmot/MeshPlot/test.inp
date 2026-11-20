@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 *include, input=mesh.inp
 
 *material, name=modleonNonLocal, id=modleon

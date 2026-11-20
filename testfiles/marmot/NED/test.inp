@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module VonMises
+
 *material, name=VonMises, id=myMaterial
 210000, 0.3, 550, 1000, 200, 1400, 1
 

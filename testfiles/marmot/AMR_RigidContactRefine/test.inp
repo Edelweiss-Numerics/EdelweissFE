@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** AMR + rigid-contact integration test (PLAN_AMR_CONTACT.md §5/P4 test): a single C3D20 block sits
 ** against an analytic rigid wall at its own left face (nodeToRigidSurfacePenalty, component=0,
 ** direction=-1, value=0.0), watching nSet 'gen_left'. The block is refined mid-run by hAdaptivity

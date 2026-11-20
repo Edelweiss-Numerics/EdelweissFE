@@ -1,3 +1,6 @@
+** requires: marmot-module AT2PhaseField
+** requires: marmot-module GeneralGradientEnhancedDisplacementFiniteElement
+
 ** Live 2D h-adaptivity of a two-field (displacement + nonlocal damage) model, the 2D counterpart of
 ** AMR_TwoFieldGC3D20R: a distorted GCPE8R cantilever (plane strain, thickness 2) under an end displacement.
 ** After the first increment the stress marker refines the elements at the clamped end, so the second

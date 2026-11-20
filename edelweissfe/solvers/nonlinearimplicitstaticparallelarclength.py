@@ -328,6 +328,18 @@ class NISTPArcLength(NISTParallel):
             )
         return named[0]
 
+    def isUnderArcLengthControl(self) -> bool:
+        """Whether the step being solved has an arc length controller, see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.isUnderArcLengthControl`.
+
+        Returns
+        -------
+        bool
+            True if the step has an arc length controller.
+        """
+
+        return self.arcLengthController is not None
+
     def endStep(self, step, model: FEModel):
         """End the step as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.endStep` does, and the control of
         its controller, see

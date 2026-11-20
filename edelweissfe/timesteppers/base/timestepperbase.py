@@ -67,6 +67,9 @@ class TimeStepperBase(ABC):
     #: from its own input file.
     checkpointedState: dict | None = None
 
+    #: The accepted progress within the step, from 0 to 1.
+    finishedStepProgress: float = 0.0
+
     @abstractmethod
     def isFinished(self) -> bool:
         """Whether the step has reached its end.
@@ -187,7 +190,7 @@ class TimeStepperBase(ABC):
         """
 
         unpackState(self, data)
-        self._warnIfResumedAtIncrementCap()
+        self._reportIfResumedAtIncrementCap()
 
     @abstractmethod
     def numberOfIncrementsDone(self) -> int:
@@ -199,29 +202,21 @@ class TimeStepperBase(ABC):
             The number of increments.
         """
 
-    def _warnIfResumedAtIncrementCap(self):
-        """Warn when a checkpoint is resumed at or past the step's increment cap.
+    def _reportIfResumedAtIncrementCap(self):
+        """Report an error when a checkpoint is resumed at or past the step's increment cap.
 
-        The maximum number of increments counts from the start of the analysis, not from the resume,
-        and it is taken from the step's own configuration rather than the checkpoint, so it can be
-        raised between runs. The trap: resume without raising it far enough, and the stepper's first
-        proposal ends the step, which the solver treats as a step that finished normally -- the job
-        reports success having advanced nothing. A diagnostic run resumed at increment 130 000 with
-        the cap still at 60 000 was very nearly read as evidence that a crash did not reproduce.
-
-        This does not change the behaviour -- the cap is absolute by design -- only the silence.
+        The maximum number of increments counts from the start of the analysis, not from the resume, and it is taken
+        from the step's own configuration rather than the checkpoint, so it can be raised between runs.
         """
 
         if self.numberOfIncrementsDone() < self.maxNumberIncrements:
             return
 
-        self.journal.message(
-            "WARNING: this checkpoint is already at increment {0:}, at or past this step's "
-            "maxNumInc of {1:}, so the resumed step will end immediately WITHOUT advancing the "
-            "solution -- and the job will then report success. maxNumInc counts increments from "
-            "the start of the analysis, not from the resume: raise it above {0:} to continue.".format(
+        self.journal.errorMessage(
+            "this checkpoint is already at increment {0:}, at or past this step's maxNumInc of {1:}, so the resumed "
+            "step reaches its maxNumInc before its first increment. maxNumInc counts increments from the start of the analysis, not "
+            "from the resume: raise it above {0:} to continue.".format(
                 self.numberOfIncrementsDone(), self.maxNumberIncrements
             ),
             self.identification,
-            0,
         )

@@ -211,12 +211,30 @@ pytest edelweissfe/numerics/test_numerics.py
 
 ### Creating a New Test Case
 1. Create a subdirectory under `testfiles/edelweiss-only/` (or `testfiles/marmot/` if Marmot is required).
-2. Add a minimal, deterministic `test.inp` file defining the simulation deck.
-3. Generate the reference solution file (`U.ref`):
+2. Add a minimal, deterministic `test.inp` file defining the simulation deck. Every step must reach its end: a step
+   that runs out of increments (`maxNumInc`) fails, unless it is under arc length control.
+3. Declare in its first lines what the deck needs beyond EdelweissFE itself, one requirement per line:
+   ```
+   ** requires: marmot-module VonMises
+   ** requires: extension edelweissfe.linsolve.amgcl.amgcl
+   ** requires: python-module num_dual
+   ```
+   A `marmot-module` is a module of Marmot, whose header `Marmot/<module>.h` is installed (`BOKU-private` stands for
+   the elements and materials that public Marmot does not have); an `extension` is an optional extension of
+   EdelweissFE listed in `edelweissfe/built_extensions.log`; a `python-module` is an importable Python module. A deck
+   with a missing requirement is SKIPPED, with the requirement as the reason; a deck that fails for any other reason
+   (an exception during parsing or the simulation, a failed step) is FAILED.
+4. Generate the reference solution file (`U.ref`):
    ```bash
    run_tests_edelweissfe ./testfiles/edelweiss-only/ --tests MyNewTest --create
    ```
-4. Verify that running without `--create` passes with a maximum residual below `1e-6`.
+   `--create` writes no reference for a deck that fails, and refuses a solution that is zero up to `1e-8`: load the
+   model so that its solution is of order one.
+5. Verify that running without `--create` passes: the solution may differ from the reference by at most `1e-6` times
+   the largest magnitude of the reference.
+6. If the deck is skipped in a CI workflow (e.g. it needs Marmot, or code public Marmot does not have), add it to that
+   workflow's list in `.github/expected-skips/`: the job fails on a skip that is not listed, and on a listed deck that
+   runs.
 
 ---
 

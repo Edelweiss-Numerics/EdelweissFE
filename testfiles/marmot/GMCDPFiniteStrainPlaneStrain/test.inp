@@ -1,3 +1,5 @@
+** requires: marmot-module BOKU-private
+
 *material, name=GMCDPFiniteStrain, id=GMCDPFiniteStrain
 **E,        nu,     GcToG,  lbending,   lTorsion,   lJ2          polarRatio,
 30000.0,    0.15 ,  0.1,     4,           7.99,       10,          1.499999

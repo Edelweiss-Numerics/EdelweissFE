@@ -101,7 +101,8 @@ option is a constructor argument of the solver:
     )
     solver = NISTPArcLength(jobInfo, journal, arcLengthController="opening")
 
-A step under arc length control may end before its time is up: the solver option ``stopCondition``, an expression of
+A step under arc length control may end before its time is up: by reaching its ``maxNumInc``, which fails any other
+step, or by a stop condition. The solver option ``stopCondition``, an expression of
 the model and its field outputs, e.g. ``stopCondition='fieldOutputs["UTop"] < -1.0'``, is checked after every accepted
 increment of nonzero size, and the step ends once it is true. A stop condition belongs to the controller it is
 declared with: an ``>>options`` block that names ``arcLengthController`` (``off`` too) without a ``stopCondition``

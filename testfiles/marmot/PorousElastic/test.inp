@@ -1,3 +1,6 @@
+** requires: marmot-module BOKU-private
+** requires: marmot-module DisplacementFiniteElement
+
 *node
 0, 0, 0, 0
 1, 100, 0, 0

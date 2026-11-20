@@ -1,3 +1,7 @@
+** Two steps of prescribed displacements: the second step prescribes its changes on top of the values the first one
+** ended with.
+** The first step ends in 20 increments of 5 % (maxNumInc=20).
+
 *material, name=linearelastic, id=modleon, provider=edelweiss
 30000.0, 0.15
 
@@ -18,7 +22,7 @@ nX=8
 nY=20
 
 *step, solver=theSolver
-maxInc=0.05, minInc=1e-8, maxNumInc=5, maxIter=25, stepLength=100
+maxInc=0.05, minInc=1e-8, maxNumInc=20, maxIter=25, stepLength=100
 >>options, name=theSolver, extrapolation=linear
 >>dirichlet, name=bottom, nSet=gen_bottom,  field=displacement, 2=0, 1=0
 >>dirichlet, name=top, nSet=gen_top, field=displacement, 2=11.45, 1=3

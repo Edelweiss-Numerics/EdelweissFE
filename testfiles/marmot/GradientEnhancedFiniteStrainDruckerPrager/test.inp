@@ -1,3 +1,6 @@
+** requires: marmot-module GradientEnhancedFiniteStrainDisplacementElement
+** requires: marmot-module GradientEnhancedFiniteStrainDruckerPrager
+
 ** Finite-strain gradient-enhanced Drucker-Prager damage-plasticity: Marmot's GradientEnhancedFiniteStrainDruckerPrager
 ** in GradientEnhancedFiniteStrainDisplacementElement (GCPE8UL, plane strain).
 **

@@ -54,6 +54,8 @@ import pytest
 # sys.path and sibling test modules import by their bare module name.
 from test_nid_newmark import _deck, _run
 
+from edelweissfe.utils.exceptions import StepFailed
+
 #: Every test of this module runs with each way of summing the system matrix (see ``conftest.py``).
 pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 
@@ -93,8 +95,9 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path):
         f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n"
     )
 
-    truncatedModel, _ = _run(tmp_path, "truncated", _deck(DT, maxNumInc=N_INCREMENTS_TRUNCATED, extra=restartWriter))
-    assert truncatedModel.time < 1.0, "the step already finished within maxNumInc -- not a real truncation"
+    # interrupted: the step fails by reaching its maxNumInc, after writing its checkpoints
+    with pytest.raises(StepFailed, match="maxNumInc reached"):
+        _run(tmp_path, "truncated", _deck(DT, maxNumInc=N_INCREMENTS_TRUNCATED, extra=restartWriter))
 
     checkpoint = _mostRecentCheckpoint(tmp_path)
 
@@ -105,9 +108,6 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path):
             "prevTimeStep" in f["solver"] and "dUOfLastIncrement" in f["solver"]
         ), "the predictor state is not checkpointed"
         checkpointTime = float(f.attrs["time"])
-        # the checkpoint holds the truncated run's own final state, which is what gets resumed
-        np.testing.assert_allclose(stored["V"][:], truncatedModel.nodeFields["displacement"]["V"], atol=0.0)
-        np.testing.assert_allclose(stored["A"][:], truncatedModel.nodeFields["displacement"]["A"], atol=0.0)
     assert abs(checkpointTime - N_INCREMENTS_TRUNCATED * DT) < 1e-10
 
     resumedModel, _ = _run(
@@ -136,7 +136,8 @@ def test_a_run_resumed_after_the_zero_increment_computes_the_initial_acceleratio
         f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n"
     )
     # maxNumInc=0: the zero increment, and no real one
-    _run(tmp_path, "truncated", _deck(DT, maxNumInc=0, extra=restartWriter))
+    with pytest.raises(StepFailed, match="maxNumInc reached"):
+        _run(tmp_path, "truncated", _deck(DT, maxNumInc=0, extra=restartWriter))
     checkpoint = _mostRecentCheckpoint(tmp_path)
     with h5py.File(checkpoint, "r") as f:
         assert int(f.attrs["numberOfIncrementsDone"]) == 1, "the checkpoint must be the one after the zero increment"

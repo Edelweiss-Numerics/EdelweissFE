@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Acceptance test for PLAN_TRANSPARENT_AMR.md P4: a new constraint that writes
 ** self._nodes = model.nodeSets[nSet] at construction time must get correct behaviour before and
 ** after a mid-run mesh refinement, without implementing any observer or MeshDependent. Same

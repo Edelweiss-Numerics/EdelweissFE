@@ -1,3 +1,6 @@
+** requires: marmot-module CompressibleNeoHooke
+** requires: marmot-module TrussElement
+
 ** A shallow two-bar truss ("von Mises truss") of finite strain trusses (T2D2CR, compressible Neo-Hooke), pushed into
 ** its snap-through by displacement control of the apex: from (10, 1) down to (10, 0), where both bars are compressed
 ** to their shortest length and the tie is in tension (the end state is not the stress-free mirrored one).

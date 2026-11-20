@@ -27,6 +27,8 @@
 #  ---------------------------------------------------------------------
 """Fixtures shared by the tests of this directory."""
 
+import sys
+
 import pytest
 
 from edelweissfe.numerics import parallelizationutilities
@@ -70,3 +72,19 @@ def systemMatrixAssemblyOfNID(request, monkeypatch):
         NonlinearImplicitDynamic.SolverSpecificOptions | {"systemMatrixAssembly": request.param},
     )
     return request.param
+
+
+@pytest.fixture
+def runScript(monkeypatch):
+    """Run the ``main`` of a command line script, e.g. ``edelweissfe`` or ``run_tests_edelweissfe``, with the given
+    arguments, as ``runScript(main, *arguments)``; returns its exit code, 0 if it returns."""
+
+    def run(main, *arguments) -> int:
+        monkeypatch.setattr(sys, "argv", ["script", *arguments])
+        try:
+            main()
+        except SystemExit as e:
+            return e.code
+        return 0
+
+    return run

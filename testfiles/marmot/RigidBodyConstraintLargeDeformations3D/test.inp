@@ -1,3 +1,6 @@
+** requires: marmot-module CompressibleNeoHooke
+** requires: marmot-module DisplacementFiniteStrainULElement
+
 *include, input=mesh.inp
 
 *material, name=COMPRESSIBLENEOHOOKE, id=le,

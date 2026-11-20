@@ -88,6 +88,14 @@ def finiteElementSimulation(
         A tuple containing
             - The final model tree
             - The fieldoutput controller containing all processed results.
+
+    Raises
+    ------
+    StepFailed
+        If a step fails. The field outputs and output managers are finalized before, so that the output of the
+        failed run is complete up to the last accepted increment.
+    KeyboardInterrupt
+        If the user interrupts the run, likewise after finalizing the outputs.
     """
 
     identification = "feCore"
@@ -234,6 +242,7 @@ def finiteElementSimulation(
     except KeyboardInterrupt:
         print("")
         journal.errorMessage("Interrupted by user", identification)
+        raise
 
     except StepFailed as e:
         print("")
@@ -241,6 +250,7 @@ def finiteElementSimulation(
         journal.errorMessage(
             "Simulation failed: {:}".format(message) if message else "Simulation failed", identification
         )
+        raise
 
     except Exception as e:
         print("")

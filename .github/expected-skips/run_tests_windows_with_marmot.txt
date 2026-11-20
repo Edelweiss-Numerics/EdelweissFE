@@ -1,0 +1,53 @@
+# The decks this workflow expects run_tests_edelweissfe to skip (--expected-skips): one <test directory>/<deck> per line.
+marmot/ADRedWildmoorSandstone  # elements or materials that public Marmot does not have
+marmot/BendingTrussGMNeoHooke  # elements or materials that public Marmot does not have
+marmot/C3D8TL  # elements or materials that public Marmot does not have
+marmot/CCPE8R  # elements or materials that public Marmot does not have
+marmot/CDP  # elements or materials that public Marmot does not have
+marmot/CDPPlane  # elements or materials that public Marmot does not have
+marmot/CPE4EAS2  # elements or materials that public Marmot does not have
+marmot/CPE4EAS5  # elements or materials that public Marmot does not have
+marmot/CosseratDruckerPrager  # elements or materials that public Marmot does not have
+marmot/CosseratHoekBrown  # elements or materials that public Marmot does not have
+marmot/DLoad3DTotalLagrange  # elements or materials that public Marmot does not have
+marmot/DLoadLargeStrain  # elements or materials that public Marmot does not have
+marmot/GC3D20RMixed  # elements or materials that public Marmot does not have
+marmot/GC3D8  # elements or materials that public Marmot does not have
+marmot/GCDP  # elements or materials that public Marmot does not have
+marmot/GCDPNEDExplicit  # elements or materials that public Marmot does not have
+marmot/GCDPNEDExplicitAMR  # elements or materials that public Marmot does not have
+marmot/GCDPNEDExplicitHyperbolic  # elements or materials that public Marmot does not have
+marmot/GCDPNEDExplicitHyperbolicAMR  # elements or materials that public Marmot does not have
+marmot/GCPE4EAS2  # elements or materials that public Marmot does not have
+marmot/GCPE4ULFBar  # elements or materials that public Marmot does not have
+marmot/GCPS4  # elements or materials that public Marmot does not have
+marmot/GCSCDP  # elements or materials that public Marmot does not have
+marmot/GMCDPFiniteStrainHydrostatic  # elements or materials that public Marmot does not have
+marmot/GMCDPFiniteStrainPlaneStrain  # elements or materials that public Marmot does not have
+marmot/GMDruckerPragerPlaneStrain  # elements or materials that public Marmot does not have
+marmot/GosfordSandstone  # elements or materials that public Marmot does not have
+marmot/GradientEnhancedCosseratDruckerPrager  # elements or materials that public Marmot does not have
+marmot/IndirectDisplacementControl  # elements or materials that public Marmot does not have
+marmot/IndirectDisplacementControl2  # elements or materials that public Marmot does not have
+marmot/JaumannShearPanel2D  # elements or materials that public Marmot does not have
+marmot/LinearElasticShrinkage  # elements or materials that public Marmot does not have
+marmot/LinearElasticSolidificationCreep  # elements or materials that public Marmot does not have
+marmot/MCDPPlaneStrain  # elements or materials that public Marmot does not have
+marmot/MeshPlot  # elements or materials that public Marmot does not have
+marmot/ModifiedCamClay  # elements or materials that public Marmot does not have
+marmot/PlaneStrainBiAxHB  # elements or materials that public Marmot does not have
+marmot/PlaneStrainBiAxORDP  # elements or materials that public Marmot does not have
+marmot/PlaneStrainBiAxRDP  # elements or materials that public Marmot does not have
+marmot/PorousElastic  # elements or materials that public Marmot does not have
+marmot/QPMarmotMaterialGradientEnhancedHypoElastic  # elements or materials that public Marmot does not have
+marmot/RedWildmoorSandstone  # elements or materials that public Marmot does not have
+marmot/ShotLeon  # elements or materials that public Marmot does not have
+marmot/ShotLeonV2  # elements or materials that public Marmot does not have
+marmot/ShotLeonV2NonLocal  # elements or materials that public Marmot does not have
+marmot/ShotLeonV2NonLocalCreepTest  # elements or materials that public Marmot does not have
+marmot/SolidificationCDP  # elements or materials that public Marmot does not have
+marmot/SolidificationModLeon  # elements or materials that public Marmot does not have
+marmot/TwistingTrussGMNeoHooke  # elements or materials that public Marmot does not have
+edelweiss-only/CantileverBeamQuad8NeoHookeAdvanced  # num_dual is not in the environment
+edelweiss-only/CantileverBeamQuad8NeoHookeAdvancedI2Extended  # num_dual is not in the environment
+edelweiss-only/CantileverBeamQuad8NeoHookeAdvancedPlastic  # num_dual is not in the environment

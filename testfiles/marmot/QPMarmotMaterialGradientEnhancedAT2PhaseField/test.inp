@@ -1,3 +1,6 @@
+** requires: extension edelweissfe.materials.marmot.marmotgradientenhancedhypoelastic
+** requires: marmot-module AT2PhaseField
+
 *material, name=AT2PHASEFIELD, id=myMaterial
 **E        nu      Gc      l
 20000.0,   0.2,    0.1,    5.0

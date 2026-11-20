@@ -1,3 +1,6 @@
+** requires: marmot-module DisplacementFiniteElement
+** requires: marmot-module LinearElastic
+
 ** Dynamic h-adaptivity with a user-specified split factor of 3 (3x3x3 = 27 children per refined
 ** element, vs the default octree bisection into 8). Same cantilever + stress marker as
 ** AMR_DynamicRefinement, but the *modelModifier carries splitFactor=3, so the marked element is split
