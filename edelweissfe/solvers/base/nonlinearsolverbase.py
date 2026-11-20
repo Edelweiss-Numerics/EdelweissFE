@@ -417,7 +417,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         return P, K
 
-    @performancetiming.timeit("assemble constraints")
     def forEachChunk(self, entities: list, work: Callable[[list], None]):
         """Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent
         entities, other than the elements, that the model's discrete system evaluates, e.g. the material points of a
@@ -437,6 +436,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         work(entities)
 
+    @performancetiming.timeit("assemble constraints")
     def assembleConstraintForces(
         self,
         constraints: list,
