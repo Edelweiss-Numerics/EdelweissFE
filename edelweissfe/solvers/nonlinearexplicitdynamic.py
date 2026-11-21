@@ -884,6 +884,21 @@ class NED(NonlinearSolverBase):
 
         P, A = self._forceAndAccelerationToPublish(step, timeStep)
         self.writeResultsToModel(U, dU, P, V, A)
+        self._acceptTheStateOfTheModel(model, timeStep)
+
+    def _acceptTheStateOfTheModel(self, model: FEModel, timeStep: TimeStep):
+        """Move the rigid bodies with the increment and let the model accept the state of its entities at the end of
+        it (:meth:`~edelweissfe.models.femodel.FEModel.advanceToTime`): what both kinds of model do once the increment
+        has reached the model, a finite element model last, a model with entities that carry their own inertia before
+        it reconnects.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        timeStep
+            The increment.
+        """
 
         self.updateRigidBodies(model, timeStep)
 
@@ -938,11 +953,7 @@ class NED(NonlinearSolverBase):
         """
 
         self.writeResultsToModel(self._U, self._dU, None, self._V, None)
-
-        self.updateRigidBodies(model, timeStep)
-
-        with performancetiming.timeit("accept state"):
-            model.advanceToTime(timeStep.totalTime)
+        self._acceptTheStateOfTheModel(model, timeStep)
 
         numberingOfTheIncrement, internalForceOfTheElements = self.system.numbering, self._internalForce
         with performancetiming.timeit("reconnect"):
