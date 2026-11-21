@@ -127,9 +127,10 @@ class SystemOfMassesOnSprings(DiscreteSystem):
         self.model.calls.append("damping")
         return self._onTheNodes(lambda mass: np.zeros(mass.nDof))
 
-    def stableTimeIncrementOfEntitiesWithOwnInertia(self, forEachChunk):
+    def stableTimeIncrementOfEntitiesWithOwnInertia(self, lumpedMass, lumpedDamping, forEachChunk):
         self.model.calls.append("bound")
-        return STABLE_TIME_INCREMENT
+        # each mass on its spring alone: 2 / omega, from the mass the solver has just assembled
+        return min(2.0 * np.sqrt(lumpedMass[mass][0] / STIFFNESS) for mass in self.entitiesWithOwnInertia)
 
     def _onTheNodes(self, valueOf) -> DofVector:
         vector = self.locations.constructDofVector()
