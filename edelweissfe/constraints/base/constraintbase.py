@@ -63,6 +63,16 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
     #: reach.
     withinReach: bool = True
 
+    #: Whether this constraint acts in the explicit dynamic solver (``NED``). ``NED`` evaluates a constraint with the
+    #: solution and the increment of the nodes of finite elements, which carry their total solution, so every
+    #: constraint on them acts there, through :meth:`computeKernelsExplicit`. In a model with entities that carry their
+    #: own inertia, such as the particles of EdelweissMeshfree, the nodes those entities couple carry neither a
+    #: solution nor an increment once the increment is accepted (see
+    #: :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia`), and a constraint on
+    #: them acts only if it measures its condition elsewhere, e.g. at the particles' current positions; such
+    #: constraints say so here, and ``NED`` refuses the others.
+    actsInExplicitAnalysis: bool = True
+
     #: Whether this constraint is switched on from outside; see :attr:`switchedOn`.
     _switchedOn: bool = True
 

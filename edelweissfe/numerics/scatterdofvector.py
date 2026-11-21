@@ -55,22 +55,18 @@ class ScatterDofVectorTemplate:
 
     def __init__(self, locations: "DofLocations", nDof: int):
         ofEntity = locations.ofEntity
-        sizes = np.array([len(v) for v in ofEntity.values()], dtype=np.intc)
-        total_size = int(np.sum(sizes))
-
-        offsets = np.zeros(len(ofEntity) + 1, dtype=np.intc)
-        np.cumsum(sizes, out=offsets[1:])
+        sizes = [len(indices) for indices in ofEntity.values()]
+        offsets = np.cumsum([0, *sizes]).tolist()
+        total_size = offsets[-1]
 
         # map entity -> (offset, size), such that a single lookup suffices for access
         self.offsetMap = {entity: (offset, size) for entity, offset, size in zip(ofEntity.keys(), offsets, sizes)}
 
-        self.globalIndices = np.empty(total_size, dtype=np.int32)
-
-        current_offset = 0
-        for entity, indices in ofEntity.items():
-            n = len(indices)
-            self.globalIndices[current_offset : current_offset + n] = indices
-            current_offset += n
+        # the global indices of all entities, one after the other, in the order of the offsets; of the index type of
+        # numpy, which np.bincount would otherwise convert them to in every assembly
+        self.globalIndices = (
+            np.concatenate(list(ofEntity.values())).astype(np.intp) if ofEntity else np.empty(0, dtype=np.intp)
+        )
 
         self.locations = locations
         self.nDof = nDof

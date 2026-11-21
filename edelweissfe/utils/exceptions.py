@@ -37,6 +37,16 @@ class WrongDomain(Exception):
     """Is thrown when a required module does not fit the spatial domain."""
 
 
+class ModuleNotBuilt(NotImplementedError):
+    """A compiled part that this environment does not have: a Cython extension that was not built, or an element,
+    material, particle, material point or cell whose module is not part of the Marmot build.
+
+    The wrappers raise it only for that. A test runner may skip a test that raises it (EdelweissMeshfree's does), and
+    only such a test: every other exception fails the test, including the ``NotImplementedError`` with which a solver
+    refuses a model.
+    """
+
+
 class StepFailed(Exception):
     """Is thrown when the computation of a step fails."""
 

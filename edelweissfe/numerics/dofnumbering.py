@@ -114,6 +114,10 @@ class DofNumbering:
             field: {nodeSet: self._locateFieldOnNodeSet(field, nodeSet) for nodeSet in nodeSets}
             for field in self.idcsOfFieldsInDofVector
         }
+        #: For each node field and node set read or written on so far, the rows of the located nodes in the node field,
+        #: with the :attr:`~edelweissfe.fields.nodefield.NodeField.version` of the node field they were found in; see
+        #: :meth:`_locateNodeFieldOnNodeSet`.
+        self._rowsOfNodeFieldsOnNodeSets = {}
 
     @cached_property
     def digest(self) -> str:
@@ -373,9 +377,12 @@ class DofNumbering:
                 "written as a whole only by the DofNumbering that numbers it".format(nodeField.name)
             )
 
-    def _locateNodeFieldOnNodeSet(self, nodeField: NodeField, nodeSet: NodeSet) -> tuple[np.ndarray, list]:
+    def _locateNodeFieldOnNodeSet(self, nodeField: NodeField, nodeSet: NodeSet) -> tuple[np.ndarray, np.ndarray]:
         """Where the values of a NodeField on the nodes of a node set lie, in the DofVector and in the NodeField: the
-        nodes of the set whose field is part of this discrete system (see :meth:`locateFieldOnNodeSet`).
+        nodes of the set whose field is part of this discrete system (see :meth:`locateFieldOnNodeSet`). The rows are
+        found once per node field and node set, as the indices are, and again only after the node field was resized
+        (its :attr:`~edelweissfe.fields.nodefield.NodeField.version`): a model with entities that carry their own
+        inertia writes its results on its active nodes after every increment.
 
         Parameters
         ----------
@@ -386,15 +393,20 @@ class DofNumbering:
 
         Returns
         -------
-        tuple[np.ndarray, list]
+        tuple[np.ndarray, np.ndarray]
             - The indices of the degrees of freedom in the DofVector, node after node.
             - The rows of these nodes in the NodeField, in the same order.
         """
 
         indices, nodePositions = self.locateFieldOnNodeSet(nodeField.name, nodeSet)
-        nodes = list(nodeSet)
 
-        return indices, [nodeField.indexOfNode(nodes[position]) for position in nodePositions]
+        version, rows = self._rowsOfNodeFieldsOnNodeSets.get((nodeField, nodeSet), (None, None))
+        if version != nodeField.version:
+            nodes = list(nodeSet)
+            rows = np.array([nodeField.indexOfNode(nodes[position]) for position in nodePositions], dtype=np.intp)
+            self._rowsOfNodeFieldsOnNodeSets[(nodeField, nodeSet)] = (nodeField.version, rows)
+
+        return indices, rows
 
     def writeDofVectorToNodeField(
         self, dofVector: DofVector, nodeField: NodeField, resultName: str, nodeSet: NodeSet = None
