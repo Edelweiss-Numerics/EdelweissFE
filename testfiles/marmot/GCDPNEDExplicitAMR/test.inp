@@ -32,7 +32,7 @@
 **  * computeCriticalTimeStepForExplicitDynamics on the gradient-enhanced element.
 **
 ** The Duvaut-Lions viscosity (idx 18) is deliberately ZERO here. It is a relaxation time, and the
-** explicit time increment is ~2e-6 s: a value tuned for implicit increments of ~1e-2 would give
+** explicit time increment is below 1e-6 s: a value tuned for implicit increments of ~1e-2 would give
 ** dT/eta << 1, meaning almost no viscoplastic relaxation per increment, and the material would
 ** respond essentially elastically -- a run that completes and shows no softening at all.
 **
@@ -56,13 +56,7 @@ gen_all
 
 *job, name=nedGcdpJob, domain=3d
 
-** COURANT NUMBER: 0.1, not the 0.8 default. The l/c critical-time-step estimate is a LINEAR-
-** element formula. For a 20-node element the highest free eigenfrequency is far above what it
-** predicts, and a convergence study on this very case shows the answer only settles around 0.1-0.2:
-** the final reaction is 4.49 at courant 0.8, 84.6 at 0.4, 118.5 at 0.2, 120.7 at 0.1, 118.0 at 0.05.
-** The 0.8 run does not fail, it just quietly returns a number 26x too small. Do not raise this.
 *solver, solver=NEDParallel, name=theSolver
-courant-number=0.1
 output-frequency=50
 ** The counterpart of the hyperbolic decks' assertion, and the reason this one is worth stating:
 ** the non-local field is first order here because the material provides NO micro-inertia, which is
