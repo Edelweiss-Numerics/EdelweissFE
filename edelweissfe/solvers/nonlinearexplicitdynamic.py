@@ -1997,10 +1997,45 @@ class NED(NonlinearSolverBase):
         if not self.system.entitiesWithOwnInertia:
             self._deriveLumpedOperators()
 
+    def _classifyFieldsOfTheMesh(self, inertia: np.ndarray, damping: np.ndarray):
+        """Classify the fields by time derivative (:meth:`_classifyFieldsByScheme`) for the current mesh, once per mesh
+        and step (:attr:`_meshOfTheClassification`): a field with an inertia is second order, one with only a damping
+        first order. Report the scheme, check it against the deck, and name the second-order fields that enter the
+        linear momentum and the energy balance.
+
+        Parameters
+        ----------
+        inertia
+            The assembled lumped inertia of every degree of freedom, of the elements and of the entities.
+        damping
+            The assembled lumped damping, likewise.
+        """
+
+        self._meshOfTheClassification = self.system.model.topology.version
+        self.firstOrderFields, self.secondOrderFields = self._classifyFieldsByScheme(inertia, damping)
+
+        self.journal.message(
+            "Time integration, derived from the assembled operators: central difference for {:}; "
+            "forward Euler for {:}".format(
+                ", ".join(self.secondOrderFields) or "(no field)",
+                ", ".join(self.firstOrderFields) or "(no field)",
+            ),
+            self.identification,
+            1,
+        )
+
+        self._checkDerivedSchemeAgainstTheDeck()
+
+        # Which second-order fields enter the linear momentum and the energy balance is a property of
+        # the field, taken from the registry; see phenomena.inertiaKind.
+        self.linearMomentumFields = [f for f in self.secondOrderFields if carriesLinearMomentum(f)]
+        self.nonMechanicalSecondOrderFields = [f for f in self.secondOrderFields if not carriesKineticEnergy(f)]
+
     def _deriveLumpedOperators(self):
         """Derive everything the explicit update divides by from the lumped inertia and damping of the elements and of
-        the entities that carry their own inertia: the classification of the fields by time derivative, a property of
-        the mesh derived for the first numbering of a step and for a new mesh (see :meth:`onNewNumbering`), with the
+        the entities that carry their own inertia: the classification of the fields by time derivative
+        (:meth:`_classifyFieldsOfTheMesh`), a property of the mesh derived for the first numbering of a step and for a
+        new mesh (see :meth:`onNewNumbering`), with the
         entities' operators once they are known; the index sets of the fields; and, as arrays of the length of the
         numbering, the inverse lumped mass the increment divides by, the lumped mass with and without the
         multi-point-constraint fold (:attr:`mpcTransformation`; the unfolded one for the diagnostics), the damping
@@ -2016,27 +2051,8 @@ class NED(NonlinearSolverBase):
             M[ids] = self._inertiaOfEntities[ids]
             damping[ids] = self._dampingOfEntities[ids]
 
-        # A field with an inertia is second order, one with only a damping first order.
         if self._meshOfTheClassification != self.system.model.topology.version:
-            self._meshOfTheClassification = self.system.model.topology.version
-            self.firstOrderFields, self.secondOrderFields = self._classifyFieldsByScheme(M, damping)
-
-            self.journal.message(
-                "Time integration, derived from the assembled operators: central difference for {:}; "
-                "forward Euler for {:}".format(
-                    ", ".join(self.secondOrderFields) or "(no field)",
-                    ", ".join(self.firstOrderFields) or "(no field)",
-                ),
-                self.identification,
-                1,
-            )
-
-            self._checkDerivedSchemeAgainstTheDeck()
-
-            # Which second-order fields enter the linear momentum and the energy balance is a property of
-            # the field, taken from the registry; see phenomena.inertiaKind.
-            self.linearMomentumFields = [f for f in self.secondOrderFields if carriesLinearMomentum(f)]
-            self.nonMechanicalSecondOrderFields = [f for f in self.secondOrderFields if not carriesKineticEnergy(f)]
+            self._classifyFieldsOfTheMesh(M, damping)
 
         self.ids_1st = self._dofIndicesOfFields(self.firstOrderFields)
         self.ids_2nd = self._dofIndicesOfFields(self.secondOrderFields)
