@@ -456,6 +456,22 @@ A change of the mesh -- a refinement -- gives a new numbering
 elements of the new discrete system, the solution, the velocity and the acceleration are read from the model, which
 interpolated them onto the new nodes, and the stable time increment is computed again.
 
+Finite elements and particles
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A model of EdelweissMeshfree may hold RKPM particles, alone or with finite elements: entities that carry their own
+inertia, whose kernel functions move with them. ``NED`` integrates both in one leapfrog, see "Entities that carry their
+own inertia" above. Every increment advances the particles and computes the elements, accepts, reconnects the
+particles, and evaluates them on the new kernel functions; their lumped mass is assembled in every increment, the
+elements' in every numbering. A projectile of finite elements gets its initial velocity from the model's velocity at its
+nodes, a body of particles from the velocity of its particles. The particles' lumped damping is taken like their mass,
+so a nonlocal field of gradient-enhanced particles is integrated by its own scheme. Their critical time step enters the
+critical time step with the elements'; it is bounded in the zero increment, whenever the particles couple other nodes
+(not when only a contact is paired anew), and every ``stable-increment-frequency`` increments (0 switches the bound
+off). With
+``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum in every
+increment.
+
 Work per increment outside the elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

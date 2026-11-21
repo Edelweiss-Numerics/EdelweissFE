@@ -46,6 +46,7 @@ from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
 from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
+from edelweissfe.numerics.scatterdofvector import ScatterDofVectorTemplate
 
 
 class _FluxCount:
@@ -126,6 +127,26 @@ class DofLocations:
         self._fluxesOfFixedElements = _FluxCount()
         #: The accumulated nodal fluxes of all entities, computed at the first request.
         self._nAccumulatedNodalFluxesFieldwise = None
+        #: The layout of the scatter vectors of these locations, made at the first request (see :attr:`scatterTemplate`).
+        self._scatterTemplate = None
+
+    @property
+    def scatterTemplate(self) -> ScatterDofVectorTemplate:
+        """The layout of the scatter vectors of these locations
+        (:meth:`~edelweissfe.numerics.dofvector.DofVector.createScatterVector`): where each entity writes its local
+        vector, one after the other, and the global index of every entry, from which the scatter vector is assembled.
+        It follows from :attr:`ofEntity` alone, so it is made at the first request and kept: the locations are
+        immutable, and every vector of them shares it.
+
+        Returns
+        -------
+        ScatterDofVectorTemplate
+            The layout.
+        """
+
+        if self._scatterTemplate is None:
+            self._scatterTemplate = ScatterDofVectorTemplate(self, self.numbering.nDof)
+        return self._scatterTemplate
 
     @property
     def nAccumulatedNodalFluxesFieldwise(self) -> dict:
@@ -316,6 +337,7 @@ class DofLocations:
         relocated.ofEntity = ofEntity
 
         relocated._nAccumulatedNodalFluxesFieldwise = None
+        relocated._scatterTemplate = None
 
         return relocated
 

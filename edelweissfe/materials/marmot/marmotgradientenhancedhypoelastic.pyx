@@ -53,7 +53,7 @@ from edelweissfe.materials.marmot._marmotmaterials cimport StateView, stateViewA
 from edelweissfe.materials.base.basegradientenhancedhypoelasticmaterial import (
     BaseGradientEnhancedHypoElasticMaterial,
 )
-from edelweissfe.utils.exceptions import CutbackRequest
+from edelweissfe.utils.exceptions import CutbackRequest, ModuleNotBuilt
 
 #: The factor by which the time increment is reduced if a Marmot material fails.
 cutbackFactorOnMaterialFailure = 0.25
@@ -97,8 +97,8 @@ cdef class MarmotGradientEnhancedHypoElasticMaterial:
                 materialNumber,
             )
         except Exception:
-            raise NotImplementedError(
-                "Marmot material {:} not found in library.".format(materialName)
+            raise ModuleNotBuilt(
+                "Marmot material {:} is not built in this environment.".format(materialName)
             )
 
         self.materialName = materialName

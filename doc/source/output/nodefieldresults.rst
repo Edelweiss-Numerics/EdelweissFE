@@ -24,7 +24,7 @@ what lives within one discrete system.* An entry is therefore of one of two kind
 - **result** -- what a solver writes for output and for the user; no solver reads it back.
 
 Iterations work on the solver's vectors only. A cut back increment writes nothing. An accepted increment writes
-every entry, once (the explicit meshfree solver in two parts, see below). The exceptions are the increments of the
+every entry, once (``NED`` in a model with particles in two parts, see below). The exceptions are the increments of the
 dynamic solvers ``NED`` and ``NID`` that integrate nothing: they evaluate no force, so they leave ``P`` as the last
 accepted increment wrote it, of this step or of the step before. These are
 
@@ -123,16 +123,14 @@ Every solver writes ``U`` and ``dU`` of every node field at acceptance, and thes
        equilibrium, written at the start of the increment
    * - ``NED``, ``NEDParallel``
      - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{f}_\mathrm{net}`; :math:`\boldsymbol{f}_\mathrm{int}` at a
-       prescribed motion and on a multi-point-constraint slave
+       prescribed motion, on a multi-point-constraint slave, and on a node of the particles' kernel functions without
+       mass
      - :math:`\boldsymbol{v}_{n+1/2}` (on a field integrated by forward Euler, the rate of the increment just taken);
        at the end of the step, the velocity at its end time
      - :math:`\boldsymbol{a}_{n+1}` (on a field integrated by forward Euler, the one with which
        :math:`\boldsymbol{v}_{n+1/2} + \tfrac{1}{2} \Delta t \, \boldsymbol{a}_{n+1}` is the rate at the end of the
-       increment); zero at a prescribed motion; on a multi-point-constraint slave, from its masters
-   * - ``MeshfreeExplicitDynamic`` (EdelweissMeshfree)
-     - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a}`
-     - as ``NED``, on the nodes of the kernel functions
-     - :math:`\boldsymbol{a} = \boldsymbol{M}^{-1} \boldsymbol{f}_\mathrm{net}`; zero on a node without mass
+       increment); zero at a prescribed motion; on a multi-point-constraint slave, from its masters; zero on a node of
+       the particles' kernel functions without mass
 
 In the explicit solver (``NED``), the inertial and damping forces of a node with an equation of motion are the
 net force the next velocity update divides by, so its ``P`` is the internal force plus that net force: the force of
@@ -155,16 +153,14 @@ material points carry the state. On these nodes, ``U`` is zero and ``dU`` holds 
 accepted increment, which is their meaningful nodal value. Nodes outside the active domain of an increment hold
 zero in every entry.
 
-The explicit meshfree solver carries the velocity of the kernel functions in ``V``: it writes ``V`` by node at
+The explicit dynamic solver ``NED`` carries the velocity of the kernel functions in ``V``: it writes ``V`` by node at
 acceptance and reads it back by node whenever its discrete system gets a new numbering, also at the start of a step,
 so that a node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
 increment ends on other kernel functions than it started on -- the particles move, and reach other nodes -- so it
 writes the results in two parts, each through the discrete system that holds them: ``dU`` on the nodes
 the increment was taken on, ``P``, ``V`` and ``A`` on the nodes of the configuration it ends in. A node that left the
 active domain in that increment therefore keeps its ``dU``, and holds zero in ``P``, ``V`` and ``A``. Its zero-length
-increment evaluates the forces of the configuration the step starts from, and writes them, when the model's nodes
-are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves ``P``
-as it is.
+increment evaluates the forces of the configuration the step starts from, and writes no force, as for every model.
 
 The implicit dynamic solver (``NID``) integrates the inertia of the entities that integrate their own either in the
 entities or at the nodes they couple (option ``inertia``, see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`).
