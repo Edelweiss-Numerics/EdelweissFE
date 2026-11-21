@@ -60,7 +60,7 @@ from edelweissfe.materials.marmot._marmotmaterials cimport (
 )
 
 from edelweissfe.materials.base.basehypoelasticmaterial import BaseHypoElasticMaterial
-from edelweissfe.utils.exceptions import CutbackRequest
+from edelweissfe.utils.exceptions import CutbackRequest, ModuleNotBuilt
 
 #: The factor by which the time increment is reduced if a Marmot material fails.
 cutbackFactorOnMaterialFailure = 0.25
@@ -124,8 +124,8 @@ cdef class MarmotHypoElasticMaterial:
                 self._material = NULL
 
         if self._material == NULL:
-            raise NotImplementedError(
-                "Marmot material {:} not found in library.".format(materialName)
+            raise ModuleNotBuilt(
+                "Marmot material {:} is not built in this environment.".format(materialName)
             )
 
         self.materialName = materialName
