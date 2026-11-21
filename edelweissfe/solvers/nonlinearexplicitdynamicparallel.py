@@ -35,31 +35,16 @@ Parallel implementation of the NED solver.
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.numerics.dofvector import DofVector
-from edelweissfe.numerics.parallelizationutilities import (
-    getNumberOfThreads,
-    mapChunksInParallel,
-    reportThreadAvailability,
-)
 from edelweissfe.solvers.base.parallelelementcomputation import (
     computeElementsInParallelForExplicit,
 )
+from edelweissfe.solvers.base.parallelsolver import ParallelSolver
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.timesteppers.timestep import TimeStep
 
 
-class NEDParallel(NED):
+class NEDParallel(ParallelSolver, NED):
     identification = "NEDPSolver"
-
-    def beginStep(self, step, model, fieldOutputController, outputmanagers):
-        reportThreadAvailability(getNumberOfThreads(), self.journal, self.identification)
-        return super().beginStep(step, model, fieldOutputController, outputmanagers)
-
-    def forEachChunk(self, entities: list, work):
-        """Call ``work(chunk)`` for chunks of ``entities`` on the available threads, as the elements are computed (see
-        :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`); otherwise as
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forEachChunk`."""
-
-        mapChunksInParallel(entities, work)
 
     @performancetiming.timeit("elements")
     def computeElements(
