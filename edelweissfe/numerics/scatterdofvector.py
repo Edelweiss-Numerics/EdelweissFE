@@ -45,16 +45,24 @@ class ScatterDofVectorTemplate:
     it can be computed once and shared by all scatter vectors of the same discrete
     system, e.g. across Newton iterations.
 
+    The layout is made from the mapping of the locations, not from the locations themselves, and holds
+    no reference to them: the locations keep their layout (see
+    :attr:`~edelweissfe.numerics.doflocations.DofLocations.scatterTemplate`), and a layout that referred
+    back to them would close a reference cycle. Locations in a cycle are not freed when the solver lets go
+    of them, but only when the cyclic garbage collector runs, which it does rarely if few Python objects
+    are made in the meantime; a run whose particles reach other kernel functions in every increment makes
+    new locations every increment, and their index arrays then pile up.
+
     Parameters
     ----------
-    locations : DofLocations
-        The locations of the entities, which map every entity to its global index array in the `DofVector`.
+    ofEntity : dict
+        The global indices of every located entity in the `DofVector`
+        (:attr:`~edelweissfe.numerics.doflocations.DofLocations.ofEntity`).
     nDof : int
         The total number of global degrees of freedom.
     """
 
-    def __init__(self, locations: "DofLocations", nDof: int):
-        ofEntity = locations.ofEntity
+    def __init__(self, ofEntity: dict, nDof: int):
         sizes = [len(indices) for indices in ofEntity.values()]
         offsets = np.cumsum([0, *sizes]).tolist()
         total_size = offsets[-1]
@@ -68,7 +76,6 @@ class ScatterDofVectorTemplate:
             np.concatenate(list(ofEntity.values())).astype(np.intp) if ofEntity else np.empty(0, dtype=np.intp)
         )
 
-        self.locations = locations
         self.nDof = nDof
         self.totalSize = total_size
 
@@ -82,14 +89,16 @@ class ScatterDofVector(np.ndarray):
     ----------
     template
         The precomputed layout of the scatter vector.
+    locations
+        The locations the layout was made from: those of the `DofVector` that :meth:`toDofVector` makes.
     """
 
-    def __new__(cls, template: ScatterDofVectorTemplate):
+    def __new__(cls, template: ScatterDofVectorTemplate, locations: "DofLocations"):
         obj = np.zeros(template.totalSize, dtype=float).view(cls)
 
         obj._offset_map = template.offsetMap
         obj._global_indices = template.globalIndices
-        obj._locations = template.locations
+        obj._locations = locations
         obj._nDof = template.nDof
         #: Plain-ndarray alias of the same buffer; see __getitem__.
         obj._plainView = None

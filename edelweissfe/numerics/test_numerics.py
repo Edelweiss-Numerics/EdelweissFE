@@ -49,7 +49,7 @@ class TestNumerics(unittest.TestCase):
                 self.ent2: np.array([1, 2, 3], dtype=int),
             }
         )
-        self.locations.scatterTemplate = ScatterDofVectorTemplate(self.locations, nDof=4)
+        self.locations.scatterTemplate = ScatterDofVectorTemplate(self.locations.ofEntity, nDof=4)
 
     def test_dof_vector_creation_and_indexing(self):
         dof_vec = DofVector(nDof=4, locations=self.locations)
@@ -85,8 +85,8 @@ class TestNumerics(unittest.TestCase):
         self.assertEqual(scatter_vec.size, 5)  # 2 + 3 entries
 
     def test_scatter_dof_vector(self):
-        template = ScatterDofVectorTemplate(self.locations, nDof=4)
-        scatter_vec = ScatterDofVector(template)
+        template = ScatterDofVectorTemplate(self.locations.ofEntity, nDof=4)
+        scatter_vec = ScatterDofVector(template, self.locations)
         self.assertEqual(scatter_vec.size, 5)
 
         # Entity-based setitem and getitem
