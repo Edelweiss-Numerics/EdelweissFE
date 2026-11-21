@@ -512,8 +512,8 @@ class NED(NonlinearSolverBase):
         self._meshOfTheClassification = None
         self._meshOfTheCriticalTimeStep = None
         #: The critical time steps of the elements (of the mesh) and of the entities that carry their own inertia (of
-        #: their configuration when it was last bounded: in the zero increment, after a change of the connectivity and
-        #: every ``stable-increment-frequency`` increments), unscaled; infinite where there is none.
+        #: their configuration when it was last bounded: in the zero increment, when they couple other nodes and every
+        #: ``stable-increment-frequency`` increments), unscaled; infinite where there is none.
         self._criticalTimeStepOfTheElements = np.inf
         self._stableTimeIncrementOfEntities = np.inf
         #: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.

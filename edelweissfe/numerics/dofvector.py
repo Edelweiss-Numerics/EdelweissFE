@@ -37,7 +37,8 @@ if TYPE_CHECKING:
 
 
 class _NoLocations:
-    """The locations of a vector that is wrapped with none: no entity is located."""
+    """The locations of a vector that is wrapped with none: no entity is located, and there is no layout of a scatter
+    vector (:meth:`DofVector.createScatterVector` needs a vector wrapped with locations)."""
 
     #: No entity has a location.
     ofEntity = {}
@@ -65,7 +66,8 @@ class DofVector(np.ndarray):
         The total number of degrees of freedom (length of the vector).
     locations : DofLocations, optional
         The locations of the entities, which map every entity to its indices in the vector: a
-        :class:`~edelweissfe.numerics.doflocations.DofLocations`, or any object with a mapping ``ofEntity``.
+        :class:`~edelweissfe.numerics.doflocations.DofLocations`, or any object with a mapping ``ofEntity`` and, for
+        :meth:`createScatterVector`, the layout of a scatter vector ``scatterTemplate``.
     """
 
     def __new__(cls, nDof: int, locations: "DofLocations | None" = None):
