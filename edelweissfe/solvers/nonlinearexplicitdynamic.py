@@ -107,7 +107,12 @@ and with it their inertia, in themselves, and couple other nodes as they move: t
 EdelweissMeshfree model, whose kernel functions move with them
 (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia`). The nodes of their kernel functions
 carry no total solution: their values are the coefficients of one increment, and no element assembles a mass there.
-The leapfrog is the same, on every node; an increment of such a model has three parts:
+In NED, "own inertia" means that an entity forms its inertia itself, from its state, and lumps it onto the nodes it
+couples: the solver integrates those nodes, as it integrates the nodes of the elements. (``NID``'s option
+``inertia="entities"`` means more: there, the entities also integrate their inertia themselves.) What distinguishes
+them in NED is that they are advanced on one connectivity and evaluated on the next. The leapfrog is the same, on every
+node; an increment of such a model has three parts (the calls a Marmot particle receives in them, in their order, and
+what each may change: Marmot's page "Meshfree Particles", section "The explicit life cycle of a particle"):
 
 1. **advance**: the elements compute their internal force with the solution and the increment, and the entities take
    the increment on the kernel functions they were assigned at its start
@@ -118,7 +123,7 @@ The leapfrog is the same, on every node; an increment of such a model has three 
    numbering if the nodes of the active domain changed. The internal force of the elements is carried to a new
    numbering element by element; nothing is evaluated again;
 3. **evaluate**: on the new kernel functions, the entities return their internal force, their lumped inertia and
-   damping, their lumped momentum and their critical time step
+   damping, their lumped momentum and, when it is due, the bound of their stable time increment
    (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,
    :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`,
    :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedDampingOfEntitiesWithOwnInertia`,
