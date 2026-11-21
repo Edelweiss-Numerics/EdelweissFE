@@ -697,7 +697,7 @@ class NED(NonlinearSolverBase):
                 self._energyAtStepStart = self.energyOfTheModelsState()
             # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.
             if step.timeStepper.enforcedTimeIncrement is None:
-                self._enforceTheCriticalTimeStep(step, "The critical time step")
+                self._enforceTheCriticalTimeStep(step, "The critical time step", 1)
 
         # --- h-adaptivity, mid-run ----------------------------------------------------------------
         # After every topology-check-frequency-th increment, i.e. after its output: the marker reads the
@@ -724,7 +724,7 @@ class NED(NonlinearSolverBase):
         if change == Change.MESH:
             self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, self._V, model)
 
-            self._enforceTheCriticalTimeStep(step, "Refinement")
+            self._enforceTheCriticalTimeStep(step, "Refinement", 1)
 
     def isOutputIncrement(self, timeStep: TimeStep) -> bool:
         """Only every ``output-frequency``-th increment: an explicit run has millions.
@@ -1002,7 +1002,7 @@ class NED(NonlinearSolverBase):
                 self._stableTimeIncrementOfEntities = system.stableTimeIncrementOfEntitiesWithOwnInertia(
                     self.forEachChunk
                 )
-            self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia")
+            self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia", 2)
 
         self._internalForce += internalForceOfEntities
         noIncrement = system.locations.constructDofVector()
@@ -1115,11 +1115,13 @@ class NED(NonlinearSolverBase):
             return False
         return timeStep.timeIncrement == 0.0 or change > Change.NONE or timeStep.number % frequency == 0
 
-    def _enforceTheCriticalTimeStep(self, step, cause: str):
+    def _enforceTheCriticalTimeStep(self, step, cause: str, journalLevel: int):
         """Make the time increment of the step the critical time step, the smaller of the elements' and the entities'
-        scaled by the courant number, if it is below the increment the step takes now: the one enforced before, or
-        else the largest the step allows. A step that asks for smaller increments keeps them, and the increment is
-        lowered only, never raised within a step.
+        scaled by the courant number, if it is below the increment the step would take now: the one enforced before,
+        or else the step's own (``startInc``, at most ``maxInc``). The step takes the smaller of the two: a step that
+        asks for smaller increments keeps them, and the increment is lowered only, never raised within a step. A finite
+        element model whose step asks for the whole step length, as explicit steps usually do, takes the critical time
+        step of its elements.
 
         Parameters
         ----------
@@ -1127,13 +1129,16 @@ class NED(NonlinearSolverBase):
             The step being solved.
         cause
             What changed the critical time step, for the journal.
+        journalLevel
+            The level of the journal message when an enforced increment is lowered.
         """
 
         self._criticalTimeStep = self.options["courant-number"] * min(
             self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
         )
-        enforced = step.timeStepper.enforcedTimeIncrement
-        current = enforced if enforced is not None else step.maxIncrementSize * step.length
+        timeStepper = step.timeStepper
+        enforced = timeStepper.enforcedTimeIncrement
+        current = enforced if enforced is not None else timeStepper.increment * step.length
         if self._criticalTimeStep < current:
             if enforced is not None:
                 self.journal.message(
@@ -1141,9 +1146,9 @@ class NED(NonlinearSolverBase):
                         cause, enforced, self._criticalTimeStep
                     ),
                     self.identification,
-                    1 if cause == "Refinement" else 2,
+                    journalLevel,
                 )
-            step.timeStepper.enforceTimeIncrement(self._criticalTimeStep)
+            timeStepper.enforceTimeIncrement(self._criticalTimeStep)
 
     def endStep(self, step, model: FEModel):
         """Leave the model's state at the end time of the step, and report the step's performance timing.
