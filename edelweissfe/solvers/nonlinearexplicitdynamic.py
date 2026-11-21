@@ -513,7 +513,8 @@ class NED(NonlinearSolverBase):
         self._meshOfTheClassification = None
         self._meshOfTheCriticalTimeStep = None
         #: The critical time steps of the elements (of the mesh) and of the entities that carry their own inertia (of
-        #: their configuration last accepted, in every increment), unscaled; infinite where there is none.
+        #: their configuration when it was last bounded: in the zero increment, after a change of the connectivity and
+        #: every ``stable-increment-frequency`` increments), unscaled; infinite where there is none.
         self._criticalTimeStepOfTheElements = np.inf
         self._stableTimeIncrementOfEntities = np.inf
         #: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.
@@ -2237,9 +2238,11 @@ class NED(NonlinearSolverBase):
         to do by accident, and integrating part of a field as a wave equation and the rest as a
         diffusion one is not a scheme anybody chose. Such a field is refused rather than split.
 
-        Only the degrees of freedom whose inertia the elements assemble decide. Those of the entities that carry their
-        own inertia (:attr:`ids_inertiaOfEntities`) are integrated by central differences without damping: the
-        entities report a mass and nothing else. A field that only these entities carry is therefore second order.
+        The degrees of freedom of the elements decide, and those of the entities that carry their own inertia
+        (:attr:`ids_inertiaOfEntities`) wherever these give them a coefficient, an inertia or a damping: a node their
+        kernel functions reach only where they vanish has neither, and no equation of motion. A field of the entities
+        with a damping and no inertia, e.g. the nonlocal field of gradient-enhanced particles without a micro-inertia,
+        is therefore first order, as it is for the elements.
 
         Parameters
         ----------
