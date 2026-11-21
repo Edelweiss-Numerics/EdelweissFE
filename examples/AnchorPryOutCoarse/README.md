@@ -13,18 +13,18 @@ All four ramp the plate to **the same 1.5 mm**, so they are comparable at equal 
 equal time.
 
 ```bash
-edelweissfe pryout_implicit_nts.inp        # see the table below for timings
+edelweissfe pryout_implicit_nts.inp        # see the table below for what each variant gives
 python plot_damage_comparison.py           # once all four have run
 ```
 
-Measured on 16 threads, one variant at a time:
+What the four variants give:
 
-| variant | wall time | increments | refinement occasions | final concrete elements | final U | final reaction |
-|---|---|---|---|---|---|---|
-| `implicit_nts` | ~8 min | 104 + 1, no cutback | 39 | 2033 | 1.500 mm | 43.1 kN |
-| `implicit_gpts` | ~8 min | 100 + 1, no cutback | 40 | 2033 | 1.500 mm | 43.4 kN |
-| `explicit_nts` | ~3 min | ~11 600 | 15 | 2033 | 1.498 mm | 42.7 kN |
-| `explicit_gpts` | ~2 min | ~11 600 | 15 | 2033 | 1.498 mm | 42.9 kN |
+| variant | increments | refinement occasions | final concrete elements | final U | final reaction |
+|---|---|---|---|---|---|
+| `implicit_nts` | 104 + 1, no cutback | 39 | 2033 | 1.500 mm | 43.1 kN |
+| `implicit_gpts` | 100 + 1, no cutback | 40 | 2033 | 1.500 mm | 43.4 kN |
+| `explicit_nts` | ~11 600 | 15 | 2033 | 1.498 mm | 42.7 kN |
+| `explicit_gpts` | ~11 600 | 15 | 2033 | 1.498 mm | 42.9 kN |
 
 With the production settings (von Mises steel, penalty 1e4) the reaction is still rising at 1.5 mm:
 the ramp stops before the breakout peak.

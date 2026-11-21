@@ -16,8 +16,8 @@
 **     Divide the reported kinetic energy by 100 to compare against an unscaled run.
 **
 **  3. DUVAUT-LIONS VISCOSITY IS ZERO, down from 1e-6. It is a relaxation time. At an implicit
-**     increment of ~5e-3 s, dT/eta ~ 5000 and it regularises usefully; at the explicit increment of
-**     ~3.4e-7 s almost nothing relaxes per increment, and a non-zero value makes the concrete
+**     increment of ~5e-3 s, dT/eta ~ 5000 and it regularises usefully; at the explicit increment almost
+**     nothing relaxes per increment, and a non-zero value makes the concrete
 **     respond very nearly ELASTICALLY -- a run that completes, looks plausible, and shows no
 **     softening at all. Explicit integration needs no Newton to stabilise, so zero is right.
 **
