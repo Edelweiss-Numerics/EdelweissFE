@@ -31,32 +31,16 @@ Parallel implementation of the NEST solver.
 """
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.numerics.parallelizationutilities import (
-    getNumberOfThreads,
-    getNumberOfWorkerThreads,
-    mapChunksInParallel,
-    reportThreadAvailability,
-)
+from edelweissfe.numerics.parallelizationutilities import getNumberOfWorkerThreads
 from edelweissfe.solvers.base.parallelelementcomputation import (
     computeElementsInParallel,
 )
+from edelweissfe.solvers.base.parallelsolver import ParallelSolver
 from edelweissfe.solvers.nonlinearexplicitstatic import NEST
 
 
-class NESTParallel(NEST):
+class NESTParallel(ParallelSolver, NEST):
     identification = "NESTPSolver"
-
-    def beginStep(self, step, model, fieldOutputController, outputmanagers):
-
-        reportThreadAvailability(getNumberOfThreads(), self.journal, self.identification)
-        return super().beginStep(step, model, fieldOutputController, outputmanagers)
-
-    def forEachChunk(self, entities: list, work):
-        """Call ``work(chunk)`` for chunks of ``entities`` on the available threads, as the elements are computed (see
-        :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`); otherwise as
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forEachChunk`."""
-
-        mapChunksInParallel(entities, work)
 
     def numberOfAssemblyWorkers(self) -> int:
         """How many threads write blocks of the system matrix at the same time: those that compute the elements.
