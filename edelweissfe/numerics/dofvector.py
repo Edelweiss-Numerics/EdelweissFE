@@ -102,7 +102,9 @@ class DofVector(np.ndarray):
             The vector wrapped with the new locations.
         """
 
-        rewrapped = self.view(DofVector)
+        # A view of the buffer, through a plain view: a DofVector viewed directly keeps this vector as its base, and with
+        # it these locations, as long as the rewrapped vector lives.
+        rewrapped = self.view(np.ndarray).view(DofVector)
         rewrapped.locations = locations
         rewrapped._plainView = None
 
@@ -179,4 +181,4 @@ class DofVector(np.ndarray):
             A `ScatterDofVector` with the layout of this vector's locations.
         """
 
-        return edelweissfe.numerics.scatterdofvector.ScatterDofVector(self.locations.scatterTemplate)
+        return edelweissfe.numerics.scatterdofvector.ScatterDofVector(self.locations.scatterTemplate, self.locations)

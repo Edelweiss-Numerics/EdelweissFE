@@ -30,6 +30,8 @@
 locations change (``DofVector.onLocations``), what new locations refuse (a change of the scalar variables), and that a
 contact deck gives the same results through new locations as through a discrete system built anew every time."""
 
+import gc
+import weakref
 from types import SimpleNamespace
 
 import numpy as np
@@ -149,6 +151,28 @@ def test_a_vector_wrapped_on_new_locations_keeps_its_values_and_sees_the_new_loc
     assert vector.createScatterVector().offsetMap is locations.constructDofVector().createScatterVector().offsetMap
     rewrapped[0] = -1.0
     assert vector[0] == -1.0, "the same buffer"
+
+
+def test_locations_left_behind_are_freed_as_soon_as_nothing_refers_to_them():
+    """The locations a solver lets go of after a change of the locations are freed at once, with their index arrays
+    and the layout of their scatter vectors: nothing they hold refers back to them. A reference cycle would keep them
+    until the cyclic garbage collector runs, which it does rarely while few Python objects are made, e.g. in an
+    explicit particle run, which makes new locations whenever a particle reaches other kernel functions."""
+    model, n = _buildTwoElementModel()
+    locations = _locations(model, [_FakeConstraint([n[0], n[5]], ["displacement"])])
+    vector = locations.constructDofVector()
+    vector.createScatterVector().toDofVector()
+    leftBehind = weakref.ref(locations)
+
+    gc.disable()
+    try:
+        newLocations = locations.withNewLocationsOf([_FakeConstraint([n[2], n[3]], ["displacement"])])
+        vector = vector.onLocations(newLocations)
+        vector.createScatterVector()
+        del locations
+        assert leftBehind() is None, "the old locations wait for the cyclic garbage collector"
+    finally:
+        gc.enable()
 
 
 def test_new_locations_refuse_a_change_of_the_scalar_variables():

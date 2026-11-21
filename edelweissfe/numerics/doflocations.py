@@ -145,7 +145,7 @@ class DofLocations:
         """
 
         if self._scatterTemplate is None:
-            self._scatterTemplate = ScatterDofVectorTemplate(self, self.numbering.nDof)
+            self._scatterTemplate = ScatterDofVectorTemplate(self.ofEntity, self.numbering.nDof)
         return self._scatterTemplate
 
     @property
