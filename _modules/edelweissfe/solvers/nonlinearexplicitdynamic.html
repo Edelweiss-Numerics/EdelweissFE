@@ -198,7 +198,9 @@
 <span class="sd">are removed rather than deprecated: a deck carrying any of them now fails with ``Invalid option``,</span>
 <span class="sd">and deleting those lines is the whole of the migration.</span>
 
-<span class="sd">The stable increment is computed once per mesh from the element wave speeds and scaled by</span>
+<span class="sd">The stable increment is computed once per mesh as the smallest of the elements' own bounds</span>
+<span class="sd">(``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum element, two over the square root</span>
+<span class="sd">of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) and scaled by</span>
 <span class="sd">``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed</span>
 <span class="sd">when it has not: as a material softens the true limit only grows, so reusing it is the conservative</span>
 <span class="sd">direction, and re-deriving it costs a full element pass.</span>

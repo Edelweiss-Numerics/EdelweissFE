@@ -7449,7 +7449,9 @@ it out of both balances.</p>
 <p><code class="docutils literal notranslate"><span class="pre">first-order-fields</span></code>, <code class="docutils literal notranslate"><span class="pre">second-order-fields</span></code>, <code class="docutils literal notranslate"><span class="pre">first-order-scheme</span></code> and <code class="docutils literal notranslate"><span class="pre">second-order-scheme</span></code>
 are removed rather than deprecated: a deck carrying any of them now fails with <code class="docutils literal notranslate"><span class="pre">Invalid</span> <span class="pre">option</span></code>,
 and deleting those lines is the whole of the migration.</p>
-<p>The stable increment is computed once per mesh from the element wave speeds and scaled by
+<p>The stable increment is computed once per mesh as the smallest of the elements’ own bounds
+(<code class="docutils literal notranslate"><span class="pre">computeCriticalTimeStepForExplicitDynamics</span></code>; for a Marmot continuum element, two over the square root
+of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) and scaled by
 <code class="docutils literal notranslate"><span class="pre">courant-number</span></code>. It is recomputed whenever the mesh changes and deliberately <em>not</em> recomputed
 when it has not: as a material softens the true limit only grows, so reusing it is the conservative
 direction, and re-deriving it costs a full element pass.</p>
