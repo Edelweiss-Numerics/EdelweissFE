@@ -42,7 +42,8 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
 * a field of the entities that gets neither an inertia nor a damping is refused, and so are a damping of the entities
   that is negative or not finite, and an inertia that is not finite,
 * the rate of a first-order field of the entities (dashpots on springs) is published in every increment, also when the
-  velocity is projected from the momentum in every increment.
+  velocity is projected from the momentum in every increment,
+* the step gives the entities zero Newmark parameters: their inertia is integrated at the nodes.
 """
 
 import numpy as np
@@ -165,6 +166,8 @@ class ModelOfMassesOnSprings(FEModel):
     def __init__(self, mass: float = MASS, damping: float = 0.0):
         super().__init__(2)
         self.calls = []
+        #: The Newmark parameters the solver gave last; those an implicit dynamic step would have left.
+        self.newmarkParametersOfEntities = (0.25, 0.5)
         for number, velocity in enumerate(VELOCITIES, start=1):
             node = Node(number, np.array([float(number), 0.0]))
             self.nodes[number] = node
@@ -174,6 +177,9 @@ class ModelOfMassesOnSprings(FEModel):
 
     def buildDiscreteSystem(self) -> SystemOfMassesOnSprings:
         return SystemOfMassesOnSprings(self, super().buildDiscreteSystem().locations)
+
+    def setNewmarkParametersOfEntities(self, beta: float, gamma: float):
+        self.newmarkParametersOfEntities = (beta, gamma)
 
     def advanceToTime(self, time: float):
         self.calls.append("accept")
@@ -359,3 +365,14 @@ def test_the_rate_of_a_first_order_field_of_the_entities_is_published_in_every_i
     rates = (displacements[1:] - displacements[:-1]) / timeIncrements[1:, np.newaxis]
     assert np.all(rates != 0.0)
     np.testing.assert_allclose(np.array(solver.publishedVelocities)[1:], rates, rtol=1e-12)
+
+
+def test_the_step_gives_the_entities_zero_newmark_parameters():
+    """An entity that can integrate its own inertia by the Newmark scheme keeps the parameters of the solver that gave
+    them last, e.g. of an implicit dynamic step. ``NED`` integrates the inertia at the nodes, and gives zero at the
+    start of its step: a tangent such an entity is asked for afterwards holds no inertia of a scheme that is not
+    running."""
+
+    model, _ = _run(STABLE_TIME_INCREMENT)
+
+    assert model.newmarkParametersOfEntities == (0.0, 0.0)
