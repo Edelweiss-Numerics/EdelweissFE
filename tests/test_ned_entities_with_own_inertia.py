@@ -39,7 +39,8 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
 * the motion starts from the velocity projected from the momentum, and the leapfrog then is the central difference
   recursion of the oscillator, to round-off; its period is the analytic one, to second order in the increment,
 * the bound of the entities' stable time increment sets the increment of a step that asks for a larger one,
-* a field of the entities that gets neither an inertia nor a damping is refused.
+* a field of the entities that gets neither an inertia nor a damping is refused, and so are a damping of the entities
+  that is negative or not finite, and an inertia that is not finite.
 """
 
 import numpy as np
@@ -73,8 +74,10 @@ class MassOnASpring(PointMass):
     """A point mass on a spring to the ground that carries its displacement and its velocity in itself, as a particle
     carries its state. As a point mass, it sits on one node and lumps its mass there."""
 
-    def __init__(self, number: int, node: Node, model: FEModel, velocity: float, mass: float):
+    def __init__(self, number: int, node: Node, model: FEModel, velocity: float, mass: float, damping: float):
         super().__init__(number, [node], model, mass)
+        #: The coefficient of a dashpot to the ground, lumped to the node as the mass is.
+        self.damping = damping
         self.displacement = np.zeros(model.domainSize)
         self.velocity = np.array([velocity, 0.0])
 
@@ -126,7 +129,7 @@ class SystemOfMassesOnSprings(DiscreteSystem):
 
     def assembleLumpedDampingOfEntitiesWithOwnInertia(self, forEachChunk):
         self.model.calls.append("damping")
-        return self._onTheNodes(lambda mass: np.zeros(mass.nDof))
+        return self._onTheNodes(lambda mass: np.full(mass.nDof, mass.damping))
 
     def stableTimeIncrementOfEntitiesWithOwnInertia(self, forEachChunk):
         self.model.calls.append("bound")
@@ -148,15 +151,17 @@ class ModelOfMassesOnSprings(FEModel):
     ----------
     mass
         The mass of every point mass.
+    damping
+        The coefficient of the dashpot of every point mass to the ground; none by default.
     """
 
-    def __init__(self, mass: float = MASS):
+    def __init__(self, mass: float = MASS, damping: float = 0.0):
         super().__init__(2)
         self.calls = []
         for number, velocity in enumerate(VELOCITIES, start=1):
             node = Node(number, np.array([float(number), 0.0]))
             self.nodes[number] = node
-            self.elements[number] = MassOnASpring(number, node, self, velocity, mass)
+            self.elements[number] = MassOnASpring(number, node, self, velocity, mass, damping)
         self.elementSets["all"] = ElementSet("all", list(self.elements.values()))
         self.nodeSets["all"] = NodeSet("all", list(self.nodes.values()))
 
@@ -291,3 +296,20 @@ def test_a_field_of_the_entities_without_inertia_and_damping_is_refused():
 
     with pytest.raises(ValueError, match="displacement carries neither an inertia nor a damping"):
         _run(10 * STABLE_TIME_INCREMENT, model=ModelOfMassesOnSprings(mass=0.0))
+
+
+@pytest.mark.parametrize(
+    "mass, damping, refusal",
+    [
+        (MASS, -1.0, "lumped damping is not a valid dissipation"),
+        (MASS, np.nan, "lumped damping is not a valid dissipation"),
+        (np.nan, 0.0, "lumped inertia is not finite"),
+    ],
+)
+def test_an_invalid_damping_or_inertia_of_the_entities_is_refused(mass, damping, refusal):
+    """The damping of the entities is checked as that of the elements is: a negative one would amplify a second-order
+    field through the rate C/M, which no check of the divisor sees, and a coefficient that is not a number passes every
+    comparison and would reach every increment."""
+
+    with pytest.raises(ValueError, match=refusal):
+        _run(10 * STABLE_TIME_INCREMENT, model=ModelOfMassesOnSprings(mass=mass, damping=damping))
