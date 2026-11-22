@@ -40,7 +40,9 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
   recursion of the oscillator, to round-off; its period is the analytic one, to second order in the increment,
 * the bound of the entities' stable time increment sets the increment of a step that asks for a larger one,
 * a field of the entities that gets neither an inertia nor a damping is refused, and so are a damping of the entities
-  that is negative or not finite, and an inertia that is not finite.
+  that is negative or not finite, and an inertia that is not finite,
+* the rate of a first-order field of the entities (dashpots on springs) is published in every increment, also when the
+  velocity is projected from the momentum in every increment.
 """
 
 import numpy as np
@@ -68,6 +70,10 @@ VELOCITIES = (0.3, -0.1)
 OMEGA = np.sqrt(STIFFNESS / MASS)
 #: The bound of the stable time increment of one mass on its spring, 2 / omega.
 STABLE_TIME_INCREMENT = 2.0 / OMEGA
+#: The coefficient of the dashpots of :class:`ModelOfDashpotsOnSprings`, and where each starts. The forward Euler update
+#: of a dashpot on a spring is stable up to the increment 2 c / k, above the bound of the masses.
+DAMPING = 20.0
+DISPLACEMENTS = (0.02, -0.05)
 
 
 class MassOnASpring(PointMass):
@@ -178,16 +184,29 @@ class ModelOfMassesOnSprings(FEModel):
         return super().updateConnectivity()
 
 
+class ModelOfDashpotsOnSprings(ModelOfMassesOnSprings):
+    """Dashpots on springs: without a mass, the displacement is a first-order field, :math:`c \\dot{x} + k x = 0`, which
+    ``NED`` integrates by forward Euler. Each dashpot starts displaced, and creeps back."""
+
+    def __init__(self):
+        super().__init__(mass=0.0, damping=DAMPING)
+        for dashpot, displacement in zip(self.elements.values(), DISPLACEMENTS):
+            dashpot.displacement[0] = displacement
+
+
 class _RecordingNED(NED):
-    """``NED``, recording the increment and the displacement of every mass after each increment it accepts."""
+    """``NED``, recording the increment and the displacement of every mass after each increment it accepts, and the
+    velocity the model holds at the nodes then (the entry ``V`` of the node field)."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.history = []
+        self.publishedVelocities = []
 
     def acceptIncrement(self, step, model, timeStep):
         super().acceptIncrement(step, model, timeStep)
         self.history.append((timeStep.timeIncrement, [mass.displacement[0] for mass in model.elements.values()]))
+        self.publishedVelocities.append(np.array(model.nodeFields["displacement"]["V"])[:, 0])
 
 
 def _run(
@@ -314,3 +333,29 @@ def test_an_invalid_damping_or_inertia_of_the_entities_is_refused(mass, damping,
 
     with pytest.raises(ValueError, match=refusal):
         _run(10 * STABLE_TIME_INCREMENT, model=ModelOfMassesOnSprings(mass=mass, damping=damping))
+
+
+@pytest.mark.parametrize("projectVelocity", [False, True])
+def test_the_rate_of_a_first_order_field_of_the_entities_is_published_in_every_increment(projectVelocity):
+    """Dashpots on springs creep back by forward Euler, :math:`x_{n+1} = x_n (1 - k \\Delta t / c)`, and the velocity
+    the model holds after an increment is the rate it was taken with. ``project-velocity-every-increment`` projects the
+    velocity of the second-order fields from the momentum; a first-order field has no momentum, and keeps its rate."""
+
+    _, solver = _run(
+        5 * STABLE_TIME_INCREMENT,
+        model=ModelOfDashpotsOnSprings(),
+        **{"project-velocity-every-increment": projectVelocity},
+    )
+
+    timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])
+    displacements = np.array([x for _, x in solver.history])
+    np.testing.assert_allclose(displacements[0], DISPLACEMENTS)
+    np.testing.assert_allclose(
+        displacements[1:],
+        displacements[:-1] * (1.0 - STIFFNESS * timeIncrements[1:, np.newaxis] / DAMPING),
+        rtol=1e-12,
+    )
+
+    rates = (displacements[1:] - displacements[:-1]) / timeIncrements[1:, np.newaxis]
+    assert np.all(rates != 0.0)
+    np.testing.assert_allclose(np.array(solver.publishedVelocities)[1:], rates, rtol=1e-12)
