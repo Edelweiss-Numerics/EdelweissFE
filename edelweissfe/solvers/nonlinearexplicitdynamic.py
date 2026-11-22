@@ -171,7 +171,10 @@ connectivity again.
 An entity that can integrate its own inertia by the Newmark scheme, as an implicit dynamic step asks of it, carries
 none here: at the start of every step, this solver gives the entities zero Newmark parameters
 (:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`), as every quasi-static solver does.
-Model modifiers that act after the start of the analysis are not supported in such a model.
+Model modifiers that act after the start of the analysis are not supported in such a model, and neither is a
+multi-point constraint whose slave is a degree of freedom of the nodes of the entities: its inertia would be folded onto
+its masters, and the velocity and the kinetic energy published for it would be zero. ``NED`` refuses such a constraint
+when it builds the numbering.
 
 **Energy balance.** Every reporting increment prints the energy the model held at the start of the
 step, kinetic and internal (``E_0``), the external work accumulated at prescribed degrees of freedom
@@ -1902,7 +1905,8 @@ class NED(NonlinearSolverBase):
         NotImplementedError
             If the discrete system holds entities this solver does not integrate: material points, cells or cell
             elements of a meshfree model; or entities that carry their own inertia together with model modifiers that
-            act after the start of the analysis.
+            act after the start of the analysis, or with a multi-point constraint whose slave is one of their degrees
+            of freedom (see :meth:`_refuseSlavesAmongTheDofsOfEntitiesWithOwnInertia`).
         """
 
         system = self.system
@@ -1927,6 +1931,7 @@ class NED(NonlinearSolverBase):
         self.ids_inertiaOfEntities = np.setdiff1d(
             self._dofIndicesOfFields(system.numbering.fields), system.dofsWithNodalInertia(system.numbering.fields)
         )
+        self._refuseSlavesAmongTheDofsOfEntitiesWithOwnInertia()
 
         self._assembleLumpedOperators()
 
@@ -1956,6 +1961,40 @@ class NED(NonlinearSolverBase):
                 1,
             )
             self._meshOfTheCriticalTimeStep = system.model.topology.version
+
+    def _refuseSlavesAmongTheDofsOfEntitiesWithOwnInertia(self):
+        """Refuse a multi-point constraint whose slave is a degree of freedom of the entities that carry their own
+        inertia (:attr:`ids_inertiaOfEntities`). Such a slave has no equation of motion of its own: the inertia the
+        entities lump to it would be folded onto its masters, and the velocity this solver publishes for it at every
+        accepted increment, and its kinetic energy, would be zero.
+
+        Raises
+        ------
+        NotImplementedError
+            If a multi-point constraint has a slave among the degrees of freedom of the entities; the message names
+            the constraint.
+        """
+
+        if self.mpcTransformation is None:
+            return
+
+        slaves = np.intersect1d(self.mpcTransformation.slaveDofIndices, self.ids_inertiaOfEntities, assume_unique=True)
+        if slaves.size == 0:
+            return
+
+        numbering = self.system.numbering
+        names = [
+            name
+            for name, constraint in self.system.model.multiPointConstraints.items()
+            if np.isin([slave for slave, _ in constraint.getMultiPointConstraints(numbering)], slaves).any()
+        ]
+        raise NotImplementedError(
+            "The multi-point constraint(s) {:} make {:} degree(s) of freedom of the entities that carry their own "
+            "inertia (the nodes of the particles of a meshfree model) their slaves, which {:} does not support: the "
+            "velocity and the kinetic energy it publishes for such a slave would be zero.".format(
+                ", ".join("'{:}'".format(name) for name in names), slaves.size, self.identification
+            )
+        )
 
     def onNewLocations(self):
         """Wrap the vectors of the increments with the new locations, their values kept: the increments continue from
