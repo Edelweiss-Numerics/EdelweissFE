@@ -177,6 +177,19 @@
 
 
 
+<div class="viewcode-block" id="ModuleNotBuilt">
+<a class="viewcode-back" href="../../../developer/exceptions.html#edelweissfe.utils.exceptions.ModuleNotBuilt">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ModuleNotBuilt</span><span class="p">(</span><span class="ne">NotImplementedError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A compiled part that this environment does not have: a Cython extension that was not built, or an element,</span>
+<span class="sd">    material, particle, material point or cell whose module is not part of the Marmot build.</span>
+
+<span class="sd">    The wrappers raise it only for that. A test runner may skip a test that raises it (EdelweissMeshfree's does), and</span>
+<span class="sd">    only such a test: every other exception fails the test, including the ``NotImplementedError`` with which a solver</span>
+<span class="sd">    refuses a model.</span>
+<span class="sd">    """</span></div>
+
+
+
 <div class="viewcode-block" id="StepFailed">
 <a class="viewcode-back" href="../../../developer/exceptions.html#edelweissfe.utils.exceptions.StepFailed">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">StepFailed</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>

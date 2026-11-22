@@ -660,9 +660,10 @@
 <a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">setNewmarkParametersOfEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by</span>
-<span class="sd">        ``NIST`` and every solver derived from it -- the implicit solvers and ``NEST`` -- at the start of every step,</span>
-<span class="sd">        so that the solver is the one source of the parameters. With :math:`\\beta = \\gamma = 0`, which every</span>
-<span class="sd">        quasi-static solver passes, such an entity carries no inertia.</span>
+<span class="sd">        ``NIST`` and every solver derived from it -- the implicit solvers and ``NEST`` -- and by ``NED`` at the start</span>
+<span class="sd">        of every step, so that the solver is the one source of the parameters. With :math:`\\beta = \\gamma = 0`,</span>
+<span class="sd">        which every quasi-static solver passes, and ``NED``, which integrates the inertia at the nodes, such an entity</span>
+<span class="sd">        carries no inertia.</span>
 
 <span class="sd">        In a finite element model, no entity integrates its own inertia: the elements report their mass, and a</span>
 <span class="sd">        dynamic solver integrates the nodes. An entity that carries its state in itself, velocity and acceleration</span>

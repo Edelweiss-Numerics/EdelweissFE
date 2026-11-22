@@ -166,7 +166,7 @@ restart checkpoint must carry for the run to continue;</p></li>
 <li><p><strong>result</strong> – what a solver writes for output and for the user; no solver reads it back.</p></li>
 </ul>
 <p>Iterations work on the solver’s vectors only. A cut back increment writes nothing. An accepted increment writes
-every entry, once (the explicit meshfree solver in two parts, see below). The exceptions are the increments of the
+every entry, once (<code class="docutils literal notranslate"><span class="pre">NED</span></code> in a model with particles in two parts, see below). The exceptions are the increments of the
 dynamic solvers <code class="docutils literal notranslate"><span class="pre">NED</span></code> and <code class="docutils literal notranslate"><span class="pre">NID</span></code> that integrate nothing: they evaluate no force, so they leave <code class="docutils literal notranslate"><span class="pre">P</span></code> as the last
 accepted increment wrote it, of this step or of the step before. These are</p>
 <ul class="simple">
@@ -281,17 +281,14 @@ equilibrium, written at the start of the increment</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NED</span></code>, <code class="docutils literal notranslate"><span class="pre">NEDParallel</span></code></p></td>
 <td><p><span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int} + \boldsymbol{f}_\mathrm{net}\)</span>; <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int}\)</span> at a
-prescribed motion and on a multi-point-constraint slave</p></td>
+prescribed motion, on a multi-point-constraint slave, and on a node of the particles’ kernel functions without
+mass</p></td>
 <td><p><span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1/2}\)</span> (on a field integrated by forward Euler, the rate of the increment just taken);
 at the end of the step, the velocity at its end time</p></td>
 <td><p><span class="math notranslate nohighlight">\(\boldsymbol{a}_{n+1}\)</span> (on a field integrated by forward Euler, the one with which
 <span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1/2} + \tfrac{1}{2} \Delta t \, \boldsymbol{a}_{n+1}\)</span> is the rate at the end of the
-increment); zero at a prescribed motion; on a multi-point-constraint slave, from its masters</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">MeshfreeExplicitDynamic</span></code> (EdelweissMeshfree)</p></td>
-<td><p><span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a}\)</span></p></td>
-<td><p>as <code class="docutils literal notranslate"><span class="pre">NED</span></code>, on the nodes of the kernel functions</p></td>
-<td><p><span class="math notranslate nohighlight">\(\boldsymbol{a} = \boldsymbol{M}^{-1} \boldsymbol{f}_\mathrm{net}\)</span>; zero on a node without mass</p></td>
+increment); zero at a prescribed motion; on a multi-point-constraint slave, from its masters; zero on a node of
+the particles’ kernel functions without mass</p></td>
 </tr>
 </tbody>
 </table>
@@ -314,16 +311,14 @@ freedom are the coefficients of the increment, starting at zero in every increme
 material points carry the state. On these nodes, <code class="docutils literal notranslate"><span class="pre">U</span></code> is zero and <code class="docutils literal notranslate"><span class="pre">dU</span></code> holds the coefficients of the last
 accepted increment, which is their meaningful nodal value. Nodes outside the active domain of an increment hold
 zero in every entry.</p>
-<p>The explicit meshfree solver carries the velocity of the kernel functions in <code class="docutils literal notranslate"><span class="pre">V</span></code>: it writes <code class="docutils literal notranslate"><span class="pre">V</span></code> by node at
+<p>The explicit dynamic solver <code class="docutils literal notranslate"><span class="pre">NED</span></code> carries the velocity of the kernel functions in <code class="docutils literal notranslate"><span class="pre">V</span></code>: it writes <code class="docutils literal notranslate"><span class="pre">V</span></code> by node at
 acceptance and reads it back by node whenever its discrete system gets a new numbering, also at the start of a step,
 so that a node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
 increment ends on other kernel functions than it started on – the particles move, and reach other nodes – so it
 writes the results in two parts, each through the discrete system that holds them: <code class="docutils literal notranslate"><span class="pre">dU</span></code> on the nodes
 the increment was taken on, <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> on the nodes of the configuration it ends in. A node that left the
 active domain in that increment therefore keeps its <code class="docutils literal notranslate"><span class="pre">dU</span></code>, and holds zero in <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>. Its zero-length
-increment evaluates the forces of the configuration the step starts from, and writes them, when the model’s nodes
-are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves <code class="docutils literal notranslate"><span class="pre">P</span></code>
-as it is.</p>
+increment evaluates the forces of the configuration the step starts from, and writes no force, as for every model.</p>
 <p>The implicit dynamic solver (<code class="docutils literal notranslate"><span class="pre">NID</span></code>) integrates the inertia of the entities that integrate their own either in the
 entities or at the nodes they couple (option <code class="docutils literal notranslate"><span class="pre">inertia</span></code>, see <a class="reference internal" href="../analysis/solvers.html#module-edelweissfe.solvers.nonlinearimplicitdynamic" title="edelweissfe.solvers.nonlinearimplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearimplicitdynamic</span></code></a>).
 In the entities, they carry their velocity and acceleration in their state, and <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the nodes they

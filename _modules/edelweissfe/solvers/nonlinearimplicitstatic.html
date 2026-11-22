@@ -1148,26 +1148,6 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblyType</span><span class="p">()(</span><span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberOfAssemblyWorkers</span><span class="p">(),</span> <span class="n">patternFillIn</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="NIST.forEachChunk">
-<a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">forEachChunk</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">work</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">],</span> <span class="kc">None</span><span class="p">]):</span>
-<span class="w">        </span><span class="sd">"""Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent</span>
-<span class="sd">        entities, other than the elements, that the model's discrete system evaluates, e.g. the material points</span>
-<span class="sd">        of a meshfree model (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`). Here, one chunk of</span>
-<span class="sd">        all entities, in the calling thread, as the elements are computed.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        entities</span>
-<span class="sd">            The entities, a list.</span>
-<span class="sd">        work</span>
-<span class="sd">            Called for each chunk; it must write only to what belongs to the entities of its chunk.</span>
-<span class="sd">        """</span>
-
-        <span class="n">work</span><span class="p">(</span><span class="n">entities</span><span class="p">)</span></div>
-
-
 <div class="viewcode-block" id="NIST.numberOfAssemblyWorkers">
 <a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">numberOfAssemblyWorkers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>

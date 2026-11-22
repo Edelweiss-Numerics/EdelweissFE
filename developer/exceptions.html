@@ -110,6 +110,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#edelweissfe.utils.exceptions.IncrementFailed"><code class="docutils literal notranslate"><span class="pre">IncrementFailed</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#edelweissfe.utils.exceptions.InputExecption"><code class="docutils literal notranslate"><span class="pre">InputExecption</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint"><code class="docutils literal notranslate"><span class="pre">MeshChangedSinceCheckpoint</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#edelweissfe.utils.exceptions.ModuleNotBuilt"><code class="docutils literal notranslate"><span class="pre">ModuleNotBuilt</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#edelweissfe.utils.exceptions.ReachedMaxIncrements"><code class="docutils literal notranslate"><span class="pre">ReachedMaxIncrements</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#edelweissfe.utils.exceptions.ReachedMaxIterations"><code class="docutils literal notranslate"><span class="pre">ReachedMaxIterations</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#edelweissfe.utils.exceptions.ReachedMinIncrementSize"><code class="docutils literal notranslate"><span class="pre">ReachedMinIncrementSize</span></code></a></li>
@@ -205,6 +206,16 @@ undone: the model cannot go back to the checkpoint.</p>
 <a class="reference internal" href="models.html#edelweissfe.models.modelchange.TopologyRecord" title="edelweissfe.models.modelchange.TopologyRecord"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyRecord</span></code></a>.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="edelweissfe.utils.exceptions.ModuleNotBuilt">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.exceptions.</span></span><span class="sig-name descname"><span class="pre">ModuleNotBuilt</span></span><a class="reference internal" href="../_modules/edelweissfe/utils/exceptions.html#ModuleNotBuilt"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.exceptions.ModuleNotBuilt" title="Link to this definition"></a></dt>
+<dd><p>A compiled part that this environment does not have: a Cython extension that was not built, or an element,
+material, particle, material point or cell whose module is not part of the Marmot build.</p>
+<p>The wrappers raise it only for that. A test runner may skip a test that raises it (EdelweissMeshfree’s does), and
+only such a test: every other exception fails the test, including the <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code> with which a solver
+refuses a model.</p>
 </dd></dl>
 
 <dl class="py exception">

@@ -202,6 +202,16 @@
     <span class="c1">#: reach.</span>
     <span class="n">withinReach</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 
+    <span class="c1">#: Whether this constraint acts in the explicit dynamic solver (``NED``). ``NED`` evaluates a constraint with the</span>
+    <span class="c1">#: solution and the increment of the nodes of finite elements, which carry their total solution, so every</span>
+    <span class="c1">#: constraint on them acts there, through :meth:`computeKernelsExplicit`. In a model with entities that carry their</span>
+    <span class="c1">#: own inertia, such as the particles of EdelweissMeshfree, the nodes those entities couple carry neither a</span>
+    <span class="c1">#: solution nor an increment once the increment is accepted (see</span>
+    <span class="c1">#: :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia`), and a constraint on</span>
+    <span class="c1">#: them acts only if it measures its condition elsewhere, e.g. at the particles' current positions; such</span>
+    <span class="c1">#: constraints say so here, and ``NED`` refuses the others.</span>
+    <span class="n">actsInExplicitAnalysis</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+
     <span class="c1">#: Whether this constraint is switched on from outside; see :attr:`switchedOn`.</span>
     <span class="n">_switchedOn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 

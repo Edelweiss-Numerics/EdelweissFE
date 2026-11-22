@@ -168,7 +168,7 @@
 <span class="sd">The dynamics add nothing to the element loop, so the parallel variant is the serial one with</span>
 <span class="sd">:class:`~edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel`'s thread-parallel</span>
 <span class="sd">``computeElements`` mixed in. The method resolution order ``NIDParallel -&gt; NID -&gt; NISTParallel -&gt;</span>
-<span class="sd">NIST`` routes every ``super()`` call of NID through NISTParallel, so both the Newton loop and the</span>
+<span class="sd">ParallelSolver -&gt; NIST`` routes every ``super()`` call of NID through NISTParallel, so both the Newton loop and the</span>
 <span class="sd">initial-acceleration solve evaluate the elements in parallel.</span>
 <span class="sd">"""</span>
 

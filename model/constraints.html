@@ -95,6 +95,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.setRestartData"><code class="docutils literal notranslate"><span class="pre">ConstraintBase.setRestartData()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity"><code class="docutils literal notranslate"><span class="pre">ConstraintBase.updateConnectivity()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="docutils literal notranslate"><span class="pre">ConstraintBase.active</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis"><code class="docutils literal notranslate"><span class="pre">ConstraintBase.actsInExplicitAnalysis</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.checkpointedState"><code class="docutils literal notranslate"><span class="pre">ConstraintBase.checkpointedState</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.dofIndicesPermutation"><code class="docutils literal notranslate"><span class="pre">ConstraintBase.dofIndicesPermutation</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.fields"><code class="docutils literal notranslate"><span class="pre">ConstraintBase.fields</span></code></a></li>
@@ -2896,6 +2897,19 @@ only between steps, by a <code class="docutils literal notranslate"><span class=
 <dd class="field-even"><p>bool</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis">
+<span class="sig-name descname"><span class="pre">actsInExplicitAnalysis</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis" title="Link to this definition"></a></dt>
+<dd><p>Whether this constraint acts in the explicit dynamic solver (<code class="docutils literal notranslate"><span class="pre">NED</span></code>). <code class="docutils literal notranslate"><span class="pre">NED</span></code> evaluates a constraint with the
+solution and the increment of the nodes of finite elements, which carry their total solution, so every
+constraint on them acts there, through <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>. In a model with entities that carry their
+own inertia, such as the particles of EdelweissMeshfree, the nodes those entities couple carry neither a
+solution nor an increment once the increment is accepted (see
+<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia"><code class="xref py py-meth docutils literal notranslate"><span class="pre">advanceEntitiesWithOwnInertia()</span></code></a>), and a constraint on
+them acts only if it measures its condition elsewhere, e.g. at the particles’ current positions; such
+constraints say so here, and <code class="docutils literal notranslate"><span class="pre">NED</span></code> refuses the others.</p>
 </dd></dl>
 
 <dl class="py attribute">

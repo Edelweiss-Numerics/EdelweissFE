@@ -229,6 +229,8 @@
 </li>
       <li><a href="developer/models.html#edelweissfe.models.femodel.FEModel.activeScalarVariables">activeScalarVariables() (edelweissfe.models.femodel.FEModel method)</a>
 </li>
+      <li><a href="model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis">actsInExplicitAnalysis (edelweissfe.constraints.base.constraintbase.ConstraintBase attribute)</a>
+</li>
       <li><a href="analysis/modelmodifiers.html#edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.actsOnlyAtSimulationStart">actsOnlyAtSimulationStart (edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase property)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverType.adapterSettings">adapterSettings() (edelweissfe.linsolve.types.LinearSolverType static method)</a>
@@ -277,6 +279,8 @@
 </li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupNodeNumbers">adoptSetupNodeNumbers() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
 </li>
+      <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia">advanceEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
+</li>
       <li><a href="developer/models.html#edelweissfe.models.femodel.FEModel.advanceToTime">advanceToTime() (edelweissfe.models.femodel.FEModel method)</a>
 </li>
       <li><a href="developer/models.html#edelweissfe.models.femodel.FEModel.advanceVelocity">advanceVelocity() (edelweissfe.models.femodel.FEModel method)</a>
@@ -311,14 +315,14 @@
       </ul></li>
       <li><a href="analysis/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepStart">applyAtStepStart() (edelweissfe.stepactions.base.stepactionbase.StepActionBase method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyCorrection">applyCorrection() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 
       <ul>
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyCorrection">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyDirichletToResidual">applyDirichletToResidual() (edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase method)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness">applyDirichletToStiffness() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
@@ -383,6 +387,8 @@
         <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.assembledMatrix">(edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly method)</a>
 </li>
       </ul></li>
+      <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia">assembleInternalForceAndMomentumOfEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
+</li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces">assembleInternalForces() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
       <li><a href="developer/dofnumbering.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.assembleInto">assembleInto() (edelweissfe.numerics.scatterdofvector.ScatterDofVector method)</a>
@@ -405,7 +411,11 @@
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.assembleLoadsAtIncrementEnd">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
       </ul></li>
+      <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedDampingOfEntitiesWithOwnInertia">assembleLumpedDampingOfEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
+</li>
       <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia">assembleLumpedMassOfEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
+</li>
+      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.assembleNetForce">assembleNetForce() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
 </li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.assembler">assembler (edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly attribute)</a>
 </li>
@@ -500,27 +510,21 @@
       <ul>
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.beginStep">(edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
 </li>
-        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamicparallel.NEDParallel.beginStep">(edelweissfe.solvers.nonlinearexplicitdynamicparallel.NEDParallel method)</a>
-</li>
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.beginStep">(edelweissfe.solvers.nonlinearexplicitstatic.NEST method)</a>
-</li>
-        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.beginStep">(edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel method)</a>
 </li>
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.beginStep">(edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic method)</a>
 </li>
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.beginStep">(edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
-        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.beginStep">(edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel method)</a>
-</li>
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.beginStep">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.types.BlockAMG">BlockAMG (class in edelweissfe.linsolve.types)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.presets.blockAMG">blockAMG() (in module edelweissfe.linsolve.composition.presets)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.presets.blockAMGFieldPreconditioner">blockAMGFieldPreconditioner() (in module edelweissfe.linsolve.composition.presets)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.types.BlockAMGSchema">BlockAMGSchema (class in edelweissfe.linsolve.types)</a>
@@ -2412,6 +2416,8 @@
       </ul></li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.ensureSurfaceFacetModifier">ensureSurfaceFacetModifier() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
 </li>
+      <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia">entitiesWithOwnInertia (edelweissfe.models.discretesystem.DiscreteSystem property)</a>
+</li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.entityIds">entityIds (edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly attribute)</a>
 </li>
       <li><a href="developer/fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES">ENTRIES (edelweissfe.fields.nodefield.NodeField attribute)</a>
@@ -2612,14 +2618,8 @@
 </li>
       <li><a href="model/sets.html#edelweissfe.sets.orderedset.OrderedSet.forceIter">forceIter() (edelweissfe.sets.orderedset.OrderedSet method)</a>
 </li>
-      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.forEachChunk">forEachChunk() (edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel method)</a>
-
-      <ul>
-        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk">(edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
+      <li><a href="developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forEachChunk">forEachChunk() (edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase method)</a>
 </li>
-        <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.forEachChunk">(edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel method)</a>
-</li>
-      </ul></li>
       <li><a href="developer/dofnumbering.html#edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel">forEachSliceInParallel() (in module edelweissfe.numerics.parallelizationutilities)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.forget">forget() (edelweissfe.linsolve.composition.base.Preconditioner method)</a>
@@ -2956,6 +2956,8 @@
         <li><a href="developer/utils.html#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.identification">(edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper attribute)</a>
 </li>
       </ul></li>
+      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.ids_inertiaOfEntities">ids_inertiaOfEntities (edelweissfe.solvers.nonlinearexplicitdynamic.NED attribute)</a>
+</li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.ids_mechanicalEnergy">ids_mechanicalEnergy (edelweissfe.solvers.nonlinearexplicitdynamic.NED attribute)</a>
 </li>
       <li><a href="model/sets.html#edelweissfe.sets.orderedset.ImmutableOrderedSet">ImmutableOrderedSet (class in edelweissfe.sets.orderedset)</a>
@@ -3649,6 +3651,8 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="developer/exceptions.html#edelweissfe.utils.exceptions.ModuleNotBuilt">ModuleNotBuilt</a>
+</li>
       <li><a href="developer/models.html#edelweissfe.models.modelchange.ModelChange.movedNodes">movedNodes (edelweissfe.models.modelchange.ModelChange attribute)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.solvedumps.SolveDumps.moveTo">moveTo() (edelweissfe.linsolve.composition.solvedumps.SolveDumps method)</a>
@@ -4197,6 +4201,8 @@
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.reportEnergyBalance">reportEnergyBalance() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
+</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.reportsSolveSummary">reportsSolveSummary (edelweissfe.linsolve.base.LinearSolver attribute)</a>
 
       <ul>
@@ -4586,6 +4592,8 @@
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.views.spy">spy() (in module edelweissfe.linsolve.composition.views)</a>
 </li>
       <li><a href="developer/journal.html#edelweissfe.journal.journal.Journal.squelch">squelch() (edelweissfe.journal.journal.Journal method)</a>
+</li>
+      <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia">stableTimeIncrementOfEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.STALENESS_MIN_EXCESS">STALENESS_MIN_EXCESS (in module edelweissfe.linsolve.composition.krylov)</a>
 </li>
