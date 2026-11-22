@@ -162,6 +162,10 @@ def test_locations_left_behind_are_freed_as_soon_as_nothing_refers_to_them():
     locations = _locations(model, [_FakeConstraint([n[0], n[5]], ["displacement"])])
     vector = locations.constructDofVector()
     vector.createScatterVector().toDofVector()
+    # a vector whose entities were read (it then holds its plain view), and a copy of a vector
+    vector[model.elements[1]]
+    copied = vector.copy()
+    assert copied.locations is locations and not np.shares_memory(copied, vector)
     leftBehind = weakref.ref(locations)
 
     gc.disable()
@@ -169,6 +173,7 @@ def test_locations_left_behind_are_freed_as_soon_as_nothing_refers_to_them():
         newLocations = locations.withNewLocationsOf([_FakeConstraint([n[2], n[3]], ["displacement"])])
         vector = vector.onLocations(newLocations)
         vector.createScatterVector()
+        copied = copied.onLocations(newLocations)
         del locations
         assert leftBehind() is None, "the old locations wait for the cyclic garbage collector"
     finally:
