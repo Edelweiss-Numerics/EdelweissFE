@@ -164,7 +164,13 @@ class DofVector(np.ndarray):
         DofVector
             A new `DofVector` instance with copied array data, wrapped with the same locations.
         """
-        return super().copy(order).view(DofVector)
+
+        # A copy of the plain buffer, wrapped: a DofVector that owns its buffer would stay the base of every vector
+        # rewrapped from it (:meth:`onLocations`), and keep the locations it was copied with.
+        copied = self.asPlainArray().copy(order).view(DofVector)
+        copied.locations = self.locations
+
+        return copied
 
     def createScatterVector(self) -> "edelweissfe.numerics.scatterdofvector.ScatterDofVector":
         """
