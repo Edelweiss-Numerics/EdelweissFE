@@ -989,8 +989,9 @@ class NED(NonlinearSolverBase):
 
         In the zero increment, the motion of the entities starts (:meth:`_startTheMotionOfEntitiesWithOwnInertia`);
         with ``project-velocity-every-increment``, the velocity of their nodes is projected from their momentum in every
-        increment. A node of theirs without a positive mass has no equation of motion, so it has no velocity: not even
-        the one it carried while it still had a mass, which the update would otherwise keep.
+        increment (:meth:`_projectTheVelocityOfEntitiesFromTheirMomentum`, the second-order fields only). A node of
+        theirs without a positive mass has no equation of motion, so it has no velocity: not even the one it carried
+        while it still had a mass, which the update would otherwise keep.
 
         Parameters
         ----------
@@ -1026,12 +1027,12 @@ class NED(NonlinearSolverBase):
             self._netForce, self._internalForce, self.collectLoads(step.actions), self._U, noIncrement, timeStep
         )
 
-        ids = self.ids_inertiaOfEntities
         if timeStep.timeIncrement == 0.0:
             self._startTheMotionOfEntitiesWithOwnInertia(momentum, dirichlets)
         elif self.options["project-velocity-every-increment"]:
-            self._V[ids] = momentum[ids] * self._Minv[ids]
+            self._projectTheVelocityOfEntitiesFromTheirMomentum(momentum)
 
+        ids = self.ids_inertiaOfEntities
         self._V[ids[self._Minv[ids] == 0.0]] = 0.0
 
         if timeStep.timeIncrement > 0.0 and timeStep.number % self.options["output-frequency"] == 0:
@@ -1063,9 +1064,25 @@ class NED(NonlinearSolverBase):
 
         if "nodes" not in self.system.carriersOfTheMotion():
             self._netForce[ids] = evaluatedNetForce
-            self._V[ids] = momentum[ids] * self._Minv[ids]
+            self._projectTheVelocityOfEntitiesFromTheirMomentum(momentum)
 
         self._energyAtStepStart = self.energyOfTheModelsState()
+
+    def _projectTheVelocityOfEntitiesFromTheirMomentum(self, momentum: DofVector):
+        """Project the velocity of the nodes of the entities that carry their own inertia from the entities' lumped
+        momentum, :math:`\\boldsymbol{v} = \\boldsymbol{M}^{-1} \\boldsymbol{p}`, at the degrees of freedom of the
+        second-order fields. A first-order field has no momentum: its rate is the one of the forward Euler update,
+        :math:`\\boldsymbol{C}^{-1} \\boldsymbol{f}_\\mathrm{net}`, and is left as it is.
+
+        Parameters
+        ----------
+        momentum
+            The lumped momentum of the entities.
+        """
+
+        ids = self.ids_inertiaOfEntities
+        secondOrder = ids[self._secondOrderMask[ids] != 0.0]
+        self._V[secondOrder] = momentum[secondOrder] * self._Minv[secondOrder]
 
     def _takeLumpedOperatorsOfEntitiesWithOwnInertia(
         self, inertiaOfEntities: np.ndarray, dampingOfEntities: np.ndarray
