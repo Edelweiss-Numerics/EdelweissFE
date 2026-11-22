@@ -43,13 +43,17 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
   that is negative or not finite, and an inertia that is not finite,
 * the rate of a first-order field of the entities (dashpots on springs) is published in every increment, also when the
   velocity is projected from the momentum in every increment,
-* the step gives the entities zero Newmark parameters: their inertia is integrated at the nodes.
+* the step gives the entities zero Newmark parameters: their inertia is integrated at the nodes,
+* a multi-point constraint whose slave is a degree of freedom of the entities is refused.
 """
 
 import numpy as np
 import pytest
 
 from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.constraints.base.multipointconstraintbase import (
+    MultiPointConstraintBase,
+)
 from edelweissfe.elements.pointmass import PointMass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.discretesystem import DiscreteSystem
@@ -204,6 +208,19 @@ class ModelOfDashpotsOnSprings(ModelOfMassesOnSprings):
         super().__init__(mass=0.0, damping=DAMPING)
         for dashpot, displacement in zip(self.elements.values(), DISPLACEMENTS):
             dashpot.displacement[0] = displacement
+
+
+class TheSecondMassFollowsTheFirst(MultiPointConstraintBase):
+    """A multi-point constraint that makes the displacement of the node of the second mass a slave of that of the
+    first, :math:`u_2 = u_1`."""
+
+    def __init__(self, name: str, model: FEModel):
+        self.name = name
+        self._nodes = (model.nodes[1], model.nodes[2])
+
+    def getMultiPointConstraints(self, numbering) -> list[tuple[int, list[tuple[int, float]]]]:
+        master, slave = (numbering.idcsOfFieldVariablesInDofVector[node.fields["displacement"]] for node in self._nodes)
+        return [(slaveDof, [(masterDof, 1.0)]) for slaveDof, masterDof in zip(slave, master)]
 
 
 class _RecordingNED(NED):
@@ -382,3 +399,19 @@ def test_the_step_gives_the_entities_zero_newmark_parameters():
     model, _ = _run(STABLE_TIME_INCREMENT)
 
     assert model.newmarkParametersOfEntities == (0.0, 0.0)
+
+
+def test_a_multi_point_constraint_with_a_slave_among_the_degrees_of_freedom_of_the_entities_is_refused():
+    """A slave of a multi-point constraint has no equation of motion of its own: the inertia the entities lump to it
+    would be folded onto its masters, and the velocity and the kinetic energy published for it would be zero. ``NED``
+    refuses it when it builds the numbering, and names the constraint."""
+
+    model = ModelOfMassesOnSprings()
+    model.multiPointConstraints["follow"] = TheSecondMassFollowsTheFirst("follow", model)
+
+    with pytest.raises(
+        NotImplementedError,
+        match=r"multi-point constraint\(s\) 'follow' make 2 degree\(s\) of freedom of the entities that carry their own "
+        r"inertia",
+    ):
+        _run(10 * STABLE_TIME_INCREMENT, model=model)
