@@ -59,7 +59,8 @@ evaluated on the same threads.
 At the start of every step, the implicit solvers and ``NEST`` give the entities of the model that integrate their own
 inertia their Newmark parameters (:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`).
 ``NID`` gives its own :math:`\beta` and :math:`\gamma` with ``inertia=entities``, and zero with ``inertia=nodes``.
-Every quasi-static solver gives zero, so that the entities are quasi-static as well. A step of ``NED`` starts from the
+Every quasi-static solver gives zero, so that the entities are quasi-static as well, and so does ``NED``, which
+integrates their inertia at the nodes. A step of ``NED`` starts from the
 velocity and the acceleration the model holds, and leaves the velocity at its end time
 (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`). The steps of a dynamic analysis therefore follow each
 other, whichever solver solves them.
