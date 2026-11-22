@@ -2279,7 +2279,9 @@ class NED(NonlinearSolverBase):
         (:attr:`ids_inertiaOfEntities`) wherever these give them a coefficient, an inertia or a damping: a node their
         kernel functions reach only where they vanish has neither, and no equation of motion. A field of the entities
         with a damping and no inertia, e.g. the nonlocal field of gradient-enhanced particles without a micro-inertia,
-        is therefore first order, as it is for the elements.
+        is therefore first order, as it is for the elements. A field of the entities that gets no coefficient at any
+        of its degrees of freedom, e.g. the displacement of particles without a density, is refused like a field of
+        elements that carries neither.
 
         Parameters
         ----------
@@ -2317,7 +2319,16 @@ class NED(NonlinearSolverBase):
             carriesInertia = np.asarray(inertia[indices]) != 0.0
             carriesDamping = np.asarray(damping[indices]) != 0.0
 
-            if carriesInertia.all():
+            if not carriesInertia.any() and not carriesDamping.any():
+                # Asked first: of a field that only the entities carry, no degree of freedom is left to decide then,
+                # and "all of none" would hold.
+                raise ValueError(
+                    "Field {:} carries neither an inertia nor a damping, so there is no time "
+                    "derivative for this solver to integrate it with. Its elements, and the entities that carry "
+                    "their own inertia, report both (computeLumpedInertia and computeLumpedDamping); "
+                    "a zero density or a zero volume gives a zero inertia.".format(fieldName)
+                )
+            elif carriesInertia.all():
                 secondOrderFields.append(fieldName)
             elif carriesInertia.any():
                 raise ValueError(
@@ -2331,20 +2342,13 @@ class NED(NonlinearSolverBase):
                 )
             elif carriesDamping.all():
                 firstOrderFields.append(fieldName)
-            elif carriesDamping.any():
+            else:
                 raise ValueError(
                     "Field {:} carries no inertia, so it is integrated by its damping alone -- but "
                     "a damping was assembled on only {:} of its {:} degrees of freedom, and the "
                     "rest have nothing to divide by.".format(
                         fieldName, int(np.count_nonzero(carriesDamping)), carriesDamping.size
                     )
-                )
-            else:
-                raise ValueError(
-                    "Field {:} carries neither an inertia nor a damping, so there is no time "
-                    "derivative for this solver to integrate it with. Its elements report both "
-                    "through computeLumpedInertia and computeLumpedDamping; an element with zero "
-                    "density or zero volume reports the first as zero.".format(fieldName)
                 )
 
         return firstOrderFields, secondOrderFields

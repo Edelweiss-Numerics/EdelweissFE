@@ -38,7 +38,8 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
 * the calls of an increment come in the order of the module documentation of ``NED``,
 * the motion starts from the velocity projected from the momentum, and the leapfrog then is the central difference
   recursion of the oscillator, to round-off; its period is the analytic one, to second order in the increment,
-* the bound of the entities' stable time increment sets the increment of a step that asks for a larger one.
+* the bound of the entities' stable time increment sets the increment of a step that asks for a larger one,
+* a field of the entities that gets neither an inertia nor a damping is refused.
 """
 
 import numpy as np
@@ -72,8 +73,8 @@ class MassOnASpring(PointMass):
     """A point mass on a spring to the ground that carries its displacement and its velocity in itself, as a particle
     carries its state. As a point mass, it sits on one node and lumps its mass there."""
 
-    def __init__(self, number: int, node: Node, model: FEModel, velocity: float):
-        super().__init__(number, [node], model, MASS)
+    def __init__(self, number: int, node: Node, model: FEModel, velocity: float, mass: float):
+        super().__init__(number, [node], model, mass)
         self.displacement = np.zeros(model.domainSize)
         self.velocity = np.array([velocity, 0.0])
 
@@ -141,15 +142,21 @@ class SystemOfMassesOnSprings(DiscreteSystem):
 
 class ModelOfMassesOnSprings(FEModel):
     """A model of masses on springs, one per node, that answers with :class:`SystemOfMassesOnSprings`, and records
-    what ``NED`` asks of it."""
+    what ``NED`` asks of it.
 
-    def __init__(self):
+    Parameters
+    ----------
+    mass
+        The mass of every point mass.
+    """
+
+    def __init__(self, mass: float = MASS):
         super().__init__(2)
         self.calls = []
         for number, velocity in enumerate(VELOCITIES, start=1):
             node = Node(number, np.array([float(number), 0.0]))
             self.nodes[number] = node
-            self.elements[number] = MassOnASpring(number, node, self, velocity)
+            self.elements[number] = MassOnASpring(number, node, self, velocity, mass)
         self.elementSets["all"] = ElementSet("all", list(self.elements.values()))
         self.nodeSets["all"] = NodeSet("all", list(self.nodes.values()))
 
@@ -177,11 +184,14 @@ class _RecordingNED(NED):
         self.history.append((timeStep.timeIncrement, [mass.displacement[0] for mass in model.elements.values()]))
 
 
-def _run(stepLength: float, **options) -> tuple[ModelOfMassesOnSprings, _RecordingNED]:
-    """Run one explicit step of the given length, which asks for the whole step as its increment."""
+def _run(
+    stepLength: float, model: ModelOfMassesOnSprings = None, **options
+) -> tuple[ModelOfMassesOnSprings, _RecordingNED]:
+    """Run one explicit step of the given length, which asks for the whole step as its increment, on the given model
+    (by default the masses on springs)."""
 
     journal = Journal(verbose=False)
-    model = ModelOfMassesOnSprings()
+    model = model or ModelOfMassesOnSprings()
     model.prepareYourself(journal)
     model.advanceToTime(0.0)
     model.calls.clear()
@@ -272,3 +282,12 @@ def test_the_period_is_the_one_of_the_oscillator_to_second_order_in_the_incremen
             times[crossing + 1] - times[crossing]
         )
         assert halfPeriod == pytest.approx(np.pi / OMEGA, rel=(OMEGA * courantNumber * STABLE_TIME_INCREMENT) ** 2 / 10)
+
+
+def test_a_field_of_the_entities_without_inertia_and_damping_is_refused():
+    """Point masses without a mass (as particles without a density) give the displacement neither an inertia nor a
+    damping at any degree of freedom: there is nothing to integrate it with, and ``NED`` says so when it takes the
+    operators of the entities, instead of leaving the field where it is for the whole step."""
+
+    with pytest.raises(ValueError, match="displacement carries neither an inertia nor a damping"):
+        _run(10 * STABLE_TIME_INCREMENT, model=ModelOfMassesOnSprings(mass=0.0))
