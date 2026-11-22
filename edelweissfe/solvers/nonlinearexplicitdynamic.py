@@ -1844,8 +1844,8 @@ class NED(NonlinearSolverBase):
         lumped operators and the indices of the fields by time derivative; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forgetDiscreteSystem`. Everything
         :meth:`onNewNumbering` builds is gone, so that no array of the previous numbering is left to be mistaken for
-        one of the next. The net force and the mass of the entities that carry their own inertia, which a resumed step
-        finds from its checkpoint, are dropped as well: whoever needs them takes them before the build (see
+        one of the next. The net force and the mass and the damping of the entities that carry their own inertia, which
+        a resumed step finds from its checkpoint, are dropped as well: whoever needs them takes them before the build (see
         :meth:`prepareIncrement`). What is derived from the mesh, the stable time increment and the classification of
         the fields by time derivative, is no array of the numbering: it is derived again when the mesh changed (see
         :meth:`onNewNumbering`)."""
@@ -1983,21 +1983,6 @@ class NED(NonlinearSolverBase):
             el.computeLumpedDamping(Ce)
             damping[locations[el]] += Ce
 
-        # Checked separately: at second-order DOFs the damping enters only as the rate C/M, which the
-        # inertia check below never sees, and a negative rate amplifies instead of damping.
-        if not np.all(np.isfinite(damping)) or np.any(damping < 0.0):
-            raise ValueError(
-                "The assembled lumped damping is not a valid dissipation: {:} of {:} entries are "
-                "negative and {:} are not finite (smallest: {:e}). A damping coefficient enters the "
-                "second-order update as the rate C/M, where a negative value amplifies instead of "
-                "damping, and a first-order field divides by it directly.".format(
-                    int(np.count_nonzero(np.asarray(damping) < 0.0)),
-                    damping.shape[0],
-                    int(np.count_nonzero(~np.isfinite(np.asarray(damping)))),
-                    np.nanmin(damping),
-                )
-            )
-
         self._inertiaOfTheElements = M
         self._dampingOfTheElements = damping
 
@@ -2040,7 +2025,8 @@ class NED(NonlinearSolverBase):
 
     def _deriveLumpedOperators(self):
         """Derive everything the explicit update divides by from the lumped inertia and damping of the elements and of
-        the entities that carry their own inertia: the classification of the fields by time derivative
+        the entities that carry their own inertia, once both are checked (a damping is finite and not negative, an
+        inertia finite; a negative divisor is refused below): the classification of the fields by time derivative
         (:meth:`_classifyFieldsOfTheMesh`), a property of the mesh derived for the first numbering of a step and for a
         new mesh (see :meth:`onNewNumbering`), with the
         entities' operators once they are known; the index sets of the fields; and, as arrays of the length of the
@@ -2057,6 +2043,30 @@ class NED(NonlinearSolverBase):
         if self._inertiaOfEntities is not None:
             M[ids] = self._inertiaOfEntities[ids]
             damping[ids] = self._dampingOfEntities[ids]
+
+        # The damping of the elements and of the entities, checked on its own: at second-order DOFs it enters only as
+        # the rate C/M, which the check of the divisor below never sees, and a negative rate amplifies instead of
+        # damping.
+        if not np.all(np.isfinite(damping)) or np.any(damping < 0.0):
+            raise ValueError(
+                "The assembled lumped damping is not a valid dissipation: {:} of {:} entries are "
+                "negative and {:} are not finite (smallest: {:e}). A damping coefficient enters the "
+                "second-order update as the rate C/M, where a negative value amplifies instead of "
+                "damping, and a first-order field divides by it directly.".format(
+                    int(np.count_nonzero(damping < 0.0)),
+                    damping.shape[0],
+                    int(np.count_nonzero(~np.isfinite(damping))),
+                    np.nanmin(damping),
+                )
+            )
+
+        # A lumped inertia that is not a number passes every comparison below, and would reach every increment.
+        if not np.all(np.isfinite(M)):
+            raise ValueError(
+                "The assembled lumped inertia is not finite at {:} of {:} degrees of freedom.".format(
+                    int(np.count_nonzero(~np.isfinite(M))), M.shape[0]
+                )
+            )
 
         if self._meshOfTheClassification != self.system.model.topology.version:
             self._classifyFieldsOfTheMesh(M, damping)
