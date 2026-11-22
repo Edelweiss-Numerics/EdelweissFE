@@ -48,6 +48,7 @@ from test_nid_amr import (
 )
 
 from edelweissfe.config.solvers import getSolverByName
+from edelweissfe.solvers.base.parallelsolver import ParallelSolver
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.solvers.nonlinearimplicitdynamicparallel import NIDParallel
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
@@ -59,10 +60,11 @@ pytestmark = pytest.mark.usefixtures("systemMatrixAssemblyOfNID")
 
 def test_the_parallel_element_loop_is_reached_through_nid():
     assert getSolverByName("NIDParallel") is NIDParallel
-    assert NIDParallel.__mro__[:4] == (NIDParallel, NonlinearImplicitDynamic, NISTParallel, NIST)
+    assert NIDParallel.__mro__[:5] == (NIDParallel, NonlinearImplicitDynamic, NISTParallel, ParallelSolver, NIST)
 
-    # the element loop is NISTParallel's, everything NID overrides is still NID's
+    # the element loop is NISTParallel's, the loop over chunks ParallelSolver's, everything NID overrides is still NID's
     assert NIDParallel.computeElements is NISTParallel.computeElements
+    assert NIDParallel.forEachChunk is ParallelSolver.forEachChunk
     assert NIDParallel.solveIncrement is NonlinearImplicitDynamic.solveIncrement
     assert NIDParallel.beginStep is NonlinearImplicitDynamic.beginStep
     assert NIDParallel.schema is NonlinearImplicitDynamic.schema
