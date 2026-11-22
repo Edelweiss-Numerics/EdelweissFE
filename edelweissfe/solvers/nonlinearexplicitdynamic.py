@@ -168,6 +168,9 @@ The kinetic energy of the balance, and the momentum of the diagnostics, are thos
 lumped mass, on the nodes of the entities as on those of the elements: the state the leapfrog integrates. The
 checkpoint holds the inertia and the damping of the entities with the net force, and a resumed step finds their
 connectivity again.
+An entity that can integrate its own inertia by the Newmark scheme, as an implicit dynamic step asks of it, carries
+none here: at the start of every step, this solver gives the entities zero Newmark parameters
+(:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`), as every quasi-static solver does.
 Model modifiers that act after the start of the analysis are not supported in such a model.
 
 **Energy balance.** Every reporting increment prints the energy the model held at the start of the
@@ -608,6 +611,10 @@ class NED(NonlinearSolverBase):
         """
 
         self.validateModelCapabilities(model)
+
+        # The inertia of every entity is integrated at the nodes here. An entity that can integrate its own by the
+        # Newmark scheme carries none: a step of an implicit solver may have left it its parameters.
+        model.setNewmarkParametersOfEntities(0.0, 0.0)
 
         # The timing table's untimed residue is measured against this wall clock, so timers and
         # clock must start together, before any timed work of this step.
