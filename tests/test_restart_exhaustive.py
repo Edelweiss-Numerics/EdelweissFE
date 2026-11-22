@@ -249,7 +249,6 @@ _SOLVERS = {
     "NID": "*solver, solver=NID, name=theSolver\nnewmarkBeta=0.25\nnewmarkGamma=0.5\n{solverOptions}\n",
     "arcLength": "*solver, solver=NISTPArcLength, name=theSolver\n{solverOptions}\n",
     "explicit": """*solver, solver=NED, name=theSolver
-courant-number=0.1
 output-frequency=1
 contact-update-frequency={contactUpdateFrequency}
 topology-check-frequency={topologyCheckFrequency}

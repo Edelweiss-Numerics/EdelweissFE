@@ -61,7 +61,9 @@ it out of both balances.
 are removed rather than deprecated: a deck carrying any of them now fails with ``Invalid option``,
 and deleting those lines is the whole of the migration.
 
-The stable increment is computed once per mesh from the element wave speeds and scaled by
+The stable increment is computed once per mesh as the smallest of the elements' own bounds
+(``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum element, two over the square root
+of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) and scaled by
 ``courant-number``. It is recomputed whenever the mesh changes and deliberately *not* recomputed
 when it has not: as a material softens the true limit only grows, so reusing it is the conservative
 direction, and re-deriving it costs a full element pass.
