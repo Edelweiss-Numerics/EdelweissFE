@@ -525,7 +525,10 @@ class DiscreteSystem:
         return None
 
     def stableTimeIncrementOfEntitiesWithOwnInertia(
-        self, forEachChunk: Callable[[list, Callable], None]
+        self,
+        lumpedMass: DofVector,
+        lumpedDamping: DofVector,
+        forEachChunk: Callable[[list, Callable], None],
     ) -> float | None:
         """A bound of the stable time increment of the explicit scheme for the entities that carry their own inertia
         (:attr:`entitiesWithOwnInertia`) at their current configuration. A property of their assembled system, not of
@@ -536,6 +539,11 @@ class DiscreteSystem:
 
         Parameters
         ----------
+        lumpedMass
+            The lumped mass of the entities at their current configuration, as
+            :meth:`assembleLumpedMassOfEntitiesWithOwnInertia` returns it: the solver has just assembled it.
+        lumpedDamping
+            Their lumped damping, likewise (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`).
         forEachChunk
             The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
 
@@ -546,6 +554,24 @@ class DiscreteSystem:
         """
 
         return None
+
+    def entitiesWithOwnInertiaCoupleOtherNodes(self) -> bool:
+        """Whether the last connectivity update of the model
+        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`) changed the nodes that an entity that carries
+        its own inertia (:attr:`entitiesWithOwnInertia`) couples. Only that changes their assembled system and with it
+        the bound of its stable time increment (:meth:`stableTimeIncrementOfEntitiesWithOwnInertia`): a constraint
+        that couples other nodes, e.g. a contact paired anew, changes the locations of the discrete system, but not the
+        entities' stiffness, mass or damping. ``NED`` bounds the stable time increment anew when it is True.
+
+        A finite element model has no such entity: False.
+
+        Returns
+        -------
+        bool
+            True if an entity that carries its own inertia couples other nodes since the last connectivity update.
+        """
+
+        return False
 
     def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep, forEachChunk: Callable[[list, Callable], None]):
         """Bring the material points that belong to no element up to date with the trial solution increment, right

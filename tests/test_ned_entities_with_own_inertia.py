@@ -76,7 +76,7 @@ OMEGA = np.sqrt(STIFFNESS / MASS)
 #: The bound of the stable time increment of one mass on its spring, 2 / omega.
 STABLE_TIME_INCREMENT = 2.0 / OMEGA
 #: The coefficient of the dashpots of :class:`ModelOfDashpotsOnSprings`, and where each starts. The forward Euler update
-#: of a dashpot on a spring is stable up to the increment 2 c / k, above the bound of the masses.
+#: of a dashpot on a spring is stable up to the increment 2 c / k.
 DAMPING = 20.0
 DISPLACEMENTS = (0.02, -0.05)
 
@@ -142,9 +142,16 @@ class SystemOfMassesOnSprings(DiscreteSystem):
         self.model.calls.append("damping")
         return self._onTheNodes(lambda mass: np.full(mass.nDof, mass.damping))
 
-    def stableTimeIncrementOfEntitiesWithOwnInertia(self, forEachChunk):
+    def stableTimeIncrementOfEntitiesWithOwnInertia(self, lumpedMass, lumpedDamping, forEachChunk):
         self.model.calls.append("bound")
-        return STABLE_TIME_INCREMENT
+
+        # each entity on its spring alone, from the mass and the damping the solver has just assembled: 2 / omega for a
+        # mass, 2 c / k for a dashpot without a mass
+        def boundOf(entity) -> float:
+            mass, damping = lumpedMass[entity][0], lumpedDamping[entity][0]
+            return 2.0 * np.sqrt(mass / STIFFNESS) if mass > 0.0 else 2.0 * damping / STIFFNESS
+
+        return min(boundOf(entity) for entity in self.entitiesWithOwnInertia)
 
     def _onTheNodes(self, valueOf) -> DofVector:
         vector = self.locations.constructDofVector()
