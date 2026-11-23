@@ -472,6 +472,23 @@ off). With
 ``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum in every
 increment.
 
+The time increment: lowered only, or followed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, ``NED`` lowers the time increment whenever the critical time step falls below it, and never raises it within
+a step: a brief stiff state -- a particle that is briefly compressed, a node that the particles' kernel functions reach
+only at the edge -- sets the increment for the rest of the step. With ``follow-critical-time-step``, the time increment
+follows the critical time step up as well as down: each time the critical time step is taken, the increment becomes
+``courant-number`` times it, at most the step's ``maxInc``. The critical time step is taken at the start of the step and
+after a change of the mesh, and, for the particles, in the zero increment, whenever they couple other nodes and every
+``stable-increment-frequency`` increments: the increment is raised only at these points. The step's ``startInc`` is not
+kept then; a step that wants smaller increments sets ``maxInc``.
+
+.. code-block:: edelweiss
+
+    *solver, solver=NED, name=explicit
+    follow-critical-time-step=True
+
 Work per increment outside the elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
