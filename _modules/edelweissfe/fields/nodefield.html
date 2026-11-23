@@ -288,6 +288,19 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">version</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of times this NodeField was resized (:meth:`resize`): the rows of its nodes hold as long as it</span>
+<span class="sd">        stays the same, so that what caches rows (e.g. a :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`)</span>
+<span class="sd">        compares it to see whether they still hold.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            The version.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_version</span>
+
 <div class="viewcode-block" id="NodeField.indexOfNode">
 <a class="viewcode-back" href="../../../developer/fields.html#edelweissfe.fields.nodefield.NodeField.indexOfNode">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">indexOfNode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>

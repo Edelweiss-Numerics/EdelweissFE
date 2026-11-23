@@ -106,6 +106,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.resize"><code class="docutils literal notranslate"><span class="pre">NodeField.resize()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.subset"><code class="docutils literal notranslate"><span class="pre">NodeField.subset()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="docutils literal notranslate"><span class="pre">NodeField.ENTRIES</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.version"><code class="docutils literal notranslate"><span class="pre">NodeField.version</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeFieldSubset"><code class="docutils literal notranslate"><span class="pre">NodeFieldSubset</span></code></a><ul>
@@ -200,6 +201,12 @@ all individual nodes.</p>
 <li><p><strong>nodes</strong> – The associated nodes. Only nodes with active fields are considered.</p></li>
 <li><p><strong>nodeSet</strong> (<a class="reference internal" href="../model/sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>NodeSet</em></a>)</p></li>
 </ul>
+</dd>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.version" title="edelweissfe.fields.nodefield.NodeField.version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">version</span></code></a></dt><dd><p>The number of times this NodeField was resized (<a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.resize" title="edelweissfe.fields.nodefield.NodeField.resize"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resize()</span></code></a>): the rows of its nodes hold as long as it stays the same, so that what caches rows (e.g.</p>
+</dd>
+</dl>
 </dd>
 </dl>
 <p class="rubric">Methods</p>
@@ -323,12 +330,39 @@ second rate <code class="docutils literal notranslate"><span class="pre">A</span
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeField.version">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">version</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeField.version" title="Link to this definition"></a></dt>
+<dd><p>the rows of its nodes hold as long as it
+stays the same, so that what caches rows (e.g. a <a class="reference internal" href="dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering" title="edelweissfe.numerics.dofnumbering.DofNumbering"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofNumbering</span></code></a>)
+compares it to see whether they still hold.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The version.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The number of times this NodeField was resized (<a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.resize" title="edelweissfe.fields.nodefield.NodeField.resize"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resize()</span></code></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeFieldSubset">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.fields.nodefield.</span></span><span class="sig-name descname"><span class="pre">NodeFieldSubset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parentNodeField</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subset</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/fields/nodefield.html#NodeFieldSubset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeFieldSubset" title="Link to this definition"></a></dt>
-<dd><p class="rubric">Methods</p>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.version" title="edelweissfe.fields.nodefield.NodeField.version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">version</span></code></a></dt><dd><p>The number of times this NodeField was resized (<code class="xref py py-meth docutils literal notranslate"><span class="pre">resize()</span></code>): the rows of its nodes hold as long as it stays the same, so that what caches rows (e.g.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">addEntriesFromOther</span></code>(other[, fieldValueEntries])</p></td>

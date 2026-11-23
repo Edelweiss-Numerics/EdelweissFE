@@ -253,6 +253,10 @@
             <span class="n">field</span><span class="p">:</span> <span class="p">{</span><span class="n">nodeSet</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateFieldOnNodeSet</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span> <span class="k">for</span> <span class="n">nodeSet</span> <span class="ow">in</span> <span class="n">nodeSets</span><span class="p">}</span>
             <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span>
         <span class="p">}</span>
+        <span class="c1">#: For each node field and node set read or written on so far, the rows of the located nodes in the node field,</span>
+        <span class="c1">#: with the :attr:`~edelweissfe.fields.nodefield.NodeField.version` of the node field they were found in; see</span>
+        <span class="c1">#: :meth:`_locateNodeFieldOnNodeSet`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rowsOfNodeFieldsOnNodeSets</span> <span class="o">=</span> <span class="p">{}</span>
 
 <div class="viewcode-block" id="DofNumbering.digest">
 <a class="viewcode-back" href="../../../developer/dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.digest">[docs]</a>
@@ -524,9 +528,12 @@
                 <span class="s2">"written as a whole only by the DofNumbering that numbers it"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
             <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_locateNodeFieldOnNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="n">NodeField</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">:</span> <span class="n">NodeSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_locateNodeFieldOnNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="n">NodeField</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">:</span> <span class="n">NodeSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Where the values of a NodeField on the nodes of a node set lie, in the DofVector and in the NodeField: the</span>
-<span class="sd">        nodes of the set whose field is part of this discrete system (see :meth:`locateFieldOnNodeSet`).</span>
+<span class="sd">        nodes of the set whose field is part of this discrete system (see :meth:`locateFieldOnNodeSet`). The rows are</span>
+<span class="sd">        found once per node field and node set, as the indices are, and again only after the node field was resized</span>
+<span class="sd">        (its :attr:`~edelweissfe.fields.nodefield.NodeField.version`): a model with entities that carry their own</span>
+<span class="sd">        inertia writes its results on its active nodes after every increment.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -537,15 +544,20 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[np.ndarray, list]</span>
+<span class="sd">        tuple[np.ndarray, np.ndarray]</span>
 <span class="sd">            - The indices of the degrees of freedom in the DofVector, node after node.</span>
 <span class="sd">            - The rows of these nodes in the NodeField, in the same order.</span>
 <span class="sd">        """</span>
 
         <span class="n">indices</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">locateFieldOnNodeSet</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span>
-        <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">indices</span><span class="p">,</span> <span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">indexOfNode</span><span class="p">(</span><span class="n">nodes</span><span class="p">[</span><span class="n">position</span><span class="p">])</span> <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">nodePositions</span><span class="p">]</span>
+        <span class="n">version</span><span class="p">,</span> <span class="n">rows</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rowsOfNodeFieldsOnNodeSets</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">),</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">version</span> <span class="o">!=</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">version</span><span class="p">:</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">)</span>
+            <span class="n">rows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">nodeField</span><span class="o">.</span><span class="n">indexOfNode</span><span class="p">(</span><span class="n">nodes</span><span class="p">[</span><span class="n">position</span><span class="p">])</span> <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">nodePositions</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rowsOfNodeFieldsOnNodeSets</span><span class="p">[(</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)]</span> <span class="o">=</span> <span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">version</span><span class="p">,</span> <span class="n">rows</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">indices</span><span class="p">,</span> <span class="n">rows</span>
 
 <div class="viewcode-block" id="DofNumbering.writeDofVectorToNodeField">
 <a class="viewcode-back" href="../../../developer/dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToNodeField">[docs]</a>
