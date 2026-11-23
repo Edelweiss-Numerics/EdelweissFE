@@ -53,6 +53,7 @@ from edelweissfe.materials.marmot._marmotmaterials cimport StateView, stateViewA
 from edelweissfe.materials.base.basegradientenhancedhypoelasticmaterial import (
     BaseGradientEnhancedHypoElasticMaterial,
 )
+from edelweissfe.utils.bufferlength cimport requireLength
 from edelweissfe.utils.exceptions import CutbackRequest, ModuleNotBuilt
 
 #: The factor by which the time increment is reduced if a Marmot material fails.
@@ -135,9 +136,21 @@ cdef class MarmotGradientEnhancedHypoElasticMaterial:
         Parameters
         ----------
         currentStateVars
-            The contiguous array holding the material state variables.
+            The contiguous array holding the material state variables, as many as
+            :meth:`getNumberOfRequiredStateVars` reports.
+
+        Raises
+        ------
+        ValueError
+            If ``currentStateVars`` does not have the required length.
         """
 
+        requireLength(
+            "assignCurrentStateVars",
+            "currentStateVars",
+            currentStateVars.shape[0],
+            self._material.getNumberOfRequiredStateVars(),
+        )
         self._stateVars = currentStateVars
 
     def initializeYourself(self):
@@ -200,6 +213,12 @@ cdef class MarmotGradientEnhancedHypoElasticMaterial:
             The total time at the end of the increment.
         dTime
             The time increment.
+
+        Raises
+        ------
+        ValueError
+            If an entry of ``response``, ``tangents`` or ``increment`` does not have the shape their
+            documentation states, for ``n`` = :attr:`nNonlocalVariables`.
         """
 
         self._computeStress(response, tangents, increment, time, dTime, False)
@@ -234,6 +253,12 @@ cdef class MarmotGradientEnhancedHypoElasticMaterial:
             The total time at the end of the increment.
         dTime
             The time increment.
+
+        Raises
+        ------
+        ValueError
+            If an entry of ``response``, ``tangents`` or ``increment`` does not have the shape their
+            documentation states, for ``n`` = :attr:`nNonlocalVariables`.
         """
 
         self._computeStress(response, tangents, increment, time, dTime, True)
@@ -284,6 +309,28 @@ cdef class MarmotGradientEnhancedHypoElasticMaterial:
         cdef const double[::1] dStrain = increment.dStrain
         cdef const double[::1] K = increment.K
         cdef const double[::1] dK = increment.dK
+
+        cdef Py_ssize_t n = self.nNonlocalVariables
+        cdef str method = "computePlaneStress" if planeStress else "computeStress"
+
+        requireLength(method, "response.stress", stress.shape[0], 6)
+        requireLength(method, "response.KLocal", KLocal.shape[0], n)
+        requireLength(method, "response.c", c.shape[0], n)
+        requireLength(method, "tangents.dStress_dStrain rows", dStress_dStrain.shape[0], 6)
+        requireLength(method, "tangents.dStress_dStrain columns", dStress_dStrain.shape[1], 6)
+        requireLength(method, "tangents.dStress_dK rows", dStress_dK.shape[0], 6)
+        requireLength(method, "tangents.dStress_dK columns", dStress_dK.shape[1], n)
+        requireLength(method, "tangents.dKLocal_dStrain rows", dKLocal_dStrain.shape[0], n)
+        requireLength(method, "tangents.dKLocal_dStrain columns", dKLocal_dStrain.shape[1], 6)
+        requireLength(method, "tangents.dKLocal_dK rows", dKLocal_dK.shape[0], n)
+        requireLength(method, "tangents.dKLocal_dK columns", dKLocal_dK.shape[1], n)
+        requireLength(method, "tangents.dc_dK rows", dc_dK.shape[0], n)
+        requireLength(method, "tangents.dc_dK columns", dc_dK.shape[1], n)
+        requireLength(method, "tangents.d2c_dK2 rows", d2c_dK2.shape[0], n)
+        requireLength(method, "tangents.d2c_dK2 columns", d2c_dK2.shape[1], n)
+        requireLength(method, "increment.dStrain", dStrain.shape[0], 6)
+        requireLength(method, "increment.K", K.shape[0], n)
+        requireLength(method, "increment.dK", dK.shape[0], n)
 
         cdef double elasticEnergyDensity = 0.0
         cdef double dissipation = 0.0
