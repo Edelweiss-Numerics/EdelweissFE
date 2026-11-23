@@ -174,7 +174,8 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_NoLocations</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The locations of a vector that is wrapped with none: no entity is located."""</span>
+<span class="w">    </span><span class="sd">"""The locations of a vector that is wrapped with none: no entity is located, and there is no layout of a scatter</span>
+<span class="sd">    vector (:meth:`DofVector.createScatterVector` needs a vector wrapped with locations)."""</span>
 
     <span class="c1">#: No entity has a location.</span>
     <span class="n">ofEntity</span> <span class="o">=</span> <span class="p">{}</span>
@@ -204,13 +205,13 @@
 <span class="sd">        The total number of degrees of freedom (length of the vector).</span>
 <span class="sd">    locations : DofLocations, optional</span>
 <span class="sd">        The locations of the entities, which map every entity to its indices in the vector: a</span>
-<span class="sd">        :class:`~edelweissfe.numerics.doflocations.DofLocations`, or any object with a mapping ``ofEntity``.</span>
+<span class="sd">        :class:`~edelweissfe.numerics.doflocations.DofLocations`, or any object with a mapping ``ofEntity`` and, for</span>
+<span class="sd">        :meth:`createScatterVector`, the layout of a scatter vector ``scatterTemplate``.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">locations</span><span class="p">:</span> <span class="s2">"DofLocations | None"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
         <span class="n">obj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
         <span class="n">obj</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="n">locations</span> <span class="k">if</span> <span class="n">locations</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_WITHOUT_LOCATIONS</span>
-        <span class="n">obj</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: Plain-ndarray alias of the same buffer, built lazily on first entity access so</span>
         <span class="c1">#: that the hot path never triggers numpy subclass wrapping. See __getitem__.</span>
         <span class="n">obj</span><span class="o">.</span><span class="n">_plainView</span> <span class="o">=</span> <span class="kc">None</span>
@@ -220,7 +221,6 @@
         <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"locations"</span><span class="p">,</span> <span class="n">_WITHOUT_LOCATIONS</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"_scatterTemplate"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_plainView</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="DofVector.onLocations">
@@ -243,9 +243,10 @@
 <span class="sd">            The vector wrapped with the new locations.</span>
 <span class="sd">        """</span>
 
-        <span class="n">rewrapped</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">DofVector</span><span class="p">)</span>
+        <span class="c1"># A view of the buffer, through a plain view: a DofVector viewed directly keeps this vector as its base, and with</span>
+        <span class="c1"># it these locations, as long as the rewrapped vector lives.</span>
+        <span class="n">rewrapped</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">DofVector</span><span class="p">)</span>
         <span class="n">rewrapped</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="n">locations</span>
-        <span class="n">rewrapped</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">rewrapped</span><span class="o">.</span><span class="n">_plainView</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">return</span> <span class="n">rewrapped</span></div>
@@ -310,7 +311,13 @@
 <span class="sd">        DofVector</span>
 <span class="sd">            A new `DofVector` instance with copied array data, wrapped with the same locations.</span>
 <span class="sd">        """</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">DofVector</span><span class="p">)</span></div>
+
+        <span class="c1"># A copy of the plain buffer, wrapped: a DofVector that owns its buffer would stay the base of every vector</span>
+        <span class="c1"># rewrapped from it (:meth:`onLocations`), and keep the locations it was copied with.</span>
+        <span class="n">copied</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">DofVector</span><span class="p">)</span>
+        <span class="n">copied</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span>
+
+        <span class="k">return</span> <span class="n">copied</span></div>
 
 
 <div class="viewcode-block" id="DofVector.createScatterVector">
@@ -319,23 +326,18 @@
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Create a scatter vector for ALL entities located in the locations of this DofVector.</span>
 
-<span class="sd">        The underlying layout (entity lookup map and scatter indices) is computed once</span>
-<span class="sd">        and cached, so repeated calls (e.g. once per Newton iteration) only allocate</span>
-<span class="sd">        the zero-initialized data buffer.</span>
+<span class="sd">        Its layout (entity lookup map and scatter indices) belongs to the locations, which make it once</span>
+<span class="sd">        (:attr:`~edelweissfe.numerics.doflocations.DofLocations.scatterTemplate`): every vector of the same locations,</span>
+<span class="sd">        e.g. the force, the momentum and the lumped mass of one increment, shares it, and a call only allocates the</span>
+<span class="sd">        zero-initialized data buffer.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        ScatterDofVector</span>
-<span class="sd">            A `ScatterDofVector` initialized with this vector's locations and total DOF count.</span>
+<span class="sd">            A `ScatterDofVector` with the layout of this vector's locations.</span>
 <span class="sd">        """</span>
 
-        <span class="c1"># The template is inherited across views/copies, but the vector may since have been wrapped with other</span>
-        <span class="c1"># locations: do not reuse a template built for stale locations.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span><span class="o">.</span><span class="n">locations</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="n">edelweissfe</span><span class="o">.</span><span class="n">numerics</span><span class="o">.</span><span class="n">scatterdofvector</span><span class="o">.</span><span class="n">ScatterDofVectorTemplate</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">edelweissfe</span><span class="o">.</span><span class="n">numerics</span><span class="o">.</span><span class="n">scatterdofvector</span><span class="o">.</span><span class="n">ScatterDofVector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">edelweissfe</span><span class="o">.</span><span class="n">numerics</span><span class="o">.</span><span class="n">scatterdofvector</span><span class="o">.</span><span class="n">ScatterDofVector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">scatterTemplate</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">locations</span><span class="p">)</span></div>
 </div>
 
 </pre></div>

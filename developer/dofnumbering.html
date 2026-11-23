@@ -126,6 +126,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.nAccumulatedNodalFluxesFieldwise"><code class="docutils literal notranslate"><span class="pre">DofLocations.nAccumulatedNodalFluxesFieldwise</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.numbering"><code class="docutils literal notranslate"><span class="pre">DofLocations.numbering</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.ofEntity"><code class="docutils literal notranslate"><span class="pre">DofLocations.ofEntity</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.scatterTemplate"><code class="docutils literal notranslate"><span class="pre">DofLocations.scatterTemplate</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -623,6 +624,8 @@ a meshfree model, its cells and particles.</p></li>
 <dd class="field-even"><dl class="simple">
 <dt><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.nAccumulatedNodalFluxesFieldwise" title="edelweissfe.numerics.doflocations.DofLocations.nAccumulatedNodalFluxesFieldwise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nAccumulatedNodalFluxesFieldwise</span></code></a></dt><dd><p>For the Abaqus like convergence test, the number of degrees of freedom ‘entity-wise’ per field, that is Σ_(elements+constraints) Σ_nodes ( nDof (field) ).</p>
 </dd>
+<dt><a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.scatterTemplate" title="edelweissfe.numerics.doflocations.DofLocations.scatterTemplate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">scatterTemplate</span></code></a></dt><dd><p>The layout of the scatter vectors of these locations (<a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector.createScatterVector" title="edelweissfe.numerics.dofvector.DofVector.createScatterVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">createScatterVector()</span></code></a>): where each entity writes its local vector, one after the other, and the global index of every entry, from which the scatter vector is assembled.</p>
+</dd>
 </dl>
 </dd>
 </dl>
@@ -761,6 +764,24 @@ scatter vectors) read; a single location is read by <code class="docutils litera
 whoever still holds the old locations holds a mapping that stays valid.</p>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.numerics.doflocations.DofLocations.scatterTemplate">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">scatterTemplate</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate" title="edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate"><span class="pre">ScatterDofVectorTemplate</span></a></span><a class="headerlink" href="#edelweissfe.numerics.doflocations.DofLocations.scatterTemplate" title="Link to this definition"></a></dt>
+<dd><p>The layout of the scatter vectors of these locations
+(<a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector.createScatterVector" title="edelweissfe.numerics.dofvector.DofVector.createScatterVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">createScatterVector()</span></code></a>): where each entity writes its local
+vector, one after the other, and the global index of every entry, from which the scatter vector is assembled.
+It follows from <a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.ofEntity" title="edelweissfe.numerics.doflocations.DofLocations.ofEntity"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ofEntity</span></code></a> alone, so it is made at the first request and kept: the locations are
+immutable, and every vector of them shares it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The layout.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate" title="edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate">ScatterDofVectorTemplate</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 </section>
@@ -884,7 +905,8 @@ wrapped on the new locations, see <a class="reference internal" href="#edelweiss
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>nDof</strong> (<em>int</em>) – The total number of degrees of freedom (length of the vector).</p></li>
 <li><p><strong>locations</strong> (<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a><em>, </em><em>optional</em>) – The locations of the entities, which map every entity to its indices in the vector: a
-<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>, or any object with a mapping <code class="docutils literal notranslate"><span class="pre">ofEntity</span></code>.</p></li>
+<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofLocations</span></code></a>, or any object with a mapping <code class="docutils literal notranslate"><span class="pre">ofEntity</span></code> and, for
+<a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector.createScatterVector" title="edelweissfe.numerics.dofvector.DofVector.createScatterVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">createScatterVector()</span></code></a>, the layout of a scatter vector <code class="docutils literal notranslate"><span class="pre">scatterTemplate</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
@@ -1137,12 +1159,13 @@ once outside the loop instead of calling <code class="docutils literal notransla
 <dt class="sig sig-object py" id="edelweissfe.numerics.dofvector.DofVector.createScatterVector">
 <span class="sig-name descname"><span class="pre">createScatterVector</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofvector.html#DofVector.createScatterVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofvector.DofVector.createScatterVector" title="Link to this definition"></a></dt>
 <dd><p>Create a scatter vector for ALL entities located in the locations of this DofVector.</p>
-<p>The underlying layout (entity lookup map and scatter indices) is computed once
-and cached, so repeated calls (e.g. once per Newton iteration) only allocate
-the zero-initialized data buffer.</p>
+<p>Its layout (entity lookup map and scatter indices) belongs to the locations, which make it once
+(<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.scatterTemplate" title="edelweissfe.numerics.doflocations.DofLocations.scatterTemplate"><code class="xref py py-attr docutils literal notranslate"><span class="pre">scatterTemplate</span></code></a>): every vector of the same locations,
+e.g. the force, the momentum and the lumped mass of one increment, shares it, and a call only allocates the
+zero-initialized data buffer.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A <cite>ScatterDofVector</cite> initialized with this vector’s locations and total DOF count.</p>
+<dd class="field-odd"><p>A <cite>ScatterDofVector</cite> with the layout of this vector’s locations.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVector" title="edelweissfe.numerics.scatterdofvector.ScatterDofVector">ScatterDofVector</a></p>
@@ -1178,13 +1201,16 @@ are writes to both.</p>
 <span id="scatterdofvector"></span><h2>ScatterDofVector<a class="headerlink" href="#module-edelweissfe.numerics.scatterdofvector" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.scatterdofvector.ScatterDofVector">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.scatterdofvector.</span></span><span class="sig-name descname"><span class="pre">ScatterDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">template</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/scatterdofvector.html#ScatterDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVector" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.scatterdofvector.</span></span><span class="sig-name descname"><span class="pre">ScatterDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">template</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">locations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/scatterdofvector.html#ScatterDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVector" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></p>
 <p>A Scatter Vector that stores data for entities contiguously.
 Includes a fast lookup map to support random access by Entity.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>template</strong> (<a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate" title="edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate"><em>ScatterDofVectorTemplate</em></a>) – The precomputed layout of the scatter vector.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>template</strong> (<a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate" title="edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate"><em>ScatterDofVectorTemplate</em></a>) – The precomputed layout of the scatter vector.</p></li>
+<li><p><strong>locations</strong> (<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations the layout was made from: those of the <cite>DofVector</cite> that <a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVector.toDofVector" title="edelweissfe.numerics.scatterdofvector.ScatterDofVector.toDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">toDofVector()</span></code></a> makes.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
@@ -1468,17 +1494,25 @@ one go – instead of taking a view per entity.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.scatterdofvector.</span></span><span class="sig-name descname"><span class="pre">ScatterDofVectorTemplate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">locations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/scatterdofvector.html#ScatterDofVectorTemplate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.scatterdofvector.</span></span><span class="sig-name descname"><span class="pre">ScatterDofVectorTemplate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ofEntity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/scatterdofvector.html#ScatterDofVectorTemplate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVectorTemplate" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>The precomputed, immutable layout of a <a class="reference internal" href="#edelweissfe.numerics.scatterdofvector.ScatterDofVector" title="edelweissfe.numerics.scatterdofvector.ScatterDofVector"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScatterDofVector</span></code></a>:
 the entity lookup map and the gather/scatter index array.</p>
 <p>Since the layout only depends on the entities and their indices in the DofVector,
 it can be computed once and shared by all scatter vectors of the same discrete
 system, e.g. across Newton iterations.</p>
+<p>The layout is made from the mapping of the locations, not from the locations themselves, and holds
+no reference to them: the locations keep their layout (see
+<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.scatterTemplate" title="edelweissfe.numerics.doflocations.DofLocations.scatterTemplate"><code class="xref py py-attr docutils literal notranslate"><span class="pre">scatterTemplate</span></code></a>), and a layout that referred
+back to them would close a reference cycle. Locations in a cycle are not freed when the solver lets go
+of them, but only when the cyclic garbage collector runs, which it does rarely if few Python objects
+are made in the meantime; a run whose particles reach other kernel functions in every increment makes
+new locations every increment, and their index arrays then pile up.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>locations</strong> (<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations" title="edelweissfe.numerics.doflocations.DofLocations"><em>DofLocations</em></a>) – The locations of the entities, which map every entity to its global index array in the <cite>DofVector</cite>.</p></li>
+<li><p><strong>ofEntity</strong> (<em>dict</em>) – The global indices of every located entity in the <cite>DofVector</cite>
+(<a class="reference internal" href="#edelweissfe.numerics.doflocations.DofLocations.ofEntity" title="edelweissfe.numerics.doflocations.DofLocations.ofEntity"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ofEntity</span></code></a>).</p></li>
 <li><p><strong>nDof</strong> (<em>int</em>) – The total number of global degrees of freedom.</p></li>
 </ul>
 </dd>

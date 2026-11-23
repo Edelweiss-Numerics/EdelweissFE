@@ -289,8 +289,8 @@
 
 <span class="sd">The critical time step is the smaller of the elements' (of the mesh) and the bound of the stable time increment of the</span>
 <span class="sd">entities' assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever</span>
-<span class="sd">their connectivity changes, and every ``stable-increment-frequency`` increments, and lowers the time increment whenever</span>
-<span class="sd">it falls below it. The first</span>
+<span class="sd">the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every</span>
+<span class="sd">``stable-increment-frequency`` increments, and lowers the time increment whenever it falls below it. The first</span>
 <span class="sd">increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they</span>
 <span class="sd">evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.</span>
 <span class="sd">Where the model holds the motion of their nodes</span>
@@ -559,8 +559,9 @@
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
             <span class="s2">"The increment interval at which the stable time increment of the entities that carry their own inertia "</span>
             <span class="s2">"(the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero "</span>
-            <span class="s2">"increment and every increment that changes their connectivity. 1 bounds it in every increment; 0 never, "</span>
-            <span class="s2">"so that the increments of the step are taken unchecked for the entities."</span>
+            <span class="s2">"increment and every increment after which the entities couple other nodes (a change of the constraints' "</span>
+            <span class="s2">"connectivity alone does not count). 1 bounds it in every increment; 0 never, so that the increments of the "</span>
+            <span class="s2">"step are taken unchecked for the entities."</span>
         <span class="p">),</span>
         <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
         <span class="n">default</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
@@ -666,8 +667,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheClassification</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheCriticalTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The critical time steps of the elements (of the mesh) and of the entities that carry their own inertia (of</span>
-        <span class="c1">#: their configuration when it was last bounded: in the zero increment, after a change of the connectivity and</span>
-        <span class="c1">#: every ``stable-increment-frequency`` increments), unscaled; infinite where there is none.</span>
+        <span class="c1">#: their configuration when it was last bounded: in the zero increment, when they couple other nodes and every</span>
+        <span class="c1">#: ``stable-increment-frequency`` increments), unscaled; infinite where there is none.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
         <span class="c1">#: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.</span>
@@ -1139,13 +1140,13 @@
             <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span><span class="p">[</span><span class="n">element</span><span class="p">]</span> <span class="o">=</span> <span class="n">internalForceOfTheElements</span><span class="p">[</span><span class="n">element</span><span class="p">]</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
         <span class="n">P</span><span class="p">,</span> <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forceAndAccelerationToPublish</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
 
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"entities with own inertia"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">Change</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Evaluate, at the configuration just accepted and on the connectivity the entities that carry their own</span>
 <span class="sd">        inertia reach now, what the next increment starts from: their internal force, their lumped momentum and their</span>
 <span class="sd">        lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), the bound of their</span>
@@ -1166,8 +1167,6 @@
 <span class="sd">            The step being solved.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The increment just accepted.</span>
-<span class="sd">        change</span>
-<span class="sd">            What the reconnection after it changed.</span>
 <span class="sd">        """</span>
 
         <span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span>
@@ -1181,10 +1180,10 @@
             <span class="n">system</span><span class="o">.</span><span class="n">assembleLumpedMassOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">),</span>
             <span class="n">system</span><span class="o">.</span><span class="n">assembleLumpedDampingOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementIsDue</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">change</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementIsDue</span><span class="p">(</span><span class="n">timeStep</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"stable time increment of entities"</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">stableTimeIncrementOfEntitiesWithOwnInertia</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_inertiaOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span>
                 <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_enforceTheCriticalTimeStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s2">"The entities that carry their own inertia"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 
@@ -1290,19 +1289,19 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span> <span class="o">=</span> <span class="n">dampingOfEntities</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_deriveLumpedOperators</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_stableTimeIncrementIsDue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">Change</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_stableTimeIncrementIsDue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Whether the stable time increment of the entities that carry their own inertia is bounded anew after this</span>
-<span class="sd">        increment, unless ``stable-increment-frequency`` is 0: in the zero increment; whenever the connectivity of the</span>
-<span class="sd">        entities changed, since a node their kernel functions reach only at the edge of a support carries a small mass</span>
-<span class="sd">        and may lower the bound a lot; and after every ``stable-increment-frequency``-th increment, for the gradual</span>
-<span class="sd">        change of the entities' size and stiffness in between, which the courant number covers.</span>
+<span class="sd">        increment, unless ``stable-increment-frequency`` is 0: in the zero increment; whenever the entities couple</span>
+<span class="sd">        other nodes (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertiaCoupleOtherNodes`),</span>
+<span class="sd">        since a node their kernel functions reach only at the edge of a support carries a small mass and may lower the</span>
+<span class="sd">        bound a lot; and after every ``stable-increment-frequency``-th increment, for the gradual change of the</span>
+<span class="sd">        entities' size and stiffness in between, which the courant number covers. A change of the connectivity of the</span>
+<span class="sd">        constraints alone, e.g. a contact paired anew, leaves the entities' system, and with it the bound, as it is.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The increment just accepted.</span>
-<span class="sd">        change</span>
-<span class="sd">            What the reconnection after it changed.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1313,7 +1312,11 @@
         <span class="n">frequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"stable-increment-frequency"</span><span class="p">]</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">frequency</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
-        <span class="k">return</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span> <span class="o">==</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="n">change</span> <span class="o">&gt;</span> <span class="n">Change</span><span class="o">.</span><span class="n">NONE</span> <span class="ow">or</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">%</span> <span class="n">frequency</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span> <span class="o">==</span> <span class="mf">0.0</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">entitiesWithOwnInertiaCoupleOtherNodes</span><span class="p">()</span>
+            <span class="ow">or</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">%</span> <span class="n">frequency</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_enforceTheCriticalTimeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">cause</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">journalLevel</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Make the time increment of the step the critical time step, the smaller of the elements' and the entities'</span>

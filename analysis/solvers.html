@@ -7452,8 +7452,8 @@ momentum in every increment instead, <span class="math notranslate nohighlight">
 more; it is what the material point method does. The nodes of the elements are never projected.</p>
 <p>The critical time step is the smaller of the elements’ (of the mesh) and the bound of the stable time increment of the
 entities’ assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever
-their connectivity changes, and every <code class="docutils literal notranslate"><span class="pre">stable-increment-frequency</span></code> increments, and lowers the time increment whenever
-it falls below it. The first
+the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every
+<code class="docutils literal notranslate"><span class="pre">stable-increment-frequency</span></code> increments, and lowers the time increment whenever it falls below it. The first
 increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they
 evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.
 Where the model holds the motion of their nodes
@@ -8433,7 +8433,7 @@ Omitted – as in every deck that predates them – they assert nothing at all.<
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">stable-increment-frequency</span></code></td>
 <td><p>int, default=100</p></td>
-<td><p>The increment interval at which the stable time increment of the entities that carry their own inertia (the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero increment and every increment that changes their connectivity. 1 bounds it in every increment; 0 never, so that the increments of the step are taken unchecked for the entities.</p></td>
+<td><p>The increment interval at which the stable time increment of the entities that carry their own inertia (the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero increment and every increment after which the entities couple other nodes (a change of the constraints’ connectivity alone does not count). 1 bounds it in every increment; 0 never, so that the increments of the step are taken unchecked for the entities.</p></td>
 </tr>
 </tbody>
 </table>
@@ -8458,8 +8458,9 @@ particles, and evaluates them on the new kernel functions; their lumped mass is 
 elements’ in every numbering. A projectile of finite elements gets its initial velocity from the model’s velocity at its
 nodes, a body of particles from the velocity of its particles. The particles’ lumped damping is taken like their mass,
 so a nonlocal field of gradient-enhanced particles is integrated by its own scheme. Their critical time step enters the
-critical time step with the elements’; it is bounded in the zero increment, after a change of the connectivity, and
-every <code class="docutils literal notranslate"><span class="pre">stable-increment-frequency</span></code> increments (0 switches the bound off). With
+critical time step with the elements’; it is bounded in the zero increment, whenever the particles couple other nodes
+(not when only a contact is paired anew), and every <code class="docutils literal notranslate"><span class="pre">stable-increment-frequency</span></code> increments (0 switches the bound
+off). With
 <code class="docutils literal notranslate"><span class="pre">project-velocity-every-increment</span></code>, the velocity of the particles’ nodes is projected from their momentum in every
 increment.</p>
 </section>
@@ -8714,7 +8715,7 @@ Called by <code class="xref py py-meth docutils literal notranslate"><span class
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">stable-increment-frequency</span></code></td>
 <td><p>int, default=100</p></td>
-<td><p>The increment interval at which the stable time increment of the entities that carry their own inertia (the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero increment and every increment that changes their connectivity. 1 bounds it in every increment; 0 never, so that the increments of the step are taken unchecked for the entities.</p></td>
+<td><p>The increment interval at which the stable time increment of the entities that carry their own inertia (the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero increment and every increment after which the entities couple other nodes (a change of the constraints’ connectivity alone does not count). 1 bounds it in every increment; 0 never, so that the increments of the step are taken unchecked for the entities.</p></td>
 </tr>
 </tbody>
 </table>

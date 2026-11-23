@@ -183,6 +183,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofnumbering</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofNumbering</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="n">mapChunksInParallel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.scatterdofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScatterDofVectorTemplate</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_FluxCount</span><span class="p">:</span>
@@ -265,6 +266,26 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_fluxesOfFixedElements</span> <span class="o">=</span> <span class="n">_FluxCount</span><span class="p">()</span>
         <span class="c1">#: The accumulated nodal fluxes of all entities, computed at the first request.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwise</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The layout of the scatter vectors of these locations, made at the first request (see :attr:`scatterTemplate`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scatterTemplate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ScatterDofVectorTemplate</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The layout of the scatter vectors of these locations</span>
+<span class="sd">        (:meth:`~edelweissfe.numerics.dofvector.DofVector.createScatterVector`): where each entity writes its local</span>
+<span class="sd">        vector, one after the other, and the global index of every entry, from which the scatter vector is assembled.</span>
+<span class="sd">        It follows from :attr:`ofEntity` alone, so it is made at the first request and kept: the locations are</span>
+<span class="sd">        immutable, and every vector of them shares it.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ScatterDofVectorTemplate</span>
+<span class="sd">            The layout.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="n">ScatterDofVectorTemplate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ofEntity</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">nAccumulatedNodalFluxesFieldwise</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
@@ -460,6 +481,7 @@
         <span class="n">relocated</span><span class="o">.</span><span class="n">ofEntity</span> <span class="o">=</span> <span class="n">ofEntity</span>
 
         <span class="n">relocated</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwise</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">relocated</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">return</span> <span class="n">relocated</span></div>
 
