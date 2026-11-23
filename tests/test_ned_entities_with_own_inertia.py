@@ -41,6 +41,7 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
 * the bound of the entities' stable time increment sets the increment of a step that asks for a larger one,
 * after a brief stiff event, the increment comes back with ``follow-critical-time-step`` and stays low without it, and
   the increment that follows the critical time step is at most the step's ``maxInc``, whatever its ``startInc``,
+* a critical time step that is not a number is refused, whether the increment follows it or not,
 * a field of the entities that gets neither an inertia nor a damping is refused, and so are a damping of the entities
   that is negative or not finite, and an inertia that is not finite,
 * the rate of a first-order field of the entities (dashpots on springs) is published in every increment, also when the
@@ -233,6 +234,21 @@ class ModelOfMassesOnSpringsWithAStiffEvent(ModelOfMassesOnSprings):
         return STIFFNESS * (STIFF_EVENT_FACTOR if stiffer else 1.0)
 
 
+class SystemOfMassesOnSpringsWithoutABound(SystemOfMassesOnSprings):
+    """Masses on springs whose bound of the stable time increment is not a number, as from a stiffness or a mass that
+    is not finite."""
+
+    def stableTimeIncrementOfEntitiesWithOwnInertia(self, lumpedMass, lumpedDamping, forEachChunk):
+        return np.nan
+
+
+class ModelOfMassesOnSpringsWithoutABound(ModelOfMassesOnSprings):
+    """Masses on springs whose bound of the stable time increment is not a number."""
+
+    def buildDiscreteSystem(self) -> SystemOfMassesOnSpringsWithoutABound:
+        return SystemOfMassesOnSpringsWithoutABound(self, super().buildDiscreteSystem().locations)
+
+
 class TheSecondMassFollowsTheFirst(MultiPointConstraintBase):
     """A multi-point constraint that makes the displacement of the node of the second mass a slave of that of the
     first, :math:`u_2 = u_1`."""
@@ -349,6 +365,20 @@ def test_after_a_brief_stiff_event_the_increment_comes_back_only_if_it_follows_t
     np.testing.assert_allclose(timeIncrements[beforeTheEvent], soft, rtol=1e-14)
     np.testing.assert_allclose(timeIncrements[inTheEvent], stiff, rtol=1e-14)
     np.testing.assert_allclose(timeIncrements[afterTheEvent], soft if follow else stiff, rtol=1e-14)
+
+
+@pytest.mark.parametrize("follow", [False, True])
+def test_a_critical_time_step_that_is_not_a_number_is_refused(follow):
+    """A bound of the entities that is not a number would pass every comparison: lowered only, it would be ignored;
+    followed, the increment would become NaN, and the step would never end. Either way, ``NED`` refuses it when it takes
+    the critical time step."""
+
+    with pytest.raises(ValueError, match="the critical time step is not a number"):
+        _run(
+            10 * STABLE_TIME_INCREMENT,
+            model=ModelOfMassesOnSpringsWithoutABound(),
+            **{"follow-critical-time-step": follow},
+        )
 
 
 @pytest.mark.parametrize("follow, expectedTimeIncrement", [(False, 0.1), (True, 0.5)])

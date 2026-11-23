@@ -64,20 +64,15 @@ and deleting those lines is the whole of the migration.
 The stable increment is computed once per mesh as the smallest of the elements' own bounds
 (``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum element, two over the square root
 of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) and scaled by
-``courant-number``; it is enforced where it is below the largest increment the step allows, and a step that asks for
-smaller increments keeps them. It is recomputed whenever the mesh changes and deliberately *not* recomputed
+``courant-number``; by default, it is enforced where it is below the largest increment the step allows, and a step
+that asks for smaller increments keeps them (see :ref:`ned-time-increment-lowered-or-followed`). It is recomputed whenever the mesh changes and deliberately *not* recomputed
 when it has not -- neither for a new numbering of the same mesh: as a material softens the true limit
 only grows, so reusing it is the conservative direction, and re-deriving it costs a full element pass.
 
-**Lowered only, or followed.** By default, the time increment is lowered only, never raised within a step: whenever the
-critical time step is taken and falls below the increment in use, the increment becomes the critical time step, and it
-stays there for the rest of the step, even when the critical time step grows again. A brief stiff state -- a particle
-briefly compressed, a node its kernel functions reach only at the edge -- thus sets the increment of the whole rest of
-the step. With ``follow-critical-time-step``, the time increment follows the critical time step up as well as down: it
-becomes the critical time step, at most the step's ``maxInc``, each time the critical time step is taken -- at the start
-of the step, after a change of the mesh, and, in a model with entities that carry their own inertia (see below), in the
-zero increment, whenever they couple other nodes and every ``stable-increment-frequency`` increments. The increment is
-raised only at these points, since only there is the critical time step known (:meth:`NED._enforceTheCriticalTimeStep`).
+**Lowered only, or followed.** By default, the time increment is lowered only, never raised within a step; with
+``follow-critical-time-step``, it follows the critical time step up as well as down, at the cost of the safety margin
+that lowering only keeps against a stiff state that returns. Both, and when to choose which, are explained under
+:ref:`ned-time-increment-lowered-or-followed`.
 
 **Three cadences, all in increments.** ``output-frequency`` is how often progress is logged and
 field outputs are finalized (a divisor, so it must be at least 1). ``topology-check-frequency`` is
@@ -164,7 +159,7 @@ The critical time step is the smaller of the elements' (of the mesh) and the bou
 entities' assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever
 the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every
 ``stable-increment-frequency`` increments, and lowers the time increment whenever it falls below it (or sets it, with
-``follow-critical-time-step``, see "Lowered only, or followed" above). The first
+``follow-critical-time-step``, see :ref:`ned-time-increment-lowered-or-followed`). The first
 increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they
 evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.
 Where the model holds the motion of their nodes
@@ -441,12 +436,9 @@ class NEDSchema:
     )
     followCriticalTimeStep: bool = schemaField(
         description=(
-            "Let the time increment follow the critical time step up as well as down: each time the critical time step "
-            "is taken (at the start of the step, after a change of the mesh, and for the entities that carry their own "
-            "inertia in the zero increment, whenever they couple other nodes and every stable-increment-frequency "
-            "increments), the time increment becomes courant-number times it, at most the step's maxInc. Off by "
-            "default: the time increment is lowered only, never raised within a step, and a step that asks for "
-            "smaller increments (startInc) keeps them."
+            "Let the time increment follow the critical time step up as well as down, at most the step's maxInc, each "
+            "time the critical time step is taken; off by default: lowered only, never raised within a step. See 'The "
+            "time increment: lowered only, or followed' in the documentation of NED."
         ),
         dtype=bool,
         default=False,
@@ -1189,18 +1181,11 @@ class NED(NonlinearSolverBase):
 
     def _enforceTheCriticalTimeStep(self, step, cause: str, journalLevel: int):
         """Set the time increment of the step from the critical time step, the smaller of the elements' and the
-        entities' scaled by the courant number. Called each time the critical time step is taken: at the start of the
-        step, after a change of the mesh, and whenever the bound of the entities is taken (see
-        :meth:`_stableTimeIncrementIsDue`).
-
-        By default, the increment is lowered only, never raised within a step: the critical time step is enforced if it
-        is below the increment the step would take now, the one enforced before, or else the step's own (``startInc``,
-        at most ``maxInc``). A step that asks for smaller increments keeps them, and a finite element model whose step
-        asks for the whole step length, as explicit steps usually do, takes the critical time step of its elements.
-
-        With ``follow-critical-time-step``, the increment becomes the critical time step, at most the step's
-        ``maxInc``, up as well as down: once a stiff state has passed, the increment comes back the next time the
-        critical time step is taken.
+        entities' scaled by the courant number, each time it is taken: at the start of the step, after a change of the
+        mesh, and whenever the bound of the entities is taken (:meth:`_stableTimeIncrementIsDue`). By default the
+        increment is lowered only, to the critical time step if it is below the increment the step would take now (the
+        one enforced before, or else the step's own); with ``follow-critical-time-step`` it becomes the critical time
+        step, at most the step's ``maxInc``. See :ref:`ned-time-increment-lowered-or-followed`.
 
         Parameters
         ----------
@@ -1210,8 +1195,22 @@ class NED(NonlinearSolverBase):
             What changed the critical time step, for the journal.
         journalLevel
             The level of the journal message when an enforced increment changes.
+
+        Raises
+        ------
+        ValueError
+            If the critical time step of the elements or of the entities is not a number.
         """
 
+        # Python's min() keeps its first argument when the comparison with NaN is false, so each bound is checked;
+        # infinity is legal: no element or no entity reports a bound.
+        if np.isnan(self._criticalTimeStepOfTheElements) or np.isnan(self._stableTimeIncrementOfEntities):
+            raise ValueError(
+                "{:}: the critical time step is not a number (of the elements {:e}, of the entities that carry their "
+                "own inertia {:e}): the stiffness or the mass of the model is not finite.".format(
+                    cause, self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
+                )
+            )
         self._criticalTimeStep = self.options["courant-number"] * min(
             self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
         )
