@@ -78,6 +78,18 @@ class TestFacetProjections(unittest.TestCase):
         np.testing.assert_array_equal(normal, [0.0, -1.0])
         self.assertEqual(length, 2.0)
 
+    def test_facet_normals_and_measures_of_stacked_facets_are_those_of_each_facet(self):
+        rng = np.random.default_rng(3)
+        for shape in ((5, 3, 3), (4, 2, 2), (2, 3, 3, 3)):
+            facets = rng.normal(size=shape)
+            normals, measures = facetNormalAndMeasure(facets)
+            self.assertEqual(normals.shape, shape[:-2] + shape[-1:])
+            self.assertEqual(measures.shape, shape[:-2])
+            for index in np.ndindex(*shape[:-2]):
+                normal, measure = facetNormalAndMeasure(facets[index])
+                np.testing.assert_allclose(normals[index], normal, rtol=1e-15, atol=0.0)
+                self.assertAlmostEqual(measures[index], measure, delta=1e-15 * measure)
+
     def test_unsupported_facet_shape_is_rejected(self):
         with self.assertRaises(ValueError):
             facetNormalAndMeasure(np.zeros((4, 3)))

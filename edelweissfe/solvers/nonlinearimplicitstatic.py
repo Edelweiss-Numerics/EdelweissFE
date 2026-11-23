@@ -958,23 +958,6 @@ class NIST(NonlinearSolverBase):
 
         return self.systemMatrixAssemblyType()(self.system.locations, self.numberOfAssemblyWorkers(), patternFillIn)
 
-    def forEachChunk(self, entities: list, work: Callable[[list], None]):
-        """Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent
-        entities, other than the elements, that the model's discrete system evaluates, e.g. the material points
-        of a meshfree model (see
-        :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.updateMaterialPoints`). Here, one chunk of
-        all entities, in the calling thread, as the elements are computed.
-
-        Parameters
-        ----------
-        entities
-            The entities, a list.
-        work
-            Called for each chunk; it must write only to what belongs to the entities of its chunk.
-        """
-
-        work(entities)
-
     def numberOfAssemblyWorkers(self) -> int:
         """How many threads write blocks of the system matrix at the same time: one, the elements are computed in the
         calling thread.

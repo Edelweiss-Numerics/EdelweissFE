@@ -31,7 +31,7 @@ Parallel implementation of the NID solver.
 The dynamics add nothing to the element loop, so the parallel variant is the serial one with
 :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel`'s thread-parallel
 ``computeElements`` mixed in. The method resolution order ``NIDParallel -> NID -> NISTParallel ->
-NIST`` routes every ``super()`` call of NID through NISTParallel, so both the Newton loop and the
+ParallelSolver -> NIST`` routes every ``super()`` call of NID through NISTParallel, so both the Newton loop and the
 initial-acceleration solve evaluate the elements in parallel.
 """
 
