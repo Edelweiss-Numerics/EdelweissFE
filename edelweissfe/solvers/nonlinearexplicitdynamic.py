@@ -153,8 +153,15 @@ more; it is what the material point method does. The nodes of the elements are n
 The critical time step is the smaller of the elements' (of the mesh) and the bound of the stable time increment of the
 entities' assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever
 the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every
-``stable-increment-frequency`` increments, and lowers the time increment whenever it falls below it. The first
-increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they
+``stable-increment-frequency`` increments, and lowers the time increment whenever it falls below it. The bound is a
+Collatz-Wielandt bound of the largest eigenvalue of the absolute value of the entities' mass-scaled stiffness, from
+weights constant per field; with ``carry-stable-increment-weights``, ``NED`` keeps the weights a bound leaves and hands
+them to the next, so that every bound takes one more step of the power iteration towards the Perron vector, where the
+bound is exact. Any positive weights give an upper bound of the eigenvalue, and the entities take the smaller of the
+two bounds, so the carried weights can only raise the stable time increment, never lower it below the bound without
+them. The weights start anew -- constant per field -- with every numbering (the nodes they belong to may have changed)
+and every step (a material property may have changed), and after a resume: they are not part of the checkpoint.
+The first increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they
 evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.
 Where the model holds the motion of their nodes
 (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`) -- after a step of this solver, or of
@@ -428,6 +435,18 @@ class NEDSchema:
         default=100,
         optionName="stable-increment-frequency",
     )
+    carryStableIncrementWeights: bool = schemaField(
+        description=(
+            "Carry the weights of the bound of the stable time increment of the entities that carry their own inertia "
+            "(the particles of a meshfree model) from one bound to the next, and refine them by one Collatz-Wielandt "
+            "step each time: the bound tightens towards the spectral radius it bounds over a few bounds, at the cost of "
+            "one more column in the pass the bound takes anyway, and is never above the bound with the weights constant "
+            "per field. The weights start anew with every numbering and every step, and after a resume."
+        ),
+        dtype=bool,
+        default=False,
+        optionName="carry-stable-increment-weights",
+    )
 
 
 class NED(NonlinearSolverBase):
@@ -460,6 +479,7 @@ class NED(NonlinearSolverBase):
         "lumped-quantity-conservation-tolerance": CONSERVATION_TOLERANCE,
         "project-velocity-every-increment": False,
         "stable-increment-frequency": 100,
+        "carry-stable-increment-weights": False,
         # Lists, so _updateOptions appends the comma-separated items. Empty means "assert nothing".
         "expect-second-order-fields": [],
         "expect-first-order-fields": [],
@@ -529,6 +549,11 @@ class NED(NonlinearSolverBase):
         #: ``stable-increment-frequency`` increments), unscaled; infinite where there is none.
         self._criticalTimeStepOfTheElements = np.inf
         self._stableTimeIncrementOfEntities = np.inf
+        #: With ``carry-stable-increment-weights``, the weights of the bound of the stable time increment of the
+        #: entities, a vector of the numbering, refined by every bound and handed to the next
+        #: (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`):
+        #: zero, i.e. not yet weighted, for a new numbering and at the start of every step; None without the option.
+        self._weightsOfTheStableIncrementBound = None
         #: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.
         self._internalEnergy = 0.0
         #: The operators of the explicit update, arrays of the length of the numbering, assembled by
@@ -631,6 +656,8 @@ class NED(NonlinearSolverBase):
         # material property takes effect at the next step.
         self._meshOfTheClassification = self._meshOfTheCriticalTimeStep = None
         self._stableTimeIncrementOfEntities = np.inf
+        if self._weightsOfTheStableIncrementBound is not None:
+            self._weightsOfTheStableIncrementBound[:] = 0.0
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
@@ -1026,7 +1053,10 @@ class NED(NonlinearSolverBase):
         if self._stableTimeIncrementIsDue(timeStep):
             with performancetiming.timeit("stable time increment of entities"):
                 self._stableTimeIncrementOfEntities = system.stableTimeIncrementOfEntitiesWithOwnInertia(
-                    self._inertiaOfEntities, self._dampingOfEntities, self.forEachChunk
+                    self._inertiaOfEntities,
+                    self._dampingOfEntities,
+                    self.forEachChunk,
+                    self._weightsOfTheStableIncrementBound,
                 )
             self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia", 2)
 
@@ -1946,6 +1976,9 @@ class NED(NonlinearSolverBase):
         self._netForce = locations.constructDofVector()
         self._internalForce = locations.constructDofVector()
         self._numberingOfNetForce = system.numbering.digest
+        self._weightsOfTheStableIncrementBound = (
+            np.zeros(system.numbering.nDof) if self.options["carry-stable-increment-weights"] else None
+        )
 
         # After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new
         # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).

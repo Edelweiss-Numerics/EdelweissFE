@@ -468,7 +468,9 @@ nodes, a body of particles from the velocity of its particles. The particles' lu
 so a nonlocal field of gradient-enhanced particles is integrated by its own scheme. Their critical time step enters the
 critical time step with the elements'; it is bounded in the zero increment, whenever the particles couple other nodes
 (not when only a contact is paired anew), and every ``stable-increment-frequency`` increments (0 switches the bound
-off). With
+off). With ``carry-stable-increment-weights``, every bound starts from the weights the last one left and refines them
+by one step of the power iteration, which tightens it over a few bounds and never lowers it (see "Entities that carry
+their own inertia" above). With
 ``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum in every
 increment.
 

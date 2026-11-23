@@ -39,6 +39,8 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
 * the motion starts from the velocity projected from the momentum, and the leapfrog then is the central difference
   recursion of the oscillator, to round-off; its period is the analytic one, to second order in the increment,
 * the bound of the entities' stable time increment sets the increment of a step that asks for a larger one,
+* with ``carry-stable-increment-weights``, the weights of the bound are handed from one bound to the next, zero at the
+  first bound of a step; without it, the bound gets none,
 * a field of the entities that gets neither an inertia nor a damping is refused, and so are a damping of the entities
   that is negative or not finite, and an inertia that is not finite,
 * the rate of a first-order field of the entities (dashpots on springs) is published in every increment, also when the
@@ -142,8 +144,14 @@ class SystemOfMassesOnSprings(DiscreteSystem):
         self.model.calls.append("damping")
         return self._onTheNodes(lambda mass: np.full(mass.nDof, mass.damping))
 
-    def stableTimeIncrementOfEntitiesWithOwnInertia(self, lumpedMass, lumpedDamping, forEachChunk):
+    def stableTimeIncrementOfEntitiesWithOwnInertia(
+        self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheBound=None
+    ):
         self.model.calls.append("bound")
+        # the weights it was handed, and one step of a stand-in refinement: every weight grows by one per bound
+        self.model.weightsOfTheBounds.append(None if weightsOfTheBound is None else np.array(weightsOfTheBound))
+        if weightsOfTheBound is not None:
+            weightsOfTheBound += 1.0
 
         # each entity on its spring alone, from the mass and the damping the solver has just assembled: 2 / omega for a
         # mass, 2 c / k for a dashpot without a mass
@@ -176,6 +184,8 @@ class ModelOfMassesOnSprings(FEModel):
     def __init__(self, mass: float = MASS, damping: float = 0.0):
         super().__init__(2)
         self.calls = []
+        #: The weights every bound was handed (None without ``carry-stable-increment-weights``).
+        self.weightsOfTheBounds = []
         #: The Newmark parameters the solver gave last; those an implicit dynamic step would have left.
         self.newmarkParametersOfEntities = (0.25, 0.5)
         for number, velocity in enumerate(VELOCITIES, start=1):
@@ -296,6 +306,24 @@ def test_the_bound_of_the_entities_sets_the_increment_of_a_step_that_asks_for_mo
     timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])
     assert timeIncrements[0] == 0.0
     np.testing.assert_allclose(timeIncrements[1:-1], courantNumber * STABLE_TIME_INCREMENT, rtol=1e-14)
+
+
+def test_without_carried_weights_the_bound_gets_none():
+    model, _ = _run(10 * STABLE_TIME_INCREMENT, **{"stable-increment-frequency": 1})
+
+    assert model.weightsOfTheBounds and all(weights is None for weights in model.weightsOfTheBounds)
+
+
+def test_carried_weights_are_handed_from_bound_to_bound_starting_at_zero():
+    """With ``carry-stable-increment-weights``, every bound gets the weights the last one left, a vector of the
+    numbering; the first bound of the step gets zeros: no weights yet."""
+
+    model, _ = _run(
+        10 * STABLE_TIME_INCREMENT, **{"stable-increment-frequency": 1, "carry-stable-increment-weights": True}
+    )
+
+    for number, weights in enumerate(model.weightsOfTheBounds):
+        np.testing.assert_array_equal(weights, np.full(len(weights), float(number)))
 
 
 @pytest.mark.parametrize("courantNumber", [0.8, 0.05])
