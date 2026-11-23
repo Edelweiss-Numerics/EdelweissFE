@@ -374,38 +374,40 @@ def line2Projection(xs: np.ndarray, x1: np.ndarray, x2: np.ndarray) -> tuple[flo
     return t, 0.0 <= t <= 1.0
 
 
-def facetNormalAndMeasure(coords: np.ndarray) -> tuple[np.ndarray, float]:
+def facetNormalAndMeasure(coords: np.ndarray) -> tuple[np.ndarray, float | np.ndarray]:
     """The (non-unit-normalized only in intermediate steps) outward normal and measure (area for a
     Tria3 facet, length for a Line2 facet) of a flat facet, as a function of its current node
-    coordinates.
+    coordinates; of many facets at once if their coordinates are stacked.
 
     Parameters
     ----------
     coords
         Array of shape ``(3, 3)`` (Tria3, 3D) or ``(2, 2)`` (Line2, 2D) with the facet's current
-        node coordinates in its fixed local order.
+        node coordinates in its fixed local order; or of shape ``(..., 3, 3)`` or ``(..., 2, 2)``, the
+        coordinates of many facets.
 
     Returns
     -------
-    tuple[numpy.ndarray, float]
-        The outward unit normal, and the facet's measure (area or length).
+    tuple[numpy.ndarray, float | numpy.ndarray]
+        The outward unit normal, and the facet's measure (area or length); of shapes ``(..., 3)`` (or
+        ``(..., 2)``) and ``(...)`` for many facets.
     """
 
-    nNodes, domainSize = coords.shape
+    nNodes, domainSize = coords.shape[-2:]
 
     if nNodes == 3 and domainSize == 3:
-        e1 = coords[1] - coords[0]
-        e2 = coords[2] - coords[0]
+        e1 = coords[..., 1, :] - coords[..., 0, :]
+        e2 = coords[..., 2, :] - coords[..., 0, :]
         c = np.cross(e1, e2)
-        cNorm = np.linalg.norm(c)
-        return c / cNorm, 0.5 * cNorm
+        cNorm = np.linalg.norm(c, axis=-1)
+        return c / cNorm[..., np.newaxis], 0.5 * cNorm
 
     elif nNodes == 2 and domainSize == 2:
-        e = coords[1] - coords[0]
-        eNorm = np.linalg.norm(e)
+        e = coords[..., 1, :] - coords[..., 0, :]
+        eNorm = np.linalg.norm(e, axis=-1)
         # Outward normal is e rotated by -90 degrees, consistent with a counter-clockwise
         # (node 1 -> node 2) traversal of the solid's boundary.
-        n = np.array([e[1], -e[0]]) / eNorm
+        n = np.stack((e[..., 1], -e[..., 0]), axis=-1) / eNorm[..., np.newaxis]
         return n, eNorm
 
     raise ValueError(f"facetNormalAndMeasure: unsupported facet shape {coords.shape}.")

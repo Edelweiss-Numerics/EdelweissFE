@@ -146,6 +146,19 @@ class NodeField:
     def __getitem__(self, key):
         return self._values[key]
 
+    @property
+    def version(self) -> int:
+        """The number of times this NodeField was resized (:meth:`resize`): the rows of its nodes hold as long as it
+        stays the same, so that what caches rows (e.g. a :class:`~edelweissfe.numerics.dofnumbering.DofNumbering`)
+        compares it to see whether they still hold.
+
+        Returns
+        -------
+        int
+            The version.
+        """
+        return self._version
+
     def indexOfNode(self, node) -> int:
         """
         The row index of a node's entries within this field's value arrays.

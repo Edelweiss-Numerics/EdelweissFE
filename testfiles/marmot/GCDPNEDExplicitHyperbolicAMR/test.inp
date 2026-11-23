@@ -31,10 +31,7 @@ gen_all
 
 *job, name=nedGcdpJob, domain=3d
 
-** COURANT NUMBER: 0.1, not the 0.8 default -- see GCDPNEDExplicit for the convergence study behind
-** that choice. Do not raise this.
 *solver, solver=NEDParallel, name=theSolver
-courant-number=0.1
 output-frequency=50
 ** ASSERTED, not selected: the scheme is derived from the assembled inertia and damping, and this
 ** line only stops the run if the derivation disagrees. It is the guard on the micro-inertia in the

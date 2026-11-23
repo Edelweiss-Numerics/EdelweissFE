@@ -36,7 +36,7 @@ cimport libcpp.cast
 cimport numpy as np
 
 from edelweissfe.numerics.systemmatrixcontributor import denseBlockLocalEntries
-from edelweissfe.utils.exceptions import CutbackRequest
+from edelweissfe.utils.exceptions import CutbackRequest, ModuleNotBuilt
 
 # Point Marmot's warning channel at stdout once, on import: MarmotJournal otherwise writes into a null
 # streambuf, discarding every warning.
@@ -113,7 +113,7 @@ cdef class MarmotElementWrapper:
         try:
             self.marmotElement = MarmotElementFactory.createElement(elementType.upper().encode("utf-8"), elNumber)
         except ValueError:
-            raise NotImplementedError("Marmot element {:} not found in library.".format(elementType))
+            raise ModuleNotBuilt("Marmot element {:} is not built in this environment.".format(elementType))
 
         # a real dynamic_cast: the capability is a further base class, at another address than the Element
         self.energyGradientProvider = libcpp.cast.dynamic_cast[MarmotEnergyGradientProviderPtr](self.marmotElement)
@@ -239,7 +239,7 @@ cdef class MarmotElementWrapper:
                             &self._materialProperties[0],
                             self._materialProperties.shape[0]))
         except ValueError:
-            raise NotImplementedError("Marmot material {:} not found in library.".format(self._materialName))
+            raise ModuleNotBuilt("Marmot material {:} is not built in this environment.".format(self._materialName))
 
         self.nStateVars = self.marmotElement.getNumberOfRequiredStateVars()
 
