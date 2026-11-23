@@ -13,23 +13,23 @@ All four ramp the plate to **the same 1.5 mm**, so they are comparable at equal 
 equal time.
 
 ```bash
-edelweissfe pryout_implicit_nts.inp        # see the table below for timings
+edelweissfe pryout_implicit_nts.inp        # see the table below for what each variant gives
 python plot_damage_comparison.py           # once all four have run
 ```
 
-Measured on 16 threads, one variant at a time, on a 64-core Threadripper (2026-09-30):
+What the four variants give:
 
-| variant | wall time | increments | refinement occasions | final concrete elements | final U | final reaction |
-|---|---|---|---|---|---|---|
-| `implicit_nts` | ~9 min | 100 + 1, no cutback | 40 | 2033 | 1.500 mm | 43.7 kN |
-| `implicit_gpts` | ~10 min | 100 + 1, no cutback | 40 | 2033 | 1.500 mm | 43.9 kN |
-| `explicit_nts` | ~13 min | ~69 900 | 12 | 2005 | 1.464 mm | 44.0 kN |
-| `explicit_gpts` | ~9 min | ~69 900 | 12 | 2005 | 1.464 mm | 44.1 kN |
+| variant | increments | refinement occasions | final concrete elements | final U | final reaction |
+|---|---|---|---|---|---|
+| `implicit_nts` | 104 + 1, no cutback | 39 | 2033 | 1.500 mm | 43.1 kN |
+| `implicit_gpts` | 100 + 1, no cutback | 40 | 2033 | 1.500 mm | 43.4 kN |
+| `explicit_nts` | ~11 600 | 15 | 2033 | 1.498 mm | 42.7 kN |
+| `explicit_gpts` | ~11 600 | 15 | 2033 | 1.498 mm | 42.9 kN |
 
 With the production settings (von Mises steel, penalty 1e4) the reaction is still rising at 1.5 mm:
 the ramp stops before the breakout peak.
 
-Each solver family reaches the same refined mesh in all its variants. The explicit runs stop at 1.464 mm
+All four variants reach the same refined mesh. The explicit runs stop at 1.498 mm
 rather than 1.500 because the last *recorded* output tick falls just short of the final increment —
 the ramp itself completes.
 
@@ -84,11 +84,10 @@ differences are consequences rather than choices. Each is argued where it is set
 | | implicit | explicit | why |
 |---|---|---|---|
 | densities | omitted | required, **×100 mass scaling** | a static solve builds no mass matrix; the explicit stable increment goes with 1/√ρ, and the scaling is what makes the run reach 1.5 mm in comparable time |
-| Duvaut-Lions viscosity | `1e-6` | **`0`** | it is a relaxation time. At dT ≈ 3.4e-7 s nothing relaxes per increment, and a non-zero value makes the concrete respond nearly elastically — a run that completes, looks plausible, and shows no softening |
+| Duvaut-Lions viscosity | `1e-6` | **`0`** | it is a relaxation time. At dT ≈ 2e-6 s nothing relaxes per increment, and a non-zero value makes the concrete respond nearly elastically — a run that completes, looks plausible, and shows no softening |
 | AMR marker | damage | damage | deliberately the same, so the comparison is not confounded. A stress marker is defensible implicitly but ratchets towards refining everything under explicit integration |
 | bulk viscosity | — | **b1 = 0.06, b2 = 1.2** on every element set, linear term degraded with damage (exponent 2.0) on the concrete | central difference dissipates nothing; undegraded, the linear term resists crack opening forever and inflates the fracture energy |
 | nonlocal field | — (static) | **hyperbolic**: `eta = 3e-4`, `m_k = eta^2/4 = 2.25e-8` | `m_k > 0` integrates the nonlocal damage by central difference, whose stable increment scales with h, not h² |
-| courant number | — | **0.1**, not the 0.8 default | `l/c` is a linear-element formula; a quadratic element's highest eigenfrequency is several times what it predicts. At 0.8 this model returns a reaction 26× too small **and does not fail** |
 
 The mass scaling is the one to watch. It buys speed by making the structure heavier, which works
 *against* quasi-staticity, so `plot_damage_comparison.py` integrates the reaction against the

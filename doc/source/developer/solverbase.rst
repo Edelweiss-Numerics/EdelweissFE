@@ -48,7 +48,8 @@ topology update at different times and use different parts of the discrete syste
       - none; lumped mass and damping
       - none
       - at the start of the step; after every ``topology-check-frequency``-th increment, if a model modifier acts
-        after the start; a contact search every ``contact-update-frequency``-th increment
+        after the start; a contact search every ``contact-update-frequency``-th increment; with entities that carry
+        their own inertia, the connectivity after every increment
 
 ``NED`` runs the full topology update at the start of its step. During the step, it runs it again after every
 ``topology-check-frequency``-th increment, but only if a model modifier of the model acts after the start of the
@@ -57,7 +58,11 @@ increment, it calls :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivit
 the model searches its partner as the bodies move
 (:attr:`~edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.connectivityChangesWithMotion`,
 e.g., a contact constraint). Such a contact search can only result in new locations, because ``NED`` refuses
-constraints with scalar variables. ``NEST`` never updates the connectivity during a step, and refuses a constraint
+constraints with scalar variables. In a model with entities that carry their own inertia, e.g. the particles of a
+meshfree model, ``NED`` calls :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity` after every increment
+instead, once the model has accepted it: the change may be a new numbering (the active nodes of the meshfree model
+changed), which gives new vectors read from the model, and an element mass assembled anew, but neither a new stable
+time increment nor a new classification of the fields, which belong to the mesh. ``NEST`` never updates the connectivity during a step, and refuses a constraint
 whose connectivity changes with the motion.
 
 ``NIST`` predicts the first iterate of an increment by extrapolating the last accepted increments. Once per increment,

@@ -1,23 +1,6 @@
 **=================================================================================================
 ** SOLVER AND STEP -- explicit
 **=================================================================================================
-** COURANT NUMBER 0.1 -- the expensive decision in this file. READ THIS BEFORE RAISING IT.
-**
-** The solver's critical increment l/c is a LINEAR-element formula: the stable increment for an
-** element whose mass is spread uniformly over its nodes and whose highest eigenfrequency is c/l. A
-** 20-node element satisfies neither. The mass part is handled in Marmot (HRZ lumping gives a hexa20
-** corner half the uniform share, so the estimate carries a 0.7071 factor); the polynomial-order part
-** is NOT, and a quadratic element's highest free eigenfrequency is several times what l/c predicts.
-**
-** Measured on testfiles/marmot/GCDPNEDExplicit -- same element and material as this concrete --
-** final reaction against courant number:
-**
-**     0.8 -> 4.49      0.4 -> 84.6      0.2 -> 118.5      0.1 -> 120.7      0.05 -> 118.0
-**
-** It converges at 0.1-0.2. At the 0.8 default it returns a number 26x too small AND DOES NOT FAIL:
-** the run completes, the reaction curve looks smooth, and it is wrong. The divergence is also only
-** visible on a material with no damping -- GC3D20R with gcdp sat above the stability limit for 800
-** increments looking healthy, because the nonlocal viscosity absorbed it.
 *solver, solver=NEDParallel, name=theSolver
 ** The time-integration scheme of every field is DERIVED from the assembled inertia and damping
 ** (#134); this line only ASSERTS the expected outcome and aborts the step if it differs. Both fields
@@ -25,18 +8,19 @@
 ** damage field an inertia, so it is integrated by central difference. The assertion catches a deck
 ** that loses m_k -- the property is optional and silently defaults to zero.
 expect-second-order-fields="displacement, nonlocal damage"
-courant-number=0.1
-output-frequency=1000
+output-frequency=125
 ** How often the contact constraints re-run their closest-point search. Throttling is what makes
 ** contact affordable here: the search is O(slaves x facets) in Python, which is fine once per
 ** increment of an implicit analysis and not fine a hundred thousand times. What makes it safe rather
 ** than merely cheap is that an explicit increment is tiny -- the solver reports the largest nodal
 ** motion since the previous search at every connectivity change, and it stays orders of magnitude
-** below a facet dimension. CHECK THAT REPORTED MOTION if you change stepLength or the mesh.
-contact-update-frequency=500
+** below a facet dimension. CHECK THAT REPORTED MOTION if you change stepLength or the mesh. The three
+** cadences here are counted in increments, so they follow the time increment: output, contact search
+** and topology check every 125, 60 and 625 increments keep the physical intervals of the model.
+contact-update-frequency=60
 ** Must be a non-zero multiple of output-frequency: a marker refines on the last FINALIZED field
 ** output, and the solver refuses the combination otherwise.
-topology-check-frequency=5000
+topology-check-frequency=625
 ** RAISED from the 1e-6 default, and this is a measurement rather than a workaround.
 **
 ** The solver asserts that a topology change conserves the total lumped mass. That mass IS a
@@ -63,8 +47,8 @@ lumped-quantity-conservation-tolerance=1e-5
 **
 ** stepLength is PHYSICAL SECONDS here, not the implicit model's dimensionless 1, and together with
 ** the mass scaling in materials_explicit.inc it is what sets the cost: the solver enforces
-** courant-number * dt_crit and reports it at step start, giving dt ~ 3.4e-7 s, so this 0.024 s ramp
-** is about 70 000 increments. maxNumInc is generous; reaching it early is not a failure, the step
+** courant-number * dt_crit (the elements' eigenvalue bound) and reports it at step start, giving
+** dt ~ 2.7e-6 s, ~1.7e-6 s after the first refinement, so this 0.024 s ramp is about 11 600 increments. maxNumInc is generous; reaching it early is not a failure, the step
 ** simply ends.
 **
 ** f(t)='t**2' starts the plate from rest with zero velocity, so the structure is not shocked at
