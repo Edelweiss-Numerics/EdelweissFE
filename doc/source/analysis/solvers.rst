@@ -491,7 +491,9 @@ the kernel functions of the entities reach only at the edge -- thus sets the inc
 **Followed** (``follow-critical-time-step``). Each time the critical time step is taken, the time increment becomes
 the critical time step, at most the step's ``maxInc``, up as well as down; the step's ``startInc`` is not kept, and a
 step that wants smaller increments sets ``maxInc``. Once a stiff state has passed, the increment comes back with the
-next critical time step taken.
+next critical time step taken. As long as no bound is known -- no element reports one, and the entities have not been
+bounded yet, or never are, with ``stable-increment-frequency=0`` -- there is nothing to follow, and the step keeps its
+own increment.
 
 **What following gives up.** Between two critical time steps taken, the increment is trusted: the courant number covers
 the gradual change of the model in between. Lowered only, the increment of a run that has met a stiff state once stays

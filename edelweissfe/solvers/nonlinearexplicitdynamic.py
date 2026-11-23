@@ -757,6 +757,8 @@ class NED(NonlinearSolverBase):
         if change == Change.MESH:
             self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, self._V, model)
 
+            # Only a model without entities that carry their own inertia gets here (live modifiers are refused with
+            # them, see onNewNumbering), so the critical time step is that of the elements alone.
             self._enforceTheCriticalTimeStep(step, "Refinement", 1)
 
     def isOutputIncrement(self, timeStep: TimeStep) -> bool:
@@ -1185,7 +1187,9 @@ class NED(NonlinearSolverBase):
         mesh, and whenever the bound of the entities is taken (:meth:`_stableTimeIncrementIsDue`). By default the
         increment is lowered only, to the critical time step if it is below the increment the step would take now (the
         one enforced before, or else the step's own); with ``follow-critical-time-step`` it becomes the critical time
-        step, at most the step's ``maxInc``. See :ref:`ned-time-increment-lowered-or-followed`.
+        step, at most the step's ``maxInc``. As long as neither the elements nor the entities have reported a bound
+        (the critical time step is infinite, e.g. at the start of a step of entities alone), the increment stays as it
+        is, whether it follows or not. See :ref:`ned-time-increment-lowered-or-followed`.
 
         Parameters
         ----------
@@ -1214,6 +1218,10 @@ class NED(NonlinearSolverBase):
         self._criticalTimeStep = self.options["courant-number"] * min(
             self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
         )
+        # No bound reported yet: nothing to follow. Lowered only, this changes nothing anyway (no increment is above an
+        # infinite one); followed, it keeps the step's own increment instead of jumping to maxInc.
+        if np.isinf(self._criticalTimeStep):
+            return
         timeStepper = step.timeStepper
         enforced = timeStepper.enforcedTimeIncrement
         if self.options["follow-critical-time-step"]:

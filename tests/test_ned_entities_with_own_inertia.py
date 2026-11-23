@@ -41,7 +41,8 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
 * the bound of the entities' stable time increment sets the increment of a step that asks for a larger one,
 * after a brief stiff event, the increment comes back with ``follow-critical-time-step`` and stays low without it, and
   the increment that follows the critical time step is at most the step's ``maxInc``, whatever its ``startInc``,
-* a critical time step that is not a number is refused, whether the increment follows it or not,
+* a critical time step that is not a number is refused, whether the increment follows it or not, and without any
+  bound the step keeps its own increment, also when it follows the critical time step,
 * a field of the entities that gets neither an inertia nor a damping is refused, and so are a damping of the entities
   that is negative or not finite, and an inertia that is not finite,
 * the rate of a first-order field of the entities (dashpots on springs) is published in every increment, also when the
@@ -381,21 +382,44 @@ def test_a_critical_time_step_that_is_not_a_number_is_refused(follow):
         )
 
 
-@pytest.mark.parametrize("follow, expectedTimeIncrement", [(False, 0.1), (True, 0.5)])
-def test_the_increment_that_follows_the_critical_time_step_is_at_most_the_steps_max_inc(follow, expectedTimeIncrement):
+@pytest.mark.parametrize(
+    "follow, maxInc, expectedTimeIncrement",
+    [(False, 0.05, 0.1), (True, 0.05, 0.5), (False, 1.0, 0.1), (True, 1.0, 0.8)],
+)
+def test_the_increment_that_follows_the_critical_time_step_is_at_most_the_steps_max_inc(
+    follow, maxInc, expectedTimeIncrement
+):
     """The step asks for a tenth of the stable time increment to start with (``startInc``), and for at most half of it
-    (``maxInc``); the critical time step is 0.8 of it. Lowered only, the increment stays the step's own, the smaller;
-    following the critical time step, it is the critical time step, at most ``maxInc``."""
+    or ten times it (``maxInc``); the critical time step is 0.8 of it. Lowered only, the increment stays the step's own,
+    the smaller; following the critical time step, it is the critical time step, at most ``maxInc``: the small
+    ``startInc`` is raised to the critical time step itself when ``maxInc`` allows it."""
 
     stepLength = 10 * STABLE_TIME_INCREMENT
     _, solver = _run(
         stepLength,
-        stepOptions={"startInc": 0.01, "maxInc": 0.05},
+        stepOptions={"startInc": 0.01, "maxInc": maxInc},
         **{"courant-number": 0.8, "follow-critical-time-step": follow},
     )
 
     timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])[1:-1]
     np.testing.assert_allclose(timeIncrements, expectedTimeIncrement * STABLE_TIME_INCREMENT, rtol=1e-12)
+
+
+@pytest.mark.parametrize("follow", [False, True])
+def test_without_a_bound_the_step_keeps_its_own_increment(follow):
+    """The masses report no critical time step, and with ``stable-increment-frequency=0`` the entities are never
+    bounded: the critical time step stays infinite, there is nothing to follow, and the step keeps its own increment
+    (``startInc``), not its ``maxInc``."""
+
+    stepLength = 10 * STABLE_TIME_INCREMENT
+    _, solver = _run(
+        stepLength,
+        stepOptions={"startInc": 0.01, "maxInc": 0.05},
+        **{"stable-increment-frequency": 0, "follow-critical-time-step": follow},
+    )
+
+    timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])[1:-1]
+    np.testing.assert_allclose(timeIncrements, 0.1 * STABLE_TIME_INCREMENT, rtol=1e-12)
 
 
 @pytest.mark.parametrize("courantNumber", [0.8, 0.05])
