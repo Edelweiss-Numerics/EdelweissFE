@@ -369,9 +369,9 @@ def test_after_a_brief_stiff_event_the_increment_comes_back_only_if_it_follows_t
 
 @pytest.mark.parametrize("follow", [False, True])
 def test_a_critical_time_step_that_is_not_a_number_is_refused(follow):
-    """A bound of the entities that is not a number would pass every comparison: lowered only, it would be ignored;
-    followed, the increment would become NaN, and the step would never end. Either way, ``NED`` refuses it when it takes
-    the critical time step."""
+    """A bound of the entities that is not a number fails every comparison: lowered only, it would be ignored silently;
+    followed, it would become the time increment. Either way, ``NED`` refuses it when it takes the critical time
+    step."""
 
     with pytest.raises(ValueError, match="the critical time step is not a number"):
         _run(
