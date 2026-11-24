@@ -183,6 +183,9 @@ on processors like the one it was compiled on. For builds that must run elsewher
 set ``EDELWEISSFE_ARCH_FLAGS`` (e.g. ``-march=x86-64-v3``, or empty for none). The compile flags are defined in
 ``edelweissfe.utils.extensionbuild``, which downstream packages (EdelweissMeshfree) use for their own extensions.
 
+The extensions are compiled side by side, as many at once as there are cores (AMGCL's, by far the slowest, first). To
+compile fewer at once, e.g. on a shared machine or one with little memory, set ``EDELWEISSFE_BUILD_JOBS`` (e.g. ``2``).
+
 Developing
 **********
 

@@ -39,12 +39,14 @@ the preconditioner was rebuilt, the true-residual restarts, whether the toleranc
 error that depends on the order of threaded reductions, so its ``||x||`` is compared to 1e-4, and its true residual is
 checked against the tolerance instead."""
 
+import functools
 import json
 
 import numpy as np
 import pytest
 import scipy.sparse as sp
 from _elasticbeam import cantilever
+from scipy.spatial import cKDTree
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -116,13 +118,17 @@ _REBUILT = {
 _GAP = {"scaled": 19.24, "scaled gapCompensated": 18.75}
 
 
-def _beamWithDamage(seed: int = 0, couplingStrength: float = 1e-2):
-    """A propped 3D cantilever (displacement) with a nonlocal damage field on its nodes (a graph Laplacian of the
-    element edges plus a mass-like diagonal), coupled both ways by weak random blocks."""
+@functools.cache
+def _system():
+    """See :func:`_beamWithDamage`; built once (cached, so not to be changed in place)."""
+    seed, couplingStrength = 0, 1e-2
     K, coordinates, constrained = cantilever((64, 6, 6), (16.0, 1.5, 1.5))
     nNodes = len(coordinates)
-    distances = np.linalg.norm(coordinates[:, None, :] - coordinates[None, :, :], axis=2)
-    neighbours = sp.csr_matrix((distances > 0) & (distances < 0.26), dtype=float)
+    # the element edges: the node pairs closer than the diagonal of an element face (the edges are 0.25 long)
+    pairs = cKDTree(coordinates).query_pairs(0.26, output_type="ndarray")
+    rows, columns = np.r_[pairs[:, 0], pairs[:, 1]], np.r_[pairs[:, 1], pairs[:, 0]]
+    neighbours = sp.csr_matrix((np.ones(len(rows)), (rows, columns)), shape=(nNodes, nNodes))
+    neighbours.sort_indices()
     K_dd = (sp.diags(np.asarray(neighbours.sum(axis=1)).ravel()) - neighbours + sp.identity(nNodes)).tocsr()
     rng = np.random.default_rng(seed)
     K_ud = sp.random(3 * nNodes, nNodes, density=2e-3, random_state=seed + 1) * couplingStrength * 1e4
@@ -132,6 +138,14 @@ def _beamWithDamage(seed: int = 0, couplingStrength: float = 1e-2):
     b = rng.standard_normal(A.shape[0])
     fields = [FieldBlock("displacement", 0, 3 * nNodes, 3), FieldBlock("nonlocal damage", 3 * nNodes, 4 * nNodes, 1)]
     return A, b, fields, coordinates
+
+
+def _beamWithDamage():
+    """A propped 3D cantilever (displacement) with a nonlocal damage field on its nodes (a graph Laplacian of the
+    element edges plus a mass-like diagonal), coupled both ways by weak random blocks: ``(A, b, fields,
+    coordinates)``, copies a test may change."""
+    A, b, fields, coordinates = _system()
+    return A.copy(), b.copy(), list(fields), coordinates.copy()
 
 
 def _composed(coordinates, fields, **presetOptions) -> ComposedLinearSolver:

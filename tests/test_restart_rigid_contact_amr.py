@@ -139,21 +139,25 @@ def _run(path: Path, text: str):
 #: The refinement happens at the first topology check (increment 100), after the support has started
 #: to slide; the checkpoint falls between two later checks.
 N_INCREMENTS_FULL = 400
-N_INCREMENTS_TRUNCATED = 340
+N_INCREMENTS_RESUMED_FROM = 340
 
 
 def test_resume_across_refinement_next_to_a_moving_rigid_body(tmp_path):
     stl = tmp_path / "plate.stl"
     _writePlateStl(stl)
 
-    reference = _run(tmp_path / "full.inp", _deck(stl, N_INCREMENTS_FULL))
+    # Neither the uninterrupted run nor the resumed run writes checkpoints: a write that changed the run before the
+    # checkpoint would have changed the checkpoint, and so where the resumed run ends.
+    reference = _run(tmp_path / "uninterrupted.inp", _deck(stl, N_INCREMENTS_FULL))
 
+    # Up to the checkpoint, writing one at every output; only the latest is kept.
     writer = (
         f"*output, type=restart, name=restart\nwriteInterval=1, baseName={tmp_path / 'ckpt'}, numberOfFilesToKeep=1\n"
     )
-    _run(tmp_path / "truncated.inp", _deck(stl, N_INCREMENTS_TRUNCATED, writer))
+    _run(tmp_path / "writingCheckpoints.inp", _deck(stl, N_INCREMENTS_RESUMED_FROM, writer))
     (checkpoint,) = tmp_path.glob("ckpt_*.h5")
     with h5py.File(checkpoint, "r") as f:
+        assert f.attrs["numberOfIncrementsDone"] == N_INCREMENTS_RESUMED_FROM
         assert f.attrs["time"] > 0.0
 
     resumed = _run(tmp_path / "resumed.inp", _deck(stl, N_INCREMENTS_FULL, f"*restart, readFrom={checkpoint}"))

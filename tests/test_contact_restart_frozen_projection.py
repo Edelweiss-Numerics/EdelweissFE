@@ -25,7 +25,13 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Bitwise restart equivalence of explicit contact with a throttled contact search."""
+"""Bitwise restart equivalence of explicit contact with a throttled contact search.
+
+Every case has three kinds of runs: the uninterrupted run, which writes no checkpoints; one run up to the last
+increment resumed from, which writes a checkpoint at every output; and, from each checkpoint resumed from, a run to the
+end, which writes none. Every resumed run must end bitwise where the uninterrupted run ends. This also shows that writing
+a checkpoint changes nothing: a write that changed the run would have changed every checkpoint after it.
+"""
 
 from pathlib import Path
 
@@ -36,6 +42,9 @@ import pytest
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.utils.exceptions import RestartError
 from edelweissfe.utils.inputfileparser import parseInputFile
+
+#: Every 5th increment is an output increment, at which the restart output writes a checkpoint.
+_OUTPUT_FREQUENCY = 5
 
 
 def _box(name, origin, length, elProvider, elType):
@@ -121,7 +130,7 @@ upper_all
 *job, name=contactRestartJob, domain=3d
 *solver, solver=NEDParallel, name=theSolver
 courant-number={0.3 if amr else 0.8}
-output-frequency=5
+output-frequency={_OUTPUT_FREQUENCY}
 contact-update-frequency=7
 {"topology-check-frequency=100" if amr else ""}
 {model}
@@ -148,19 +157,48 @@ def _fields(model) -> dict:
     return {(name, entry): np.array(field[entry]) for name, field in model.nodeFields.items() for entry in "UP"}
 
 
-def _truncateAndResume(directory: Path, constraintType: str, nFull: int, nTruncated: int, extra="", amr=False):
-    """Run nTruncated increments writing checkpoints, then resume from the last one to nFull.
+def _runUninterrupted(directory: Path, constraintType: str, nIncrements: int, extra="", amr=False) -> dict:
+    """The reference: the node fields of the run over all increments, writing no checkpoints."""
+    return _fields(_run(directory, "uninterrupted", constraintType, nIncrements, extra, amr))
 
-    The contact-update frequency (7) is no divisor of the output frequency (5), so a checkpoint
-    usually falls between two searches."""
 
+def _runWritingCheckpoints(directory: Path, constraintType: str, resumePoints, extra="", amr=False) -> dict:
+    """The run up to the last of the ``resumePoints``, writing a checkpoint at every output: its checkpoints at the
+    resume points, by the number of increments done. The others are deleted.
+
+    The contact-update frequency (7) is no divisor of the output frequency, so a checkpoint usually falls between two
+    searches."""
+
+    nIncrements = max(resumePoints)
+    nCheckpoints = nIncrements // _OUTPUT_FREQUENCY + 1
     writer = (
-        f"*output, type=restart, name=restart\nwriteInterval=1, baseName={directory / 'ckpt'}, numberOfFilesToKeep=1\n"
+        "*output, type=restart, name=restart\n"
+        f"writeInterval=1, baseName={directory / 'ckpt'}, numberOfFilesToKeep={nCheckpoints}\n"
     )
-    _run(directory, "truncated", constraintType, nTruncated, extra + writer, amr)
-    (checkpoint,) = directory.glob("ckpt_*.h5")
-    resumed = _run(directory, "resumed", constraintType, nFull, extra + f"*restart, readFrom={checkpoint}", amr)
-    return resumed, checkpoint
+    _run(directory, "writingCheckpoints", constraintType, nIncrements, extra + writer, amr)
+
+    checkpoints = {}
+    for checkpoint in directory.glob("ckpt_*.h5"):
+        with h5py.File(checkpoint, "r") as f:
+            nDone = int(f.attrs["numberOfIncrementsDone"])
+        assert nDone not in checkpoints, "two checkpoints after {:} increments".format(nDone)
+        checkpoints[nDone] = checkpoint
+    # The zero increment is an output increment too.
+    assert sorted(checkpoints) == list(range(0, nIncrements + 1, _OUTPUT_FREQUENCY)), "a checkpoint at every output"
+
+    for nDone in checkpoints.keys() - set(resumePoints):
+        checkpoints.pop(nDone).unlink()
+    return checkpoints
+
+
+def _resume(checkpoint: Path, constraintType: str, nIncrements: int, extra="", amr=False):
+    """The run resumed from ``checkpoint`` to the end, in a directory of its own. Like the uninterrupted run, it writes
+    no checkpoints: a write that changed the run before the checkpoint changed the checkpoint, and so where the resumed
+    run ends."""
+
+    directory = checkpoint.parent / "resumed_from_{:}".format(checkpoint.stem)
+    directory.mkdir()
+    return _run(directory, "resumed", constraintType, nIncrements, extra + f"*restart, readFrom={checkpoint}", amr)
 
 
 @pytest.fixture(
@@ -172,8 +210,9 @@ def resumedContact(request, tmp_path_factory):
     resumed from increment 250."""
 
     directory = tmp_path_factory.mktemp(request.param)
-    reference = _fields(_run(directory, "full", request.param, 300))
-    resumed, checkpoint = _truncateAndResume(directory, request.param, 300, 250)
+    reference = _runUninterrupted(directory, request.param, 300)
+    checkpoint = _runWritingCheckpoints(directory, request.param, [250])[250]
+    resumed = _resume(checkpoint, request.param, 300)
     return reference, _fields(resumed), resumed, checkpoint
 
 
@@ -227,25 +266,41 @@ maxLevel=1
 """
 
 
+#: The increments the live-refinement run is resumed from, by what happens there.
+_LIVE_REFINEMENT_RESUME_POINTS = {
+    "onCheckThatRefines": 100,
+    "onCheckThatChangesContactConnectivity": 1000,
+    "onCheck": 1300,
+    "betweenChecks": 1340,
+}
+
+
 @pytest.fixture(scope="module")
-def liveRefinementReference(tmp_path_factory):
+def liveRefinement(tmp_path_factory):
+    """The node fields of the uninterrupted run with live refinement, and the checkpoints to resume it from."""
+
     directory = tmp_path_factory.mktemp("liveRefinement")
-    return _fields(_run(directory, "full", "surfaceToDeformableSurfacePenalty", 1500, _LIVE_REFINEMENT, amr=True))
+    reference = _runUninterrupted(directory, "surfaceToDeformableSurfacePenalty", 1500, _LIVE_REFINEMENT, amr=True)
+    checkpoints = _runWritingCheckpoints(
+        directory,
+        "surfaceToDeformableSurfacePenalty",
+        _LIVE_REFINEMENT_RESUME_POINTS.values(),
+        _LIVE_REFINEMENT,
+        amr=True,
+    )
+    return reference, checkpoints
 
 
 @pytest.mark.parametrize(
-    "nTruncated",
-    [100, 1000, 1300, 1340],
-    ids=["onCheckThatRefines", "onCheckThatChangesContactConnectivity", "onCheck", "betweenChecks"],
+    "nResumedFrom", list(_LIVE_REFINEMENT_RESUME_POINTS.values()), ids=list(_LIVE_REFINEMENT_RESUME_POINTS)
 )
-def test_resume_after_live_refinement(tmp_path, liveRefinementReference, nTruncated):
+def test_resume_after_live_refinement(liveRefinement, nResumedFrom):
     """The slave body is refined by the topology check at increment 100 (every 100 increments),
     which rebuilds its contact points; the check at 1000 changes only the contact connectivity."""
 
-    resumed, _ = _truncateAndResume(
-        tmp_path, "surfaceToDeformableSurfacePenalty", 1500, nTruncated, _LIVE_REFINEMENT, amr=True
-    )
+    reference, checkpoints = liveRefinement
+    resumed = _resume(checkpoints[nResumedFrom], "surfaceToDeformableSurfacePenalty", 1500, _LIVE_REFINEMENT, amr=True)
     assert len(resumed.elements) > 2 * 27
     fields = _fields(resumed)
-    for key, values in liveRefinementReference.items():
+    for key, values in reference.items():
         assert np.array_equal(fields[key], values), key
