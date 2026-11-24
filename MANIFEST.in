@@ -1,2 +1,3 @@
 include edelweissfe/*.*
 include edelweissfe/materials/marmot/*.pxd edelweissfe/materials/marmot/*.h
+include edelweissfe/utils/*.pxd

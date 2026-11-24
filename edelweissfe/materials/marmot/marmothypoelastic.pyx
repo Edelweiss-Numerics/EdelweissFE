@@ -60,6 +60,7 @@ from edelweissfe.materials.marmot._marmotmaterials cimport (
 )
 
 from edelweissfe.materials.base.basehypoelasticmaterial import BaseHypoElasticMaterial
+from edelweissfe.utils.bufferlength cimport requireLength
 from edelweissfe.utils.exceptions import CutbackRequest, ModuleNotBuilt
 
 #: The factor by which the time increment is reduced if a Marmot material fails.
@@ -156,9 +157,21 @@ cdef class MarmotHypoElasticMaterial:
         Parameters
         ----------
         currentStateVars
-            The contiguous array holding the material state variables.
+            The contiguous array holding the material state variables, as many as
+            :meth:`getNumberOfRequiredStateVars` reports.
+
+        Raises
+        ------
+        ValueError
+            If ``currentStateVars`` does not have the required length.
         """
 
+        requireLength(
+            "assignCurrentStateVars",
+            "currentStateVars",
+            currentStateVars.shape[0],
+            self._material.getNumberOfRequiredStateVars(),
+        )
         self._stateVars = currentStateVars
 
     def initializeYourself(self):
@@ -210,7 +223,15 @@ cdef class MarmotHypoElasticMaterial:
             The total time at the end of the increment.
         dTime
             The time increment.
+
+        Raises
+        ------
+        ValueError
+            If ``stress`` or ``dStrain`` does not have 6 entries.
         """
+
+        requireLength("computeStress", "stress", stress.shape[0], 6)
+        requireLength("computeStress", "dStrain", dStrain.shape[0], 6)
 
         cdef double[36] tangentBuffer
         cdef int i
@@ -271,7 +292,15 @@ cdef class MarmotHypoElasticMaterial:
             The total time at the end of the increment.
         dTime
             The time increment.
+
+        Raises
+        ------
+        ValueError
+            If ``stress`` or ``dStrain`` does not have 6 entries.
         """
+
+        requireLength("computePlaneStress", "stress", stress.shape[0], 6)
+        requireLength("computePlaneStress", "dStrain", dStrain.shape[0], 6)
 
         cdef double[3] stressBuffer
         cdef double[3] dStrainBuffer
@@ -341,7 +370,15 @@ cdef class MarmotHypoElasticMaterial:
             The total time at the end of the increment.
         dTime
             The time increment.
+
+        Raises
+        ------
+        ValueError
+            If ``stress`` or ``dStrain`` does not have 6 entries.
         """
+
+        requireLength("computeUniaxialStress", "stress", stress.shape[0], 6)
+        requireLength("computeUniaxialStress", "dStrain", dStrain.shape[0], 6)
 
         cdef double dStress_dStrain_ = 0.0
 
