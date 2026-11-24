@@ -574,8 +574,9 @@ within the bounds of the minimum and maximum increment size.</p>
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement">
 <span class="sig-name descname"><span class="pre">enforceTimeIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeIncrement</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/base/timestepperbase.html#TimeStepperBase.enforceTimeIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement" title="Link to this definition"></a></dt>
 <dd><p>Use <code class="docutils literal notranslate"><span class="pre">timeIncrement</span></code> for every following increment, instead of adapting it.</p>
-<p>The caller is an explicit solver, whose stable time increment is a property of the mesh: set
-at the start of the step, and lowered when a refinement shrinks the smallest element.</p>
+<p>The caller is an explicit solver, whose stable time increment is a property of the model: set at the start of
+the step, and set anew each time the solver takes the critical time step again, e.g. after a refinement or as
+entities that carry their own inertia deform; lowered only, or also raised, as the solver chooses.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>timeIncrement</strong> (<em>float</em>) – The time increment to use.</p>
@@ -1020,8 +1021,9 @@ within the bounds of the minimum and maximum increment size.</p>
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.enforceTimeIncrement">
 <span class="sig-name descname"><span class="pre">enforceTimeIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeIncrement</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/simpletimestepper.html#SimpleTimeStepper.enforceTimeIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.enforceTimeIncrement" title="Link to this definition"></a></dt>
 <dd><p>Use <code class="docutils literal notranslate"><span class="pre">timeIncrement</span></code> for every following increment, instead of adapting it.</p>
-<p>The caller is an explicit solver, whose stable time increment is a property of the mesh: set
-at the start of the step, and lowered when a refinement shrinks the smallest element.</p>
+<p>The caller is an explicit solver, whose stable time increment is a property of the model: set at the start of
+the step, and set anew each time the solver takes the critical time step again, e.g. after a refinement or as
+entities that carry their own inertia deform; lowered only, or also raised, as the solver chooses.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>timeIncrement</strong> (<em>float</em>) – The time increment to use.</p>

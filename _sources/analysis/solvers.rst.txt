@@ -472,6 +472,44 @@ off). With
 ``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum in every
 increment.
 
+.. _ned-time-increment-lowered-or-followed:
+
+The time increment: lowered only, or followed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``NED`` takes the critical time step -- the smaller of the elements' and the bound of the entities that carry their own
+inertia (e.g. particles), scaled by ``courant-number`` -- at the start of the step and after a change of the mesh, and,
+for the entities that carry their own inertia, in the zero increment, whenever they couple other nodes and every
+``stable-increment-frequency`` increments. Only at these points is it known; in between, the time increment is
+trusted.
+
+**Lowered only (the default).** Whenever the critical time step is taken and falls below the time increment in use,
+the increment becomes the critical time step; it is never raised within a step. A step that asks for smaller increments
+(``startInc``, at most ``maxInc``) keeps them. A brief stiff state -- an entity that is briefly compressed, a node that
+the kernel functions of the entities reach only at the edge -- thus sets the increment for the rest of the step.
+
+**Followed** (``follow-critical-time-step``). Each time the critical time step is taken, the time increment becomes
+the critical time step, at most the step's ``maxInc``, up as well as down; the step's ``startInc`` is not kept, and a
+step that wants smaller increments sets ``maxInc``. Once a stiff state has passed, the increment comes back with the
+next critical time step taken. As long as no bound is known -- no element reports one, and the entities have not been
+bounded yet, or never are, with ``stable-increment-frequency=0`` -- there is nothing to follow, and the step keeps its
+own increment.
+
+**What following gives up.** Between two critical time steps taken, the increment is trusted: the courant number covers
+the gradual change of the model in between. Lowered only, the increment of a run that has met a stiff state once stays
+low, and is ready for the next time that state returns. The states this option is meant for are brief, but they tend to
+recur: an entity compressed again, a node reached at the edge again. Followed, the increment is raised after the first
+one and meets the next with nothing but the courant margin, for up to ``stable-increment-frequency`` increments before
+the next bound sees it. Use the option with a ``stable-increment-frequency`` small enough to see such a state recur,
+or with a lower ``courant-number``; at a ``courant-number`` close to 1, repeated raising and lowering can also pump
+energy into a mode near the stability limit.
+
+.. code-block:: edelweiss
+
+    *solver, solver=NED, name=explicit
+    follow-critical-time-step=True
+    stable-increment-frequency=10
+
 Work per increment outside the elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -312,8 +312,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">enforceTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeIncrement</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Use ``timeIncrement`` for every following increment, instead of adapting it.</span>
 
-<span class="sd">        The caller is an explicit solver, whose stable time increment is a property of the mesh: set</span>
-<span class="sd">        at the start of the step, and lowered when a refinement shrinks the smallest element.</span>
+<span class="sd">        The caller is an explicit solver, whose stable time increment is a property of the model: set at the start of</span>
+<span class="sd">        the step, and set anew each time the solver takes the critical time step again, e.g. after a refinement or as</span>
+<span class="sd">        entities that carry their own inertia deform; lowered only, or also raised, as the solver chooses.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
