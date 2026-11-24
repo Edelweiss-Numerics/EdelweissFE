@@ -28,6 +28,8 @@
 
 import numpy as np
 
+from edelweissfe.utils.trianglequadrature import TRIANGLE_RULES_BY_POINTS
+
 """
 Parametric geometry of a *parent face*: the element face a contact facet was cut from, together
 with its own (possibly quadratic) shape functions and the quadrature rules needed to integrate
@@ -125,45 +127,6 @@ def parentFaceShapeFunctions(faceType: str, parametricCoords: np.ndarray) -> np.
     raise ValueError(f"parentFaceShapeFunctions: unsupported parent face type '{faceType}'.")
 
 
-#: Barycentric quadrature rules on a triangle, keyed by point count: (points, weights). The weights
-#: sum to one, so an integral is ``facetMeasure * sum(w_q * f(b_q))``. 1 point is exact to degree 1,
-#: 3 points to degree 2, 6 points to degree 4 (Dunavant).
-_TRIANGLE_RULES = {
-    1: (np.array([[1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0]]), np.array([1.0])),
-    3: (
-        np.array(
-            [
-                [2.0 / 3.0, 1.0 / 6.0, 1.0 / 6.0],
-                [1.0 / 6.0, 2.0 / 3.0, 1.0 / 6.0],
-                [1.0 / 6.0, 1.0 / 6.0, 2.0 / 3.0],
-            ]
-        ),
-        np.array([1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0]),
-    ),
-    6: (
-        np.array(
-            [
-                [0.816847572980459, 0.091576213509771, 0.091576213509771],
-                [0.091576213509771, 0.816847572980459, 0.091576213509771],
-                [0.091576213509771, 0.091576213509771, 0.816847572980459],
-                [0.108103018168070, 0.445948490915965, 0.445948490915965],
-                [0.445948490915965, 0.108103018168070, 0.445948490915965],
-                [0.445948490915965, 0.445948490915965, 0.108103018168070],
-            ]
-        ),
-        np.array(
-            [
-                0.109951743655322,
-                0.109951743655322,
-                0.109951743655322,
-                0.223381589678011,
-                0.223381589678011,
-                0.223381589678011,
-            ]
-        ),
-    ),
-}
-
 #: Gauss-Legendre rules on a Line2 facet, in the facet's own barycentric coordinates, keyed by point
 #: count. Weights sum to one, as for the triangle rules. Exact to degree 2n - 1.
 _LINE_RULES = {}
@@ -192,7 +155,8 @@ def facetQuadratureRule(nFacetNodes: int, nPoints: int) -> tuple[np.ndarray, np.
         one -- so an integral over the facet is ``facetMeasure * sum(weights * f(points))``.
     """
 
-    rules = _TRIANGLE_RULES if nFacetNodes == 3 else _LINE_RULES
+    # the triangle rules (barycentric, weights summing to one) come from edelweissfe.utils.trianglequadrature
+    rules = TRIANGLE_RULES_BY_POINTS if nFacetNodes == 3 else _LINE_RULES
     if nPoints not in rules:
         raise ValueError(
             f"facetQuadratureRule: no {nPoints}-point rule for a {nFacetNodes}-node facet. "
