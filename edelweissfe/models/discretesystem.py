@@ -541,7 +541,8 @@ class DiscreteSystem:
         (\\boldsymbol{A}\\boldsymbol{w})_i / w_i`, which holds for every positive weight vector :math:`\\boldsymbol{w}`
         and is exact for the Perron vector. ``NED`` may carry the weights from one bound to the next
         (``carry-stable-increment-weights``): each bound then takes the weights the last one left, and leaves
-        :math:`\\boldsymbol{A}\\boldsymbol{w}` for the next, one step of the power iteration per bound.
+        :math:`\\boldsymbol{A}\\boldsymbol{w}` for the next, one step of the power iteration per bound. Weights of
+        zero start the iteration anew, from the bound's own start weights.
 
         A finite element model has no such entity: None.
 

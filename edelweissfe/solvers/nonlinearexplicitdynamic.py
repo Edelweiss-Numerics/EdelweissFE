@@ -163,12 +163,16 @@ the entities couple other nodes (not when only a constraint does, e.g. a contact
 of the largest eigenvalue of the absolute value of the entities' mass-scaled stiffness, from weights constant per field;
 with ``carry-stable-increment-weights``, ``NED`` keeps the weights a bound leaves and hands them to the next, so that
 every bound takes one more step of the power iteration towards the Perron vector, where the bound is exact. Any positive
-weights give an upper bound of the eigenvalue, and the entities take the smaller of the two bounds, so the carried
-weights can only raise the stable time increment, never lower it below the bound without them. The weights start anew
--- constant per field -- with every numbering (the nodes they belong to may have changed) and every step (a material
-property may have changed), and after a resume: they are not part of the checkpoint. The first
-increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they
-evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.
+weights give an upper bound of the eigenvalue, but weights refined at another configuration can bound it less tightly
+than the weights constant per field when the stiffness changed faster than they followed: a bound with carried weights
+below the one they started from starts them anew, and the larger of the two is taken. Every bound taken is thus at least
+the one the weights started from. Lowered only, the increment therefore never falls below the smallest bound with
+weights constant per field of the step; followed, it can fall below the bound without carried weights of the same
+configuration, down to the one the weights started from. The weights start anew -- constant per field -- also with
+every numbering (the nodes they belong to may have changed) and every step (a material property may have changed), and
+after a resume: they are not part of the checkpoint. The first increment of a step must be the zero increment: in it,
+the entities take an increment of zero length, from which they evaluate the force, the inertia, the damping and the
+critical time step of the configuration the step starts from.
 Where the model holds the motion of their nodes
 (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`) -- after a step of this solver, or of
 ``NID`` integrating the inertia at the nodes --, the step continues it as at the nodes of elements, from their velocity
@@ -455,9 +459,9 @@ class NEDSchema:
         description=(
             "Carry the weights of the bound of the stable time increment of the entities that carry their own inertia "
             "(the particles of a meshfree model) from one bound to the next, and refine them by one Collatz-Wielandt "
-            "step each time: the bound tightens towards the spectral radius it bounds over a few bounds, at the cost of "
-            "one more column in the pass the bound takes anyway, and is never above the bound with the weights constant "
-            "per field. The weights start anew with every numbering and every step, and after a resume."
+            "step each time: the bound tightens towards the spectral radius it bounds over a few bounds, in the pass "
+            "the bound takes anyway. A bound below the one the weights started from (with weights constant per field) "
+            "starts them anew, and so do every numbering and every step, and a resume."
         ),
         dtype=bool,
         default=False,
@@ -571,6 +575,9 @@ class NED(NonlinearSolverBase):
         #: (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`):
         #: zero, i.e. not yet weighted, for a new numbering and at the start of every step; None without the option.
         self._weightsOfTheStableIncrementBound = None
+        #: With ``carry-stable-increment-weights``, the stable time increment of the bound the weights started from, the
+        #: first after they were set to zero, with weights constant per field.
+        self._stableTimeIncrementTheWeightsStartedFrom = np.inf
         #: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.
         self._internalEnergy = 0.0
         #: The operators of the explicit update, arrays of the length of the numbering, assembled by
@@ -1072,12 +1079,7 @@ class NED(NonlinearSolverBase):
         )
         if self._stableTimeIncrementIsDue(timeStep):
             with performancetiming.timeit("stable time increment of entities"):
-                self._stableTimeIncrementOfEntities = system.stableTimeIncrementOfEntitiesWithOwnInertia(
-                    self._inertiaOfEntities,
-                    self._dampingOfEntities,
-                    self.forEachChunk,
-                    self._weightsOfTheStableIncrementBound,
-                )
+                self._stableTimeIncrementOfEntities = self._boundTheStableTimeIncrementOfEntities()
             self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia", 2)
 
         self._internalForce += internalForceOfEntities
@@ -1181,6 +1183,47 @@ class NED(NonlinearSolverBase):
         self._inertiaOfEntities = inertiaOfEntities
         self._dampingOfEntities = dampingOfEntities
         self._deriveLumpedOperators()
+
+    def _boundTheStableTimeIncrementOfEntities(self) -> float | None:
+        """The bound of the stable time increment of the entities that carry their own inertia
+        (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`), from
+        the lumped inertia and damping just assembled.
+
+        With ``carry-stable-increment-weights``, the bound takes the weights the last one left, and leaves the weights
+        for the next. Any positive weights bound the stable time increment, but weights refined at another
+        configuration can bound it less tightly than the weights constant per field they started from when the
+        stiffness changed faster than the weights followed, e.g. where entities reach nodes whose weights the power
+        iteration has made small. So a bound with carried weights below the bound the weights started from starts them
+        anew: the bound is taken again from the weights constant per field, and the larger of the two is the bound.
+        Every bound is thus at least the one the weights started from: lowered only, the increment never falls below
+        the smallest bound with weights constant per field of the step; followed (``follow-critical-time-step``), it can
+        fall below the bound without carried weights of the same configuration, down to the one the weights started
+        from.
+
+        Returns
+        -------
+        float | None
+            The stable time increment; None in a model without such entities.
+        """
+
+        weights = self._weightsOfTheStableIncrementBound
+
+        def bound() -> float | None:
+            return self.system.stableTimeIncrementOfEntitiesWithOwnInertia(
+                self._inertiaOfEntities, self._dampingOfEntities, self.forEachChunk, weights
+            )
+
+        startsTheWeights = weights is not None and not weights.any()
+        stable = bound()
+        if weights is None or stable is None:
+            return stable
+        if startsTheWeights:
+            self._stableTimeIncrementTheWeightsStartedFrom = stable
+        elif stable < self._stableTimeIncrementTheWeightsStartedFrom:
+            weights[:] = 0.0
+            self._stableTimeIncrementTheWeightsStartedFrom = bound()
+            stable = max(stable, self._stableTimeIncrementTheWeightsStartedFrom)
+        return stable
 
     def _stableTimeIncrementIsDue(self, timeStep: TimeStep) -> bool:
         """Whether the stable time increment of the entities that carry their own inertia is bounded anew after this

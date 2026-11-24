@@ -469,8 +469,9 @@ so a nonlocal field of gradient-enhanced particles is integrated by its own sche
 critical time step with the elements'; it is bounded in the zero increment, whenever the particles couple other nodes
 (not when only a contact is paired anew), and every ``stable-increment-frequency`` increments (0 switches the bound
 off). With ``carry-stable-increment-weights``, every bound starts from the weights the last one left and refines them
-by one step of the power iteration, which tightens it over a few bounds and never lowers it (see "Entities that carry
-their own inertia" above). With
+by one step of the power iteration, which tightens it over a few bounds at no extra cost; a bound below the one the
+weights started from starts them anew, so an increment that is lowered only never falls below the smallest bound
+without them (see "Entities that carry their own inertia" above). With
 ``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum in every
 increment.
 
