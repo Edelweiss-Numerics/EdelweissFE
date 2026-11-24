@@ -529,11 +529,20 @@ class DiscreteSystem:
         lumpedMass: DofVector,
         lumpedDamping: DofVector,
         forEachChunk: Callable[[list, Callable], None],
+        weightsOfTheBound: np.ndarray | None = None,
     ) -> float | None:
         """A bound of the stable time increment of the explicit scheme for the entities that carry their own inertia
         (:attr:`entitiesWithOwnInertia`) at their current configuration. A property of their assembled system, not of
         one entity: an entity's stiffness may couple nodes at which its own lumped mass vanishes. ``NED`` takes the
         smaller of it and the elements' critical time step.
+
+        A bound of the largest eigenvalue of a nonnegative matrix :math:`\\boldsymbol{A}` -- here the absolute value of
+        the mass-scaled stiffness -- is the Collatz-Wielandt bound :math:`\\rho(\\boldsymbol{A}) \\le \\max_i
+        (\\boldsymbol{A}\\boldsymbol{w})_i / w_i`, which holds for every positive weight vector :math:`\\boldsymbol{w}`
+        and is exact for the Perron vector. ``NED`` may carry the weights from one bound to the next
+        (``carry-stable-increment-weights``): each bound then takes the weights the last one left, and leaves
+        :math:`\\boldsymbol{A}\\boldsymbol{w}` for the next, one step of the power iteration per bound. Weights of
+        zero start the iteration anew, from the bound's own start weights.
 
         A finite element model has no such entity: None.
 
@@ -546,6 +555,9 @@ class DiscreteSystem:
             Their lumped damping, likewise (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`).
         forEachChunk
             The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
+        weightsOfTheBound
+            The weights the last bound left, a vector of the numbering, zero where a degree of freedom has none yet;
+            replaced in place by the weights for the next bound. None for the bound with its own start weights alone.
 
         Returns
         -------

@@ -36,6 +36,7 @@ cimport libcpp.cast
 cimport numpy as np
 
 from edelweissfe.numerics.systemmatrixcontributor import denseBlockLocalEntries
+from edelweissfe.utils.bufferlength cimport requireLength
 from edelweissfe.utils.exceptions import CutbackRequest, ModuleNotBuilt
 
 # Point Marmot's warning channel at stdout once, on import: MarmotJournal otherwise writes into a null
@@ -181,8 +182,12 @@ cdef class MarmotElementWrapper:
     def setNodes (self, nodes):
         """Assign the nodes coordinates to the underyling MarmotElement"""
 
+        requireLength("setNodes", "nodes", len(nodes), self._nNodes)
         self._nodes = nodes
         self.nodeCoordinates = np.concatenate([node.coordinates for node in nodes])
+        requireLength(
+            "setNodes", "node coordinates", self.nodeCoordinates.shape[0], self._nNodes * self._nSpatialDimensions
+        )
         self.marmotElement.assignNodeCoordinates(&self.nodeCoordinates[0])
 
     def setProperties(self, elementProperties):
@@ -317,10 +322,36 @@ cdef class MarmotElementWrapper:
                               const double[::1] dU,
                               double time,
                               double dTime) except *:
-        """Evaluate residual and stiffness for given time, field, and field increment."""
+        """Evaluate residual and stiffness for given time, field, and field increment.
+
+        Parameters
+        ----------
+        Ke
+            The stiffness, ``nDof * nDof`` entries, written.
+        Pe
+            The residual, ``nDof`` entries, written.
+        U
+            The current solution, ``nDof`` entries.
+        dU
+            The solution increment, ``nDof`` entries.
+        time
+            The total time at the end of the increment.
+        dTime
+            The time increment.
+
+        Raises
+        ------
+        ValueError
+            If a buffer does not have the required length.
+        """
 
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
+
+        requireLength("computeKernels", "Ke", Ke.shape[0], self._nDof * self._nDof)
+        requireLength("computeKernels", "Pe", Pe.shape[0], self._nDof)
+        requireLength("computeKernels", "U", U.shape[0], self._nDof)
+        requireLength("computeKernels", "dU", dU.shape[0], self._nDof)
 
         try:
             with nogil:
@@ -341,10 +372,33 @@ cdef class MarmotElementWrapper:
                                       const double[::1] dU,
                                       double time,
                                       double dTime) except *:
-        """Evaluate residual and stiffness for given time, field, and field increment."""
+        """Evaluate the residual for given time, field, and field increment, without a stiffness.
+
+        Parameters
+        ----------
+        Pe
+            The residual, ``nDof`` entries, written.
+        U
+            The current solution, ``nDof`` entries.
+        dU
+            The solution increment, ``nDof`` entries.
+        time
+            The total time at the end of the increment.
+        dTime
+            The time increment.
+
+        Raises
+        ------
+        ValueError
+            If a buffer does not have the required length.
+        """
 
         if not self._hasMaterial:
             raise Exception("Element {:} has no material assigned!".format(self._elNumber))
+
+        requireLength("computeKernelsExplicit", "Pe", Pe.shape[0], self._nDof)
+        requireLength("computeKernelsExplicit", "U", U.shape[0], self._nDof)
+        requireLength("computeKernelsExplicit", "dU", dU.shape[0], self._nDof)
 
         try:
             with nogil:
@@ -370,9 +424,43 @@ cdef class MarmotElementWrapper:
         """Add the residual contribution of a surface load, the negative of the external load, and its tangent.
 
         Marmot adds the external load itself, so it integrates into a buffer of its own, which is then
-        subtracted: only this load's contribution changes sign, whatever ``P`` holds already."""
+        subtracted: only this load's contribution changes sign, whatever ``P`` holds already.
 
-        cdef double[::1] externalLoad = np.zeros(P.shape[0])
+        Parameters
+        ----------
+        loadType
+            The type of the load, a key of ``mapLoadTypes``.
+        P
+            The residual, ``nDof`` entries, augmented.
+        K
+            The stiffness, ``nDof * nDof`` entries, augmented.
+        faceID
+            The face of the element the load acts on.
+        load
+            The load: one entry for a pressure, ``nSpatialDimensions`` entries for a surface traction.
+        U
+            The current solution, ``nDof`` entries.
+        time
+            The total time at the end of the increment.
+        dTime
+            The time increment.
+
+        Raises
+        ------
+        ValueError
+            If a buffer does not have the required length.
+        """
+
+        requireLength("computeDistributedLoad", "P", P.shape[0], self._nDof)
+        requireLength("computeDistributedLoad", "K", K.shape[0], self._nDof * self._nDof)
+        requireLength("computeDistributedLoad", "U", U.shape[0], self._nDof)
+        # A surface torsion is not checked: no Marmot element defines how many values it reads.
+        if loadType == "pressure":
+            requireLength("computeDistributedLoad", "load", load.shape[0], 1)
+        elif loadType == "surface traction":
+            requireLength("computeDistributedLoad", "load", load.shape[0], self._nSpatialDimensions)
+
+        cdef double[::1] externalLoad = np.zeros(self._nDof)
         cdef Py_ssize_t i
 
         self.marmotElement.computeDistributedLoad(mapLoadTypes[loadType],
@@ -397,9 +485,35 @@ cdef class MarmotElementWrapper:
         """Add the residual contribution of a body force, the negative of the external load, and its tangent.
 
         Marmot adds the external load itself, so it integrates into a buffer of its own, which is then
-        subtracted: only this load's contribution changes sign, whatever ``P`` holds already."""
+        subtracted: only this load's contribution changes sign, whatever ``P`` holds already.
 
-        cdef double[::1] externalLoad = np.zeros(P.shape[0])
+        Parameters
+        ----------
+        P
+            The residual, ``nDof`` entries, augmented.
+        K
+            The stiffness, ``nDof * nDof`` entries, augmented.
+        load
+            The force per unit volume, ``nSpatialDimensions`` entries.
+        U
+            The current solution, ``nDof`` entries.
+        time
+            The total time at the end of the increment.
+        dTime
+            The time increment.
+
+        Raises
+        ------
+        ValueError
+            If a buffer does not have the required length.
+        """
+
+        requireLength("computeBodyForce", "P", P.shape[0], self._nDof)
+        requireLength("computeBodyForce", "K", K.shape[0], self._nDof * self._nDof)
+        requireLength("computeBodyForce", "load", load.shape[0], self._nSpatialDimensions)
+        requireLength("computeBodyForce", "U", U.shape[0], self._nDof)
+
+        cdef double[::1] externalLoad = np.zeros(self._nDof)
         cdef Py_ssize_t i
 
         self.marmotElement.computeBodyForce(
@@ -414,13 +528,37 @@ cdef class MarmotElementWrapper:
             P[i] -= externalLoad[i]
 
     def computeLumpedInertia(self, double[::1] M):
-        """Compute the lumped mass matrix of the underlying MarmotElement"""
+        """Compute the lumped mass matrix of the underlying MarmotElement.
 
+        Parameters
+        ----------
+        M
+            The diagonal of the lumped mass matrix, ``nDof`` entries, written.
+
+        Raises
+        ------
+        ValueError
+            If ``M`` does not have the required length.
+        """
+
+        requireLength("computeLumpedInertia", "M", M.shape[0], self._nDof)
         self.marmotElement.computeLumpedInertia(&M[0])
 
     def computeLumpedDamping(self, double[::1] C):
-        """Compute the lumped damping of the underlying MarmotElement"""
+        """Compute the lumped damping of the underlying MarmotElement.
 
+        Parameters
+        ----------
+        C
+            The diagonal of the lumped damping matrix, ``nDof`` entries, written.
+
+        Raises
+        ------
+        ValueError
+            If ``C`` does not have the required length.
+        """
+
+        requireLength("computeLumpedDamping", "C", C.shape[0], self._nDof)
         self.marmotElement.computeLumpedDamping(&C[0])
 
     def computeConsistentInertia(self, double[::1] M):
@@ -428,12 +566,42 @@ cdef class MarmotElementWrapper:
 
         Written into ``M`` in the element's flat ``nDof * nDof`` layout -- the same layout
         ``computeKernels`` writes the stiffness into, so an entity slice of a VIJ system matrix can
-        be handed over directly and the assembled mass shares the stiffness' sparsity pattern."""
+        be handed over directly and the assembled mass shares the stiffness' sparsity pattern.
 
+        Parameters
+        ----------
+        M
+            The mass matrix, ``nDof * nDof`` entries, written.
+
+        Raises
+        ------
+        ValueError
+            If ``M`` does not have the required length.
+        """
+
+        requireLength("computeConsistentInertia", "M", M.shape[0], self._nDof * self._nDof)
         self.marmotElement.computeConsistentInertia(&M[0])
 
     def computeCriticalTimeStepForExplicitDynamics(self, double[::1] Q):
-        """Compute the critical time step for explicit dynamics of the underlying MarmotElement"""
+        """Compute the critical time step for explicit dynamics of the underlying MarmotElement.
+
+        Parameters
+        ----------
+        Q
+            The current solution, ``nDof`` entries.
+
+        Returns
+        -------
+        float
+            The critical time step.
+
+        Raises
+        ------
+        ValueError
+            If ``Q`` does not have the required length.
+        """
+
+        requireLength("computeCriticalTimeStepForExplicitDynamics", "Q", Q.shape[0], self._nDof)
         cdef double criticalTimeStep = 1e36
         self.marmotElement.computeCriticalTimeStepForExplicitDynamics(criticalTimeStep, &Q[0])
         return criticalTimeStep
@@ -482,8 +650,8 @@ cdef class MarmotElementWrapper:
 
         if dElasticEnergy_dQ is None or dDissipation_dQ is None:
             raise ValueError("assign both energy gradient outputs, or none")
-        if dElasticEnergy_dQ.shape[0] != self._nDof or dDissipation_dQ.shape[0] != self._nDof:
-            raise ValueError(f"energy gradient outputs need {self._nDof} entries")
+        requireLength("assignEnergyGradientOutput", "dElasticEnergy_dQ", dElasticEnergy_dQ.shape[0], self._nDof)
+        requireLength("assignEnergyGradientOutput", "dDissipation_dQ", dDissipation_dQ.shape[0], self._nDof)
 
         self.energyGradientProvider.assignEnergyGradientOutput(&dElasticEnergy_dQ[0], &dDissipation_dQ[0])
         # the element writes to the arrays: keep them alive
@@ -504,10 +672,7 @@ cdef class MarmotElementWrapper:
         assigned pointer to the trial buffer stays valid). Used by adaptive refinement to transfer
         history to child elements."""
 
-        if values.shape[0] != self._stateVars.shape[0]:
-            raise ValueError(
-                "setStateVars: expected {:} state variables, got {:}".format(
-                    self._stateVars.shape[0], values.shape[0]))
+        requireLength("setStateVars", "values", values.shape[0], self._stateVars.shape[0])
         self._stateVars[:] = values
         self._stateVarsTemp[:] = values
 

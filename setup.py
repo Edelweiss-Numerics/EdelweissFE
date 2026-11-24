@@ -352,6 +352,8 @@ setup(
         # cimport/include have to be part of the installed distribution, not just the source
         # checkout.
         "edelweissfe.materials.marmot": ["*.pxd", "*.h"],
+        # The buffer length check every Marmot wrapper cimports, also those of downstream packages.
+        "edelweissfe.utils": ["*.pxd"],
     },
 )
 
