@@ -1,0 +1,524 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.utils.beamsections &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.utils.beamsections</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.utils.beamsections</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""</span>
+<span class="sd">Integration points of beam cross sections ("section points", the fibers of Marmot's ``BeamFiberSection``), for beam</span>
+<span class="sd">elements that integrate their section over given points, e.g., the Marmot beams ``B&lt;d&gt;D&lt;n&gt;``. The triangle rules</span>
+<span class="sd">of the polygons come from :mod:`edelweissfe.utils.trianglequadrature`.</span>
+
+<span class="sd">A section is a set of points :math:`(y_i, z_i)` with areas (weights) :math:`A_i` in the section coordinates</span>
+<span class="sd">:math:`(y, z)` of the beam. The generators cover</span>
+
+<span class="sd">* parametric shapes with a selectable 1D rule and number of points per direction: ``rectangle`` (:math:`n_y</span>
+<span class="sd">  \\times n_z`), ``circle`` and ``tube`` (rings :math:`\\times` sectors), ``iProfile`` (per flange and web),</span>
+<span class="sd">* polygons with holes (even-odd rule), decomposed exactly into trapezoids, subdivided to a mesh size and</span>
+<span class="sd">  integrated with a triangle rule of selectable order,</span>
+<span class="sd">* explicit point lists.</span>
+
+<span class="sd">The 1D rules (on :math:`[-1, 1]`): ``gauss`` (Gauss-Legendre, :math:`n \\geq 1`), ``lobatto`` (Gauss-Lobatto,</span>
+<span class="sd">:math:`n \\geq 2`, points on the outer fibers) and ``simpson`` (composite Simpson, odd :math:`n \\geq 3`, points on</span>
+<span class="sd">the outer fibers). With points on the outer fibers, the first yield of a section is detected exactly. The second</span>
+<span class="sd">moments of area are integrated exactly by gauss with :math:`n \\geq 2`, lobatto with :math:`n \\geq 3` and simpson.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.trianglequadrature</span><span class="w"> </span><span class="kn">import</span> <span class="n">triangleRuleByDegree</span>
+
+<span class="c1">#: The 1D integration rules.</span>
+<span class="n">RULES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"gauss"</span><span class="p">,</span> <span class="s2">"lobatto"</span><span class="p">,</span> <span class="s2">"simpson"</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="lineRule">
+<a class="viewcode-back" href="../../../model/sections.html#edelweissfe.utils.beamsections.lineRule">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">lineRule</span><span class="p">(</span><span class="n">rule</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""A 1D integration rule on [-1, 1].</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    rule</span>
+<span class="sd">        ``gauss``, ``lobatto`` or ``simpson``.</span>
+<span class="sd">    n</span>
+<span class="sd">        The number of points.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[np.ndarray, np.ndarray]</span>
+<span class="sd">        The points and the weights (summing to 2).</span>
+<span class="sd">    """</span>
+    <span class="n">rule</span> <span class="o">=</span> <span class="n">rule</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">rule</span> <span class="o">==</span> <span class="s2">"gauss"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"A Gauss rule needs at least 1 point."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">polynomial</span><span class="o">.</span><span class="n">legendre</span><span class="o">.</span><span class="n">leggauss</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rule</span> <span class="o">==</span> <span class="s2">"lobatto"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"A Lobatto rule needs at least 2 points."</span><span class="p">)</span>
+        <span class="n">P</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">polynomial</span><span class="o">.</span><span class="n">legendre</span><span class="o">.</span><span class="n">Legendre</span><span class="o">.</span><span class="n">basis</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="o">-</span><span class="mf">1.0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">P</span><span class="o">.</span><span class="n">deriv</span><span class="p">()</span><span class="o">.</span><span class="n">roots</span><span class="p">()</span><span class="o">.</span><span class="n">real</span><span class="p">),</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]])</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">n</span> <span class="o">*</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">P</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">w</span>
+    <span class="k">if</span> <span class="n">rule</span> <span class="o">==</span> <span class="s2">"simpson"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">n</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"A Simpson rule needs an odd number of at least 3 points."</span><span class="p">)</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">)</span>
+        <span class="n">w</span><span class="p">[</span><span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mf">4.0</span>
+        <span class="n">w</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">w</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">w</span> <span class="o">*</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">/</span> <span class="mf">3.0</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unknown integration rule '</span><span class="si">{</span><span class="n">rule</span><span class="si">}</span><span class="s2">', use one of </span><span class="si">{</span><span class="n">RULES</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span></div>
+
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SectionPoints</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The integration points of a cross section."""</span>
+
+    <span class="c1">#: The y coordinates.</span>
+    <span class="n">y</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The z coordinates.</span>
+    <span class="n">z</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The areas (weights).</span>
+    <span class="n">area</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">area</span><span class="p">))</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"A section needs points with y, z and area each."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">area</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Section points must have positive areas."</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromArrays</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">area</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SectionPoints"</span><span class="p">:</span>
+        <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">area</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">area</span><span class="p">))</span>
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">area</span> <span class="o">&gt;</span> <span class="mf">1e-14</span> <span class="o">*</span> <span class="n">area</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>  <span class="c1"># e.g., the center of a circle in a Lobatto rule</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="n">keep</span><span class="p">],</span> <span class="n">z</span><span class="p">[</span><span class="n">keep</span><span class="p">],</span> <span class="n">area</span><span class="p">[</span><span class="n">keep</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">integrals</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``A``, the first moments ``Sy`` = int y dA and ``Sz`` = int z dA, and the second moments ``Iy`` = int z^2 dA,</span>
+<span class="sd">        ``Iz`` = int y^2 dA, ``Iyz`` = int y z dA."""</span>
+        <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">a</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">area</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"A"</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+            <span class="s2">"Sy"</span><span class="p">:</span> <span class="p">(</span><span class="n">y</span> <span class="o">*</span> <span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+            <span class="s2">"Sz"</span><span class="p">:</span> <span class="p">(</span><span class="n">z</span> <span class="o">*</span> <span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+            <span class="s2">"Iy"</span><span class="p">:</span> <span class="p">(</span><span class="n">z</span> <span class="o">*</span> <span class="n">z</span> <span class="o">*</span> <span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+            <span class="s2">"Iz"</span><span class="p">:</span> <span class="p">(</span><span class="n">y</span> <span class="o">*</span> <span class="n">y</span> <span class="o">*</span> <span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+            <span class="s2">"Iyz"</span><span class="p">:</span> <span class="p">(</span><span class="n">y</span> <span class="o">*</span> <span class="n">z</span> <span class="o">*</span> <span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">centroid</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">integrals</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">c</span><span class="p">[</span><span class="s2">"Sy"</span><span class="p">]</span> <span class="o">/</span> <span class="n">c</span><span class="p">[</span><span class="s2">"A"</span><span class="p">],</span> <span class="n">c</span><span class="p">[</span><span class="s2">"Sz"</span><span class="p">]</span> <span class="o">/</span> <span class="n">c</span><span class="p">[</span><span class="s2">"A"</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">shifted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dy</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">dz</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SectionPoints"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SectionPoints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">+</span> <span class="n">dy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">z</span> <span class="o">+</span> <span class="n">dz</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">area</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">centered</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SectionPoints"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The points shifted such that their centroid lies on the beam axis."""</span>
+        <span class="n">yc</span><span class="p">,</span> <span class="n">zc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">centroid</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shifted</span><span class="p">(</span><span class="o">-</span><span class="n">yc</span><span class="p">,</span> <span class="o">-</span><span class="n">zc</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">"SectionPoints"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SectionPoints"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SectionPoints</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">y</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">z</span><span class="p">]),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">area</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">area</span><span class="p">]),</span>
+        <span class="p">)</span>
+
+
+<div class="viewcode-block" id="rectangle">
+<a class="viewcode-back" href="../../../model/sections.html#edelweissfe.utils.beamsections.rectangle">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">rectangle</span><span class="p">(</span><span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">h</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">nY</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">nZ</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span> <span class="n">rule</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"gauss"</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span> <span class="o">-&gt;</span> <span class="n">SectionPoints</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A rectangle of height ``h`` (along y) and width ``b`` (along z): ``nY`` x ``nZ`` points of the rule</span>
+<span class="sd">    (``nZ = 1``: a single point at the middle of the width, e.g., for 2D beams)."""</span>
+    <span class="n">yi</span><span class="p">,</span> <span class="n">wy</span> <span class="o">=</span> <span class="n">lineRule</span><span class="p">(</span><span class="n">rule</span><span class="p">,</span> <span class="n">nY</span><span class="p">)</span>
+    <span class="n">zi</span><span class="p">,</span> <span class="n">wz</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">))</span> <span class="k">if</span> <span class="n">nZ</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">lineRule</span><span class="p">(</span><span class="n">rule</span><span class="p">,</span> <span class="n">nZ</span><span class="p">)</span>
+    <span class="n">Y</span><span class="p">,</span> <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">center</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">h</span> <span class="o">*</span> <span class="n">yi</span><span class="p">,</span> <span class="n">center</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">zi</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">"ij"</span><span class="p">)</span>
+    <span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">wy</span><span class="p">,</span> <span class="n">wz</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.25</span> <span class="o">*</span> <span class="n">b</span> <span class="o">*</span> <span class="n">h</span>
+    <span class="k">return</span> <span class="n">SectionPoints</span><span class="o">.</span><span class="n">fromArrays</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">Z</span><span class="p">,</span> <span class="n">W</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="tube">
+<a class="viewcode-back" href="../../../model/sections.html#edelweissfe.utils.beamsections.tube">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">tube</span><span class="p">(</span>
+    <span class="n">d</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">di</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">nRings</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">nSectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span> <span class="n">rule</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"gauss"</span><span class="p">,</span> <span class="n">center</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SectionPoints</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A circle (``di = 0``) or a tube of outer diameter ``d`` and inner diameter ``di``: ``nRings`` points of the rule</span>
+<span class="sd">    in the radial direction (weighted by the radius) x ``nSectors`` (at least 3) equally spaced angles, starting on</span>
+<span class="sd">    the y axis (exact area and second moments for exact radial rules)."""</span>
+    <span class="k">if</span> <span class="n">nSectors</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"A circular section needs at least 3 sectors."</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">di</span> <span class="o">&lt;</span> <span class="n">d</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"The inner diameter of a tube must be smaller than its outer diameter."</span><span class="p">)</span>
+    <span class="n">ri</span><span class="p">,</span> <span class="n">ro</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">di</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">d</span>
+    <span class="n">xi</span><span class="p">,</span> <span class="n">w</span> <span class="o">=</span> <span class="n">lineRule</span><span class="p">(</span><span class="n">rule</span><span class="p">,</span> <span class="n">nRings</span><span class="p">)</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">ri</span> <span class="o">+</span> <span class="n">ro</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">ro</span> <span class="o">-</span> <span class="n">ri</span><span class="p">)</span> <span class="o">*</span> <span class="n">xi</span>
+    <span class="n">phi</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nSectors</span><span class="p">)</span> <span class="o">/</span> <span class="n">nSectors</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">PHI</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">phi</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">"ij"</span><span class="p">)</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">w</span> <span class="o">*</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">ro</span> <span class="o">-</span> <span class="n">ri</span><span class="p">)</span> <span class="o">*</span> <span class="n">r</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">nSectors</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="n">nSectors</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">SectionPoints</span><span class="o">.</span><span class="n">fromArrays</span><span class="p">(</span><span class="n">center</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">R</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">PHI</span><span class="p">),</span> <span class="n">center</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">R</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">PHI</span><span class="p">),</span> <span class="n">A</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="iProfile">
+<a class="viewcode-back" href="../../../model/sections.html#edelweissfe.utils.beamsections.iProfile">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">iProfile</span><span class="p">(</span>
+    <span class="n">h</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">b</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">tf</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">tw</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">nWeb</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
+    <span class="n">nWidth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
+    <span class="n">nThickness</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="n">rule</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"gauss"</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SectionPoints</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A doubly symmetric I (H) profile of height ``h`` (along y), flange width ``b`` (along z), flange thickness ``tf``</span>
+<span class="sd">    and web thickness ``tw``: per flange ``nThickness`` x ``nWidth`` points, in the web (between the flanges)</span>
+<span class="sd">    ``nWeb`` x ``nThickness`` points."""</span>
+    <span class="n">hw</span> <span class="o">=</span> <span class="n">h</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">tf</span>
+    <span class="k">if</span> <span class="n">hw</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">tw</span> <span class="o">&gt;</span> <span class="n">b</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Invalid I profile dimensions."</span><span class="p">)</span>
+    <span class="n">flange</span> <span class="o">=</span> <span class="n">rectangle</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">tf</span><span class="p">,</span> <span class="n">nThickness</span><span class="p">,</span> <span class="n">nWidth</span><span class="p">,</span> <span class="n">rule</span><span class="p">)</span>
+    <span class="n">web</span> <span class="o">=</span> <span class="n">rectangle</span><span class="p">(</span><span class="n">tw</span><span class="p">,</span> <span class="n">hw</span><span class="p">,</span> <span class="n">nWeb</span><span class="p">,</span> <span class="n">nThickness</span><span class="p">,</span> <span class="n">rule</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">flange</span><span class="o">.</span><span class="n">shifted</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">h</span> <span class="o">-</span> <span class="n">tf</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">+</span> <span class="n">flange</span><span class="o">.</span><span class="n">shifted</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">h</span> <span class="o">-</span> <span class="n">tf</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">+</span> <span class="n">web</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_trapezoids</span><span class="p">(</span><span class="n">loops</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Exact decomposition of a polygon with holes (even-odd rule) into trapezoids with sides parallel to the z axis:</span>
+<span class="sd">    (y0, y1, zLeft0, zRight0, zLeft1, zRight1)."""</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">loop</span> <span class="ow">in</span> <span class="n">loops</span><span class="p">:</span>
+        <span class="n">loop</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">roll</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">q</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>  <span class="c1"># edges parallel to z bound no slab</span>
+                <span class="n">edges</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">p</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span> <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">q</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">else</span> <span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">p</span><span class="p">))</span>
+    <span class="n">levels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">loop</span> <span class="ow">in</span> <span class="n">loops</span><span class="p">]))</span>
+    <span class="n">trapezoids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">y0</span><span class="p">,</span> <span class="n">y1</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">levels</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">levels</span><span class="p">[</span><span class="mi">1</span><span class="p">:]):</span>
+        <span class="n">ym</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">y0</span> <span class="o">+</span> <span class="n">y1</span><span class="p">)</span>
+        <span class="n">crossing</span> <span class="o">=</span> <span class="p">[(</span><span class="n">p</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">edges</span> <span class="k">if</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">ym</span> <span class="o">&lt;=</span> <span class="n">q</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">zAt</span><span class="p">(</span><span class="n">edge</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+            <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">edge</span>
+            <span class="k">return</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span><span class="n">y</span> <span class="o">-</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="n">crossing</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">e</span><span class="p">:</span> <span class="n">zAt</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">ym</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">crossing</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"The section polygon is not closed or self-intersecting."</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">left</span><span class="p">,</span> <span class="n">right</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">crossing</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">],</span> <span class="n">crossing</span><span class="p">[</span><span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">]):</span>
+            <span class="n">trapezoids</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">y0</span><span class="p">,</span> <span class="n">y1</span><span class="p">,</span> <span class="n">zAt</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">y0</span><span class="p">),</span> <span class="n">zAt</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">y0</span><span class="p">),</span> <span class="n">zAt</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">y1</span><span class="p">),</span> <span class="n">zAt</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">y1</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">trapezoids</span>
+
+
+<div class="viewcode-block" id="polygon">
+<a class="viewcode-back" href="../../../model/sections.html#edelweissfe.utils.beamsections.polygon">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">polygon</span><span class="p">(</span><span class="n">loops</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">meshSize</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SectionPoints</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A polygonal section, optionally with holes.</span>
+
+<span class="sd">    The polygon is decomposed exactly into trapezoids (between the y levels of its vertices), which are subdivided</span>
+<span class="sd">    to the ``meshSize``, split into triangles and integrated with a triangle rule of the polynomial degree</span>
+<span class="sd">    ``order`` (1, 2, 4 or 5; 2 or more integrates the second moments of area exactly).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    loops</span>
+<span class="sd">        The boundary loops, each a sequence of vertices (y, z); the outer boundary and the holes (even-odd rule, the</span>
+<span class="sd">        orientation does not matter).</span>
+<span class="sd">    meshSize</span>
+<span class="sd">        The largest size of the cells; default: a tenth of the larger extent of the section.</span>
+<span class="sd">    order</span>
+<span class="sd">        The polynomial degree of the triangle rule.</span>
+<span class="sd">    """</span>
+    <span class="n">allVertices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">loop</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="k">for</span> <span class="n">loop</span> <span class="ow">in</span> <span class="n">loops</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">meshSize</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">meshSize</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ptp</span><span class="p">(</span><span class="n">allVertices</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">/</span> <span class="mi">10</span>
+    <span class="n">bary</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">triangleRuleByDegree</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+
+    <span class="n">ys</span><span class="p">,</span> <span class="n">zs</span><span class="p">,</span> <span class="n">areas</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">addTriangle</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+        <span class="n">area</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="nb">abs</span><span class="p">((</span><span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="p">(</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="k">if</span> <span class="n">area</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">corners</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">])</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">bary</span> <span class="o">@</span> <span class="n">corners</span>
+        <span class="n">ys</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">p</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="n">zs</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">p</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+        <span class="n">areas</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">area</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">y0</span><span class="p">,</span> <span class="n">y1</span><span class="p">,</span> <span class="n">zl0</span><span class="p">,</span> <span class="n">zr0</span><span class="p">,</span> <span class="n">zl1</span><span class="p">,</span> <span class="n">zr1</span> <span class="ow">in</span> <span class="n">_trapezoids</span><span class="p">(</span><span class="n">loops</span><span class="p">):</span>
+        <span class="n">nY</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">((</span><span class="n">y1</span> <span class="o">-</span> <span class="n">y0</span><span class="p">)</span> <span class="o">/</span> <span class="n">meshSize</span><span class="p">)))</span>
+        <span class="n">nZ</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">zr0</span> <span class="o">-</span> <span class="n">zl0</span><span class="p">,</span> <span class="n">zr1</span> <span class="o">-</span> <span class="n">zl1</span><span class="p">)</span> <span class="o">/</span> <span class="n">meshSize</span><span class="p">)))</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nY</span><span class="p">):</span>
+            <span class="n">s0</span><span class="p">,</span> <span class="n">s1</span> <span class="o">=</span> <span class="n">i</span> <span class="o">/</span> <span class="n">nY</span><span class="p">,</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">nY</span>
+            <span class="n">ya</span><span class="p">,</span> <span class="n">yb</span> <span class="o">=</span> <span class="n">y0</span> <span class="o">+</span> <span class="n">s0</span> <span class="o">*</span> <span class="p">(</span><span class="n">y1</span> <span class="o">-</span> <span class="n">y0</span><span class="p">),</span> <span class="n">y0</span> <span class="o">+</span> <span class="n">s1</span> <span class="o">*</span> <span class="p">(</span><span class="n">y1</span> <span class="o">-</span> <span class="n">y0</span><span class="p">)</span>
+            <span class="n">la</span><span class="p">,</span> <span class="n">ra</span> <span class="o">=</span> <span class="n">zl0</span> <span class="o">+</span> <span class="n">s0</span> <span class="o">*</span> <span class="p">(</span><span class="n">zl1</span> <span class="o">-</span> <span class="n">zl0</span><span class="p">),</span> <span class="n">zr0</span> <span class="o">+</span> <span class="n">s0</span> <span class="o">*</span> <span class="p">(</span><span class="n">zr1</span> <span class="o">-</span> <span class="n">zr0</span><span class="p">)</span>
+            <span class="n">lb</span><span class="p">,</span> <span class="n">rb</span> <span class="o">=</span> <span class="n">zl0</span> <span class="o">+</span> <span class="n">s1</span> <span class="o">*</span> <span class="p">(</span><span class="n">zl1</span> <span class="o">-</span> <span class="n">zl0</span><span class="p">),</span> <span class="n">zr0</span> <span class="o">+</span> <span class="n">s1</span> <span class="o">*</span> <span class="p">(</span><span class="n">zr1</span> <span class="o">-</span> <span class="n">zr0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nZ</span><span class="p">):</span>
+                <span class="n">t0</span><span class="p">,</span> <span class="n">t1</span> <span class="o">=</span> <span class="n">j</span> <span class="o">/</span> <span class="n">nZ</span><span class="p">,</span> <span class="p">(</span><span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">nZ</span>
+                <span class="n">p00</span> <span class="o">=</span> <span class="p">(</span><span class="n">ya</span><span class="p">,</span> <span class="n">la</span> <span class="o">+</span> <span class="n">t0</span> <span class="o">*</span> <span class="p">(</span><span class="n">ra</span> <span class="o">-</span> <span class="n">la</span><span class="p">))</span>
+                <span class="n">p01</span> <span class="o">=</span> <span class="p">(</span><span class="n">ya</span><span class="p">,</span> <span class="n">la</span> <span class="o">+</span> <span class="n">t1</span> <span class="o">*</span> <span class="p">(</span><span class="n">ra</span> <span class="o">-</span> <span class="n">la</span><span class="p">))</span>
+                <span class="n">p10</span> <span class="o">=</span> <span class="p">(</span><span class="n">yb</span><span class="p">,</span> <span class="n">lb</span> <span class="o">+</span> <span class="n">t0</span> <span class="o">*</span> <span class="p">(</span><span class="n">rb</span> <span class="o">-</span> <span class="n">lb</span><span class="p">))</span>
+                <span class="n">p11</span> <span class="o">=</span> <span class="p">(</span><span class="n">yb</span><span class="p">,</span> <span class="n">lb</span> <span class="o">+</span> <span class="n">t1</span> <span class="o">*</span> <span class="p">(</span><span class="n">rb</span> <span class="o">-</span> <span class="n">lb</span><span class="p">))</span>
+                <span class="n">addTriangle</span><span class="p">(</span><span class="n">p00</span><span class="p">,</span> <span class="n">p01</span><span class="p">,</span> <span class="n">p11</span><span class="p">)</span>
+                <span class="n">addTriangle</span><span class="p">(</span><span class="n">p00</span><span class="p">,</span> <span class="n">p11</span><span class="p">,</span> <span class="n">p10</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">SectionPoints</span><span class="o">.</span><span class="n">fromArrays</span><span class="p">(</span><span class="n">ys</span><span class="p">,</span> <span class="n">zs</span><span class="p">,</span> <span class="n">areas</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="genericPoints">
+<a class="viewcode-back" href="../../../model/sections.html#edelweissfe.utils.beamsections.genericPoints">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">genericPoints</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">Iy</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">Iz</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SectionPoints</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The fewest points reproducing the area and the (principal) second moments: 2 points at y = +- sqrt(Iz / A)</span>
+<span class="sd">    if Iy = 0 (2D), else 4 points at (+- sqrt(Iz / A), +- sqrt(Iy / A)). Exact for elastic materials; for inelastic</span>
+<span class="sd">    ones an idealized sandwich section."""</span>
+    <span class="n">ry</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">Iz</span> <span class="o">/</span> <span class="n">A</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">Iy</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SectionPoints</span><span class="o">.</span><span class="n">fromArrays</span><span class="p">([</span><span class="o">-</span><span class="n">ry</span><span class="p">,</span> <span class="n">ry</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="n">A</span> <span class="o">/</span> <span class="mi">2</span><span class="p">,</span> <span class="n">A</span> <span class="o">/</span> <span class="mi">2</span><span class="p">])</span>
+    <span class="n">rz</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">Iy</span> <span class="o">/</span> <span class="n">A</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">SectionPoints</span><span class="o">.</span><span class="n">fromArrays</span><span class="p">([</span><span class="o">-</span><span class="n">ry</span><span class="p">,</span> <span class="n">ry</span><span class="p">,</span> <span class="n">ry</span><span class="p">,</span> <span class="o">-</span><span class="n">ry</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="n">rz</span><span class="p">,</span> <span class="o">-</span><span class="n">rz</span><span class="p">,</span> <span class="n">rz</span><span class="p">,</span> <span class="n">rz</span><span class="p">],</span> <span class="p">[</span><span class="n">A</span> <span class="o">/</span> <span class="mi">4</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="readPoints">
+<a class="viewcode-back" href="../../../model/sections.html#edelweissfe.utils.beamsections.readPoints">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">readPoints</span><span class="p">(</span><span class="n">fileName</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SectionPoints</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Section points from a text file, one point per line: ``y, z, area`` (or ``y, area`` for 2D sections);</span>
+<span class="sd">    lines starting with ``#`` or ``**`` are comments."""</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"#"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"**"</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">","</span><span class="p">,</span> <span class="s2">" "</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()])</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">fileName</span><span class="si">}</span><span class="s2">: expected lines 'y, z, area' or 'y, area'."</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SectionPoints</span><span class="o">.</span><span class="n">fromArrays</span><span class="p">(</span><span class="n">data</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span> <span class="n">data</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">SectionPoints</span><span class="o">.</span><span class="n">fromArrays</span><span class="p">(</span><span class="n">data</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">data</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">data</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="readPolygon">
+<a class="viewcode-back" href="../../../model/sections.html#edelweissfe.utils.beamsections.readPolygon">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">readPolygon</span><span class="p">(</span><span class="n">fileName</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Polygon loops from a text file: one vertex ``y, z`` per line, loops (outer boundary, holes) separated by empty</span>
+<span class="sd">    lines; lines starting with ``#`` or ``**`` are comments."""</span>
+    <span class="n">loops</span><span class="p">,</span> <span class="n">current</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"#"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"**"</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">current</span><span class="p">:</span>
+                    <span class="n">loops</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+                    <span class="n">current</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">continue</span>
+            <span class="n">current</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">","</span><span class="p">,</span> <span class="s2">" "</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()])</span>
+    <span class="k">if</span> <span class="n">current</span><span class="p">:</span>
+        <span class="n">loops</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">loops</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">loop</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span> <span class="k">for</span> <span class="n">loop</span> <span class="ow">in</span> <span class="n">loops</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">fileName</span><span class="si">}</span><span class="s2">: expected loops of at least 3 vertices 'y, z'."</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">loops</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

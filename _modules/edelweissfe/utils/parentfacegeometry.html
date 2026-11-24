@@ -165,6 +165,8 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.trianglequadrature</span><span class="w"> </span><span class="kn">import</span> <span class="n">TRIANGLE_RULES_BY_POINTS</span>
+
 <span class="sd">"""</span>
 <span class="sd">Parametric geometry of a *parent face*: the element face a contact facet was cut from, together</span>
 <span class="sd">with its own (possibly quadratic) shape functions and the quadrature rules needed to integrate</span>
@@ -265,45 +267,6 @@
 
 
 
-<span class="c1">#: Barycentric quadrature rules on a triangle, keyed by point count: (points, weights). The weights</span>
-<span class="c1">#: sum to one, so an integral is ``facetMeasure * sum(w_q * f(b_q))``. 1 point is exact to degree 1,</span>
-<span class="c1">#: 3 points to degree 2, 6 points to degree 4 (Dunavant).</span>
-<span class="n">_TRIANGLE_RULES</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="mi">1</span><span class="p">:</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">]]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">])),</span>
-    <span class="mi">3</span><span class="p">:</span> <span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="p">[</span><span class="mf">2.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">],</span>
-                <span class="p">[</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">2.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">],</span>
-                <span class="p">[</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">6.0</span><span class="p">,</span> <span class="mf">2.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">],</span>
-            <span class="p">]</span>
-        <span class="p">),</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">3.0</span><span class="p">]),</span>
-    <span class="p">),</span>
-    <span class="mi">6</span><span class="p">:</span> <span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="p">[</span><span class="mf">0.816847572980459</span><span class="p">,</span> <span class="mf">0.091576213509771</span><span class="p">,</span> <span class="mf">0.091576213509771</span><span class="p">],</span>
-                <span class="p">[</span><span class="mf">0.091576213509771</span><span class="p">,</span> <span class="mf">0.816847572980459</span><span class="p">,</span> <span class="mf">0.091576213509771</span><span class="p">],</span>
-                <span class="p">[</span><span class="mf">0.091576213509771</span><span class="p">,</span> <span class="mf">0.091576213509771</span><span class="p">,</span> <span class="mf">0.816847572980459</span><span class="p">],</span>
-                <span class="p">[</span><span class="mf">0.108103018168070</span><span class="p">,</span> <span class="mf">0.445948490915965</span><span class="p">,</span> <span class="mf">0.445948490915965</span><span class="p">],</span>
-                <span class="p">[</span><span class="mf">0.445948490915965</span><span class="p">,</span> <span class="mf">0.108103018168070</span><span class="p">,</span> <span class="mf">0.445948490915965</span><span class="p">],</span>
-                <span class="p">[</span><span class="mf">0.445948490915965</span><span class="p">,</span> <span class="mf">0.445948490915965</span><span class="p">,</span> <span class="mf">0.108103018168070</span><span class="p">],</span>
-            <span class="p">]</span>
-        <span class="p">),</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="mf">0.109951743655322</span><span class="p">,</span>
-                <span class="mf">0.109951743655322</span><span class="p">,</span>
-                <span class="mf">0.109951743655322</span><span class="p">,</span>
-                <span class="mf">0.223381589678011</span><span class="p">,</span>
-                <span class="mf">0.223381589678011</span><span class="p">,</span>
-                <span class="mf">0.223381589678011</span><span class="p">,</span>
-            <span class="p">]</span>
-        <span class="p">),</span>
-    <span class="p">),</span>
-<span class="p">}</span>
-
 <span class="c1">#: Gauss-Legendre rules on a Line2 facet, in the facet's own barycentric coordinates, keyed by point</span>
 <span class="c1">#: count. Weights sum to one, as for the triangle rules. Exact to degree 2n - 1.</span>
 <span class="n">_LINE_RULES</span> <span class="o">=</span> <span class="p">{}</span>
@@ -334,7 +297,8 @@
 <span class="sd">        one -- so an integral over the facet is ``facetMeasure * sum(weights * f(points))``.</span>
 <span class="sd">    """</span>
 
-    <span class="n">rules</span> <span class="o">=</span> <span class="n">_TRIANGLE_RULES</span> <span class="k">if</span> <span class="n">nFacetNodes</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="n">_LINE_RULES</span>
+    <span class="c1"># the triangle rules (barycentric, weights summing to one) come from edelweissfe.utils.trianglequadrature</span>
+    <span class="n">rules</span> <span class="o">=</span> <span class="n">TRIANGLE_RULES_BY_POINTS</span> <span class="k">if</span> <span class="n">nFacetNodes</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="n">_LINE_RULES</span>
     <span class="k">if</span> <span class="n">nPoints</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">rules</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"facetQuadratureRule: no </span><span class="si">{</span><span class="n">nPoints</span><span class="si">}</span><span class="s2">-point rule for a </span><span class="si">{</span><span class="n">nFacetNodes</span><span class="si">}</span><span class="s2">-node facet. "</span>
