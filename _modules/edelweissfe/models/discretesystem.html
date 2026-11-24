@@ -712,11 +712,20 @@
         <span class="n">lumpedMass</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">forEachChunk</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="n">weightsOfTheBound</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""A bound of the stable time increment of the explicit scheme for the entities that carry their own inertia</span>
 <span class="sd">        (:attr:`entitiesWithOwnInertia`) at their current configuration. A property of their assembled system, not of</span>
 <span class="sd">        one entity: an entity's stiffness may couple nodes at which its own lumped mass vanishes. ``NED`` takes the</span>
 <span class="sd">        smaller of it and the elements' critical time step.</span>
+
+<span class="sd">        A bound of the largest eigenvalue of a nonnegative matrix :math:`\\boldsymbol{A}` -- here the absolute value of</span>
+<span class="sd">        the mass-scaled stiffness -- is the Collatz-Wielandt bound :math:`\\rho(\\boldsymbol{A}) \\le \\max_i</span>
+<span class="sd">        (\\boldsymbol{A}\\boldsymbol{w})_i / w_i`, which holds for every positive weight vector :math:`\\boldsymbol{w}`</span>
+<span class="sd">        and is exact for the Perron vector. ``NED`` may carry the weights from one bound to the next</span>
+<span class="sd">        (``carry-stable-increment-weights``): each bound then takes the weights the last one left, and leaves</span>
+<span class="sd">        :math:`\\boldsymbol{A}\\boldsymbol{w}` for the next, one step of the power iteration per bound. Weights of</span>
+<span class="sd">        zero start the iteration anew, from the bound's own start weights.</span>
 
 <span class="sd">        A finite element model has no such entity: None.</span>
 
@@ -729,6 +738,9 @@
 <span class="sd">            Their lumped damping, likewise (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`).</span>
 <span class="sd">        forEachChunk</span>
 <span class="sd">            The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.</span>
+<span class="sd">        weightsOfTheBound</span>
+<span class="sd">            The weights the last bound left, a vector of the numbering, zero where a degree of freedom has none yet;</span>
+<span class="sd">            replaced in place by the weights for the next bound. None for the bound with its own start weights alone.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>

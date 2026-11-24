@@ -7459,9 +7459,20 @@ more; it is what the material point method does. The nodes of the elements are n
 entities’ assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever
 the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every
 <code class="docutils literal notranslate"><span class="pre">stable-increment-frequency</span></code> increments, and lowers the time increment whenever it falls below it (or sets it, with
-<code class="docutils literal notranslate"><span class="pre">follow-critical-time-step</span></code>, see <a class="reference internal" href="#ned-time-increment-lowered-or-followed"><span class="std std-ref">The time increment: lowered only, or followed</span></a>). The first
-increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they
-evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.
+<code class="docutils literal notranslate"><span class="pre">follow-critical-time-step</span></code>, see <a class="reference internal" href="#ned-time-increment-lowered-or-followed"><span class="std std-ref">The time increment: lowered only, or followed</span></a>). The bound is a Collatz-Wielandt bound
+of the largest eigenvalue of the absolute value of the entities’ mass-scaled stiffness, from weights constant per field;
+with <code class="docutils literal notranslate"><span class="pre">carry-stable-increment-weights</span></code>, <code class="docutils literal notranslate"><span class="pre">NED</span></code> keeps the weights a bound leaves and hands them to the next, so that
+every bound takes one more step of the power iteration towards the Perron vector, where the bound is exact. Any positive
+weights give an upper bound of the eigenvalue, but weights refined at another configuration can bound it less tightly
+than the weights constant per field when the stiffness changed faster than they followed: a bound with carried weights
+below the one they started from starts them anew, and the larger of the two is taken. Every bound taken is thus at least
+the one the weights started from. Lowered only, the increment therefore never falls below the smallest bound with
+weights constant per field of the step; followed, it can fall below the bound without carried weights of the same
+configuration, down to the one the weights started from. The weights start anew – constant per field – also with
+every numbering (the nodes they belong to may have changed) and every step (a material property may have changed), and
+after a resume: they are not part of the checkpoint. The first increment of a step must be the zero increment: in it,
+the entities take an increment of zero length, from which they evaluate the force, the inertia, the damping and the
+critical time step of the configuration the step starts from.
 Where the model holds the motion of their nodes
 (<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion" title="edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion"><code class="xref py py-meth docutils literal notranslate"><span class="pre">carriersOfTheMotion()</span></code></a>) – after a step of this solver, or of
 <code class="docutils literal notranslate"><span class="pre">NID</span></code> integrating the inertia at the nodes –, the step continues it as at the nodes of elements, from their velocity
@@ -8351,7 +8362,7 @@ checkpointed one, since the checkpointed velocity already carries the half-step 
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearexplicitdynamic.NEDSchema">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.solvers.nonlinearexplicitdynamic.</span></span><span class="sig-name descname"><span class="pre">NEDSchema</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">courantNumber</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputFrequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topologyCheckFrequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contactUpdateFrequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expectSecondOrderFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expectFirstOrderFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reportPerformance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lumpedQuantityConservationTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projectVelocityEveryIncrement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stableIncrementFrequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">followCriticalTimeStep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearexplicitdynamic.html#NEDSchema"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NEDSchema" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.solvers.nonlinearexplicitdynamic.</span></span><span class="sig-name descname"><span class="pre">NEDSchema</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">courantNumber</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputFrequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">topologyCheckFrequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contactUpdateFrequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expectSecondOrderFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expectFirstOrderFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reportPerformance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lumpedQuantityConservationTolerance</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projectVelocityEveryIncrement</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stableIncrementFrequency</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">followCriticalTimeStep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">carryStableIncrementWeights</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearexplicitdynamic.html#NEDSchema"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NEDSchema" title="Link to this definition"></a></dt>
 <dd><p>The options of the <code class="docutils literal notranslate"><span class="pre">*solver</span></code> datalines and of an <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> block routed to this
 solver, owned by this module and never mutated from outside it.</p>
 <p>Mirrors <code class="xref py py-attr docutils literal notranslate"><span class="pre">NED.SolverSpecificOptions</span></code> one-for-one; the plain <code class="docutils literal notranslate"><span class="pre">self.options</span></code> dict remains the actual
@@ -8388,6 +8399,7 @@ Omitted – as in every deck that predates them – they assert nothing at all.<
 <li><p><strong>projectVelocityEveryIncrement</strong> (<em>bool</em>)</p></li>
 <li><p><strong>stableIncrementFrequency</strong> (<em>int</em><em> | </em><em>None</em>)</p></li>
 <li><p><strong>followCriticalTimeStep</strong> (<em>bool</em>)</p></li>
+<li><p><strong>carryStableIncrementWeights</strong> (<em>bool</em>)</p></li>
 </ul>
 </dd>
 </dl>
@@ -8446,6 +8458,10 @@ Omitted – as in every deck that predates them – they assert nothing at all.<
 <td><p>bool, default=False</p></td>
 <td><p>Let the time increment follow the critical time step up as well as down, at most the step’s maxInc, each time the critical time step is taken; off by default: lowered only, never raised within a step. See ‘The time increment: lowered only, or followed’ in the documentation of NED.</p></td>
 </tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">carry-stable-increment-weights</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>Carry the weights of the bound of the stable time increment of the entities that carry their own inertia (the particles of a meshfree model) from one bound to the next, and refine them by one Collatz-Wielandt step each time: the bound tightens towards the spectral radius it bounds over a few bounds, in the pass the bound takes anyway. A bound below the one the weights started from (with weights constant per field) starts them anew, and so do every numbering and every step, and a resume.</p></td>
+</tr>
 </tbody>
 </table>
 <section id="contact-searches-during-a-step">
@@ -8471,7 +8487,10 @@ nodes, a body of particles from the velocity of its particles. The particles’ 
 so a nonlocal field of gradient-enhanced particles is integrated by its own scheme. Their critical time step enters the
 critical time step with the elements’; it is bounded in the zero increment, whenever the particles couple other nodes
 (not when only a contact is paired anew), and every <code class="docutils literal notranslate"><span class="pre">stable-increment-frequency</span></code> increments (0 switches the bound
-off). With
+off). With <code class="docutils literal notranslate"><span class="pre">carry-stable-increment-weights</span></code>, every bound starts from the weights the last one left and refines them
+by one step of the power iteration, which tightens it over a few bounds at no extra cost; a bound below the one the
+weights started from starts them anew, so an increment that is lowered only never falls below the smallest bound
+without them (see “Entities that carry their own inertia” above). With
 <code class="docutils literal notranslate"><span class="pre">project-velocity-every-increment</span></code>, the velocity of the particles’ nodes is projected from their momentum in every
 increment.</p>
 </section>
@@ -8762,6 +8781,10 @@ Called by <code class="xref py py-meth docutils literal notranslate"><span class
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">follow-critical-time-step</span></code></td>
 <td><p>bool, default=False</p></td>
 <td><p>Let the time increment follow the critical time step up as well as down, at most the step’s maxInc, each time the critical time step is taken; off by default: lowered only, never raised within a step. See ‘The time increment: lowered only, or followed’ in the documentation of NED.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">carry-stable-increment-weights</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>Carry the weights of the bound of the stable time increment of the entities that carry their own inertia (the particles of a meshfree model) from one bound to the next, and refine them by one Collatz-Wielandt step each time: the bound tightens towards the spectral radius it bounds over a few bounds, in the pass the bound takes anyway. A bound below the one the weights started from (with weights constant per field) starts them anew, and so do every numbering and every step, and a resume.</p></td>
 </tr>
 </tbody>
 </table>

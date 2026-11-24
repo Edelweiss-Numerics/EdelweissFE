@@ -296,9 +296,20 @@
 <span class="sd">entities' assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever</span>
 <span class="sd">the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every</span>
 <span class="sd">``stable-increment-frequency`` increments, and lowers the time increment whenever it falls below it (or sets it, with</span>
-<span class="sd">``follow-critical-time-step``, see :ref:`ned-time-increment-lowered-or-followed`). The first</span>
-<span class="sd">increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which they</span>
-<span class="sd">evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.</span>
+<span class="sd">``follow-critical-time-step``, see :ref:`ned-time-increment-lowered-or-followed`). The bound is a Collatz-Wielandt bound</span>
+<span class="sd">of the largest eigenvalue of the absolute value of the entities' mass-scaled stiffness, from weights constant per field;</span>
+<span class="sd">with ``carry-stable-increment-weights``, ``NED`` keeps the weights a bound leaves and hands them to the next, so that</span>
+<span class="sd">every bound takes one more step of the power iteration towards the Perron vector, where the bound is exact. Any positive</span>
+<span class="sd">weights give an upper bound of the eigenvalue, but weights refined at another configuration can bound it less tightly</span>
+<span class="sd">than the weights constant per field when the stiffness changed faster than they followed: a bound with carried weights</span>
+<span class="sd">below the one they started from starts them anew, and the larger of the two is taken. Every bound taken is thus at least</span>
+<span class="sd">the one the weights started from. Lowered only, the increment therefore never falls below the smallest bound with</span>
+<span class="sd">weights constant per field of the step; followed, it can fall below the bound without carried weights of the same</span>
+<span class="sd">configuration, down to the one the weights started from. The weights start anew -- constant per field -- also with</span>
+<span class="sd">every numbering (the nodes they belong to may have changed) and every step (a material property may have changed), and</span>
+<span class="sd">after a resume: they are not part of the checkpoint. The first increment of a step must be the zero increment: in it,</span>
+<span class="sd">the entities take an increment of zero length, from which they evaluate the force, the inertia, the damping and the</span>
+<span class="sd">critical time step of the configuration the step starts from.</span>
 <span class="sd">Where the model holds the motion of their nodes</span>
 <span class="sd">(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`) -- after a step of this solver, or of</span>
 <span class="sd">``NID`` integrating the inertia at the nodes --, the step continues it as at the nodes of elements, from their velocity</span>
@@ -582,6 +593,18 @@
         <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
         <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">optionName</span><span class="o">=</span><span class="s2">"follow-critical-time-step"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">carryStableIncrementWeights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Carry the weights of the bound of the stable time increment of the entities that carry their own inertia "</span>
+            <span class="s2">"(the particles of a meshfree model) from one bound to the next, and refine them by one Collatz-Wielandt "</span>
+            <span class="s2">"step each time: the bound tightens towards the spectral radius it bounds over a few bounds, in the pass "</span>
+            <span class="s2">"the bound takes anyway. A bound below the one the weights started from (with weights constant per field) "</span>
+            <span class="s2">"starts them anew, and so do every numbering and every step, and a resume."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">optionName</span><span class="o">=</span><span class="s2">"carry-stable-increment-weights"</span><span class="p">,</span>
     <span class="p">)</span></div>
 
 
@@ -619,6 +642,7 @@
         <span class="s2">"project-velocity-every-increment"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
         <span class="s2">"stable-increment-frequency"</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
         <span class="s2">"follow-critical-time-step"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"carry-stable-increment-weights"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
         <span class="c1"># Lists, so _updateOptions appends the comma-separated items. Empty means "assert nothing".</span>
         <span class="s2">"expect-second-order-fields"</span><span class="p">:</span> <span class="p">[],</span>
         <span class="s2">"expect-first-order-fields"</span><span class="p">:</span> <span class="p">[],</span>
@@ -688,6 +712,14 @@
         <span class="c1">#: ``stable-increment-frequency`` increments), unscaled; infinite where there is none.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="c1">#: With ``carry-stable-increment-weights``, the weights of the bound of the stable time increment of the</span>
+        <span class="c1">#: entities, a vector of the numbering, refined by every bound and handed to the next</span>
+        <span class="c1">#: (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`):</span>
+        <span class="c1">#: zero, i.e. not yet weighted, for a new numbering and at the start of every step; None without the option.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: With ``carry-stable-increment-weights``, the stable time increment of the bound the weights started from, the</span>
+        <span class="c1">#: first after they were set to zero, with weights constant per field.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
         <span class="c1">#: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_internalEnergy</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="c1">#: The operators of the explicit update, arrays of the length of the numbering, assembled by</span>
@@ -792,6 +824,8 @@
         <span class="c1"># material property takes effect at the next step.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheClassification</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheCriticalTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_conservationCheck</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warnedAboutMissingInternalEnergy</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warnedAboutMissingExternalWork</span> <span class="o">=</span> <span class="kc">False</span>
@@ -1202,9 +1236,7 @@
         <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementIsDue</span><span class="p">(</span><span class="n">timeStep</span><span class="p">):</span>
             <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"stable time increment of entities"</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">stableTimeIncrementOfEntitiesWithOwnInertia</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_inertiaOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span>
-                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boundTheStableTimeIncrementOfEntities</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_enforceTheCriticalTimeStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s2">"The entities that carry their own inertia"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">+=</span> <span class="n">internalForceOfEntities</span>
@@ -1308,6 +1340,47 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_inertiaOfEntities</span> <span class="o">=</span> <span class="n">inertiaOfEntities</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span> <span class="o">=</span> <span class="n">dampingOfEntities</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_deriveLumpedOperators</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_boundTheStableTimeIncrementOfEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The bound of the stable time increment of the entities that carry their own inertia</span>
+<span class="sd">        (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`), from</span>
+<span class="sd">        the lumped inertia and damping just assembled.</span>
+
+<span class="sd">        With ``carry-stable-increment-weights``, the bound takes the weights the last one left, and leaves the weights</span>
+<span class="sd">        for the next. Any positive weights bound the stable time increment, but weights refined at another</span>
+<span class="sd">        configuration can bound it less tightly than the weights constant per field they started from when the</span>
+<span class="sd">        stiffness changed faster than the weights followed, e.g. where entities reach nodes whose weights the power</span>
+<span class="sd">        iteration has made small. So a bound with carried weights below the bound the weights started from starts them</span>
+<span class="sd">        anew: the bound is taken again from the weights constant per field, and the larger of the two is the bound.</span>
+<span class="sd">        Every bound is thus at least the one the weights started from: lowered only, the increment never falls below</span>
+<span class="sd">        the smallest bound with weights constant per field of the step; followed (``follow-critical-time-step``), it can</span>
+<span class="sd">        fall below the bound without carried weights of the same configuration, down to the one the weights started</span>
+<span class="sd">        from.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float | None</span>
+<span class="sd">            The stable time increment; None in a model without such entities.</span>
+<span class="sd">        """</span>
+
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">bound</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">stableTimeIncrementOfEntitiesWithOwnInertia</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_inertiaOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">,</span> <span class="n">weights</span>
+            <span class="p">)</span>
+
+        <span class="n">startsTheWeights</span> <span class="o">=</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">weights</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+        <span class="n">stable</span> <span class="o">=</span> <span class="n">bound</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">stable</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">stable</span>
+        <span class="k">if</span> <span class="n">startsTheWeights</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">stable</span>
+        <span class="k">elif</span> <span class="n">stable</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span><span class="p">:</span>
+            <span class="n">weights</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">bound</span><span class="p">()</span>
+            <span class="n">stable</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">stable</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">stable</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_stableTimeIncrementIsDue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Whether the stable time increment of the entities that carry their own inertia is bounded anew after this</span>
@@ -2189,6 +2262,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfNetForce</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">digest</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"carry-stable-increment-weights"</span><span class="p">]</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
 
         <span class="c1"># After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new</span>
         <span class="c1"># nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).</span>
