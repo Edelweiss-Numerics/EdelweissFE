@@ -43,6 +43,9 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
   the increment that follows the critical time step is at most the step's ``maxInc``, whatever its ``startInc``,
 * a critical time step that is not a number is refused, whether the increment follows it or not, and without any
   bound the step keeps its own increment, also when it follows the critical time step,
+* with ``carry-stable-increment-weights``, the weights of the bound are handed from one bound to the next, zero at the
+  first bound of a step; without it, the bound gets none; carried weights that give a bound below the one they started
+  from start anew, and the increment is not lowered by them,
 * a field of the entities that gets neither an inertia nor a damping is refused, and so are a damping of the entities
   that is negative or not finite, and an inertia that is not finite,
 * the rate of a first-order field of the entities (dashpots on springs) is published in every increment, also when the
@@ -151,8 +154,14 @@ class SystemOfMassesOnSprings(DiscreteSystem):
         self.model.calls.append("damping")
         return self._onTheNodes(lambda mass: np.full(mass.nDof, mass.damping))
 
-    def stableTimeIncrementOfEntitiesWithOwnInertia(self, lumpedMass, lumpedDamping, forEachChunk):
+    def stableTimeIncrementOfEntitiesWithOwnInertia(
+        self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheBound=None
+    ):
         self.model.calls.append("bound")
+        # the weights it was handed, and one step of a stand-in refinement: every weight grows by one per bound
+        self.model.weightsOfTheBounds.append(None if weightsOfTheBound is None else np.array(weightsOfTheBound))
+        if weightsOfTheBound is not None:
+            weightsOfTheBound += 1.0
         stiffness = self.model.springStiffness()
 
         # each entity on its spring alone, from the mass and the damping the solver has just assembled: 2 / omega for a
@@ -186,6 +195,8 @@ class ModelOfMassesOnSprings(FEModel):
     def __init__(self, mass: float = MASS, damping: float = 0.0):
         super().__init__(2)
         self.calls = []
+        #: The weights every bound was handed (None without ``carry-stable-increment-weights``).
+        self.weightsOfTheBounds = []
         #: The Newmark parameters the solver gave last; those an implicit dynamic step would have left.
         self.newmarkParametersOfEntities = (0.25, 0.5)
         for number, velocity in enumerate(VELOCITIES, start=1):
@@ -239,7 +250,9 @@ class SystemOfMassesOnSpringsWithoutABound(SystemOfMassesOnSprings):
     """Masses on springs whose bound of the stable time increment is not a number, as from a stiffness or a mass that
     is not finite."""
 
-    def stableTimeIncrementOfEntitiesWithOwnInertia(self, lumpedMass, lumpedDamping, forEachChunk):
+    def stableTimeIncrementOfEntitiesWithOwnInertia(
+        self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheBound=None
+    ):
         return np.nan
 
 
@@ -248,6 +261,28 @@ class ModelOfMassesOnSpringsWithoutABound(ModelOfMassesOnSprings):
 
     def buildDiscreteSystem(self) -> SystemOfMassesOnSpringsWithoutABound:
         return SystemOfMassesOnSpringsWithoutABound(self, super().buildDiscreteSystem().locations)
+
+
+class SystemWhoseCarriedWeightsFallBehind(SystemOfMassesOnSprings):
+    """The masses on springs with a stand-in of carried weights that fall behind the stiffness: the bound the weights
+    start from (weights zero) is that of the springs, the next one (weights one) is larger, the one after it (weights
+    two) below the start."""
+
+    def stableTimeIncrementOfEntitiesWithOwnInertia(
+        self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheBound=None
+    ):
+        carried = float(np.max(weightsOfTheBound))
+        stable = super().stableTimeIncrementOfEntitiesWithOwnInertia(
+            lumpedMass, lumpedDamping, forEachChunk, weightsOfTheBound
+        )
+        return {0.0: 1.0, 1.0: 1.5, 2.0: 0.5}[carried] * stable
+
+
+class ModelWhoseCarriedWeightsFallBehind(ModelOfMassesOnSprings):
+    """The masses on springs, answering with :class:`SystemWhoseCarriedWeightsFallBehind`."""
+
+    def buildDiscreteSystem(self) -> SystemWhoseCarriedWeightsFallBehind:
+        return SystemWhoseCarriedWeightsFallBehind(self, super().buildDiscreteSystem().locations)
 
 
 class TheSecondMassFollowsTheFirst(MultiPointConstraintBase):
@@ -420,6 +455,43 @@ def test_without_a_bound_the_step_keeps_its_own_increment(follow):
 
     timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])[1:-1]
     np.testing.assert_allclose(timeIncrements, 0.1 * STABLE_TIME_INCREMENT, rtol=1e-12)
+
+
+def test_without_carried_weights_the_bound_gets_none():
+    model, _ = _run(10 * STABLE_TIME_INCREMENT, **{"stable-increment-frequency": 1})
+
+    assert model.weightsOfTheBounds and all(weights is None for weights in model.weightsOfTheBounds)
+
+
+def test_carried_weights_are_handed_from_bound_to_bound_starting_at_zero():
+    """With ``carry-stable-increment-weights``, every bound gets the weights the last one left, a vector of the
+    numbering; the first bound of the step gets zeros: no weights yet."""
+
+    model, _ = _run(
+        10 * STABLE_TIME_INCREMENT, **{"stable-increment-frequency": 1, "carry-stable-increment-weights": True}
+    )
+
+    for number, weights in enumerate(model.weightsOfTheBounds):
+        np.testing.assert_array_equal(weights, np.full(len(weights), float(number)))
+
+
+def test_carried_weights_that_give_a_bound_below_their_start_start_anew():
+    """The third bound of the weights (weights two) is below the bound they started from: ``NED`` starts them anew and
+    takes the bound again from zero weights, so the weights handed cycle through zero, one, two, and the increment is
+    never lowered below the start's."""
+
+    courantNumber = 0.5
+    model, solver = _run(
+        10 * STABLE_TIME_INCREMENT,
+        ModelWhoseCarriedWeightsFallBehind(),
+        **{"stable-increment-frequency": 1, "carry-stable-increment-weights": True, "courant-number": courantNumber},
+    )
+
+    handed = [float(np.max(weights)) for weights in model.weightsOfTheBounds]
+    assert len(handed) > 6
+    assert handed == [float(number % 3) for number in range(len(handed))]
+    timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])
+    np.testing.assert_allclose(timeIncrements[1:-1], courantNumber * STABLE_TIME_INCREMENT, rtol=1e-14)
 
 
 @pytest.mark.parametrize("courantNumber", [0.8, 0.05])
