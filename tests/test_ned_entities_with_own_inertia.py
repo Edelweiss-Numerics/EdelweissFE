@@ -39,6 +39,10 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
 * the motion starts from the velocity projected from the momentum, and the leapfrog then is the central difference
   recursion of the oscillator, to round-off; its period is the analytic one, to second order in the increment,
 * the bound of the entities' stable time increment sets the increment of a step that asks for a larger one,
+* after a brief stiff event, the increment comes back with ``follow-critical-time-step`` and stays low without it, and
+  the increment that follows the critical time step is at most the step's ``maxInc``, whatever its ``startInc``,
+* a critical time step that is not a number is refused, whether the increment follows it or not, and without any
+  bound the step keeps its own increment, also when it follows the critical time step,
 * with ``carry-stable-increment-weights``, the weights of the bound are handed from one bound to the next, zero at the
   first bound of a step; without it, the bound gets none,
 * a field of the entities that gets neither an inertia nor a damping is refused, and so are a damping of the entities
@@ -81,6 +85,10 @@ STABLE_TIME_INCREMENT = 2.0 / OMEGA
 #: of a dashpot on a spring is stable up to the increment 2 c / k.
 DAMPING = 20.0
 DISPLACEMENTS = (0.02, -0.05)
+#: The brief stiff event of :class:`ModelOfMassesOnSpringsWithAStiffEvent`: when the springs are stiffer, and by how
+#: much. Its ends lie between the start times of the increments taken at the courant number 0.5.
+STIFF_EVENT_START, STIFF_EVENT_END = 10.3 * STABLE_TIME_INCREMENT, 12.25 * STABLE_TIME_INCREMENT
+STIFF_EVENT_FACTOR = 25.0
 
 
 class MassOnASpring(PointMass):
@@ -132,7 +140,8 @@ class SystemOfMassesOnSprings(DiscreteSystem):
         self.model.calls.append("force and momentum")
         # the residual contribution of the spring, the negative of the force it exerts on the node, with the sign of
         # every element and constraint of EdelweissFE
-        return self._onTheNodes(lambda mass: STIFFNESS * mass.displacement), self._onTheNodes(
+        stiffness = self.model.springStiffness()
+        return self._onTheNodes(lambda mass: stiffness * mass.displacement), self._onTheNodes(
             lambda mass: mass.mass * mass.velocity
         )
 
@@ -152,12 +161,13 @@ class SystemOfMassesOnSprings(DiscreteSystem):
         self.model.weightsOfTheBounds.append(None if weightsOfTheBound is None else np.array(weightsOfTheBound))
         if weightsOfTheBound is not None:
             weightsOfTheBound += 1.0
+        stiffness = self.model.springStiffness()
 
         # each entity on its spring alone, from the mass and the damping the solver has just assembled: 2 / omega for a
         # mass, 2 c / k for a dashpot without a mass
         def boundOf(entity) -> float:
             mass, damping = lumpedMass[entity][0], lumpedDamping[entity][0]
-            return 2.0 * np.sqrt(mass / STIFFNESS) if mass > 0.0 else 2.0 * damping / STIFFNESS
+            return 2.0 * np.sqrt(mass / stiffness) if mass > 0.0 else 2.0 * damping / stiffness
 
         return min(boundOf(entity) for entity in self.entitiesWithOwnInertia)
 
@@ -198,6 +208,11 @@ class ModelOfMassesOnSprings(FEModel):
     def buildDiscreteSystem(self) -> SystemOfMassesOnSprings:
         return SystemOfMassesOnSprings(self, super().buildDiscreteSystem().locations)
 
+    def springStiffness(self) -> float:
+        """The stiffness of every spring now."""
+
+        return STIFFNESS
+
     def setNewmarkParametersOfEntities(self, beta: float, gamma: float):
         self.newmarkParametersOfEntities = (beta, gamma)
 
@@ -218,6 +233,33 @@ class ModelOfDashpotsOnSprings(ModelOfMassesOnSprings):
         super().__init__(mass=0.0, damping=DAMPING)
         for dashpot, displacement in zip(self.elements.values(), DISPLACEMENTS):
             dashpot.displacement[0] = displacement
+
+
+class ModelOfMassesOnSpringsWithAStiffEvent(ModelOfMassesOnSprings):
+    """Masses on springs that are stiffer for a while, from :data:`STIFF_EVENT_START` to :data:`STIFF_EVENT_END`, as a
+    particle that is briefly compressed: the bound of the entities' stable time increment falls by the square root of
+    :data:`STIFF_EVENT_FACTOR` meanwhile, and comes back after the event."""
+
+    def springStiffness(self) -> float:
+        stiffer = STIFF_EVENT_START <= self.time < STIFF_EVENT_END
+        return STIFFNESS * (STIFF_EVENT_FACTOR if stiffer else 1.0)
+
+
+class SystemOfMassesOnSpringsWithoutABound(SystemOfMassesOnSprings):
+    """Masses on springs whose bound of the stable time increment is not a number, as from a stiffness or a mass that
+    is not finite."""
+
+    def stableTimeIncrementOfEntitiesWithOwnInertia(
+        self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheBound=None
+    ):
+        return np.nan
+
+
+class ModelOfMassesOnSpringsWithoutABound(ModelOfMassesOnSprings):
+    """Masses on springs whose bound of the stable time increment is not a number."""
+
+    def buildDiscreteSystem(self) -> SystemOfMassesOnSpringsWithoutABound:
+        return SystemOfMassesOnSpringsWithoutABound(self, super().buildDiscreteSystem().locations)
 
 
 class TheSecondMassFollowsTheFirst(MultiPointConstraintBase):
@@ -249,10 +291,10 @@ class _RecordingNED(NED):
 
 
 def _run(
-    stepLength: float, model: ModelOfMassesOnSprings = None, **options
+    stepLength: float, model: ModelOfMassesOnSprings = None, stepOptions: dict = None, **options
 ) -> tuple[ModelOfMassesOnSprings, _RecordingNED]:
-    """Run one explicit step of the given length, which asks for the whole step as its increment, on the given model
-    (by default the masses on springs)."""
+    """Run one explicit step of the given length, which asks for the whole step as its increment unless the options of
+    the step say otherwise, on the given model (by default the masses on springs), with the options of the solver."""
 
     journal = Journal(verbose=False)
     model = model or ModelOfMassesOnSprings()
@@ -275,6 +317,7 @@ def _run(
         StepActionCollection(),
         stepLength=stepLength,
         maxNumInc=100000,
+        **(stepOptions or {}),
     ).solve()
     fieldOutputController.finalizeJob()
 
@@ -306,6 +349,89 @@ def test_the_bound_of_the_entities_sets_the_increment_of_a_step_that_asks_for_mo
     timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])
     assert timeIncrements[0] == 0.0
     np.testing.assert_allclose(timeIncrements[1:-1], courantNumber * STABLE_TIME_INCREMENT, rtol=1e-14)
+
+
+@pytest.mark.parametrize("follow", [False, True])
+def test_after_a_brief_stiff_event_the_increment_comes_back_only_if_it_follows_the_critical_time_step(follow):
+    """The springs are stiffer for a while, and the bound of the entities, taken in every increment here, falls by a
+    factor of five meanwhile. The increment that starts in the event is the bound of the stiff springs times the courant
+    number. After the event, it is lowered only, and stays at the one of the event, by default; with
+    ``follow-critical-time-step``, it comes back to the one before the event with the first bound taken after it."""
+
+    courantNumber = 0.5
+    _, solver = _run(
+        30 * STABLE_TIME_INCREMENT,
+        model=ModelOfMassesOnSpringsWithAStiffEvent(),
+        **{"courant-number": courantNumber, "stable-increment-frequency": 1, "follow-critical-time-step": follow},
+    )
+
+    timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])[1:-1]  # without the zero
+    # increment, and the last one, which ends the step
+    startTimes = np.cumsum(timeIncrements) - timeIncrements
+    beforeTheEvent = startTimes < STIFF_EVENT_START
+    inTheEvent = (startTimes >= STIFF_EVENT_START) & (startTimes < STIFF_EVENT_END)
+    afterTheEvent = startTimes >= STIFF_EVENT_END
+    assert beforeTheEvent.any() and inTheEvent.any() and afterTheEvent.any()
+
+    soft = courantNumber * STABLE_TIME_INCREMENT
+    stiff = soft / np.sqrt(STIFF_EVENT_FACTOR)
+    np.testing.assert_allclose(timeIncrements[beforeTheEvent], soft, rtol=1e-14)
+    np.testing.assert_allclose(timeIncrements[inTheEvent], stiff, rtol=1e-14)
+    np.testing.assert_allclose(timeIncrements[afterTheEvent], soft if follow else stiff, rtol=1e-14)
+
+
+@pytest.mark.parametrize("follow", [False, True])
+def test_a_critical_time_step_that_is_not_a_number_is_refused(follow):
+    """A bound of the entities that is not a number fails every comparison: lowered only, it would be ignored silently;
+    followed, it would become the time increment. Either way, ``NED`` refuses it when it takes the critical time
+    step."""
+
+    with pytest.raises(ValueError, match="the critical time step is not a number"):
+        _run(
+            10 * STABLE_TIME_INCREMENT,
+            model=ModelOfMassesOnSpringsWithoutABound(),
+            **{"follow-critical-time-step": follow},
+        )
+
+
+@pytest.mark.parametrize(
+    "follow, maxInc, expectedTimeIncrement",
+    [(False, 0.05, 0.1), (True, 0.05, 0.5), (False, 1.0, 0.1), (True, 1.0, 0.8)],
+)
+def test_the_increment_that_follows_the_critical_time_step_is_at_most_the_steps_max_inc(
+    follow, maxInc, expectedTimeIncrement
+):
+    """The step asks for a tenth of the stable time increment to start with (``startInc``), and for at most half of it
+    or ten times it (``maxInc``); the critical time step is 0.8 of it. Lowered only, the increment stays the step's own,
+    the smaller; following the critical time step, it is the critical time step, at most ``maxInc``: the small
+    ``startInc`` is raised to the critical time step itself when ``maxInc`` allows it."""
+
+    stepLength = 10 * STABLE_TIME_INCREMENT
+    _, solver = _run(
+        stepLength,
+        stepOptions={"startInc": 0.01, "maxInc": maxInc},
+        **{"courant-number": 0.8, "follow-critical-time-step": follow},
+    )
+
+    timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])[1:-1]
+    np.testing.assert_allclose(timeIncrements, expectedTimeIncrement * STABLE_TIME_INCREMENT, rtol=1e-12)
+
+
+@pytest.mark.parametrize("follow", [False, True])
+def test_without_a_bound_the_step_keeps_its_own_increment(follow):
+    """The masses report no critical time step, and with ``stable-increment-frequency=0`` the entities are never
+    bounded: the critical time step stays infinite, there is nothing to follow, and the step keeps its own increment
+    (``startInc``), not its ``maxInc``."""
+
+    stepLength = 10 * STABLE_TIME_INCREMENT
+    _, solver = _run(
+        stepLength,
+        stepOptions={"startInc": 0.01, "maxInc": 0.05},
+        **{"stable-increment-frequency": 0, "follow-critical-time-step": follow},
+    )
+
+    timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])[1:-1]
+    np.testing.assert_allclose(timeIncrements, 0.1 * STABLE_TIME_INCREMENT, rtol=1e-12)
 
 
 def test_without_carried_weights_the_bound_gets_none():
