@@ -250,8 +250,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._buildFromSlaveSurface(slaveSurface)
 
         self.journal.message(
-            f"contact '{self.name}': {self.nPoints} points ({len(self.slave.facets)} slave facets x "
-            f"{self.nQuadraturePoints} quadrature points) against rigid body '{rigidBody.name}' "
+            f"contact '{self.name}': {self.slave.describe()} against rigid body '{rigidBody.name}' "
             f"({len(self._rigidTriangles)} triangles), type={self.type}",
             self.identification,
         )
@@ -282,29 +281,21 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         self.slave = ContactPointsOnSlaveSurface(slaveSurface, self.nQuadraturePoints, self.name)
 
-        parentNodeCounts = {len(nodes) for nodes in self.slave.parentNodes}
-        if len(parentNodeCounts) > 1:
-            raise ValueError(
-                f"Constraint '{self.name}': the slave surface '{self._slaveSurfaceSetName}' mixes parent "
-                f"faces with {sorted(parentNodeCounts)} nodes; a single element type is required."
-            )
-        self.nParentNodes = parentNodeCounts.pop() if parentNodeCounts else 0
-
         # Degrees of freedom: all parent-face nodes of each slave facet, facet by facet, then the RP.
         nFacets = len(self.slave.facets)
         self._nodes = [node for nodes in self.slave.parentNodes for node in nodes] + [self.rpNode]
         self._fields = [["displacement"]] * (len(self._nodes) - 1) + [["displacement", "rotation"]]
-        self.nSlaveDof = nFacets * self.nParentNodes * self.nDim
+        self.nSlaveDof = nFacets * self.slave.nParentNodes * self.nDim
         self._nDof = self.nSlaveDof + self.rpDofCount
-        self._slaveBlockSizes = [self.nParentNodes * self.nDim] * nFacets
+        self._slaveBlockSizes = [self.slave.nParentNodes * self.nDim] * nFacets
 
         # All contact points stacked, for the vectorized evaluation.
         self._shapeFunctions = (
-            np.concatenate(self.slave.shapeFunctions) if nFacets else np.zeros((0, self.nParentNodes))
+            np.concatenate(self.slave.shapeFunctions) if nFacets else np.zeros((0, self.slave.nParentNodes))
         )
         self._integrationWeights = np.concatenate(self.slave.integrationWeights) if nFacets else np.zeros(0)
         self._parentReferenceCoordinates = np.array(self.slave.parentReferenceCoordinates).reshape(
-            (nFacets, self.nParentNodes, self.nDim)
+            (nFacets, self.slave.nParentNodes, self.nDim)
         )
 
         # The frozen contact search result of each point. An unassigned point keeps a zero normal and
@@ -427,8 +418,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     def _searchLayout(self) -> dict[str, np.ndarray]:
         # The rigid body's triangles are fixed by its geometry file, so their number identifies them.
         return {
-            "slaveFacets": np.array([facet.elNumber for facet in self.slave.facets], dtype=np.int64),
-            "nQuadraturePoints": np.array([self.nQuadraturePoints], dtype=np.int64),
+            **self.slave.searchLayout(),
             "nRigidTriangles": np.array([len(self._rigidTriangles)], dtype=np.int64),
         }
 
@@ -461,7 +451,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def _slaveBlockOffsets(self) -> list[tuple[int, int]]:
         """The first local index and the size of each slave facet's block."""
-        m = self.nParentNodes * self.nDim
+        m = self.slave.nParentNodes * self.nDim
         return [(f * m, m) for f in range(len(self.slave.facets))]
 
     def computeKernels(
@@ -483,7 +473,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         nFacets, nQuadraturePoints, nDim = len(self.slave.facets), self.nQuadraturePoints, self.nDim
 
         # Current positions of the contact points on the curved slave parent faces.
-        slaveDisplacements = U_np[: self.nSlaveDof].reshape((nFacets, self.nParentNodes, nDim))
+        slaveDisplacements = U_np[: self.nSlaveDof].reshape((nFacets, self.slave.nParentNodes, nDim))
         parentCoordinates = self._parentReferenceCoordinates + slaveDisplacements
         pointCoordinates = np.einsum("pa,paj->pj", self._shapeFunctions, parentCoordinates[self.slave.pointFacet])
 

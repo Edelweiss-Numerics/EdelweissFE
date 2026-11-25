@@ -187,7 +187,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         g = \\bar{n} \\cdot \\left( N^s(\\xi_q) \\cdot x^s - N^m(\\xi_m) \\cdot x^m \\right) ,
 
     which is *linear* in the displacement DOFs, so the gradient
-    :math:`w = \\bar{n} \\otimes [N^s, -N^m]` is constant, the geometric Hessian vanishes
+    :math:`w = [N^s, -N^m] \\otimes \\bar{n}` is constant, the geometric Hessian vanishes
     identically, and the tangent :math:`\\mathrm{d}f_n/\\mathrm{d}g \\, w \\otimes w` is
     symmetric.
     Structurally this is the same algebra as the node-based constraint's frozen form, with that
@@ -285,8 +285,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.totalNormalForce = 0.0
 
         self.journal.message(
-            f"contact '{self.name}': {self.nPoints} points ({len(self.slave.facets)} slave facets x "
-            f"{self.nQuadraturePoints} quadrature points), {len(self.facetElements)} master facets, "
+            f"contact '{self.name}': {self.slave.describe()}, {len(self.facetElements)} master facets, "
             f"sliding={self.sliding}, type={self.type}",
             self.identification,
         )
@@ -313,7 +312,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         checkFacetsCarryParentFaces(self.facetElements, "master", self._masterSurfaceSetName, self.name)
 
         masterNodes = {node for facet in self.facetElements for node in facet.parentFaceNodes}
-        if not masterNodes.isdisjoint(self.slave.allParentNodes()):
+        if not masterNodes.isdisjoint(self.slave.finiteElementNodes()):
             raise ValueError(
                 f"Constraint '{self.name}': slave surface '{self._slaveSurfaceSetName}' and master "
                 f"surface '{self._masterSurfaceSetName}' share nodes -- self-contact is not "
@@ -341,7 +340,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._nDof = 0
 
         # Batched active-point arrays, rebuilt by every connectivity update; None means the
-        # per-point loop is used (no active points, or non-uniform parent-node counts).
+        # per-point loop is used (no active points, or master parent faces with different node counts).
         self._batched = None
         self._activePoints = np.zeros(0, dtype=int)
         self._blockSizes = None
@@ -480,8 +479,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def _searchLayout(self) -> dict[str, np.ndarray]:
         return {
-            "slaveFacets": np.array([facet.elNumber for facet in self.slave.facets], dtype=np.int64),
-            "nQuadraturePoints": np.array([self.nQuadraturePoints], dtype=np.int64),
+            **self.slave.searchLayout(),
             "masterFacets": np.array([facet.elNumber for facet in self.facetElements], dtype=np.int64),
         }
 
@@ -536,10 +534,12 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         at roughly half the wall clock of an explicit run. Batching lets the whole surface be
         evaluated in a fixed handful of array operations instead.
 
-        Only the *uniform* case is batched: every active point must share the same slave and master
-        parent-node counts, which holds whenever each surface is discretized with a single element
-        type (the ordinary case, and the pry-out's). Anything else falls back to the per-point loop,
-        which remains the reference implementation.
+        Only the *uniform* case is batched. The slave side is uniform by construction: its parent faces
+        are of one type (see :class:`ContactPointsOnSlaveSurface`). The master side is uniform when every
+        active point is assigned a master parent face with the same number of nodes, which holds whenever
+        the master surface is discretized with a single element type (the ordinary case, and the
+        pry-out's). A master of mixed parent faces falls back to the per-point loop, which remains the
+        reference implementation.
         """
 
         active = [p for p in range(self.nPoints) if self._assignedFacetIdx[p] is not None]
@@ -550,13 +550,12 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             self._batched = None
             return
 
-        slaveCounts = {len(self.slave.shapeFunctions[self.slave.pointFacet[p]][0]) for p in active}
         masterCounts = {len(self._frozenMasterShapeFunctions[p]) for p in active}
-        if len(slaveCounts) != 1 or len(masterCounts) != 1:
+        if len(masterCounts) != 1:
             self._batched = None
             return
 
-        nSlaveNodes, nMasterNodes = slaveCounts.pop(), masterCounts.pop()
+        nSlaveNodes, nMasterNodes = self.slave.nParentNodes, masterCounts.pop()
         nActive, nDim = len(active), self.nDim
 
         Ns = np.empty((nActive, nSlaveNodes))

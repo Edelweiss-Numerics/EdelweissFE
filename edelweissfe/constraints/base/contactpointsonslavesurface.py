@@ -36,7 +36,9 @@ distributed with the *parent* face's shape functions.
 """
 
 import numpy as np
+from scipy.sparse import csr_matrix
 
+from edelweissfe.constraints.base.contactpoints import ContactPoints
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.modelchange import ModelChange
 from edelweissfe.sets.elementset import ElementSet
@@ -87,7 +89,7 @@ def checkFacetsCarryParentFaces(facets: list, side: str, setName: str, constrain
         )
 
 
-class ContactPointsOnSlaveSurface:
+class ContactPointsOnSlaveSurface(ContactPoints):
     """The quadrature points of a slave surface, used as contact points.
 
     Each slave facet carries an ``nQuadraturePoints``-point rule. A point at facet-barycentric
@@ -97,7 +99,11 @@ class ContactPointsOnSlaveSurface:
     :math:`J_q = A_{\\text{facet}}^{\\text{ref}} w_q`. Its position follows the *curved* parent
     surface, :math:`x_q = N^s(\\xi_q) \\cdot x^s`.
 
-    The contact points are numbered by slave facet and, within a facet, by quadrature point.
+    The contact points are numbered by slave facet and, within a facet, by quadrature point. The faces of the slave
+    surface must be of one type (one number of parent face nodes), so that the located points are evaluated as one
+    array. A located point takes the nodes of its parent face into the block of the constraint, its own copy of them:
+    its interpolation vector is :math:`N^s(\\xi_q)` over them, and it moves with their total displacement, from its
+    origin in the reference configuration, :math:`N^s(\\xi_q) \\cdot X^s`.
 
     Parameters
     ----------
@@ -127,16 +133,13 @@ class ContactPointsOnSlaveSurface:
         The slave facet index of each contact point.
     pointQuadraturePoint : numpy.ndarray
         The quadrature point index of each contact point within its facet.
-    nPoints : int
-        The number of contact points.
-    surfaceNodes : list
-        The unique nodes of the slave facets, in the same first-encounter order the surface element
-        generator uses for its '<prefix>_nodes' node set -- so a fromExpression field output over
-        that set lines up with :meth:`nodalNormalForces`.
+    areas : numpy.ndarray
+        The integration weight of each contact point, see :attr:`integrationWeights`.
     """
 
     def __init__(self, slaveSurface: ElementSet, nQuadraturePoints: int, constraintName: str):
         self.setName = slaveSurface.name
+        self._constraintName = constraintName
         self.nQuadraturePoints = nQuadraturePoints
         self.facets = list(slaveSurface)
 
@@ -162,10 +165,54 @@ class ContactPointsOnSlaveSurface:
         self.pointQuadraturePoint = np.tile(np.arange(nQuadraturePoints), len(self.facets))
         self.nPoints = len(self.pointFacet)
 
-        self.surfaceNodes = list(dict.fromkeys(node for facet in self.facets for node in facet.nodes))
+        self._surfaceNodes = list(dict.fromkeys(node for facet in self.facets for node in facet.nodes))
 
-    def allParentNodes(self) -> set:
-        """The set of all parent face nodes of the slave surface."""
+        self.areas = np.concatenate(self.integrationWeights) if self.nPoints else np.zeros(0)
+
+        nodeCounts = {len(nodes) for nodes in self.parentNodes}
+        if len(nodeCounts) > 1:
+            raise ValueError(
+                f"Constraint '{constraintName}': the slave surface '{self.setName}' mixes parent faces with "
+                f"{sorted(nodeCounts)} nodes; a single element type is required, since the contact points of a "
+                "slave surface are evaluated as one array."
+            )
+        self.nDim = self.parentReferenceCoordinates[0].shape[1] if self.facets else 0
+        self.nParentNodes = nodeCounts.pop() if nodeCounts else 0
+        self.locatePoints(np.zeros(0, dtype=int))
+
+    @property
+    def surfaceNodes(self) -> list:
+        """The unique nodes of the slave facets, in the same first-encounter order the surface element generator uses
+        for its '<prefix>_nodes' node set -- so a fromExpression field output over that set lines up with
+        :meth:`nodalNormalForces`.
+
+        Returns
+        -------
+        list
+            The nodes.
+        """
+
+        return self._surfaceNodes
+
+    def describe(self) -> str:
+        """The number of points, slave facets and quadrature points per facet, for the journal.
+
+        Returns
+        -------
+        str
+            The description.
+        """
+
+        return f"{self.nPoints} points ({len(self.facets)} slave facets x {self.nQuadraturePoints} quadrature points)"
+
+    def finiteElementNodes(self) -> set:
+        """All parent face nodes of the slave surface.
+
+        Returns
+        -------
+        set
+            The nodes.
+        """
 
         return {node for nodes in self.parentNodes for node in nodes}
 
@@ -191,23 +238,6 @@ class ContactPointsOnSlaveSurface:
             coords[first : first + self.nQuadraturePoints] = self.shapeFunctions[f] @ currentCoords
         return coords
 
-    def normalPressures(self, normalForces: np.ndarray) -> np.ndarray:
-        """Convert the normal forces of the contact points into pressures (positive in compression).
-
-        Parameters
-        ----------
-        normalForces
-            The normal force of each contact point (negative in compression).
-
-        Returns
-        -------
-        numpy.ndarray
-            The normal pressure of each contact point.
-        """
-
-        weights = np.concatenate(self.integrationWeights) if self.nPoints else np.zeros(0)
-        return np.divide(-normalForces, weights, out=np.zeros_like(normalForces), where=weights > 0)
-
     def nodalNormalForces(self, normalForces: np.ndarray) -> np.ndarray:
         """Distribute the normal forces of the contact points to the slave surface nodes.
 
@@ -228,7 +258,7 @@ class ContactPointsOnSlaveSurface:
             The normal force at each slave surface node.
         """
 
-        forceOfNode = dict.fromkeys(self.surfaceNodes, 0.0)
+        forceOfNode = dict.fromkeys(self._surfaceNodes, 0.0)
         for p in range(self.nPoints):
             if normalForces[p] == 0.0:
                 continue
@@ -236,7 +266,7 @@ class ContactPointsOnSlaveSurface:
             for node, shapeFunction in zip(self.parentNodes[f], self.shapeFunctions[f][self.pointQuadraturePoint[p]]):
                 if node in forceOfNode:
                     forceOfNode[node] += -normalForces[p] * shapeFunction
-        return np.array([forceOfNode[node] for node in self.surfaceNodes])
+        return np.array([forceOfNode[node] for node in self._surfaceNodes])
 
     def isTouchedBy(self, model: FEModel, change: ModelChange) -> bool:
         """Whether a mesh change touched the source elements of the slave surface, so the contact
@@ -257,3 +287,152 @@ class ContactPointsOnSlaveSurface:
 
         recipe = model.contactFacetRecipes.get(self.setName)
         return recipe is not None and change.touchesSurface(recipe[0])
+
+    def regenerated(self, model: FEModel) -> "ContactPointsOnSlaveSurface":
+        """The contact points of the regenerated slave facets, after a change of the mesh touched them.
+
+        Parameters
+        ----------
+        model
+            The model tree, holding the regenerated facet set.
+
+        Returns
+        -------
+        ContactPointsOnSlaveSurface
+            The new contact points.
+        """
+
+        return ContactPointsOnSlaveSurface(
+            model.elementSets[self.setName], self.nQuadraturePoints, self._constraintName
+        )
+
+    def locatePoints(self, points: np.ndarray) -> list:
+        """Locate the given points: each takes the nodes of its parent face into the block, a copy of its own, and its
+        shape functions and its origin, :math:`N^s(\\xi_q) \\cdot X^s` in the reference configuration, are gathered
+        into arrays, once per update of the connectivity, so that an evaluation is a fixed handful of array operations
+        rather than a loop over the points.
+
+        Parameters
+        ----------
+        points
+            The indices of the contact points to locate, ascending.
+
+        Returns
+        -------
+        list
+            The nodes of the parent faces of the points, point after point.
+        """
+
+        facets = self.pointFacet[points]
+        self._shapeFunctionsOfLocated = np.array(
+            [self.shapeFunctions[f][q] for f, q in zip(facets, self.pointQuadraturePoint[points])]
+        ).reshape((len(points), self.nParentNodes))
+        referenceCoordinatesOfLocated = np.array([self.parentReferenceCoordinates[f] for f in facets]).reshape(
+            (len(points), self.nParentNodes, self.nDim)
+        )
+        self._originsOfLocated = np.einsum("ai,aij->aj", self._shapeFunctionsOfLocated, referenceCoordinatesOfLocated)
+        return [node for f in facets for node in self.parentNodes[f]]
+
+    def originsOfLocatedPoints(self) -> np.ndarray:
+        """:math:`N^s(\\xi_q) \\cdot X^s`, the points in the reference configuration, on the *curved* parent face.
+
+        Returns
+        -------
+        numpy.ndarray
+            The coordinates, of shape (nLocated, nDim).
+        """
+
+        return self._originsOfLocated
+
+    def displacementsOfLocatedPoints(self, U: np.ndarray, dU: np.ndarray) -> np.ndarray:
+        """:math:`N^s(\\xi_q) \\cdot U^s`, from the total displacement of the parent face nodes.
+
+        Parameters
+        ----------
+        U
+            The total displacement of the slave part of the block; the points move with it.
+        dU
+            The increment of the slave part of the block; unused.
+
+        Returns
+        -------
+        numpy.ndarray
+            The displacements, of shape (nLocated, nDim).
+        """
+
+        return np.einsum(
+            "ai,aij->aj",
+            self._shapeFunctionsOfLocated,
+            U.reshape((len(self._shapeFunctionsOfLocated), self.nParentNodes, self.nDim)),
+        )
+
+    def addForceResidual(self, P: np.ndarray, points: np.ndarray, forces: np.ndarray, directions: np.ndarray):
+        """Add :math:`f\\, N^s \\otimes n` to the parent face nodes of each given point; see
+        :meth:`ContactPoints.addForceResidual`.
+
+        Parameters
+        ----------
+        P
+            The slave part of the residual contribution; augmented.
+        points
+            The located points that carry a force.
+        forces
+            The forces of their springs.
+        directions
+            The unit directions of their springs.
+        """
+
+        Ns = self._shapeFunctionsOfLocated[points]
+        w = (Ns[:, :, None] * directions[:, None, :]).reshape((len(points), -1))
+        P.reshape((-1, self.nParentNodes * self.nDim))[points] += forces[:, None] * w
+
+    def interpolationOfLocatedPoint(self, k: int) -> tuple[np.ndarray, np.ndarray]:
+        """The degrees of freedom of the parent face nodes of a located point, and its shape functions there.
+
+        Parameters
+        ----------
+        k
+            The index of the located point.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            The degrees of freedom and the interpolation vector.
+        """
+
+        nDof = self.nParentNodes * self.nDim
+        return np.arange(k * nDof, (k + 1) * nDof), self._shapeFunctionsOfLocated[k]
+
+    def interpolationMatrixOfLocatedPoints(self) -> csr_matrix:
+        """The shape functions :math:`N^s(\\xi_q)` of the located points, each over its own copy of the nodes of its
+        parent face; see :meth:`ContactPoints.interpolationMatrixOfLocatedPoints`.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            The block diagonal matrix of the shape functions.
+        """
+
+        nLocated = len(self._shapeFunctionsOfLocated)
+        return csr_matrix(
+            (
+                self._shapeFunctionsOfLocated.ravel(),
+                np.arange(nLocated * self.nParentNodes),
+                np.arange(0, nLocated * self.nParentNodes + 1, self.nParentNodes),
+            ),
+            shape=(nLocated, nLocated * self.nParentNodes),
+        )
+
+    def searchLayout(self) -> dict[str, np.ndarray]:
+        """The slave facets and the quadrature rule identify the contact points in a checkpoint.
+
+        Returns
+        -------
+        dict[str, numpy.ndarray]
+            The element numbers of the slave facets, and the number of quadrature points per facet.
+        """
+
+        return {
+            "slaveFacets": np.array([facet.elNumber for facet in self.facets], dtype=np.int64),
+            "nQuadraturePoints": np.array([self.nQuadraturePoints], dtype=np.int64),
+        }

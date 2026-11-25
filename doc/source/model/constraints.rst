@@ -320,7 +320,8 @@ order, linear included, as the figure in :ref:`integrated-contact` shows.
 
 Scope: normal penalty contact under ``sliding=small``, on both the implicit and the explicit solver
 path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
-constraint has both), and ``sliding=finite`` is rejected rather than approximated.
+constraint has both), and ``sliding=finite`` is rejected rather than approximated. The slave
+surface must consist of a single element type.
 
 Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
 
@@ -613,6 +614,19 @@ with one formula for the bound; a worked example from the tangent is ``direction
 ``ParticlePenaltyCartesianBoundaryConstraintExplicit``:
 
 .. automodule:: edelweissfe.constraints.base.penaltysprings
+    :members:
+
+A contact constraint takes its slave side as contact points (:ref:`contact-points`): points that move with an
+interpolation vector over the nodes they act on and stand for an area. The interface says what a constraint needs from
+them; the two kinds are the nodes of a slave surface and the quadrature points of its faces:
+
+.. automodule:: edelweissfe.constraints.base.contactpoints
+    :members:
+
+.. automodule:: edelweissfe.constraints.base.contactpointsatslavenodes
+    :members:
+
+.. automodule:: edelweissfe.constraints.base.contactpointsonslavesurface
     :members:
 
 Multi-point (DOF-elimination) constraints subclass from

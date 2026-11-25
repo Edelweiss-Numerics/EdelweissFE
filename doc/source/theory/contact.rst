@@ -45,9 +45,9 @@ For a Tria3 facet, the unit normal is constructed by cross-product-then-normaliz
 
 .. math::
 
-   \boldsymbol{c} = (\boldsymbol{x}_2 - \boldsymbol{x}_1) \times (\boldsymbol{x}_3 -
-   \boldsymbol{x}_1), \qquad m = \lVert \boldsymbol{c} \rVert, \qquad \boldsymbol{n} =
-   \boldsymbol{c} / m,
+   \boldsymbol{m} = (\boldsymbol{x}_2 - \boldsymbol{x}_1) \times (\boldsymbol{x}_3 -
+   \boldsymbol{x}_1), \qquad m = \lVert \boldsymbol{m} \rVert, \qquad \boldsymbol{n} =
+   \boldsymbol{m} / m,
 
 and the gap is the signed plane distance
 
@@ -65,10 +65,10 @@ rule with
 .. math::
 
    \frac{\partial \boldsymbol{n}}{\partial \boldsymbol{x}_a} = \frac{1}{m} \left( \boldsymbol{I}
-   - \boldsymbol{n} \otimes \boldsymbol{n} \right) \frac{\partial \boldsymbol{c}}{\partial
+   - \boldsymbol{n} \otimes \boldsymbol{n} \right) \frac{\partial \boldsymbol{m}}{\partial
    \boldsymbol{x}_a},
 
-where :math:`\partial \boldsymbol{c} / \partial \boldsymbol{x}_a` are constant skew-symmetric
+where :math:`\partial \boldsymbol{m} / \partial \boldsymbol{x}_a` are constant skew-symmetric
 (cross-product) matrices of the edge vectors. Because the facet is flat, the *only* second-order
 term in the Hessian :math:`\boldsymbol{H} = \partial^2 g / \partial \boldsymbol{q}^2` is the
 pose-dependence of the normal's own construction (the derivative of the
@@ -122,7 +122,7 @@ the master surface is computed once per increment from the last converged config
 
    .. math::
 
-      \boldsymbol{w} = \boldsymbol{c} \otimes \bar{\boldsymbol{n}}, \qquad \boldsymbol{c} = [1,
+      \boldsymbol{w} = \bar{\boldsymbol{c}} \otimes \bar{\boldsymbol{n}}, \qquad \bar{\boldsymbol{c}} = [1,
       -\bar{N}_1, \ldots, -\bar{N}_k],
 
    (Kronecker-product block structure) and the geometric Hessian term vanishes identically.
@@ -139,12 +139,12 @@ matrix
 
 .. math::
 
-   \boldsymbol{G} = \boldsymbol{c} \otimes \boldsymbol{I}, \qquad \boldsymbol{u}_{rel} =
+   \boldsymbol{G} = \bar{\boldsymbol{c}} \otimes \boldsymbol{I}, \qquad \boldsymbol{u}_{rel} =
    \boldsymbol{G}\, \boldsymbol{q} = \boldsymbol{x}_s - \sum_a \bar{N}_a \boldsymbol{x}_a,
 
-with the identities :math:`\boldsymbol{G}^T \boldsymbol{M} \boldsymbol{G} = (\boldsymbol{c}
-\otimes \boldsymbol{c}^T) \otimes \boldsymbol{M}` and :math:`\boldsymbol{G}^T \boldsymbol{v} =
-\boldsymbol{c} \otimes \boldsymbol{v}` used verbatim in the implementation.
+with the identities :math:`\boldsymbol{G}^T \boldsymbol{M} \boldsymbol{G} = (\bar{\boldsymbol{c}}
+\otimes \bar{\boldsymbol{c}}^T) \otimes \boldsymbol{M}` and :math:`\boldsymbol{G}^T \boldsymbol{v} =
+\bar{\boldsymbol{c}} \otimes \boldsymbol{v}` used verbatim in the implementation.
 
 
 Normal contact
@@ -290,8 +290,8 @@ cutbacks automatically state-safe):
 with :math:`N = -f_n \geq 0` the current normal force (multiplier-augmented if AL is active).
 The force on the slave node is :math:`\boldsymbol{t}_T` and the facet nodes receive the reaction
 :math:`-\bar{N}_a \boldsymbol{t}_T`, i.e. the force on the nodes is :math:`\boldsymbol{G}^T
-\boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T`, and the residual contribution is its
-negative, :math:`\boldsymbol{P} \mathrel{-}= \boldsymbol{c} \otimes \boldsymbol{t}_T`.
+\boldsymbol{t}_T = \bar{\boldsymbol{c}} \otimes \boldsymbol{t}_T`, and the residual contribution is its
+negative, :math:`\boldsymbol{P} \mathrel{-}= \bar{\boldsymbol{c}} \otimes \boldsymbol{t}_T`.
 
 Note the continuity at liftoff: as :math:`N \to 0` the slip branch caps the force at :math:`\mu N
 \to 0`, so the frictional force is continuous through gap activation. The *tangent*, however, is
@@ -309,7 +309,7 @@ Consistent tangent
 ^^^^^^^^^^^^^^^^^^
 
 With :math:`\boldsymbol{K} = \partial \boldsymbol{P} / \partial \boldsymbol{U}`, the derivative of the
-residual contribution :math:`\boldsymbol{P} = -\boldsymbol{c} \otimes \boldsymbol{t}_T`, and the
+residual contribution :math:`\boldsymbol{P} = -\bar{\boldsymbol{c}} \otimes \boldsymbol{t}_T`, and the
 Kronecker identities above:
 
 **Stick** (symmetric, positive semi-definite):
@@ -317,7 +317,7 @@ Kronecker identities above:
 .. math::
 
    \boldsymbol{K}^{stick} = \boldsymbol{G}^T \big( k_T \bar{\boldsymbol{P}} \big) \boldsymbol{G}
-   = (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \big( k_T \bar{\boldsymbol{P}} \big).
+   = (\bar{\boldsymbol{c}} \otimes \bar{\boldsymbol{c}}^T) \otimes \big( k_T \bar{\boldsymbol{P}} \big).
 
 **Slip** (nonsymmetric): differentiating :math:`\boldsymbol{t}_T = \mu N \hat{\boldsymbol{s}}`
 with :math:`\hat{\boldsymbol{s}} = \boldsymbol{t}^{trial} / \lVert \boldsymbol{t}^{trial}
@@ -328,9 +328,9 @@ with :math:`\hat{\boldsymbol{s}} = \boldsymbol{t}^{trial} / \lVert \boldsymbol{t
 
 .. math::
 
-   \boldsymbol{K}^{slip} = \underbrace{\mu \, \frac{\partial f_n}{\partial g} \, (\boldsymbol{c}
+   \boldsymbol{K}^{slip} = \underbrace{\mu \, \frac{\partial f_n}{\partial g} \, (\bar{\boldsymbol{c}}
    \otimes \hat{\boldsymbol{s}}) \otimes \boldsymbol{w}}_{\text{normal--tangential coupling,
-   nonsymmetric}} \; + \; (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \left[ \frac{\mu N
+   nonsymmetric}} \; + \; (\bar{\boldsymbol{c}} \otimes \bar{\boldsymbol{c}}^T) \otimes \left[ \frac{\mu N
    k_T}{\lVert \boldsymbol{t}^{trial} \rVert} \big( \boldsymbol{I} - \hat{\boldsymbol{s}}
    \otimes \hat{\boldsymbol{s}} \big) \bar{\boldsymbol{P}} \right].
 
@@ -540,7 +540,7 @@ variationally harmless under ``sliding=small`` and only there: the facet is flat
 weights remain a partition of unity, and the frozen normal is normal to the facet plane at the
 increment's start, so :math:`g = \bar{\boldsymbol{n}} \cdot (\boldsymbol{x}_s - \sum_a w_a
 \boldsymbol{x}_a)` takes the same value for *any* partition of unity over the -- coplanar -- facet
-nodes. Gap, gradient :math:`\boldsymbol{w} = \bar{\boldsymbol{n}} \otimes \boldsymbol{c}` and
+nodes. Gap, gradient :math:`\boldsymbol{w} = \bar{\boldsymbol{c}} \otimes \bar{\boldsymbol{n}}` and
 the symmetry of the tangent are all preserved; the substitution perturbs the gap only as the facet
 tilts away from the frozen normal within the increment, at exactly the order the small-sliding
 formulation already discards. Under ``sliding=finite`` the same substitution would make the force
@@ -667,8 +667,8 @@ unusually cheap here. The gap
     g = \bar{\boldsymbol{n}} \cdot \left( N^s(\xi_q) \cdot \boldsymbol{x}^s
         - N^m(\xi_m) \cdot \boldsymbol{x}^m \right)
 
-is linear in the displacement DOFs, so the gradient :math:`\boldsymbol{w} = \bar{\boldsymbol{n}}
-\otimes [N^s, -N^m]` is constant and the geometric Hessian vanishes identically; and the tangent
+is linear in the displacement DOFs, so the gradient :math:`\boldsymbol{w} = [N^s, -N^m] \otimes
+\bar{\boldsymbol{n}}` is constant and the geometric Hessian vanishes identically; and the tangent
 :math:`\mathrm{d}f_n/\mathrm{d}g \, \boldsymbol{w} \otimes \boldsymbol{w}` is symmetric. This
 is structurally the same algebra as the node-based frozen form, with that formulation's slave
 coefficient :math:`1` replaced by the slave face's shape-function vector.
@@ -804,6 +804,72 @@ contact-assembly entries. Whether that matters depends on contact's share of the
 worth measuring on a given model before adopting it in an explicit run.
 
 
+.. _contact-points:
+
+Contact points: the slave side as points
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The algebra of the integrated formulation does not care *what* the slave point is. A contact point
+:math:`p` moves with an interpolation vector :math:`\boldsymbol{c}` over the nodes it acts on, stands
+for an area :math:`A_p`, and its gap, gradient and tangent are
+
+.. math::
+    g = \bar{\boldsymbol{n}} \cdot \left( \boldsymbol{x}_p - N^m(\xi_m) \cdot \boldsymbol{x}^m \right) , \qquad
+    \boldsymbol{w} = [\boldsymbol{c}, -N^m] \otimes \bar{\boldsymbol{n}} , \qquad
+    \boldsymbol{K} = \frac{\mathrm{d}f_n}{\mathrm{d}g} \, \boldsymbol{w} \otimes \boldsymbol{w} ,
+
+with :math:`f_n` the penalty law at the stiffness ``penalty`` times :math:`A_p`. With
+:math:`\boldsymbol{c} = N^s(\xi_q)` and :math:`A_p = w_q J_q`, this is the integrated formulation above; with
+:math:`\boldsymbol{c} = [1]` and :math:`A_p` the tributary area, it has the form of the small-sliding
+node-to-surface gap (:ref:`small-sliding-kinematics`): its vector
+:math:`\bar{\boldsymbol{c}} = [1, -\bar{N}_1, \ldots, -\bar{N}_k]` is :math:`[\boldsymbol{c}, -N^m]` with the
+flat facet's weights :math:`\bar{N}` in place of the master's parent-face shape functions :math:`N^m` (the two agree on
+straight-edged linear faces). The force of a point is distributed with the same :math:`\boldsymbol{c}`
+with which the point moves, the transpose of its motion: so the stiffness of its penalty spring is symmetric, and the
+spring does no work over a closed cycle. Two kinds of point are written as contact points:
+
+.. list-table::
+    :header-rows: 1
+
+    * - contact point
+      - :math:`\boldsymbol{c}`
+      - :math:`\boldsymbol{x}_p`
+      - :math:`A_p`
+    * - quadrature point of a slave element face
+        (:class:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface`)
+      - :math:`N^s(\xi_q)`
+      - :math:`N^s(\xi_q) \cdot (\boldsymbol{X}^s + \boldsymbol{U}^s)`
+      - :math:`w_q J_q`
+    * - slave node
+        (:class:`~edelweissfe.constraints.base.contactpointsatslavenodes.ContactPointsAtSlaveNodes`)
+      - :math:`[1]`
+      - :math:`\boldsymbol{X} + \boldsymbol{U}`
+      - tributary area (:ref:`tributary-areas`)
+
+What a constraint needs from its slave side is the same for both, and is written down once, as
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`: the current coordinates of all points, for the
+contact search; the *located* points, the paired ones, which name the nodes they act on and so become the slave part
+of the constraint's block; and, for the located points, where they are, the residual contribution of their forces,
+and their interpolation vectors for the tangent and for the bound of the stiffness in the critical time step
+(:doc:`criticaltimestep`). The integrated constraints,
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` and
+:mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`, take from the quadrature points of the slave faces
+the points, their coordinates for the contact search, their areas, and the forces of the points at the slave nodes for
+the output.
+
+**Origin and displacement.** A point's position is told in two parts: its *origin* :math:`\boldsymbol{x}^0_p`,
+where it is when the displacement it moves with is zero, and its *displacement*
+:math:`\boldsymbol{c} \cdot \boldsymbol{u}` from there. For the points of finite elements, :math:`\boldsymbol{u}`
+is the total displacement :math:`\boldsymbol{U}` of their nodes, so the origin is the point in the reference
+configuration (:math:`N^s(\xi_q) \cdot \boldsymbol{X}^s` and :math:`\boldsymbol{X}` in the table). A kind of point
+whose nodes carry the increment rather than the total displacement (points on the faces of updated-Lagrangian
+particles) fits the same interface: for it, :math:`\boldsymbol{u}` would be the increment
+:math:`\Delta\boldsymbol{U}`, and the origin the point at the start of the increment. A constraint therefore passes
+both, and each kind takes the one it moves with. The split also keeps a small distance accurate: the stretch of a
+stiff penalty spring is a tiny difference of two large positions, and a constraint can take it as the difference of
+the origins once plus the difference of the displacements in every evaluation, which rounds it relative to the
+displacements, not to the coordinates.
+
 .. _integrated-contact-algorithm:
 
 The integrated formulation, step by step
@@ -861,8 +927,8 @@ is shared with the rigid-body variant (:ref:`integrated-contact-rigid-body`).
 #. The closed points' normal force is the penalty law applied to :math:`g`, scaled by that point's
    integration weight -- so ``penalty`` is a stiffness per unit *area*, and the force of a point is
    the pressure it carries times the area it represents.
-#. That force is distributed with :math:`\boldsymbol{w} = \bar{\boldsymbol{n}} \otimes [N^s,
-   -N^m]`, which is where a serendipity corner receives its tensile share. The tangent is assembled
+#. That force is distributed with :math:`\boldsymbol{w} = [N^s, -N^m] \otimes
+   \bar{\boldsymbol{n}}`, which is where a serendipity corner receives its tensile share. The tangent is assembled
    only when one is asked for; the explicit path overrides the hook so that no tangent container is
    ever allocated.
 
@@ -888,13 +954,13 @@ receives its tensile share exactly as above, and the node-based
 :ref:`serendipity-liftoff` -- is deprecated in its favour.
 
 Only the master side differs. The rigid body moves with its reference point (RP): current position
-:math:`\boldsymbol{c} = \boldsymbol{X}_{RP} + \boldsymbol{u}_{RP}` and rotation
+:math:`\boldsymbol{x}_{RP} = \boldsymbol{X}_{RP} + \boldsymbol{u}_{RP}` and rotation
 :math:`\boldsymbol{R}(\boldsymbol{\theta})`, so that a body-frame point :math:`\boldsymbol{Y}` is at
-:math:`\boldsymbol{c} + \boldsymbol{R}(\boldsymbol{Y} - \boldsymbol{X}_{RP})`.
+:math:`\boldsymbol{x}_{RP} + \boldsymbol{R}(\boldsymbol{Y} - \boldsymbol{X}_{RP})`.
 
 **Contact search.** At each ``updateConnectivity``, every contact point is pulled back into the body
 frame, :math:`\hat{\boldsymbol{X}}_q = \boldsymbol{X}_{RP} + \boldsymbol{R}^T(\boldsymbol{x}_q -
-\boldsymbol{c})`, and assigned its closest triangle of the rigid surface, using the same broadphase
+\boldsymbol{x}_{RP})`, and assigned its closest triangle of the rigid surface, using the same broadphase
 and clamped closest point as the deformable case. Frozen until the next search are the triangle's
 outward body-frame normal :math:`\boldsymbol{N}_q` and its plane offset
 :math:`d_q = \boldsymbol{N}_q \cdot (\boldsymbol{Y}_t - \boldsymbol{X}_{RP})` (:math:`\boldsymbol{Y}_t`
@@ -903,7 +969,7 @@ The rigid surface must be closed and free of zero-area triangles, so that the ou
 defined; both are checked when the constraint is created.
 
 **Gap.** With :math:`\boldsymbol{n}_q = \boldsymbol{R}\boldsymbol{N}_q` and the lever arm
-:math:`\boldsymbol{r}_q = \boldsymbol{x}_q - \boldsymbol{c}`,
+:math:`\boldsymbol{r}_q = \boldsymbol{x}_q - \boldsymbol{x}_{RP}`,
 
 .. math::
     g_q = \boldsymbol{n}_q \cdot \boldsymbol{r}_q - d_q ,

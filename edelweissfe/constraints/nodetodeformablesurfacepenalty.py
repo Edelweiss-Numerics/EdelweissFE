@@ -31,6 +31,9 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
+from edelweissfe.constraints.base.contactpointsatslavenodes import (
+    tributaryAreasOfSlaveNodes,
+)
 from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
     ForcesOnlyExplicitEvaluation,
 )
@@ -344,16 +347,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.slaveFacetElements = list(slaveSurface)
         self.facetElements = list(masterSurface)
 
-        # The contact points are the unique slave surface nodes, each weighted by its tributary area (sum
-        # of its area shares over its incident slave facets, in the reference configuration). Nodes with a
-        # zero share (nodalWeights=serendipityOptimal) are kept, inert, to preserve the slave node ordering.
-        tributaryAreaOfSlaveNode = {}
-        for slaveFacet in self.slaveFacetElements:
-            for node, share in zip(slaveFacet.nodes, slaveFacet.nodalAreaShares):
-                tributaryAreaOfSlaveNode[node] = tributaryAreaOfSlaveNode.get(node, 0.0) + share
-
-        self.slaveNodes = list(tributaryAreaOfSlaveNode.keys())
-        self.tributaryAreas = np.array(list(tributaryAreaOfSlaveNode.values()))
+        # The contact points are the unique slave surface nodes, each weighted by its tributary area.
+        self.slaveNodes, self.tributaryAreas = tributaryAreasOfSlaveNodes(self.slaveFacetElements)
         self.nSlaves = len(self.slaveNodes)
 
         masterNodes = {node for el in self.facetElements for node in el.nodes}
@@ -625,13 +620,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         oldLambda = dict(zip(self.slaveNodes, self._lambdaN))
 
         self.slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
-        tributaryAreaOfSlaveNode = {}
-        for slaveFacet in self.slaveFacetElements:
-            for node, share in zip(slaveFacet.nodes, slaveFacet.nodalAreaShares):
-                tributaryAreaOfSlaveNode[node] = tributaryAreaOfSlaveNode.get(node, 0.0) + share
-
-        self.slaveNodes = list(tributaryAreaOfSlaveNode.keys())
-        self.tributaryAreas = np.array(list(tributaryAreaOfSlaveNode.values()))
+        self.slaveNodes, self.tributaryAreas = tributaryAreasOfSlaveNodes(self.slaveFacetElements)
         self.nSlaves = len(self.slaveNodes)
         self._referenceCoordsSlaves = np.array([n.coordinates for n in self.slaveNodes])
 
