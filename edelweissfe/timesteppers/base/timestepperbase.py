@@ -150,7 +150,7 @@ class TimeStepperBase(ABC):
     def enforceTimeIncrement(self, timeIncrement: float):
         """Use ``timeIncrement`` for every following increment, instead of adapting it.
 
-        The caller is an explicit solver, whose stable time increment is a property of the model: set at the start of
+        The caller is an explicit solver, whose critical time step is a property of the model: set at the start of
         the step, and set anew each time the solver takes the critical time step again, e.g. after a refinement or as
         entities that carry their own inertia deform; lowered only, or also raised, as the solver chooses.
 

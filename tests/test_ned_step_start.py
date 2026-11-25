@@ -107,10 +107,10 @@ _RELEASED_UNDER_ITS_WEIGHT = """
 
 
 @pytest.fixture
-def fixedTimeIncrement(monkeypatch):
-    """Every discrete system's stable time increment is replaced by the fixed one (with a courant number of 1)."""
+def fixedTimeIncrement(criticalTimeStepOfTheElements):
+    """Every discrete system's critical time step is replaced by the fixed one (with a courant number of 1)."""
 
-    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, U: _TIME_INCREMENT)
+    criticalTimeStepOfTheElements(_TIME_INCREMENT)
 
 
 def _run(deck: str, directory: Path):
@@ -199,7 +199,7 @@ _BINARY_TIME_INCREMENT = 2.0**-9
 _DAMPING_RATE = 25.0
 
 
-def test_the_damping_terms_of_the_step_start_rule(tmp_path, monkeypatch):
+def test_the_damping_terms_of_the_step_start_rule(tmp_path, monkeypatch, criticalTimeStepOfTheElements):
     """Two exact relations, each of which fails without a damping term of the rule.
 
     * A step of N increments leaves (U_N, v_N, a_N). One step of 2N increments takes the increment N+1 from
@@ -211,7 +211,7 @@ def test_the_damping_terms_of_the_step_start_rule(tmp_path, monkeypatch):
     """
     dt = _BINARY_TIME_INCREMENT
     nIncrements = 32
-    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, U: dt)
+    criticalTimeStepOfTheElements(dt)
 
     def massProportionalDamping(self, C):
         M = np.zeros_like(C)

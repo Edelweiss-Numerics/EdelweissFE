@@ -500,7 +500,7 @@ _SCENARIOS = {
         steps=[_LOADS_PUSH, _LOADS_HOLD],
         check=lambda model, run: "",
     ),
-    # (k) Explicit dynamics with a von Mises material and live AMR: the stable time increment depends
+    # (k) Explicit dynamics with a von Mises material and live AMR: the critical time step depends
     # on the state (refinement lowers it, mid-run, lower-only).
     "amrPlasticExplicit": dict(
         solvers=["explicit"],
@@ -789,8 +789,10 @@ def _reader(checkpoint: Path) -> str:
 #: separate mutations a replay bundles into one, not on the state they guard -- and the linear solver,
 #: which a nonlinear solver creates afresh at the start of every step: what it learns across solves
 #: (its solve count, the residual history, a preconditioner it reuses) is not checkpointed, so a
-#: resume starts it afresh as a step does. For a direct solver (these scenarios) it changes nothing.
-_NOT_STATE = {"_stepWallClockTic", "_version", "_seenParentVersion", "linSolver"}
+#: resume starts it afresh as a step does. For a direct solver (these scenarios) it changes nothing. How often a part's
+#: critical time step was estimated in the step is a count for the step's report, not state: a resumed step counts from
+#: its resume (the estimate itself, its value, is compared).
+_NOT_STATE = {"_stepWallClockTic", "_version", "_seenParentVersion", "linSolver", "numberOfEstimates"}
 
 
 def _plainValue(value, directory: str, depth: int = 0):
