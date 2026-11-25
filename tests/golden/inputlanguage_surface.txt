@@ -219,15 +219,6 @@ records file, one line per slave node::
     [mu] The Coulomb friction coefficient. Requires sliding=small; mu=0 disables friction. Strongly recommended in combination with type=quadratic: the quadratic law's contact stiffness vanishes continuously at gap activation, keeping the frictional tangent continuous for slave nodes lifting off/touching down -- with type=linear, the activation stiffness jump scaled by mu makes Newton prone to limit-cycling at such events. (<class 'float'>, default = 0.0)
     [tangentPenalty] The tangential penalty stiffness per unit slave surface area for frictional stick. Defaults to the normal penalty. (<class 'float'>, default = None)
     [augmentedLagrange] Augment the penalty force with a per-slave normal traction multiplier, updated once per increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + penalty * A * g)). The multiplier is constant within an increment (zero tangent contribution), drives the penetration toward zero over the increments at a fixed penalty, and sharpens the friction cone mu * N. Requires sliding=small. (<class 'bool'>, default = False)
-===== module documentation: edelweissfe.constraints.nodetodiscreterigidbodypenalty =====
-[nodeToDiscreteRigidBodyPenalty] A penalty based unilateral contact constraint preventing nodes of a node set from penetrating the surface of a discrete rigid body.
-  required arguments
-    [nSet] The (slave) node set to be protected from penetrating the rigid body. (<class 'str'>)
-    [rigidBody] The name of the discrete rigid body (as registered in model.rigidBodies). (<class 'str'>)
-    [penalty] The numerical penalty value. (<class 'float'>)
-  optional arguments
-    [type] The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic force, linear stiffness). (<class 'str'>, default = linear)
-    [searchDistance] An optional broadphase distance (passed on to the rigid body's surface query) for culling nodes far away from the rigid body. If not given, every slave node is queried exactly every iteration. (<class 'float'>, default = None)
 ===== module documentation: edelweissfe.constraints.nodetorigidsurfacepenalty =====
 [nodeToRigidSurfacePenalty] A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.
   required arguments

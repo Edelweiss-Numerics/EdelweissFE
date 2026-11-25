@@ -57,10 +57,8 @@ origins*).
 pairing with the master, the gap, the law -- is written once for every kind of point. Two kinds are here: the nodes of
 a slave surface (:mod:`~edelweissfe.constraints.base.contactpointsatslavenodes`) and the quadrature points of its faces
 (:mod:`~edelweissfe.constraints.base.contactpointsonslavesurface`). The contact with a deformable master surface,
-:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`, is written against it, once for both kinds. The
-contact with a discrete rigid body, :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`, takes its slave
-side from the quadrature points: the points, their coordinates for the contact search, their areas, and the forces of
-the points at the slave nodes for the output.
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`, and the contact with a discrete rigid body,
+:mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`, are written against it, each once for both kinds.
 """
 
 from abc import ABC, abstractmethod

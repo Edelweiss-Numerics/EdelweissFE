@@ -168,8 +168,8 @@ for its defaults); Python: `getLinSolverByName(type, options)`.
   `scripts/benchmark_linsolve.py`.
 
 #### Contact, Rigid Bodies & Constraints (`edelweissfe/constraints/`)
-- **Node-to-Surface & Contact with Facets**: Penalty contact formulations (`NodeToDeformableSurfacePenaltyConstraint`,
-  `NodeToDiscreteRigidBodyPenaltyConstraint`).
+- **Node-to-Surface & Contact with Facets**: Penalty contact formulations (`NodeToDeformableSurfacePenaltyConstraint`;
+  `SurfaceToDeformableSurfacePenalty` and `SurfaceToDiscreteRigidBodyPenalty` for every kind of contact point).
 - **Surface Tie Constraints**: Multi-point constraint tying non-conforming interface surfaces.
 - **Rigid Bodies & MPCs**: Linearized 2D/3D rigid bodies (`*rigidBody`, `LinearizedRigidBodyConstraint`), Lagrangian
   and penalty equal-value constraints (`EqualValuePenaltyConstraint`), and penalty-based indirect displacement control.

@@ -49,7 +49,7 @@ class SurfaceContactPenaltySchema:
     :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` and
     :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`, which add their master side. The slave side
     is a :class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`, built from these options by
-    :func:`contactPointsOfTheSlaveSurface`; ``surfaceToDiscreteRigidBodyPenalty`` takes the quadrature points only.
+    :func:`contactPointsOfTheSlaveSurface`.
 
     The update-type option is spelled ``type`` in the input file but the field is named
     ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,

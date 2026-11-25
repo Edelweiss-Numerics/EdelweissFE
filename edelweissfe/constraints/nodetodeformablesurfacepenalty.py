@@ -294,15 +294,14 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     dynamic contact-pair connectivity. Within :meth:`computeKernels`, the gap, its exact gradient,
     and its exact Hessian (see :mod:`~edelweissfe.utils.facetcontactgeometry`, including the
     second-derivative term from the facet normal's own pose-dependence -- not curvature, since the
-    facet is flat) are recomputed fresh from the *current Newton iterate* every iteration, exactly
-    as :mod:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty` does for rigid bodies -- no
+    facet is flat) are recomputed fresh from the *current Newton iterate* every iteration -- no
     geometry is frozen across iterations within an increment.
 
     Each slave is assigned at most *one* active facet at a time (reassigned each increment). If
     the slave's assigned facet ever fails its exact in-facet containment test mid-Newton
     (the true contact point has moved onto a neighboring facet within the same increment), no
-    contact contribution is assembled for that slave until the next connectivity update -- the
-    same accepted non-smoothness at facet boundaries as the rigid-body case's mesh edges.
+    contact contribution is assembled for that slave until the next connectivity update -- an
+    accepted non-smoothness at facet boundaries.
 
     The slave side is itself a contact facet surface: the constraint's contact points are the
     unique nodes of the ``slaveSurface`` element set, and each node's penalty force is weighted by

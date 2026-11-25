@@ -41,9 +41,6 @@ from edelweissfe.constraints.base.rigidbodycontactstiffness import (
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
     Constraint as NodeToDeformableSurfacePenalty,
 )
-from edelweissfe.constraints.nodetodiscreterigidbodypenalty import (
-    Constraint as NodeToDiscreteRigidBodyPenalty,
-)
 from edelweissfe.constraints.rigidbody import Constraint as RigidBody
 from edelweissfe.constraints.surfacetodeformablesurfacepenalty import (
     Constraint as SurfaceToDeformableSurfacePenalty,
@@ -84,8 +81,8 @@ class _SparseEntity(SystemMatrixContributorBase):
 
 
 class _OneSlaveRigidBodyContact(SystemMatrixContributorBase):
-    """The block of a contact between one node and a rigid body in 3D, as
-    :class:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty.Constraint` lays it out: the six degrees of
+    """The block of a contact between one located contact point (a node) and a rigid body in 3D, as
+    :class:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty.Constraint` lays it out: the six degrees of
     freedom of the reference point (first) coupled with each other, the three of the node (last) with each other, and
     the two groups both ways. That is 36 + 9 + 18 + 18 = 81 entries on nDof = 9 degrees of freedom: exactly as many as
     a dense 9 x 9 block, but ordered block by block, not column by column."""
@@ -229,7 +226,6 @@ def test_sparse_entity_whose_size_is_a_square_is_scattered_entry_by_entry(assemb
     "constraintType",
     [
         RigidBody,
-        NodeToDiscreteRigidBodyPenalty,
         SurfaceToDiscreteRigidBodyPenalty,
         NodeToDeformableSurfacePenalty,
         SurfaceToDeformableSurfacePenalty,

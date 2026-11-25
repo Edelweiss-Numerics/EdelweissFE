@@ -62,9 +62,8 @@ class DiscreteRigidBody(RigidBody):
         self.domainSize = model.domainSize
 
         self.surfaceMesh = surfaceMesh
-        self._queryEngine = None
+        self._outerSurface = None
         self._referenceTriangles = None
-        self._stackedSurfaceCoordinatesCache = None
 
         # Facets replace DiscreteRigidElement.
         # Format: [{'type': 'tria3', 'nodes': [node1, node2, node3]}, ...]
@@ -160,30 +159,9 @@ class DiscreteRigidBody(RigidBody):
         currentCoords, _ = self._currentAndReferenceSurfaceCoordinates()
 
         # Unlike the usual EdelweissFE convention, the surface nodes' coordinates hold the *current*
-        # configuration (used by output and contact AABB checks); they carry no field variables.
+        # configuration (used by output); they carry no field variables.
         for i, node in enumerate(self.surfaceNodes):
             node.coordinates[:] = currentCoords[i]
-
-        self._stackedSurfaceCoordinatesCache = currentCoords
-
-    def getAABB(self, kinematics: tuple = None):
-        """Axis-aligned bounding box of the surface nodes' current positions.
-
-        Parameters
-        ----------
-        kinematics : tuple, optional
-            See :meth:`_currentAndReferenceSurfaceCoordinates`. If not given, uses
-            the stacked array cached by the last :meth:`updateKinematics` call (or,
-            before the first such call, rebuilds it from the surface nodes' own
-            ``coordinates``), as a fast path for the common case.
-        """
-        if kinematics is None:
-            coords = self._stackedSurfaceCoordinatesCache
-            if coords is None:
-                coords = np.array([n.coordinates for n in self.surfaceNodes])
-        else:
-            coords, _ = self._currentAndReferenceSurfaceCoordinates(kinematics)
-        return np.min(coords, axis=0), np.max(coords, axis=0)
 
     def poseFromDofs(self, rpDisplacement: np.ndarray, rpRotation: np.ndarray) -> tuple:
         """The rigid body pose for given reference point DOF values.
@@ -211,13 +189,23 @@ class DiscreteRigidBody(RigidBody):
         currentRpPosition = self.rpNode.coordinates + rpDisplacement
         return currentRpPosition, rotationMatrix, dPhysicalSpin_dTheta
 
-    def _surfaceQueryEngine(self):
-        """The VTK-based surface query engine, created on first use."""
-        if self._queryEngine is None:
-            from edelweissfe.utils.discretesurfacequery import DiscreteSurfaceQuery
+    def outerSurface(self) -> tuple[Any, np.ndarray]:
+        """The outer surface of the rigid body's mesh and the outward unit normals of its cells, made on first use.
 
-            self._queryEngine = DiscreteSurfaceQuery(mesh=self.surfaceMesh)
-        return self._queryEngine
+        The outward normals are established from the mesh topology
+        (``compute_normals(..., auto_orient_normals=True)``) rather than from the face winding of the file, so they are
+        reliable for any correctly closed mesh.
+
+        Returns
+        -------
+        tuple[pyvista.PolyData, numpy.ndarray]
+            The outer surface, and the outward unit normals of its cells, of shape (nCells, 3).
+        """
+        if self._outerSurface is None:
+            surface = self.surfaceMesh.extract_surface(algorithm="dataset_surface")
+            surface.compute_normals(cell_normals=True, point_normals=False, auto_orient_normals=True, inplace=True)
+            self._outerSurface = (surface, np.array(surface.cell_normals))
+        return self._outerSurface
 
     def referenceTriangles(self) -> tuple[np.ndarray, np.ndarray]:
         """The triangles of the rigid surface and their outward unit normals, in the reference
@@ -234,7 +222,7 @@ class DiscreteRigidBody(RigidBody):
             normals, of shape (nTriangles, 3).
         """
         if self._referenceTriangles is None:
-            surface = self._surfaceQueryEngine().mesh
+            surface, outwardNormals = self.outerSurface()
             if not surface.is_all_triangles:
                 raise ValueError(f"Discrete rigid body '{self.name}': the surface must consist of triangles only.")
             if surface.n_open_edges > 0:
@@ -256,64 +244,8 @@ class DiscreteRigidBody(RigidBody):
                     f"Discrete rigid body '{self.name}': {degenerate.size} triangle(s) of zero area "
                     f"(first: {degenerate[0]}), whose normals are undefined."
                 )
-            self._referenceTriangles = (triangleCoordinates, np.array(self._surfaceQueryEngine().mesh_cell_normals))
+            self._referenceTriangles = (triangleCoordinates, outwardNormals)
         return self._referenceTriangles
-
-    def querySurface(self, coords: np.ndarray, proximityDistance: float = None, kinematics: tuple = None):
-        """Compute signed distances and outward face normals of the rigid
-        surface, in its current configuration, for an array of query points.
-
-        Parameters
-        ----------
-        coords : numpy.ndarray, shape (nPoints, 3)
-            The query coordinates.
-        proximityDistance : float, optional
-            If given, a broadphase AABB check (the current AABB inflated by
-            this distance) is performed first; points outside are assigned a
-            distance of ``inf`` and a zero normal without querying the surface.
-        kinematics : tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray], optional
-            An explicit ``(u_rp, R, rp_initial)`` triple to use for the rigid body's
-            pose instead of :meth:`getCurrentKinematics`'s (last-*converged*-increment)
-            NodeField state. A caller that already holds a fresher/current RP
-            kinematic state -- e.g. a contact constraint mid-Newton-iteration, which
-            has direct access to the trial solution vector -- should pass it here so
-            the query is evaluated for a pose consistent with the rest of that
-            caller's own current state (both this narrow-phase query and the
-            broadphase AABB check use it consistently).
-
-        Returns
-        -------
-        dists : numpy.ndarray, shape (nPoints,)
-            The signed distances (negative = penetration).
-        normals : numpy.ndarray, shape (nPoints, 3)
-            The outward unit normals of the closest faces.
-        """
-        queryEngine = self._surfaceQueryEngine()
-
-        n_points = coords.shape[0]
-        if proximityDistance is not None:
-            curr_min, curr_max = self.getAABB(kinematics)
-            aabb_min = curr_min - proximityDistance
-            aabb_max = curr_max + proximityDistance
-            in_aabb = np.all((coords >= aabb_min) & (coords <= aabb_max), axis=1)
-            active_indices = np.where(in_aabb)[0]
-            if len(active_indices) == 0:
-                return np.full(n_points, np.inf), np.zeros((n_points, 3))
-            coords_to_query = coords[active_indices]
-        else:
-            coords_to_query = coords
-            active_indices = np.arange(n_points)
-
-        u_rp, R, rp_initial = kinematics if kinematics is not None else self.getCurrentKinematics()
-        active_dists, active_normals = queryEngine.query(
-            coords_to_query, translation=u_rp, rotation_matrix=R, rotation_center=rp_initial
-        )
-
-        dists = np.full(n_points, np.inf)
-        dists[active_indices] = active_dists
-        normals = np.zeros((n_points, 3))
-        normals[active_indices] = active_normals
-        return dists, normals
 
     def getVisualizationNodes(self) -> List:
         return self.surfaceNodes

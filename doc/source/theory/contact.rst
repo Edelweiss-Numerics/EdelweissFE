@@ -852,11 +852,9 @@ contact search; the *located* points, the paired ones, which name the nodes they
 of the constraint's block; and, for the located points, where they are, the residual contribution of their forces,
 and their interpolation vectors for the tangent and for the bound of the stiffness in the critical time step
 (:doc:`criticaltimestep`). The contact with a deformable master surface,
-:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`, is written against it, once for both kinds
-(:ref:`contact-one-constraint`). The contact with a discrete rigid body,
-:mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`, takes from the quadrature points of the slave faces
-the points, their coordinates for the contact search, their areas, and the forces of the points at the slave nodes for
-the output.
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` (:ref:`contact-one-constraint`), and the contact
+with a discrete rigid body, :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`
+(:ref:`integrated-contact-rigid-body`), are written against it, each once for both kinds.
 
 **Origin and displacement.** A point's position is told in two parts: its *origin* :math:`\boldsymbol{x}^0_p`,
 where it is when the displacement it moves with is zero, and its *displacement*
@@ -1227,13 +1225,16 @@ Integrated contact against a discrete rigid body
 
 :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty` applies the same integrated
 formulation when the master side is a :doc:`discrete rigid body </model/rigidbodies>` instead of a
-deformable surface. The slave side is identical and shared: the contact points, their weights and
-the distribution with the parent-face shape functions :math:`N^s` all come from
-:class:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface`, and
-the penalty law from :mod:`~edelweissfe.constraints.base.penaltylaw`. So a serendipity corner
-receives its tensile share exactly as above, and the node-based
-``nodeToDiscreteRigidBodyPenalty`` -- whose corners lift off for the reason explained in
-:ref:`serendipity-liftoff` -- is deprecated in its favour.
+deformable surface. The slave side is identical and shared: it is a
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints` (:ref:`contact-points`), so both kinds of contact
+point meet a rigid body as they meet a deformable master -- the quadrature points of the slave facets
+(``contactPoints=quadraturePoints``, the default) and the slave nodes (``contactPoints=nodes``). Their positions, their
+areas and the distribution of their forces with their interpolation vectors :math:`\boldsymbol{c}` all come from the
+contact points, and the penalty law from :mod:`~edelweissfe.constraints.base.penaltylaw`. So a serendipity corner
+receives its tensile share exactly as above. With ``contactPoints=nodes`` it is also the contact of nodes against a
+rigid body, with the small-sliding gap below; how an input of the removed node-based
+``nodeToDiscreteRigidBodyPenalty`` (finite sliding, penalty per node) moves to it is described in
+:doc:`/model/constraints`.
 
 Only the master side differs. The rigid body moves with its reference point (RP): current position
 :math:`\boldsymbol{x}_{RP} = \boldsymbol{X}_{RP} + \boldsymbol{u}_{RP}` and rotation
@@ -1241,61 +1242,48 @@ Only the master side differs. The rigid body moves with its reference point (RP)
 :math:`\boldsymbol{x}_{RP} + \boldsymbol{R}(\boldsymbol{Y} - \boldsymbol{X}_{RP})`.
 
 **Contact search.** At each ``updateConnectivity``, every contact point is pulled back into the body
-frame, :math:`\hat{\boldsymbol{X}}_q = \boldsymbol{X}_{RP} + \boldsymbol{R}^T(\boldsymbol{x}_q -
+frame, :math:`\hat{\boldsymbol{X}}_p = \boldsymbol{X}_{RP} + \boldsymbol{R}^T(\boldsymbol{x}_p -
 \boldsymbol{x}_{RP})`, and assigned its closest triangle of the rigid surface, using the same broadphase
 and clamped closest point as the deformable case. Frozen until the next search are the triangle's
-outward body-frame normal :math:`\boldsymbol{N}_q` and its plane offset
-:math:`d_q = \boldsymbol{N}_q \cdot (\boldsymbol{Y}_t - \boldsymbol{X}_{RP})` (:math:`\boldsymbol{Y}_t`
-a vertex of the triangle). The point then sees the triangle's plane, moving rigidly with the body.
+outward body-frame normal :math:`\boldsymbol{N}_p` and its plane offset
+:math:`d_p = \boldsymbol{N}_p \cdot (\boldsymbol{Y}_t - \boldsymbol{X}_{RP})` (:math:`\boldsymbol{Y}_t`
+a vertex of the triangle). The point then sees the triangle's plane, moving rigidly with the body. The points
+with a triangle -- within ``searchDistance`` of the rigid surface, or all without one -- are *located* in the
+block; the others take no part until a later search finds them within reach.
 The rigid surface must be closed and free of zero-area triangles, so that the outward normals are
 defined; both are checked when the constraint is created.
 
-**Gap.** With :math:`\boldsymbol{n}_q = \boldsymbol{R}\boldsymbol{N}_q` and the lever arm
-:math:`\boldsymbol{r}_q = \boldsymbol{x}_q - \boldsymbol{x}_{RP}`,
+**Gap.** With :math:`\boldsymbol{n}_p = \boldsymbol{R}\boldsymbol{N}_p` and the lever arm
+:math:`\boldsymbol{r}_p = \boldsymbol{x}_p - \boldsymbol{x}_{RP}`,
 
 .. math::
-    g_q = \boldsymbol{n}_q \cdot \boldsymbol{r}_q - d_q ,
+    g_p = \boldsymbol{n}_p \cdot \boldsymbol{r}_p - d_p ,
     \qquad
-    \frac{\partial g_q}{\partial \boldsymbol{x}^s_a} = N^s_a \boldsymbol{n}_q , \quad
-    \frac{\partial g_q}{\partial \boldsymbol{u}_{RP}} = -\boldsymbol{n}_q , \quad
-    \frac{\partial g_q}{\partial \boldsymbol{\theta}} = -\boldsymbol{S}^T(\boldsymbol{r}_q \times \boldsymbol{n}_q) ,
+    \frac{\partial g_p}{\partial \boldsymbol{x}_a} = c_a \boldsymbol{n}_p , \quad
+    \frac{\partial g_p}{\partial \boldsymbol{u}_{RP}} = -\boldsymbol{n}_p , \quad
+    \frac{\partial g_p}{\partial \boldsymbol{\theta}} = -\boldsymbol{S}^T(\boldsymbol{r}_p \times \boldsymbol{n}_p) ,
 
-with :math:`\boldsymbol{S} = \boldsymbol{R}\,\boldsymbol{J}_r(\boldsymbol{\theta})` (see
-:doc:`/model/rigidbodies`). Unlike the deformable case, the gap is not linear in the degrees of freedom: the
-normal rotates with the body, :math:`\partial\boldsymbol{n}_q/\partial\boldsymbol{\theta} =
--\mathrm{skew}(\boldsymbol{n}_q)\boldsymbol{S}`, which gives the geometric tangent terms coupling
+with :math:`c_a` the interpolation vector of the point at a node :math:`a` it acts on (:math:`N^s_a` for a
+quadrature point, :math:`1` for a slave node) and :math:`\boldsymbol{S} = \boldsymbol{R}\,\boldsymbol{J}_r(\boldsymbol{\theta})`
+(see :doc:`/model/rigidbodies`). Unlike the deformable case, the gap is not linear in the degrees of freedom: the
+normal rotates with the body, :math:`\partial\boldsymbol{n}_p/\partial\boldsymbol{\theta} =
+-\mathrm{skew}(\boldsymbol{n}_p)\boldsymbol{S}`, which gives the geometric tangent terms coupling
 the rotation to the slave nodes and to :math:`\boldsymbol{u}_{RP}`. The
-:math:`\boldsymbol{\theta}\boldsymbol{\theta}` block is omitted, as for the node-based constraint;
-it plays no role for a fixed rigid body or in explicit runs.
+:math:`\boldsymbol{\theta}\boldsymbol{\theta}` block is omitted: it needs the second derivative of the
+exponential map. It plays no role for a fixed rigid body or in explicit runs.
 
-**Degrees of freedom.** The constraint acts on all parent-face nodes of the slave surface and on the
-RP. This footprint does not depend on the search, so a search never changes the discrete system --
-which matters on the explicit path, where the search runs every ``contact-update-frequency``
-increments. The stiffness consists of one block per slave facet plus the RP block they all share
-(:mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`). A fixed support is a rigid body
-whose RP carries Dirichlet conditions.
+**Degrees of freedom.** The constraint acts on the nodes of the located contact points -- for a quadrature
+point a copy of its slave parent face's nodes, for a slave node the node itself -- and on the RP. A search changes the
+block only if it locates other points (a point comes within ``searchDistance``); then the discrete system is rebuilt.
+The stiffness consists of one block per located point plus the RP block they all share
+(:mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`). A fixed support is a rigid body whose RP carries
+Dirichlet conditions.
 
-**Penalty units.** In both integrated constraints ``penalty`` is a modulus per unit area (force per length cubed),
-multiplied by each point's area: its integration weight, or, for the slave nodes of
-``surfaceToDeformableSurfacePenalty`` (``contactPoints=nodes``), the tributary area of a node. The node-based
-constraints use a force per length per node instead, so a node-based value converts approximately as
-:math:`p_\text{integrated} \approx p_\text{node} / A_\text{tributary}`:
-
-.. list-table::
-    :header-rows: 1
-
-    * - Constraint
-      - ``type=linear``
-      - ``type=quadratic``
-    * - ``surfaceToDeformableSurfacePenalty``, ``surfaceToDiscreteRigidBodyPenalty``
-      - force / length\ :sup:`3`
-      - force / length\ :sup:`4`
-    * - ``nodeToDiscreteRigidBodyPenalty``
-      - force / length
-      - force / length\ :sup:`2`
-
-The integrated penalty is therefore also independent of the mesh size, e.g. under AMR, whereas a
-per-node penalty stiffens the interface by the refinement factor.
+**Penalty units.** In both integrated constraints ``penalty`` is a modulus per unit area (force per
+length cubed for ``type=linear``, per length to the fourth for ``type=quadratic``), multiplied by each point's
+area: its integration weight, or the tributary area of a node. A penalty per node converts as
+:math:`k_\text{area} = k_\text{node} / A_\text{tributary}`. The penalty per area is independent of the mesh
+size, e.g. under AMR, whereas a penalty per node stiffens the interface by the refinement factor.
 
 
 Framework integration and verification
@@ -1396,13 +1384,8 @@ per-slave outer product and four block writes.
 (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`): the contact
 adds the row sums of its stiffness, scaled by the lumped mass, to the frequencies of the nodes it couples. It asks
 right after the force, with the same arguments, so that the trial state of the friction, which ``computeKernels``
-writes for the next increment, is written again as the force wrote it. The contacts with a deformable master bound
-the springs their law puts at the closed points, the same springs as their force
-(:mod:`~edelweissfe.constraints.base.penaltysprings`), and build no tangent for it. The contact of a surface with a
-discrete rigid body is bounded from the tangent ``computeKernels`` gives at the state: ``NED`` builds it once per
-increment for the bound, in a scratch of the size of the block kept per location of the constraint, and its forces are
-still evaluated without it. While a point slips, the friction makes the tangent
-unsymmetric (:ref:`friction-tangent`); the bound takes the rows of its symmetric part there as well.
+writes for the next increment, is written again as the force wrote it. Every contact bounds the springs its law puts at the closed points, the same springs as its force
+(:mod:`~edelweissfe.constraints.base.penaltysprings`), and builds no tangent for it.
 
 **The connectivity search is throttled.** The closest-facet search is
 :math:`\mathcal{O}(n_\text{slave} \times n_\text{facet})` work in Python, affordable once per

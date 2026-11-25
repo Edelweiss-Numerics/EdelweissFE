@@ -31,26 +31,32 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.constraints.base.contactpointsonslavesurface import (
-    ContactPointsOnSlaveSurface,
-)
+from edelweissfe.constraints.base.contactpoints import ContactPoints
 from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
     ForcesOnlyExplicitEvaluation,
 )
 from edelweissfe.constraints.base.frozencontactsearch import FrozenContactSearch
 from edelweissfe.constraints.base.penaltylaw import penaltyLaw
+from edelweissfe.constraints.base.penaltysprings import (
+    PenaltySprings,
+    SpringGradientOnOwnNodes,
+    SpringGradientOnSharedNodes,
+    addBoundOfAbsoluteStiffnessOfSprings,
+    smallestGapsWithin,
+)
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
     rigidBodyContactLocalEntries,
 )
 from edelweissfe.constraints.base.surfacecontactpenaltyschema import (
     SurfaceContactPenaltySchema,
+    contactPointsOfTheSlaveSurface,
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.rigidbodies.discreterigidbody import DiscreteRigidBody
-from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.solvers.base.criticaltimestep import NextIncrement
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
     candidatePairs,
@@ -62,16 +68,19 @@ from edelweissfe.utils.rotations import skewMatrix
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
-A penalty based unilateral contact constraint between a deformable slave surface and a
-:class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody`, integrated over the slave
-surface at quadrature points and distributed with the slave *parent element face* shape functions.
+A penalty based unilateral contact constraint between the contact points of a slave body and a
+:class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody` -- for every kind of contact point: the quadrature
+points of the faces of finite elements and the nodes of finite elements. What a kind of point contributes -- how it
+moves, which nodes its force goes to, the area it stands for -- is its
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`, as in the contact with a deformable master
+(:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`); only the master side differs.
 
-This is the rigid-body counterpart of :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`,
-and exists for the same reason: a node-based scheme such as
-:mod:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty` cannot transmit a correct pressure
-across a serendipity (quad8/hexa20) face, whose consistent corner loads are tensile. Integrating the
-pressure at quadrature points and distributing it with the parent-face shape functions lets a corner
-node carry a tensile force from a non-negative pressure field.
+This is the rigid-body counterpart of :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`. Its default
+contact points are quadrature points for the same reason: nodes cannot transmit a correct pressure across a serendipity
+(quad8/hexa20) face, whose consistent corner loads are tensile. Integrating the pressure at quadrature points and
+distributing it with the parent-face shape functions lets a corner node carry a tensile force from a non-negative
+pressure field. With ``contactPoints=nodes`` it is the contact of nodes against a rigid body, with a penalty per unit
+area (times the tributary area of a node) and a small-sliding gap.
 """
 
 
@@ -95,88 +104,96 @@ class SurfaceToDiscreteRigidBodyPenaltySchema(SurfaceContactPenaltySchema):
 
 class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
     """
-    Penalty based unilateral contact between a slave surface and a discrete rigid body, integrated
-    at quadrature points over the slave facets.
+    Penalty based unilateral contact between the contact points of a slave body and a discrete rigid body.
 
     Contact points
     --------------
-    The contact points are the quadrature points of the slave facets, positioned on the curved
-    slave parent faces, :math:`\\boldsymbol{x}_q = N^s(\\xi_q) \\cdot \\boldsymbol{x}^s`, with
-    integration weights :math:`J_q`; see
-    :class:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface`.
+    A contact point :math:`p` moves with an interpolation vector :math:`\\boldsymbol{c}` over the nodes it acts on, and
+    stands for an area :math:`A_p` (see :mod:`~edelweissfe.constraints.base.contactpoints`): a quadrature point of a
+    slave facet, positioned on the curved slave parent face, :math:`\\boldsymbol{x}_p = N^s(\\xi_q) \\cdot
+    \\boldsymbol{x}^s` (:math:`\\boldsymbol{c} = N^s(\\xi_q)`, :math:`A_p = w_q J_q`), or a slave node
+    (:math:`\\boldsymbol{c} = [1]`, its tributary area). Each acts on nodes of its own in the block of the constraint: a
+    quadrature point on a copy of its own of the nodes of its slave face, a slave node on itself; only the RP of the
+    rigid body is shared by all. An input file chooses the quadrature points or the nodes of a slave surface (option
+    ``contactPoints``); a kind of point of another library is given to the constructor in code.
 
     Rigid body motion
     -----------------
     The rigid body moves with its reference point (RP): current position
-    :math:`\\boldsymbol{c} = \\boldsymbol{X}_{RP} + \\boldsymbol{u}_{RP}` and rotation
+    :math:`\\boldsymbol{x}_{RP} = \\boldsymbol{X}_{RP} + \\boldsymbol{u}_{RP}` and rotation
     :math:`R = \\exp(\\mathrm{skew}(\\boldsymbol{\\theta}))`. A body-frame point :math:`\\boldsymbol{Y}` is
-    at :math:`\\boldsymbol{y} = \\boldsymbol{c} + R\\,(\\boldsymbol{Y} - \\boldsymbol{X}_{RP})`.
+    at :math:`\\boldsymbol{y} = \\boldsymbol{x}_{RP} + R\\,(\\boldsymbol{Y} - \\boldsymbol{X}_{RP})`.
 
     Contact search (small sliding)
     ------------------------------
-    At every contact search (:meth:`updateConnectivity`), each contact point is pulled back into the
-    body frame, and its closest rigid triangle :math:`t` is found. Frozen until the next search are the
-    triangle's outward body-frame normal :math:`\\boldsymbol{N}_q` and its plane offset
-    :math:`d_q = \\boldsymbol{N}_q \\cdot (\\boldsymbol{Y}_t - \\boldsymbol{X}_{RP})`, with
+    At every contact search (:meth:`updateConnectivity`), each contact point is pulled back into the body
+    frame, and its closest rigid triangle :math:`t` is found. Frozen until the next search are the
+    triangle's outward body-frame normal :math:`\\boldsymbol{N}_p` and its plane offset
+    :math:`d_p = \\boldsymbol{N}_p \\cdot (\\boldsymbol{Y}_t - \\boldsymbol{X}_{RP})`, with
     :math:`\\boldsymbol{Y}_t` any vertex of the triangle. The point then sees the triangle's *plane*,
-    moving rigidly with the body.
+    moving rigidly with the body. The points that have a triangle are *located* in the block of the constraint
+    (:meth:`~edelweissfe.constraints.base.contactpoints.ContactPoints.locatePoints`); a point farther than
+    ``searchDistance`` from the rigid surface has none and takes no part until a later search finds it within reach.
 
     Gap and its derivatives
     -----------------------
-    With the current normal :math:`\\boldsymbol{n}_q = R\\,\\boldsymbol{N}_q` and the lever arm
-    :math:`\\boldsymbol{r}_q = \\boldsymbol{x}_q - \\boldsymbol{c}`, the gap (negative when penetrating) is
+    With the current normal :math:`\\boldsymbol{n}_p = R\\,\\boldsymbol{N}_p` and the lever arm
+    :math:`\\boldsymbol{r}_p = \\boldsymbol{x}_p - \\boldsymbol{x}_{RP}`, the gap (negative when penetrating) is
 
     .. math::
-        g_q = \\boldsymbol{n}_q \\cdot \\boldsymbol{r}_q - d_q .
+        g_p = \\boldsymbol{n}_p \\cdot \\boldsymbol{r}_p - d_p .
 
-    Its gradient with respect to the slave parent-face nodes, the RP displacement and the RP rotation
+    Its gradient with respect to the nodes :math:`a` the point acts on, the RP displacement and the RP rotation
     is
 
     .. math::
-        \\frac{\\partial g_q}{\\partial \\boldsymbol{x}^s_a} = N^s_a \\, \\boldsymbol{n}_q , \\qquad
-        \\frac{\\partial g_q}{\\partial \\boldsymbol{u}_{RP}} = -\\boldsymbol{n}_q , \\qquad
-        \\frac{\\partial g_q}{\\partial \\boldsymbol{\\theta}} = -S^T (\\boldsymbol{r}_q \\times \\boldsymbol{n}_q) ,
+        \\frac{\\partial g_p}{\\partial \\boldsymbol{x}_a} = c_a \\, \\boldsymbol{n}_p , \\qquad
+        \\frac{\\partial g_p}{\\partial \\boldsymbol{u}_{RP}} = -\\boldsymbol{n}_p , \\qquad
+        \\frac{\\partial g_p}{\\partial \\boldsymbol{\\theta}} = -S^T (\\boldsymbol{r}_p \\times \\boldsymbol{n}_p) ,
 
     with ``dPhysicalSpin_dTheta`` :math:`S = R\\,J_r(\\boldsymbol{\\theta})`, see
     :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.poseFromDofs`. Since the normal
-    rotates with the body, :math:`\\partial \\boldsymbol{n}_q / \\partial \\boldsymbol{\\theta} =
-    -\\mathrm{skew}(\\boldsymbol{n}_q)\\,S`, the non-zero second derivatives are
+    rotates with the body, :math:`\\partial \\boldsymbol{n}_p / \\partial \\boldsymbol{\\theta} =
+    -\\mathrm{skew}(\\boldsymbol{n}_p)\\,S`, the non-zero second derivatives are
 
     .. math::
-        \\frac{\\partial^2 g_q}{\\partial \\boldsymbol{x}^s_a \\partial \\boldsymbol{\\theta}}
-        = -N^s_a \\, \\mathrm{skew}(\\boldsymbol{n}_q)\\,S , \\qquad
-        \\frac{\\partial^2 g_q}{\\partial \\boldsymbol{u}_{RP} \\partial \\boldsymbol{\\theta}}
-        = \\mathrm{skew}(\\boldsymbol{n}_q)\\,S ,
+        \\frac{\\partial^2 g_p}{\\partial \\boldsymbol{x}_a \\partial \\boldsymbol{\\theta}}
+        = -c_a \\, \\mathrm{skew}(\\boldsymbol{n}_p)\\,S , \\qquad
+        \\frac{\\partial^2 g_p}{\\partial \\boldsymbol{u}_{RP} \\partial \\boldsymbol{\\theta}}
+        = \\mathrm{skew}(\\boldsymbol{n}_p)\\,S ,
 
-    and their transposes. The :math:`\\boldsymbol{\\theta}\\boldsymbol{\\theta}` block is omitted, as in
-    :mod:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty`: it needs the second derivative of
-    the exponential map. It affects only the convergence rate of implicit runs with a rotating RP, not
-    the residual; with a fixed RP, or in explicit runs, it plays no role.
+    and their transposes. The :math:`\\boldsymbol{\\theta}\\boldsymbol{\\theta}` block is omitted: it needs the
+    second derivative of the exponential map. It affects only the convergence rate of implicit runs with a rotating
+    RP, not the residual; with a fixed RP, or in explicit runs, it plays no role.
 
     Forces and tangent
     ------------------
     With the normal force :math:`f_n` and :math:`\\mathrm{d}f_n/\\mathrm{d}g` from
     :meth:`~edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw.normalForce`, evaluated for
-    :math:`p\\,J_q`, each closed point exerts the force
-    :math:`-f_n \\, \\partial g_q / \\partial \\boldsymbol{q}` on the nodes, so it adds the residual
+    :math:`k\\,A_p`, with :math:`k` the ``penalty``, each closed point exerts the force
+    :math:`-f_n \\, \\partial g_p / \\partial \\boldsymbol{q}` on the nodes, so it adds the residual
     contribution and its tangent
 
     .. math::
-        P \\mathrel{+{=}} f_n \\, \\frac{\\partial g_q}{\\partial \\boldsymbol{q}} , \\qquad
+        P \\mathrel{+{=}} f_n \\, \\frac{\\partial g_p}{\\partial \\boldsymbol{q}} , \\qquad
         K \\mathrel{+{=}} \\frac{\\mathrm{d}f_n}{\\mathrm{d}g} \\,
-        \\frac{\\partial g_q}{\\partial \\boldsymbol{q}} \\otimes \\frac{\\partial g_q}{\\partial \\boldsymbol{q}}
-        + f_n \\, \\frac{\\partial^2 g_q}{\\partial \\boldsymbol{q}^2} .
+        \\frac{\\partial g_p}{\\partial \\boldsymbol{q}} \\otimes \\frac{\\partial g_p}{\\partial \\boldsymbol{q}}
+        + f_n \\, \\frac{\\partial^2 g_p}{\\partial \\boldsymbol{q}^2} .
+
+    The contact points distribute their part with their interpolation vectors
+    (:meth:`~edelweissfe.constraints.base.contactpoints.ContactPoints.addForceResidual`), as in the contact with a
+    deformable master.
 
     Degrees of freedom
     ------------------
-    The constraint acts on the parent-face nodes of every slave facet (displacement), followed by the
-    RP (displacement and rotation). This footprint does not depend on the contact search, so a search
-    never changes the discrete system. The stiffness is one block per slave facet plus the shared RP
-    block, see :mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`. A fixed rigid body is
-    simply one whose RP carries Dirichlet conditions; the RP reaction is then the support force.
+    The constraint acts on the nodes of the located contact points (the slave part of its block), followed by the RP
+    (displacement and rotation). The stiffness is one block per located point plus the RP block they all share, see
+    :mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`. A search changes the block only if it locates other
+    points (or, for a kind of point whose nodes follow from where it is, if the located points act on other nodes). A
+    fixed rigid body is simply one whose RP carries Dirichlet conditions; the RP reaction is then the support force.
 
-    The force evaluation is vectorized over all contact points, which requires all slave parent faces
-    to have the same number of nodes (a slave surface of a single element type).
+    The force evaluation is vectorized over the located points, which requires a slave surface of finite elements
+    to consist of faces of one type (a single element type).
 
     Parameters
     ----------
@@ -184,20 +201,22 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         The name of this constraint.
     model
         The model tree.
-    slaveSurface
-        The element set of contact facet elements forming the slave surface.
+    contactPoints
+        The contact points of the slave side.
     rigidBody
         The discrete rigid body.
     journal
         The journal instance.
     configuration
-        The options this constraint accepts, see :class:`SurfaceToDiscreteRigidBodyPenaltySchema`.
+        The options this constraint accepts, see :class:`SurfaceToDiscreteRigidBodyPenaltySchema`. Its
+        ``slaveSurface``, ``nQuadraturePoints`` and ``contactPoints`` say which contact points an input file builds
+        (:meth:`fromConstraintDefinition`); here they are given.
     """
 
     #: Option schema for this constraint, per OptionSchemaProvider.
     schema = SurfaceToDiscreteRigidBodyPenaltySchema
 
-    #: The contact searches for the closest triangles as the bodies move, though the nodes it couples stay.
+    #: The contact searches for the closest triangles as the bodies move.
     connectivityChangesWithMotion = True
 
     #: Journal sender tag.
@@ -207,7 +226,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self,
         name: str,
         model: FEModel,
-        slaveSurface: ElementSet,
+        contactPoints: ContactPoints,
         rigidBody: DiscreteRigidBody,
         journal: Journal,
         *,
@@ -222,7 +241,6 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.journal = journal
         self.rigidBody = rigidBody
         self.rpNode = rigidBody.rpNode
-        self._slaveSurfaceSetName = slaveSurface.name
         self._lastSeenTopologyVersion = model.topology.version
         model.topology.registerMeshDependent(self)
 
@@ -233,24 +251,19 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
         self.law = penaltyLaw(configuration.contactType)
-        if configuration.contactPoints.lower() != "quadraturepoints":
-            raise ValueError(
-                f"Constraint '{name}': surfaceToDiscreteRigidBodyPenalty takes the quadrature points of the slave "
-                f"facets as its contact points, not contactPoints={configuration.contactPoints}; for the nodes of a "
-                "surface against a rigid body, use nodeToDiscreteRigidBodyPenalty."
-            )
         if configuration.sliding.lower() != "small":
             raise ValueError(
                 f"Constraint sliding '{configuration.sliding}' is not supported by "
                 "surfaceToDiscreteRigidBodyPenalty: only 'small' is implemented."
             )
-        self.nQuadraturePoints = configuration.nQuadraturePoints
         self.searchDistance = configuration.searchDistance
 
         # Validates the rigid surface (closed, triangles only, no zero-area triangles).
         self._rigidTriangles, self._rigidTriangleNormals = rigidBody.referenceTriangles()
 
-        self._buildFromSlaveSurface(slaveSurface)
+        self.slave = contactPoints
+        self._nodes = [self.rpNode]
+        self._resetContactPoints()
 
         self.journal.message(
             f"contact '{self.name}': {self.slave.describe()} against rigid body '{rigidBody.name}' "
@@ -260,55 +273,36 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     @classmethod
     def fromConstraintDefinition(cls, name: str, definition: dict, model: FEModel, journal: Journal) -> "Constraint":
-        """Build this constraint from a parsed ``*constraint`` definition. See
+        """Build this constraint from a parsed ``*constraint`` definition, with the contact points the option
+        ``contactPoints`` chooses on the slave surface. See
         :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase` for why this is
         separate from ``__init__``."""
         configuration = buildSchemaFromOptions(cls.schema, definition)
         return cls(
             name,
             model,
-            model.elementSets[configuration.slaveSurface],
+            contactPointsOfTheSlaveSurface(configuration, model, name),
             model.rigidBodies[configuration.rigidBody],
             journal,
             configuration=configuration,
         )
 
-    def _buildFromSlaveSurface(self, slaveSurface: ElementSet):
-        """Build (or rebuild, after an AMR refinement) everything that depends on the slave surface.
+    def _resetContactPoints(self):
+        """Size the per-point state for the current contact points, which start without a rigid triangle."""
 
-        Parameters
-        ----------
-        slaveSurface
-            The element set of slave contact facets.
-        """
+        nPoints = self.slave.nPoints
 
-        self.slave = ContactPointsOnSlaveSurface(slaveSurface, self.nQuadraturePoints, self.name)
+        # The frozen contact search result of each point. A point without a triangle keeps a zero normal and a zero
+        # offset, and is not located.
+        self._frozenBodyNormals = np.zeros((nPoints, self.nDim))
+        self._frozenPlaneOffsets = np.zeros(nPoints)
 
-        # Degrees of freedom: all parent-face nodes of each slave facet, facet by facet, then the RP.
-        nFacets = len(self.slave.facets)
-        self._nodes = [node for nodes in self.slave.parentNodes for node in nodes] + [self.rpNode]
-        self._fields = [["displacement"]] * (len(self._nodes) - 1) + [["displacement", "rotation"]]
-        self.nSlaveDof = nFacets * self.slave.nParentNodes * self.nDim
-        self._nDof = self.nSlaveDof + self.rpDofCount
-        self._slaveBlockSizes = [self.slave.nParentNodes * self.nDim] * nFacets
-
-        # All contact points stacked, for the vectorized evaluation.
-        self._shapeFunctions = (
-            np.concatenate(self.slave.shapeFunctions) if nFacets else np.zeros((0, self.slave.nParentNodes))
-        )
-        self._integrationWeights = np.concatenate(self.slave.integrationWeights) if nFacets else np.zeros(0)
-        self._parentReferenceCoordinates = np.array(self.slave.parentReferenceCoordinates).reshape(
-            (nFacets, self.slave.nParentNodes, self.nDim)
-        )
-
-        # The frozen contact search result of each point. An unassigned point keeps a zero normal and
-        # a zero offset, so that its gap is exactly zero and it never closes.
-        self._frozenBodyNormals = np.zeros((self.nPoints, self.nDim))
-        self._frozenPlaneOffsets = np.zeros(self.nPoints)
-
-        self._gapCurrent = np.zeros(self.nPoints)
-        self._normalForceCurrent = np.zeros(self.nPoints)
+        # Per-point results of the current evaluation, for output.
+        self._gapCurrent = np.zeros(nPoints)
+        self._normalForceCurrent = np.zeros(nPoints)
         self.totalNormalForce = 0.0
+
+        self._locatePointsWithATriangle()
 
     @property
     def nodes(self) -> list:
@@ -316,25 +310,26 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     @property
     def fields(self) -> list:
-        return self._fields
+        return [["displacement"]] * (len(self._nodes) - 1) + [["displacement", "rotation"]]
 
     @property
     def nDof(self) -> int:
-        return self._nDof
+        return self.nSlaveDof + self.rpDofCount
 
     @property
     def nPoints(self) -> int:
-        """The number of contact points, see :class:`ContactPointsOnSlaveSurface`."""
+        """The number of contact points."""
         return self.slave.nPoints
 
     @property
     def slaveSurfaceNodes(self) -> list:
-        """The unique slave facet nodes, see :attr:`ContactPointsOnSlaveSurface.surfaceNodes`."""
+        """The nodes of an FE slave surface, see
+        :attr:`~edelweissfe.constraints.base.contactpoints.ContactPoints.surfaceNodes`."""
         return self.slave.surfaceNodes
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        """The contact search: assign each contact point its closest rigid triangle, in the last
-        converged configuration, and freeze that triangle's normal and plane offset.
+        """The contact search: assign each contact point its closest rigid triangle, in the configuration of the
+        model, freeze that triangle's normal and plane offset, and locate the points that have one.
 
         Called at the start of every increment by implicit solvers, and every
         ``contact-update-frequency`` increments by the explicit solver.
@@ -342,11 +337,44 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         Returns
         -------
         bool
-            Always False: the degrees of freedom of this constraint do not depend on the search.
+            True if the nodes of the constraint changed.
         """
 
         self._searchClosestRigidTriangles(model)
-        return False
+        return self._locatePointsWithATriangle()
+
+    def _locatePointsWithATriangle(self) -> bool:
+        """Locate the contact points that have a rigid triangle in the block: the nodes they act on (the slave part),
+        then the RP. Their frozen normals and offsets are gathered into arrays, once per search, so that an evaluation
+        is a fixed handful of array operations rather than a loop over the points.
+
+        Returns
+        -------
+        bool
+            True if the nodes of the constraint changed.
+        """
+
+        located = np.flatnonzero(np.any(self._frozenBodyNormals != 0.0, axis=1))
+        self._locatedPoints = located
+
+        previousNodes = self._nodes
+        slaveNodes = self.slave.locatePoints(located)
+        self._nodes = slaveNodes + [self.rpNode]
+        self.nSlaveDof = self.nDim * len(slaveNodes)
+
+        self._bodyNormalsOfLocated = self._frozenBodyNormals[located]
+        self._planeOffsetsOfLocated = self._frozenPlaneOffsets[located]
+        self._areasOfLocated = self.slave.areas[located]
+        self._slaveDofsOfLocated = [self.slave.interpolationOfLocatedPoint(k)[0] for k in range(len(located))]
+
+        # A point that lost its triangle has no gap and no force: reset them, so that getGaps() and the pressures do
+        # not keep their last values.
+        withoutATriangle = np.ones(self.nPoints, dtype=bool)
+        withoutATriangle[located] = False
+        self._gapCurrent[withoutATriangle] = 0.0
+        self._normalForceCurrent[withoutATriangle] = 0.0
+
+        return self._nodes != previousNodes
 
     def _searchClosestRigidTriangles(self, model: FEModel):
         """Assign each contact point its closest rigid triangle, see :meth:`updateConnectivity`."""
@@ -429,33 +457,33 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return {"bodyNormals": self._frozenBodyNormals, "planeOffsets": self._frozenPlaneOffsets}
 
     def _adoptFrozenProjection(self, projection: dict[str, np.ndarray]) -> bool:
-        self._frozenBodyNormals[:] = projection["bodyNormals"]
+        self._frozenBodyNormals[:] = np.reshape(projection["bodyNormals"], self._frozenBodyNormals.shape)
         self._frozenPlaneOffsets[:] = projection["planeOffsets"]
-        # The coupled DOFs (slave nodes and the reference point) do not depend on the search.
-        return False
+        if self.slave.locatedOnlyWhenConnected:
+            # Located at the next update of the connectivity, once the entities of the points are connected.
+            return False
+        return self._locatePointsWithATriangle()
 
     def refresh(self, model: FEModel, change) -> bool:
-        """Rebuild the slave side from the regenerated facet set if ``change`` touched its source
-        elements, and search the rigid triangles again for the new contact points."""
+        """Regenerate the contact points if ``change`` touched them (e.g. a refinement of the elements of the slave
+        surface), and search the rigid triangles again for the new contact points."""
 
         if not self.slave.isTouchedBy(model, change):
             return False
 
-        self._buildFromSlaveSurface(model.elementSets[self._slaveSurfaceSetName])
+        self.slave = self.slave.regenerated(model)
+        self._resetContactPoints()
         self._searchClosestRigidTriangles(model)
+        self._locatePointsWithATriangle()
         return True
 
     def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
-        slaveBlockLocalIndices = [np.arange(first, first + m) for first, m in self._slaveBlockOffsets()]
-        return rigidBodyContactLocalEntries(np.arange(self.nSlaveDof, self.nDof), slaveBlockLocalIndices)
+        """The RP block, then per located contact point its block over its slave degrees of freedom and their coupling
+        with the RP, see :mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`."""
+        return rigidBodyContactLocalEntries(np.arange(self.nSlaveDof, self.nDof), self._slaveDofsOfLocated)
 
     def shapeBlock(self, values: np.ndarray) -> RigidBodyContactStiffnessView:
-        return RigidBodyContactStiffnessView(values, self.rpDofCount, self._slaveBlockSizes)
-
-    def _slaveBlockOffsets(self) -> list[tuple[int, int]]:
-        """The first local index and the size of each slave facet's block."""
-        m = self.slave.nParentNodes * self.nDim
-        return [(f * m, m) for f in range(len(self.slave.facets))]
+        return RigidBodyContactStiffnessView(values, self.rpDofCount, [len(dofs) for dofs in self._slaveDofsOfLocated])
 
     def computeKernels(
         self,
@@ -465,65 +493,161 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         K: RigidBodyContactStiffnessView | None,
         timeStep: TimeStep,
     ):
-        """Add the residual contribution of the contact, the negative of its forces on the slave nodes and on
-        the rigid body, and the tangent unless ``K`` is None (explicit runs)."""
+        """Add the residual contribution of the contact, the negative of its forces on the nodes of the contact points
+        and on the rigid body, and the tangent unless ``K`` is None (explicit runs)."""
 
         self.totalNormalForce = 0.0
         self._normalForceCurrent[:] = 0.0
-        if self.nPoints == 0:
+        located = self._locatedPoints
+        if not len(located):
             return
 
-        nFacets, nQuadraturePoints, nDim = len(self.slave.facets), self.nQuadraturePoints, self.nDim
+        gaps, normals, leverArms, dPhysicalSpin_dTheta = self._locatedPointsAgainstTheRigidBody(U_np, dU)
+        self._gapCurrent[located] = gaps
 
-        # Current positions of the contact points on the curved slave parent faces.
-        slaveDisplacements = U_np[: self.nSlaveDof].reshape((nFacets, self.slave.nParentNodes, nDim))
-        parentCoordinates = self._parentReferenceCoordinates + slaveDisplacements
-        pointCoordinates = np.einsum("pa,paj->pj", self._shapeFunctions, parentCoordinates[self.slave.pointFacet])
+        springs = self._springsOfClosedPoints(gaps, normals)
+        if springs is None:
+            return
+        closed, normalForces = springs.points, springs.forces
+
+        self._normalForceCurrent[located[closed]] = normalForces
+        self.totalNormalForce = float(normalForces.sum())
+
+        # The force on the nodes of a point is -f_n c n: the contact points distribute it.
+        self.slave.addForceResidual(P[: self.nSlaveDof], closed, normalForces, springs.directions)
+
+        # The force on the RP is -f_n dg/du_RP = f_n n, and the force conjugate to its rotation DOF is
+        # -f_n dg/dtheta = f_n S^T (r x n).
+        forceOnRigidBody = normalForces @ springs.directions
+        momentOnRigidBody = normalForces @ np.cross(leverArms[closed], springs.directions)
+        P[self.nSlaveDof : self.nSlaveDof + self.nDim] -= forceOnRigidBody
+        P[self.nSlaveDof + self.nDim :] -= dPhysicalSpin_dTheta.T @ momentOnRigidBody
+
+        if K is not None:
+            self._addTangent(K, closed, normalForces, springs.stiffness, normals, leverArms, dPhysicalSpin_dTheta)
+
+    def _locatedPointsAgainstTheRigidBody(
+        self, U_np: np.ndarray, dU: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Where the located contact points are against the rigid body: their gaps, the current normals of their
+        triangles, their lever arms about the RP, and :math:`S`, see the class docstring.
+
+        Parameters
+        ----------
+        U_np
+            The solution of the constraint's block.
+        dU
+            The increment of the constraint's block.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray, numpy.ndarray]
+            The gaps (nLocated), the normals and the lever arms (nLocated, nDim), and ``dPhysicalSpin_dTheta``.
+        """
+
+        nSlaveDof, nDim = self.nSlaveDof, self.nDim
+
+        # Where the located contact points are, as their kind of point says.
+        pointCoordinates = self.slave.coordinatesOfLocatedPoints(U_np[:nSlaveDof], dU[:nSlaveDof])
 
         # The rigid body pose, from this constraint's own trial solution (not the converged NodeFields).
-        rpDisplacement = U_np[self.nSlaveDof : self.nSlaveDof + nDim]
-        rpRotation = U_np[self.nSlaveDof + nDim :]
+        rpDisplacement = U_np[nSlaveDof : nSlaveDof + nDim]
+        rpRotation = U_np[nSlaveDof + nDim :]
         rpCurrentPosition, rotationMatrix, dPhysicalSpin_dTheta = self.rigidBody.poseFromDofs(
             rpDisplacement, rpRotation
         )
 
         # n = R N, for row vectors N @ R^T; the lever arm r = x - c; the gap g = n.r - d.
-        normals = self._frozenBodyNormals @ rotationMatrix.T
+        normals = self._bodyNormalsOfLocated @ rotationMatrix.T
         leverArms = pointCoordinates - rpCurrentPosition
-        gaps = np.einsum("pj,pj->p", normals, leverArms) - self._frozenPlaneOffsets
-        self._gapCurrent[:] = gaps
+        gaps = np.einsum("pj,pj->p", normals, leverArms) - self._planeOffsetsOfLocated
+        return gaps, normals, leverArms, dPhysicalSpin_dTheta
 
-        closed = gaps < 0.0
-        if not closed.any():
+    def _springsOfClosedPoints(self, gaps: np.ndarray, normals: np.ndarray) -> PenaltySprings | None:
+        """The penalty springs of the contact law (:meth:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.springs`):
+        one along the current normal at every closed point, with the force and the stiffness the law gives it for
+        :math:`k\\, A_p`, with :math:`k` the ``penalty``. The force (:meth:`computeKernels`) and the bound of the
+        stiffness (:meth:`addBoundOfAbsoluteStiffnessTimes`) go through these springs. The constraint measures gaps
+        only and takes contact laws only, whose springs are these, if any.
+
+        Parameters
+        ----------
+        gaps
+            The gaps of the located points.
+        normals
+            The current normals of their triangles.
+
+        Returns
+        -------
+        PenaltySprings or None
+            The springs; None if no point is closed.
+        """
+
+        springs = self.law.springs(self.penalty * self._areasOfLocated, gaps, normals)
+        return springs[0] if springs else None
+
+    def addBoundOfAbsoluteStiffnessTimes(
+        self,
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        weights: np.ndarray,
+        bound: np.ndarray,
+        timeStep: TimeStep,
+        nextIncrement: NextIncrement | None = None,
+    ):
+        """Add the row sums of the absolute value of the stiffness of the springs, weighted by column; see
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`.
+
+        The springs are those of the force (:meth:`_springsOfClosedPoints`), over the next increment at the smallest
+        gap of each point within it (:func:`~edelweissfe.constraints.base.penaltysprings.smallestGapsWithin`).
+        A spring :math:`p` acts with the vector :math:`\\boldsymbol{a}_p`, the gradient of its gap now (see the class
+        docstring): :math:`\\boldsymbol{c} \\otimes \\boldsymbol{n}_p` on the nodes of the contact point, each point on
+        its own (with the interpolation matrix of the contact points), :math:`-\\boldsymbol{n}_p` on the displacement of
+        the RP and :math:`-S^T (\\boldsymbol{r}_p \\times \\boldsymbol{n}_p)` on its rotation, with the stiffness
+        :math:`k_p = \\mathrm{d}f/\\mathrm{d}g` its law gives it; the bound is the one of every penalty spring
+        (:func:`~edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings`). Every spring acts
+        on the RP, so the tangent's largest entries over the states of the next increment would miss the sum of
+        springs that close in different states there; the springs' bound sums them. At the RP's rows it is at least
+        the row sums of the springs' tangent, and above them where the moments of points on either side of the RP
+        cancel in the tangent, not in the bound -- safe, and blunt where a light free rigid body governs the critical
+        time step. Not bounded: the second derivatives
+        of the gap, scaled by the normal force (the normal rotates with the body); against the spring, of the order of
+        the penetration over the lever arm.
+        """
+
+        located = self._locatedPoints
+        if not len(located):
             return
 
-        normalForces, dNormalForce_dGap = self.law.normalForce(
-            self.penalty * self._integrationWeights[closed], gaps[closed]
-        )
-        self._normalForceCurrent[closed] = normalForces
-        self.totalNormalForce = float(normalForces.sum())
-
-        # The force on the slave nodes is -f_n N_a n, summed over the quadrature points of each facet.
-        slaveForces = -self._normalForceCurrent[:, None, None] * self._shapeFunctions[:, :, None] * normals[:, None, :]
-        P[: self.nSlaveDof] -= slaveForces.reshape((nFacets, nQuadraturePoints, -1)).sum(axis=1).ravel()
-
-        # The force on the RP is -f_n dg/du_RP = f_n n, and the force conjugate to its rotation DOF is
-        # -f_n dg/dtheta = f_n S^T (r x n).
-        forceOnRigidBody = normalForces @ normals[closed]
-        momentOnRigidBody = normalForces @ np.cross(leverArms[closed], normals[closed])
-        P[self.nSlaveDof : self.nSlaveDof + nDim] -= forceOnRigidBody
-        P[self.nSlaveDof + nDim :] -= dPhysicalSpin_dTheta.T @ momentOnRigidBody
-
-        if K is not None:
-            self._addTangent(
-                K,
-                np.flatnonzero(closed),
-                normalForces,
-                dNormalForce_dGap,
-                normals,
-                leverArms,
-                dPhysicalSpin_dTheta,
+        gaps, normals, leverArms, dPhysicalSpin_dTheta = self._locatedPointsAgainstTheRigidBody(U_np, dU)
+        if nextIncrement is not None:
+            gaps = smallestGapsWithin(
+                nextIncrement,
+                lambda U, dU, timeStep: self._locatedPointsAgainstTheRigidBody(U, dU)[0],
+                U_np,
+                dU,
+                timeStep,
             )
+        springs = self._springsOfClosedPoints(gaps, normals)
+        if springs is None:
+            return
+        closed, n = springs.points, springs.directions
+
+        nSlaveDof, nDim = self.nSlaveDof, self.nDim
+        oneNodeEach = -np.ones((len(closed), 1))
+        dofsOfTheRp = nSlaveDof + np.arange(self.rpDofCount)
+        gradient = [
+            SpringGradientOnSharedNodes(
+                self.slave.interpolationMatrixOfLocatedPoints()[closed], n, np.arange(nSlaveDof).reshape((-1, nDim))
+            ),
+            SpringGradientOnOwnNodes(oneNodeEach, n, np.broadcast_to(dofsOfTheRp[:nDim], (len(closed), 1, nDim))),
+            SpringGradientOnOwnNodes(
+                oneNodeEach,
+                np.cross(leverArms[closed], n) @ dPhysicalSpin_dTheta,
+                np.broadcast_to(dofsOfTheRp[nDim:], (len(closed), 1, self.rpDofCount - nDim)),
+            ),
+        ]
+        addBoundOfAbsoluteStiffnessOfSprings(bound, weights, springs.stiffness, gradient)
 
     def _addTangent(
         self,
@@ -535,35 +659,52 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         leverArms: np.ndarray,
         dPhysicalSpin_dTheta: np.ndarray,
     ):
-        """Add the tangent of the closed contact points, see the class docstring."""
+        """Add the tangent of the closed contact points, see the class docstring.
+
+        Parameters
+        ----------
+        K
+            The tangent of the constraint; augmented.
+        closedPoints
+            The closed points (indices into the located points).
+        normalForces
+            Their normal forces.
+        dNormalForce_dGap
+            Their stiffness.
+        normals
+            The current normals of the located points.
+        leverArms
+            The lever arms of the located points about the RP.
+        dPhysicalSpin_dTheta
+            :math:`S`, see the class docstring.
+        """
 
         nDim = self.nDim
-        for i, p in enumerate(closedPoints):
-            f = self.slave.pointFacet[p]
-            shapeFunctions = self._shapeFunctions[p]
-            n = normals[p]
+        for i, k in enumerate(closedPoints):
+            interpolation = self.slave.interpolationOfLocatedPoint(k)[1]
+            n = normals[k]
 
-            dGap_dSlave = np.kron(shapeFunctions, n)
-            dGap_dRp = np.concatenate((-n, -dPhysicalSpin_dTheta.T @ np.cross(leverArms[p], n)))
+            dGap_dSlave = np.kron(interpolation, n)
+            dGap_dRp = np.concatenate((-n, -dPhysicalSpin_dTheta.T @ np.cross(leverArms[k], n)))
 
-            K.K_ss[f] += dNormalForce_dGap[i] * np.outer(dGap_dSlave, dGap_dSlave)
-            K.K_srp[f] += dNormalForce_dGap[i] * np.outer(dGap_dSlave, dGap_dRp)
-            K.K_rps[f] += dNormalForce_dGap[i] * np.outer(dGap_dRp, dGap_dSlave)
+            K.K_ss[k] += dNormalForce_dGap[i] * np.outer(dGap_dSlave, dGap_dSlave)
+            K.K_srp[k] += dNormalForce_dGap[i] * np.outer(dGap_dSlave, dGap_dRp)
+            K.K_rps[k] += dNormalForce_dGap[i] * np.outer(dGap_dRp, dGap_dSlave)
             K.K_rprp += dNormalForce_dGap[i] * np.outer(dGap_dRp, dGap_dRp)
 
             # The normal rotates with the rigid body: dn/dtheta = -skew(n) S.
             dNormal_dTheta = -skewMatrix(n) @ dPhysicalSpin_dTheta
-            d2Gap_dSlave_dTheta = np.kron(shapeFunctions[:, None], dNormal_dTheta)
+            d2Gap_dSlave_dTheta = np.kron(interpolation[:, None], dNormal_dTheta)
             d2Gap_dRpDisplacement_dTheta = -dNormal_dTheta
 
-            K.K_srp[f][:, nDim:] += normalForces[i] * d2Gap_dSlave_dTheta
-            K.K_rps[f][nDim:, :] += normalForces[i] * d2Gap_dSlave_dTheta.T
+            K.K_srp[k][:, nDim:] += normalForces[i] * d2Gap_dSlave_dTheta
+            K.K_rps[k][nDim:, :] += normalForces[i] * d2Gap_dSlave_dTheta.T
             K.K_rprp[:nDim, nDim:] += normalForces[i] * d2Gap_dRpDisplacement_dTheta
             K.K_rprp[nDim:, :nDim] += normalForces[i] * d2Gap_dRpDisplacement_dTheta.T
 
     def getNormalPressures(self) -> np.ndarray:
-        """The current normal contact pressures (positive in compression), one per contact point,
-        ordered by slave facet and quadrature point."""
+        """The current normal contact pressures (positive in compression), one per contact point, ordered like the
+        contact points (for quadrature points: by slave facet and quadrature point)."""
 
         return self.slave.normalPressures(self._normalForceCurrent)
 
@@ -574,8 +715,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         return self._gapCurrent.copy()
 
     def getSlaveNodalNormalForces(self) -> np.ndarray:
-        """The normal contact force at each slave surface node; negative means pulled, see
-        :meth:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.nodalNormalForces`.
+        """The normal contact force at each node of an FE slave surface; negative means pulled, see
+        :meth:`~edelweissfe.constraints.base.contactpoints.ContactPoints.nodalNormalForces`.
         """
 
         return self.slave.nodalNormalForces(self._normalForceCurrent)

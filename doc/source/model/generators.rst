@@ -134,9 +134,9 @@ Relevant module ``edelweissfe.generators.discreterigidbodygenerator``
 .. pprint:: generator:discreterigidbodygenerator
    :caption: Options:
 
-.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp
+.. literalinclude:: ../../../testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactAtNodes/test.inp
     :language: edelweiss
-    :caption: Example: ``testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp``
+    :caption: Example: ``testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactAtNodes/test.inp``
 
 ``executepythoncode`` - Script model generation using Python
 ------------------------------------------------------------

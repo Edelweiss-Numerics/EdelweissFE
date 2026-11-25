@@ -247,14 +247,6 @@ _BRACKET_MODULE_SPECS = [
         "penetrating a deformable master surface, both represented by contact facet elements.",
     ),
     _BracketModuleSpec(
-        "edelweissfe.constraints.nodetodiscreterigidbodypenalty",
-        "constraint",
-        "nodetodiscreterigidbodypenalty",
-        "nodeToDiscreteRigidBodyPenalty",
-        "A penalty based unilateral contact constraint preventing nodes of a node set from "
-        "penetrating the surface of a discrete rigid body.",
-    ),
-    _BracketModuleSpec(
         "edelweissfe.constraints.nodetorigidsurfacepenalty",
         "constraint",
         "nodetorigidsurfacepenalty",

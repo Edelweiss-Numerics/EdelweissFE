@@ -228,6 +228,10 @@ finite sliding, the normal force times the second derivative of the gap, and, wh
 tangential to the normal force, each by its own absolute value (the unsymmetric coupling, as the default does, with the
 mean of its rows and columns where that is larger): at least the default bound of the tangent, above it where the parts
 cancel.
+Where springs share a degree of freedom, the bound of the springs is at least the row sums of the springs' tangent,
+and above them where the springs cancel in the tangent: at the reference point of a rigid body every spring adds its
+absolute value, while the moments of points on either side of it cancel in the tangent -- safe, and blunt where a light
+free rigid body governs the critical time step.
 
 **At which state.** The central difference method integrates in each increment the net force evaluated at the end of
 the increment before, :math:`\boldsymbol{v}_{n+1/2} = \boldsymbol{v}_{n-1/2} + \tfrac{1}{2}(\Delta t_n + \Delta
@@ -288,25 +292,9 @@ afterwards, where the springs that meet at a node are summed. The contacts with 
 ``nodeToDeformableSurfacePenalty`` gives each slave node, and ``surfaceToDeformableSurfacePenalty`` each contact point,
 a copy of its own of the nodes it couples -- of its master facet, and of its slave face -- in the block. Where springs
 that close at different corners share a degree of freedom within the block, the entry misses their sum: at the
-reference point of a rigid body, on which every spring of a contact with a discrete rigid body acts, and, in
-``surfaceToDiscreteRigidBodyPenalty``, at the nodes of a slave facet, which its contact points share. A constraint that
-needs the bound over the next increment there gives its springs; the contacts with a discrete rigid body are bounded
-from their tangent, and the contacts with a deformable master give their springs, from the same code as their force.
-
-Taking the velocity alone would not do: near the critical time step of the open state, the acceleration can turn a
-receding point around within one increment. The prediction is exact for the leapfrog without damping; damping only
-slows a point down. After a refinement, whose net force starts at zero
-(:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering`), the first increment is bounded by the
-velocity part alone -- the acceleration then holds the damping only --; the forces enter from the next increment on.
-
-The pairing that the next increment evaluates its force with must be the one bounded. A periodic contact search
-therefore runs before the time increment of the increment it is due for is set, after the force the increment
-integrates was evaluated (:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement`), and, followed,
-the constraints are bounded over the next increment once more, on the new pairing; the bound at the state, of the
-pairing that force was evaluated with, is kept, and the smaller critical time step of the two holds. A search run
-inside the increment, after the motion and before the force, would pair the points where the force is evaluated, but
-after the time increment was set: the new pairing would again be half an increment late.
-
+reference point of a rigid body, on which every spring of a contact with a discrete rigid body acts (its contact
+points have nodes of their own, as in the contacts with a deformable master). A constraint that needs the bound over the
+next increment there gives its springs. Every contact of EdelweissFE gives its springs, from the same code as its force.
 Raising and lowering the increment is not free: each change of the increment changes the energy the central difference
 holds in a mode by a fraction of the order of :math:`(\omega \Delta t)^2`, small for the motion that carries the
 energy, which lies far below the highest frequencies of a mesh, but not for a mode near the critical time step that
@@ -336,10 +324,9 @@ The parts' estimates cover the stiffness of the parts themselves, and the penalt
   constraints are bounded over the next increment as well ("Over the next increment"): the stiffness of the next force
   is then in the time increment before that force is evaluated, as far as the bound over the states holds (next item).
 * **With follow-critical-time-step, a constraint bounded from its tangent whose springs that close at different corners
-  of the next increment share a degree of freedom within its block** -- a contact with a discrete rigid body, at its
-  reference point, and ``surfaceToDiscreteRigidBodyPenalty`` at the nodes of a slave facet as well: over the next
-  increment, it is seen only as far as one corner closes its springs together ("Over the next increment"); beyond
-  that, it is half an increment late as above.
+  of the next increment share a degree of freedom within its block**: over the next increment, it is seen only as far
+  as one corner closes its springs together ("Over the next increment"); beyond that, it is half an increment late as
+  above. No contact of EdelweissFE is of that kind: each bounds its springs.
 * **The skew part of an unsymmetric tangent** (a frictional contact while it slips): it does no work in
   :math:`\boldsymbol{x}^T\boldsymbol{K}\boldsymbol{x}` and is outside the argument above. Where it makes an eigenvalue
   of :math:`\boldsymbol{M}^{-1}\boldsymbol{K}` complex, the central difference method grows at every time increment,
@@ -349,9 +336,9 @@ The parts' estimates cover the stiffness of the parts themselves, and the penalt
   still bound the condensed system there is assumed, not shown, with or without penalty constraints.
 * **A multi-point constraint whose coefficients do not sum to one** (a linearized rigid body): the argument above
   assumes coefficients that sum to one.
-* **The geometric stiffness of a rigid body whose normals rotate with it**, in a contact with a discrete rigid body:
-  it is bounded from its tangent, which omits the :math:`\theta\theta` block; against the spring, of the order of the
-  penetration over the lever arm.
+* **The geometric stiffness of a rigid body whose normals rotate with it**, in a contact with a discrete rigid body,
+  which bounds its springs: against the spring, of the order of the penetration over the lever arm. A constraint
+  bounded from its tangent has in its bound what its tangent holds.
 * **A constraint that couples particles and finite elements at once**: taken with the larger of the two arguments,
   which is not proven (see "The particles").
 * **A penalty on a field integrated by forward Euler** (a field with a damping and no inertia): its rows are added to

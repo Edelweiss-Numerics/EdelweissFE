@@ -442,30 +442,38 @@ referencePoint=gen_bottomLeftBack
     np.testing.assert_allclose(P[3 * nSlaves : 3 * nSlaves + 3], multipliers.sum(axis=0), rtol=1e-13)
 
 
-def _nodeToDiscreteRigidBodyCase(tmp_path, slaveNodeSet: str):
-    """The node-to-discrete-rigid-body penalty contact of the nodes of ``slaveNodeSet`` against a box below the unit
-    cube, the model, and a state in which the slave nodes penetrate the box's top face."""
+def _surfaceToDiscreteRigidBodyCase(tmp_path, upperCornerOfTheSupport: tuple):
+    """The contact of the nodes of the cube's bottom face (``contactPoints=nodes``) against a box below the unit cube
+    whose top face is at y = 0 and whose upper corner is ``upperCornerOfTheSupport``, the model, and a state in which
+    the located nodes penetrate the box's top face. The nodes are searched in the model's configuration, so a node
+    farther than the search distance from the box is not located."""
 
-    _writeBoxStl(tmp_path / "support.stl", (-1.0, -1.0, -1.0), (2.0, 0.0, 2.0))
+    _writeBoxStl(tmp_path / "support.stl", (-1.0, -1.0, -1.0), upperCornerOfTheSupport)
     model = _buildModel(
         tmp_path,
         _SOLID_BLOCK
         + f"""
+*modelGenerator, generator=surfaceElementGenerator, name=slaveFacets
+surface=gen_bottom
+name=slaveSurf
+
 *modelGenerator, generator=discreteRigidBodyGenerator, name=support, executeAfterManualGeneration=True
 filename={tmp_path / 'support.stl'}
 rpCoordinate='0.5, -0.5, 0.5'
 mass=1.0
 inertia="1.0, 1.0, 1.0"
 
-*constraint, type=nodeToDiscreteRigidBodyPenalty, name=theConstraint
-nSet={slaveNodeSet}
+*constraint, type=surfaceToDiscreteRigidBodyPenalty, name=theConstraint
+slaveSurface=slaveSurf_facets
+contactPoints=nodes
 rigidBody=support
-penalty=1e3
-searchDistance=1.0
+penalty=4e3
+searchDistance=0.5
 """,
         3,
     )
     constraint = model.constraints["theConstraint"]
+    constraint.updateConnectivity(model)
     rpNode = constraint.rpNode
 
     def nodalValue(node, field):
@@ -477,27 +485,30 @@ searchDistance=1.0
     return model, constraint, localVector(constraint, nodalValue)
 
 
-def test_node_to_discrete_rigid_body_penalty(tmp_path):
+def test_surface_to_discrete_rigid_body_penalty_at_nodes(tmp_path):
     """The rotation-rotation block of the reference point is excluded: the constraint omits it (it needs the second
     derivative of the exponential map), as documented in its class docstring."""
 
-    model, constraint, U = _nodeToDiscreteRigidBodyCase(tmp_path, "gen_bottom")
+    model, constraint, U = _surfaceToDiscreteRigidBodyCase(tmp_path, (2.0, 0.0, 2.0))
     rpNode = constraint.rpNode
     rpRotation = _localIndices(constraint, lambda node, field: node is rpNode and field == "rotation")
 
     P = _assertTangentIsTheDerivative(constraint, U, U, excluded=rpRotation)
-    assert constraint.totalNormalForce > 0.0, "the contact must be active"
+    assert len(constraint.nodes) == 5, "the four nodes of the face and the reference point"
+    assert constraint.totalNormalForce < 0.0, "the contact must be active"
 
     # the support pushes every slave node up, out of its top face, and is pushed down
     assert np.all(_forcesOnNodes(constraint, P, lambda node: node is not rpNode)[:, 1] > 0.0)
     assert _forcesOnNodes(constraint, P, lambda node: node is rpNode)[0, 1] < 0.0
 
 
-def test_one_slave_node_to_discrete_rigid_body_penalty_is_assembled_alike_on_both_paths(tmp_path):
-    """With one slave node the block lists exactly nDof**2 = 81 entries (36 + 9 + 18 + 18), in an order that is not
-    column-major: both assemblies place every value at its own entry, so the assembled matrices agree."""
+def test_one_located_node_against_a_discrete_rigid_body_is_assembled_alike_on_both_paths(tmp_path):
+    """A support under one corner of the face only: one node is located, and the block lists exactly nDof**2 = 81
+    entries (36 + 9 + 18 + 18), in an order that is not column-major: both assemblies place every value at its own
+    entry, so the assembled matrices agree."""
 
-    model, constraint, U = _nodeToDiscreteRigidBodyCase(tmp_path, "gen_bottomLeftBack")
+    model, constraint, U = _surfaceToDiscreteRigidBodyCase(tmp_path, (0.1, 0.0, 0.1))
+    assert len(constraint.nodes) == 2, "one node and the reference point"
     assert countEntriesOfBlock(constraint) == constraint.nDof**2
 
     locations = DofLocations(

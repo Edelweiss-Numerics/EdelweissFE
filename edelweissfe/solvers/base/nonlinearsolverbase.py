@@ -943,9 +943,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         A rigid body's surface (visualization) nodes are not degrees of freedom of their own; they
         are fully determined by the rigid body's reference point. This propagates the just-converged
         reference-point pose onto those surface nodes so that output managers write the transient
-        geometry of the moving body and any consumer relying on the surface nodes' ``coordinates``
-        (e.g. the fast-path AABB of :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB`)
-        sees the current configuration.
+        geometry of the moving body and any consumer relying on the surface nodes' ``coordinates`` sees the current
+        configuration.
 
         Every nonlinear solver must call this once per converged increment, in :meth:`acceptIncrement`.
 
