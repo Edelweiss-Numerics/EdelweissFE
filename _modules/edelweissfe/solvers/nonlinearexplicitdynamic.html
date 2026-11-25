@@ -81,6 +81,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../theory/contact.html">Contact mechanics: theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
 <ul>
@@ -170,8 +171,16 @@
 <span class="sd">fields -- a nonlocal damage field, for instance -- by forward Euler, and both divide by a **lumped**</span>
 <span class="sd">mass, so the cost of an increment is one element pass plus vector arithmetic. There is no linear</span>
 <span class="sd">solver, no Newton loop, and no cutback: the time increment is set by stability, not by convergence,</span>
-<span class="sd">so a material that fails to integrate at the stable step is reported as an error rather than</span>
+<span class="sd">so a material that fails to integrate at the time increment stability allows is reported as an error rather than</span>
 <span class="sd">answered with a smaller step.</span>
+
+<span class="sd">**Words, one per quantity.** The *critical time step* is the largest time increment the central difference method is</span>
+<span class="sd">stable for, :math:`2/\\omega_\\mathrm{max}` of the assembled system; every part of the model gives an *estimate* of its</span>
+<span class="sd">own, a lower bound of it (:doc:`/theory/criticaltimestep`). A *bound* is on the side of the eigenvalue only: an upper</span>
+<span class="sd">bound of :math:`\\omega_\\mathrm{max}^2`, from which an estimate is made. The *time increment* is what the step takes:</span>
+<span class="sd">at most the fraction ``courant-number`` of the critical time step. The *inertia* of a field is the coefficient of its</span>
+<span class="sd">second time derivative -- a mass on the displacement, a micro-inertia on a nonlocal field --, its *damping* the</span>
+<span class="sd">coefficient of the first; *lumped* means summed onto the diagonal, node by node.</span>
 
 <span class="sd">**Inertia and damping.** An element reports two diagonals: the coefficient of each field's second</span>
 <span class="sd">time derivative (its inertia) and of its first (its damping). The integrator divides by the one and</span>
@@ -198,13 +207,31 @@
 <span class="sd">are removed rather than deprecated: a deck carrying any of them now fails with ``Invalid option``,</span>
 <span class="sd">and deleting those lines is the whole of the migration.</span>
 
-<span class="sd">The stable increment is computed once per mesh as the smallest of the elements' own bounds</span>
-<span class="sd">(``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum element, two over the square root</span>
-<span class="sd">of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) and scaled by</span>
-<span class="sd">``courant-number``; by default, it is enforced where it is below the largest increment the step allows, and a step</span>
-<span class="sd">that asks for smaller increments keeps them (see :ref:`ned-time-increment-lowered-or-followed`). It is recomputed whenever the mesh changes and deliberately *not* recomputed</span>
-<span class="sd">when it has not -- neither for a new numbering of the same mesh: as a material softens the true limit</span>
-<span class="sd">only grows, so reusing it is the conservative direction, and re-deriving it costs a full element pass.</span>
+<span class="sd">**The critical time step.** The time increment is the fraction ``courant-number`` of the critical time step of the</span>
+<span class="sd">model, the smallest of the critical time steps of its parts, each estimated by its own policy</span>
+<span class="sd">(:mod:`~edelweissfe.solvers.base.criticaltimestep`, and :doc:`/theory/criticaltimestep`): the finite elements -- the</span>
+<span class="sd">smallest of the elements' own estimates (``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum</span>
+<span class="sd">element, two over the square root of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped</span>
+<span class="sd">mass) -- once per mesh and at the start of every step, and deliberately *not* for a new numbering of the same mesh:</span>
+<span class="sd">an estimate costs a full element pass, and the policy assumes that within a step neither the geometry nor the wave</span>
+<span class="sd">speed of an element changes enough to use up the margin of the courant number (see</span>
+<span class="sd">:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements` for where that fails); the</span>
+<span class="sd">entities that carry their own inertia (below) when the margin of their last estimate may be used up. It is enforced</span>
+<span class="sd">where it is below the largest increment the step allows, and a step that asks for smaller increments keeps them.</span>
+
+<span class="sd">When the critical time step is estimated, and where ``NED`` does it:</span>
+
+<span class="sd">* :meth:`NED.beginStep`: both parts forget their estimates (``reset``), since a material property may have changed</span>
+<span class="sd">  with the step;</span>
+<span class="sd">* :meth:`NED.onNewNumbering`: the elements are estimated, when the mesh is not the one of their last estimate (the</span>
+<span class="sd">  first numbering of a step, a refinement);</span>
+<span class="sd">* :meth:`NED.prepareIncrement`: the critical time step is enforced at the start of a step (not in a resumed step,</span>
+<span class="sd">  which keeps the time increment of its checkpoint), and after a refinement;</span>
+<span class="sd">* :meth:`NED._evaluateTheNetForceOnTheNewConnectivity`: the entities, after every increment, when their estimate is</span>
+<span class="sd">  due, and the critical time step is enforced at once;</span>
+<span class="sd">* :meth:`NED._enforceTheCriticalTimeStep`: the one place where the parts are combined</span>
+<span class="sd">  (:meth:`NED._criticalTimeStepOfTheModel`) and the time increment is set from them;</span>
+<span class="sd">* :meth:`NED.endStep`: the report, how often each part was estimated in the step, and its last estimate.</span>
 
 <span class="sd">**Lowered only, or followed.** By default, the time increment is lowered only, never raised within a step; with</span>
 <span class="sd">``follow-critical-time-step``, it follows the critical time step up as well as down, at the cost of the safety margin</span>
@@ -232,13 +259,13 @@
 <span class="sd">at the first increment of every step, from the elements as they are then, and kept until the next numbering (the</span>
 <span class="sd">entities that carry their own inertia excepted, see below). A change of</span>
 <span class="sd">a material property during the step (:doc:`/analysis/stepactions`, ``changeMaterialProperty``) takes effect on the</span>
-<span class="sd">mass at the next step, as it does on the stable time increment.</span>
+<span class="sd">mass at the next step, as it does on the critical time step.</span>
 
 <span class="sd">**The discrete system.** It is built, like that of every solver, by</span>
 <span class="sd">:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem`, from the</span>
 <span class="sd">change the model reports (:class:`~edelweissfe.models.change.Change`). A new numbering -- the first one of a step, and</span>
 <span class="sd">a refinement of the mesh -- gives the lumped operators, the classification of the fields by time derivative, the</span>
-<span class="sd">multi-point-constraint condensation and the vectors of the increments, and the stable time increment of the mesh</span>
+<span class="sd">multi-point-constraint condensation and the vectors of the increments, and the critical time step of the mesh</span>
 <span class="sd">(:meth:`NED.onNewNumbering`). A contact search that couples other nodes gives new locations on the same numbering: the</span>
 <span class="sd">lumped operators are functions of the elements and of the numbering and are kept, the vectors keep their values, and</span>
 <span class="sd">only the locations they are wrapped with are new (:meth:`NED.onNewLocations`). The elements the increment evaluates are</span>
@@ -265,11 +292,11 @@
 <span class="sd">   numbering if the nodes of the active domain changed. The internal force of the elements is carried to a new</span>
 <span class="sd">   numbering element by element; nothing is evaluated again;</span>
 <span class="sd">3. **evaluate**: on the new kernel functions, the entities return their internal force, their lumped inertia and</span>
-<span class="sd">   damping, their lumped momentum and, when it is due, the bound of their stable time increment</span>
+<span class="sd">   damping, their lumped momentum and, when its estimate is due, their critical time step</span>
 <span class="sd">   (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,</span>
 <span class="sd">   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`,</span>
 <span class="sd">   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedDampingOfEntitiesWithOwnInertia`,</span>
-<span class="sd">   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`), and with the</span>
+<span class="sd">   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia`), and with the</span>
 <span class="sd">   internal force of the elements and the forces of the loads and the constraints, they give the net force. The</span>
 <span class="sd">   configuration is accepted, no increment is left: the loads and the constraints are evaluated with a zero</span>
 <span class="sd">   increment, so only a constraint that measures its condition at the configuration acts here</span>
@@ -292,24 +319,20 @@
 <span class="sd">momentum in every increment instead, :math:`\boldsymbol{v} = \boldsymbol{M}^{-1} \boldsymbol{p}`, which dissipates</span>
 <span class="sd">more; it is what the material point method does. The nodes of the elements are never projected.</span>
 
-<span class="sd">The critical time step is the smaller of the elements' (of the mesh) and the bound of the stable time increment of the</span>
-<span class="sd">entities' assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever</span>
-<span class="sd">the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every</span>
-<span class="sd">``stable-increment-frequency`` increments, and lowers the time increment whenever it falls below it (or sets it, with</span>
-<span class="sd">``follow-critical-time-step``, see :ref:`ned-time-increment-lowered-or-followed`). The bound is a Collatz-Wielandt bound</span>
-<span class="sd">of the largest eigenvalue of the absolute value of the entities' mass-scaled stiffness, from weights constant per field;</span>
-<span class="sd">with ``carry-stable-increment-weights``, ``NED`` keeps the weights a bound leaves and hands them to the next, so that</span>
-<span class="sd">every bound takes one more step of the power iteration towards the Perron vector, where the bound is exact. Any positive</span>
-<span class="sd">weights give an upper bound of the eigenvalue, but weights refined at another configuration can bound it less tightly</span>
-<span class="sd">than the weights constant per field when the stiffness changed faster than they followed: a bound with carried weights</span>
-<span class="sd">below the one they started from starts them anew, and the larger of the two is taken. Every bound taken is thus at least</span>
-<span class="sd">the one the weights started from. Lowered only, the increment therefore never falls below the smallest bound with</span>
-<span class="sd">weights constant per field of the step; followed, it can fall below the bound without carried weights of the same</span>
-<span class="sd">configuration, down to the one the weights started from. The weights start anew -- constant per field -- also with</span>
-<span class="sd">every numbering (the nodes they belong to may have changed) and every step (a material property may have changed), and</span>
-<span class="sd">after a resume: they are not part of the checkpoint. The first increment of a step must be the zero increment: in it,</span>
-<span class="sd">the entities take an increment of zero length, from which they evaluate the force, the inertia, the damping and the</span>
-<span class="sd">critical time step of the configuration the step starts from.</span>
+<span class="sd">The critical time step is the smaller of the elements' (of the mesh) and the estimate of the critical time step of the</span>
+<span class="sd">entities' assembled system, which changes with their configuration: it is estimated anew in the zero increment, and</span>
+<span class="sd">whenever the margin of its last estimate over the time increment in use may be used up -- by the fall of their lumped</span>
+<span class="sd">inertia since, which is followed in every increment, and by the assumed fall per increment from their stiffness</span>
+<span class="sd">(``critical-time-step-decrease-per-increment``) --, and lowers the time increment whenever it falls below it (or sets</span>
+<span class="sd">it, with ``follow-critical-time-step``, see :ref:`ned-time-increment-lowered-or-followed`). The estimate is made from</span>
+<span class="sd">a Collatz-Wielandt bound of the largest eigenvalue of the absolute value of the entities' mass-scaled stiffness, from</span>
+<span class="sd">weights constant per field; with ``carry-critical-time-step-weights``, ``NED`` keeps the weights an estimate leaves and</span>
+<span class="sd">hands them to the next, so that every estimate takes one more step of the power iteration towards the Perron vector,</span>
+<span class="sd">where the bound is exact. An estimate below the one the weights started from starts them anew, and the larger of the</span>
+<span class="sd">two is taken; the weights start anew also with every numbering and every step, and after a resume</span>
+<span class="sd">(:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia`, "Carried weights"). The</span>
+<span class="sd">first increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which</span>
+<span class="sd">they evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.</span>
 <span class="sd">Where the model holds the motion of their nodes</span>
 <span class="sd">(:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`) -- after a step of this solver, or of</span>
 <span class="sd">``NID`` integrating the inertia at the nodes --, the step continues it as at the nodes of elements, from their velocity</span>
@@ -336,8 +359,9 @@
 <span class="sd">one check that nothing else performs: the kinetic energy cannot exceed the energy at the start of the</span>
 <span class="sd">step plus the external work, because the terms omitted from the balance are all non-negative, so a</span>
 <span class="sd">violation means energy is appearing from nowhere and the time step is above the true stability limit</span>
-<span class="sd">-- which the critical time step does not see in full, as it never sees contact penalty stiffness,</span>
-<span class="sd">and sees the nonlocal field only where that field carries a non-mechanical inertia. Such a field's</span>
+<span class="sd">-- which the critical time step does not see in full, as it never sees contact penalty stiffness</span>
+<span class="sd">(:doc:`/theory/criticaltimestep`, "What the estimate does not see"), and sees the nonlocal field only where that</span>
+<span class="sd">field carries a non-mechanical inertia. Such a field's</span>
 <span class="sd">own ``0.5 m_k rate^2`` is reported on a separate line and kept out of the balance: with a</span>
 <span class="sd">coefficient in seconds squared it has the units of a volume, not of an energy. ``E_0`` is read off</span>
 <span class="sd">the model's state, nothing evaluated: zero for a step from rest in a model without strain energy,</span>
@@ -442,6 +466,10 @@
     <span class="n">ConservationCheck</span><span class="p">,</span>
     <span class="n">formatMomentumAndKineticEnergy</span><span class="p">,</span>
     <span class="n">linearMomentum</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.criticaltimestep</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CriticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">,</span>
+    <span class="n">CriticalTimeStepOfTheElements</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.nonlinearsolverbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonlinearSolverBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
@@ -572,17 +600,19 @@
         <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">optionName</span><span class="o">=</span><span class="s2">"project-velocity-every-increment"</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">stableIncrementFrequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+    <span class="n">criticalTimeStepDecreasePerIncrement</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
-            <span class="s2">"The increment interval at which the stable time increment of the entities that carry their own inertia "</span>
-            <span class="s2">"(the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero "</span>
-            <span class="s2">"increment and every increment after which the entities couple other nodes (a change of the constraints' "</span>
-            <span class="s2">"connectivity alone does not count). 1 bounds it in every increment; 0 never, so that the increments of the "</span>
-            <span class="s2">"step are taken unchecked for the entities."</span>
+            <span class="s2">"The largest relative decrease per increment that the critical time step of the entities that carry their "</span>
+            <span class="s2">"own inertia (the particles of a meshfree model) is assumed to have from their stiffness between two "</span>
+            <span class="s2">"estimates; the decrease from their lumped inertia and damping is followed exactly in every increment. It "</span>
+            <span class="s2">"sets how long an estimate is trusted while another part sets the time increment: an estimate is taken "</span>
+            <span class="s2">"anew once its margin over the time increment in use may be used up at this rate. An assumption, measured "</span>
+            <span class="s2">"on gradient-enhanced particles (see the theory page on the critical time step); 1 estimates in every "</span>
+            <span class="s2">"increment."</span>
         <span class="p">),</span>
-        <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
-        <span class="n">default</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-        <span class="n">optionName</span><span class="o">=</span><span class="s2">"stable-increment-frequency"</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">optionName</span><span class="o">=</span><span class="s2">"critical-time-step-decrease-per-increment"</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">followCriticalTimeStep</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
@@ -594,17 +624,18 @@
         <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">optionName</span><span class="o">=</span><span class="s2">"follow-critical-time-step"</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">carryStableIncrementWeights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+    <span class="n">carryCriticalTimeStepWeights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
-            <span class="s2">"Carry the weights of the bound of the stable time increment of the entities that carry their own inertia "</span>
-            <span class="s2">"(the particles of a meshfree model) from one bound to the next, and refine them by one Collatz-Wielandt "</span>
-            <span class="s2">"step each time: the bound tightens towards the spectral radius it bounds over a few bounds, in the pass "</span>
-            <span class="s2">"the bound takes anyway. A bound below the one the weights started from (with weights constant per field) "</span>
-            <span class="s2">"starts them anew, and so do every numbering and every step, and a resume."</span>
+            <span class="s2">"Carry the weights of the estimate of the critical time step of the entities that carry their own inertia "</span>
+            <span class="s2">"(the particles of a meshfree model) from one estimate to the next, and refine them by one "</span>
+            <span class="s2">"Collatz-Wielandt step each time: the estimate tightens towards the spectral radius it bounds over a few "</span>
+            <span class="s2">"estimates, in the pass the estimate takes anyway. An estimate below the one the weights started from "</span>
+            <span class="s2">"(with weights constant per field) starts them anew, and so do every numbering and every step, and a "</span>
+            <span class="s2">"resume."</span>
         <span class="p">),</span>
         <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
         <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">optionName</span><span class="o">=</span><span class="s2">"carry-stable-increment-weights"</span><span class="p">,</span>
+        <span class="n">optionName</span><span class="o">=</span><span class="s2">"carry-critical-time-step-weights"</span><span class="p">,</span>
     <span class="p">)</span></div>
 
 
@@ -640,9 +671,9 @@
         <span class="s2">"report-performance"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
         <span class="s2">"lumped-quantity-conservation-tolerance"</span><span class="p">:</span> <span class="n">CONSERVATION_TOLERANCE</span><span class="p">,</span>
         <span class="s2">"project-velocity-every-increment"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="s2">"stable-increment-frequency"</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="s2">"critical-time-step-decrease-per-increment"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span>
         <span class="s2">"follow-critical-time-step"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="s2">"carry-stable-increment-weights"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"carry-critical-time-step-weights"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
         <span class="c1"># Lists, so _updateOptions appends the comma-separated items. Empty means "assert nothing".</span>
         <span class="s2">"expect-second-order-fields"</span><span class="p">:</span> <span class="p">[],</span>
         <span class="s2">"expect-first-order-fields"</span><span class="p">:</span> <span class="p">[],</span>
@@ -700,26 +731,18 @@
         <span class="c1">#: element model.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_inertiaOfEntities</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The versions of the model's topology</span>
-        <span class="c1">#: (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`) the classification of the fields and</span>
-        <span class="c1">#: the critical time step of the elements are derived for: both are properties of the mesh, derived again when</span>
-        <span class="c1">#: it changed, and at the start of every step, not for a new numbering of the same mesh. None until they are</span>
-        <span class="c1">#: first derived in a step.</span>
+        <span class="c1">#: The version of the model's topology</span>
+        <span class="c1">#: (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`) the classification of the fields is</span>
+        <span class="c1">#: derived for: a property of the mesh, derived again when it changed, and at the start of every step, not for a</span>
+        <span class="c1">#: new numbering of the same mesh. None until it is first derived in a step.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheClassification</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheCriticalTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The critical time steps of the elements (of the mesh) and of the entities that carry their own inertia (of</span>
-        <span class="c1">#: their configuration when it was last bounded: in the zero increment, when they couple other nodes and every</span>
-        <span class="c1">#: ``stable-increment-frequency`` increments), unscaled; infinite where there is none.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-        <span class="c1">#: With ``carry-stable-increment-weights``, the weights of the bound of the stable time increment of the</span>
-        <span class="c1">#: entities, a vector of the numbering, refined by every bound and handed to the next</span>
-        <span class="c1">#: (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`):</span>
-        <span class="c1">#: zero, i.e. not yet weighted, for a new numbering and at the start of every step; None without the option.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: With ``carry-stable-increment-weights``, the stable time increment of the bound the weights started from, the</span>
-        <span class="c1">#: first after they were set to zero, with weights constant per field.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="c1">#: The critical time steps of the two parts of a model, each estimated by its own policy (see</span>
+        <span class="c1">#: :mod:`~edelweissfe.solvers.base.criticaltimestep`): the finite elements once per mesh, the entities that</span>
+        <span class="c1">#: carry their own inertia when the margin of their last estimate may be used up.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span> <span class="o">=</span> <span class="n">CriticalTimeStepOfTheElements</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheEntities</span> <span class="o">=</span> <span class="n">CriticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"critical-time-step-decrease-per-increment"</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"carry-critical-time-step-weights"</span><span class="p">]</span>
+        <span class="p">)</span>
         <span class="c1">#: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_internalEnergy</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="c1">#: The operators of the explicit update, arrays of the length of the numbering, assembled by</span>
@@ -766,9 +789,6 @@
         <span class="c1">#: :meth:`_assembleLumpedOperators`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The stable time increment, the smaller of the elements' and the entities', scaled by the courant number;</span>
-        <span class="c1">#: infinite if neither reports one.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The vectors the increments work on, of the current discrete system, wrapped with its locations. They are the</span>
         <span class="c1">#: solution, its increment, the velocity (staggered half an increment behind the solution) and the</span>
         <span class="c1">#: acceleration at the end of the last increment, which the model receives with the velocity (see</span>
@@ -820,12 +840,11 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_externalWork</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_energyAtStepStart</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1"># The stable time increment and the classification of the fields are derived anew for every step: a change of a</span>
+        <span class="c1"># The critical time steps and the classification of the fields are derived anew for every step: a change of a</span>
         <span class="c1"># material property takes effect at the next step.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheClassification</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheCriticalTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheClassification</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheEntities</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_conservationCheck</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warnedAboutMissingInternalEnergy</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_warnedAboutMissingExternalWork</span> <span class="o">=</span> <span class="kc">False</span>
@@ -864,8 +883,8 @@
 <span class="sd">        ``topology-check-frequency``-th increment. At the start of the step it runs before anything</span>
 <span class="sd">        sized by the discrete system exists, so the mesh is final before the lumped mass, the</span>
 <span class="sd">        multi-point-constraint condensation and the critical time step are derived from it. It runs</span>
-<span class="sd">        here, before the next increment is proposed, because a refinement may lower the stable time</span>
-<span class="sd">        increment that increment has to use.</span>
+<span class="sd">        here, before the next increment is proposed, because a refinement may lower the critical time</span>
+<span class="sd">        step, and with it the time increment that increment has to use.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -909,7 +928,7 @@
                 <span class="c1"># damping are evaluated (see _startTheMotionOfEntitiesWithOwnInertia).</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">formNetForceOfTheModelsState</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_energyAtStepStart</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">energyOfTheModelsState</span><span class="p">()</span>
-            <span class="c1"># The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.</span>
+            <span class="c1"># The time stepper carries (and checkpoints) the time increment; a resumed step keeps its own.</span>
             <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_enforceTheCriticalTimeStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s2">"The critical time step"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
@@ -939,7 +958,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">reportTopologyChangeConservation</span><span class="p">(</span><span class="n">lumpedTotalsBefore</span><span class="p">,</span> <span class="n">momentumBefore</span><span class="p">,</span> <span class="n">kineticBefore</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
 
             <span class="c1"># Only a model without entities that carry their own inertia gets here (live modifiers are refused with</span>
-            <span class="c1"># them, see onNewNumbering), so the critical time step is that of the elements alone.</span>
+            <span class="c1"># them, see onNewNumbering), so the entities' critical time step never enters it.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_enforceTheCriticalTimeStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s2">"Refinement"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span></div>
 
 
@@ -1074,7 +1093,7 @@
             <span class="k">raise</span> <span class="n">StepFailed</span><span class="p">(</span>
                 <span class="s2">"A material requested a cutback in increment </span><span class="si">{:}</span><span class="s2">: </span><span class="si">{:}</span><span class="s2">. The explicit time "</span>
                 <span class="s2">"step is set by stability, not by convergence, so it cannot be reduced in "</span>
-                <span class="s2">"response -- either the material cannot integrate at the stable step, or "</span>
+                <span class="s2">"response -- either the material cannot integrate at the time increment stability allows, or "</span>
                 <span class="s2">"the state reaching it is already wrong. Both need the material or the "</span>
                 <span class="s2">"model looked at, not a smaller step."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">timeStep</span><span class="o">.</span><span class="n">number</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
             <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
@@ -1203,8 +1222,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Evaluate, at the configuration just accepted and on the connectivity the entities that carry their own</span>
 <span class="sd">        inertia reach now, what the next increment starts from: their internal force, their lumped momentum and their</span>
-<span class="sd">        lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), the bound of their</span>
-<span class="sd">        stable time increment when it is due (:meth:`_stableTimeIncrementIsDue`), and, with the internal force of the</span>
+<span class="sd">        lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), their critical time step</span>
+<span class="sd">        when its estimate is due</span>
+<span class="sd">        (:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue`), and, with the internal force of the</span>
 <span class="sd">        elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The configuration is</span>
 <span class="sd">        accepted: no increment is left, so the loads and the constraints are evaluated with a zero increment, and the</span>
 <span class="sd">        nodes of the entities carry no total solution.</span>
@@ -1234,11 +1254,6 @@
             <span class="n">system</span><span class="o">.</span><span class="n">assembleLumpedMassOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">),</span>
             <span class="n">system</span><span class="o">.</span><span class="n">assembleLumpedDampingOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementIsDue</span><span class="p">(</span><span class="n">timeStep</span><span class="p">):</span>
-            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"stable time increment of entities"</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boundTheStableTimeIncrementOfEntities</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_enforceTheCriticalTimeStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s2">"The entities that carry their own inertia"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">+=</span> <span class="n">internalForceOfEntities</span>
         <span class="n">noIncrement</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleNetForce</span><span class="p">(</span>
@@ -1252,6 +1267,23 @@
 
         <span class="n">ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids_inertiaOfEntities</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">[</span><span class="n">ids</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_Minv</span><span class="p">[</span><span class="n">ids</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">]]</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="c1"># The entities are estimated after the net force, though the order is not required: the estimate needs only</span>
+        <span class="c1"># their lumped inertia and damping, just assembled, and nothing in the net force depends on it. What it decides</span>
+        <span class="c1"># is the time increment of the next increment.</span>
+        <span class="n">criticalTimeStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheEntities</span>
+        <span class="k">if</span> <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">isDue</span><span class="p">(</span>
+            <span class="n">system</span><span class="p">,</span>
+            <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_inertiaOfEntities</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_timeIncrementInUse</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"courant-number"</span><span class="p">],</span>
+        <span class="p">):</span>
+            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"critical time step of entities"</span><span class="p">):</span>
+                <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">estimate</span><span class="p">(</span>
+                    <span class="n">system</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inertiaOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">,</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_enforceTheCriticalTimeStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s2">"The entities that carry their own inertia"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="ow">and</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"output-frequency"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">reportEnergyBalance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
@@ -1341,85 +1373,52 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span> <span class="o">=</span> <span class="n">dampingOfEntities</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_deriveLumpedOperators</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_boundTheStableTimeIncrementOfEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The bound of the stable time increment of the entities that carry their own inertia</span>
-<span class="sd">        (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`), from</span>
-<span class="sd">        the lumped inertia and damping just assembled.</span>
-
-<span class="sd">        With ``carry-stable-increment-weights``, the bound takes the weights the last one left, and leaves the weights</span>
-<span class="sd">        for the next. Any positive weights bound the stable time increment, but weights refined at another</span>
-<span class="sd">        configuration can bound it less tightly than the weights constant per field they started from when the</span>
-<span class="sd">        stiffness changed faster than the weights followed, e.g. where entities reach nodes whose weights the power</span>
-<span class="sd">        iteration has made small. So a bound with carried weights below the bound the weights started from starts them</span>
-<span class="sd">        anew: the bound is taken again from the weights constant per field, and the larger of the two is the bound.</span>
-<span class="sd">        Every bound is thus at least the one the weights started from: lowered only, the increment never falls below</span>
-<span class="sd">        the smallest bound with weights constant per field of the step; followed (``follow-critical-time-step``), it can</span>
-<span class="sd">        fall below the bound without carried weights of the same configuration, down to the one the weights started</span>
-<span class="sd">        from.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        float | None</span>
-<span class="sd">            The stable time increment; None in a model without such entities.</span>
-<span class="sd">        """</span>
-
-        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="nf">bound</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">stableTimeIncrementOfEntitiesWithOwnInertia</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_inertiaOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dampingOfEntities</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">,</span> <span class="n">weights</span>
-            <span class="p">)</span>
-
-        <span class="n">startsTheWeights</span> <span class="o">=</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">weights</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
-        <span class="n">stable</span> <span class="o">=</span> <span class="n">bound</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">stable</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">stable</span>
-        <span class="k">if</span> <span class="n">startsTheWeights</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">stable</span>
-        <span class="k">elif</span> <span class="n">stable</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span><span class="p">:</span>
-            <span class="n">weights</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">bound</span><span class="p">()</span>
-            <span class="n">stable</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">stable</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementTheWeightsStartedFrom</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">stable</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_stableTimeIncrementIsDue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Whether the stable time increment of the entities that carry their own inertia is bounded anew after this</span>
-<span class="sd">        increment, unless ``stable-increment-frequency`` is 0: in the zero increment; whenever the entities couple</span>
-<span class="sd">        other nodes (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertiaCoupleOtherNodes`),</span>
-<span class="sd">        since a node their kernel functions reach only at the edge of a support carries a small mass and may lower the</span>
-<span class="sd">        bound a lot; and after every ``stable-increment-frequency``-th increment, for the gradual change of the</span>
-<span class="sd">        entities' size and stiffness in between, which the courant number covers. A change of the connectivity of the</span>
-<span class="sd">        constraints alone, e.g. a contact paired anew, leaves the entities' system, and with it the bound, as it is.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_timeIncrementInUse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The time increment the step takes next: the one enforced last, or else the step's own (``startInc``, at most</span>
+<span class="sd">        ``maxInc``).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        timeStep</span>
-<span class="sd">            The increment just accepted.</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being solved.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        bool</span>
-<span class="sd">            True if it is due.</span>
+<span class="sd">        float</span>
+<span class="sd">            The time increment.</span>
 <span class="sd">        """</span>
 
-        <span class="n">frequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"stable-increment-frequency"</span><span class="p">]</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">frequency</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span>
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span> <span class="o">==</span> <span class="mf">0.0</span>
-            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">entitiesWithOwnInertiaCoupleOtherNodes</span><span class="p">()</span>
-            <span class="ow">or</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">%</span> <span class="n">frequency</span> <span class="o">==</span> <span class="mi">0</span>
-        <span class="p">)</span>
+        <span class="n">timeStepper</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span>
+        <span class="n">enforced</span> <span class="o">=</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span>
+        <span class="k">return</span> <span class="n">enforced</span> <span class="k">if</span> <span class="n">enforced</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">increment</span> <span class="o">*</span> <span class="n">step</span><span class="o">.</span><span class="n">length</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_criticalTimeStepOfTheModel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The critical time step of the model as last estimated: the smallest of its parts', the elements' and the</span>
+<span class="sd">        entities'.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The critical time step, not scaled by the courant number; infinite if no part has one.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheEntities</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_largestTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The largest time increment the critical time step of the model allows: ``courant-number`` times it</span>
+<span class="sd">        (:meth:`_criticalTimeStepOfTheModel`); infinite if no part has one."""</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"courant-number"</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheModel</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_enforceTheCriticalTimeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">cause</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">journalLevel</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Set the time increment of the step from the critical time step, the smaller of the elements' and the</span>
-<span class="sd">        entities' scaled by the courant number, each time it is taken: at the start of the step, after a change of the</span>
-<span class="sd">        mesh, and whenever the bound of the entities is taken (:meth:`_stableTimeIncrementIsDue`). By default the</span>
-<span class="sd">        increment is lowered only, to the critical time step if it is below the increment the step would take now (the</span>
-<span class="sd">        one enforced before, or else the step's own); with ``follow-critical-time-step`` it becomes the critical time</span>
-<span class="sd">        step, at most the step's ``maxInc``. As long as neither the elements nor the entities have reported a bound</span>
-<span class="sd">        (the critical time step is infinite, e.g. at the start of a step of entities alone), the increment stays as it</span>
-<span class="sd">        is, whether it follows or not. See :ref:`ned-time-increment-lowered-or-followed`.</span>
+<span class="w">        </span><span class="sd">"""Set the time increment of the step from the critical time step of the model: the largest time increment it</span>
+<span class="sd">        allows (:attr:`_largestTimeIncrement`). Called each time a part is estimated. By default the increment is</span>
+<span class="sd">        lowered only, to the largest one if it is below the increment the step would take now</span>
+<span class="sd">        (:meth:`_timeIncrementInUse`); with ``follow-critical-time-step`` it becomes the largest one, at most the</span>
+<span class="sd">        step's ``maxInc``. As long as no part has an estimate (the critical time step is infinite, e.g. at the start of</span>
+<span class="sd">        a step of entities alone), the increment stays as it is, whether it follows or not. See</span>
+<span class="sd">        :ref:`ned-time-increment-lowered-or-followed`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1433,37 +1432,35 @@
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If the critical time step of the elements or of the entities is not a number.</span>
+<span class="sd">            If the critical time step of a part of the model is not a number.</span>
 <span class="sd">        """</span>
 
-        <span class="c1"># Python's min() keeps its first argument when the comparison with NaN is false, so each bound is checked;</span>
-        <span class="c1"># infinity is legal: no element or no entity reports a bound.</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span><span class="p">)</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span><span class="p">):</span>
+        <span class="c1"># Python's min() keeps its first argument when the comparison with NaN is false, so each part is checked;</span>
+        <span class="c1"># infinity is legal: a part without an estimate.</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheEntities</span><span class="p">)</span>
+        <span class="n">notANumber</span> <span class="o">=</span> <span class="p">[</span><span class="n">part</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">parts</span> <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">part</span><span class="o">.</span><span class="n">value</span><span class="p">)]</span>
+        <span class="k">if</span> <span class="n">notANumber</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"</span><span class="si">{:}</span><span class="s2">: the critical time step is not a number (of the elements </span><span class="si">{:e}</span><span class="s2">, of the entities that carry their "</span>
-                <span class="s2">"own inertia </span><span class="si">{:e}</span><span class="s2">): the stiffness or the mass of the model is not finite."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                    <span class="n">cause</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span>
-                <span class="p">)</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2">: the critical time step is not a number (</span><span class="si">{:}</span><span class="s2">): the stiffness or the mass of the model is not "</span>
+                <span class="s2">"finite."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">cause</span><span class="p">,</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">"of </span><span class="si">{:}</span><span class="s2"> </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">part</span><span class="o">.</span><span class="n">part</span><span class="p">,</span> <span class="n">part</span><span class="o">.</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">notANumber</span><span class="p">))</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"courant-number"</span><span class="p">]</span> <span class="o">*</span> <span class="nb">min</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span>
-        <span class="p">)</span>
-        <span class="c1"># No bound reported yet: nothing to follow. Lowered only, this changes nothing anyway (no increment is above an</span>
+        <span class="n">largestTimeIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_largestTimeIncrement</span>
+        <span class="c1"># No estimate yet: nothing to follow. Lowered only, this changes nothing anyway (no increment is above an</span>
         <span class="c1"># infinite one); followed, it keeps the step's own increment instead of jumping to maxInc.</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">largestTimeIncrement</span><span class="p">):</span>
             <span class="k">return</span>
         <span class="n">timeStepper</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span>
         <span class="n">enforced</span> <span class="o">=</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">enforcedTimeIncrement</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"follow-critical-time-step"</span><span class="p">]:</span>
-            <span class="n">timeIncrement</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span><span class="p">,</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">maxIncrement</span> <span class="o">*</span> <span class="n">step</span><span class="o">.</span><span class="n">length</span><span class="p">)</span>
+            <span class="n">timeIncrement</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">largestTimeIncrement</span><span class="p">,</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">maxIncrement</span> <span class="o">*</span> <span class="n">step</span><span class="o">.</span><span class="n">length</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">current</span> <span class="o">=</span> <span class="n">enforced</span> <span class="k">if</span> <span class="n">enforced</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">increment</span> <span class="o">*</span> <span class="n">step</span><span class="o">.</span><span class="n">length</span>
-            <span class="n">timeIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">&lt;</span> <span class="n">current</span> <span class="k">else</span> <span class="n">enforced</span>
+            <span class="n">inUse</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeIncrementInUse</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+            <span class="n">timeIncrement</span> <span class="o">=</span> <span class="n">largestTimeIncrement</span> <span class="k">if</span> <span class="n">largestTimeIncrement</span> <span class="o">&lt;</span> <span class="n">inUse</span> <span class="k">else</span> <span class="n">enforced</span>
         <span class="k">if</span> <span class="n">timeIncrement</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">timeIncrement</span> <span class="o">==</span> <span class="n">enforced</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="k">if</span> <span class="n">enforced</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> </span><span class="si">{:}</span><span class="s2"> the stable time increment from </span><span class="si">{:e}</span><span class="s2"> to </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> </span><span class="si">{:}</span><span class="s2"> the time increment from </span><span class="si">{:e}</span><span class="s2"> to </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                     <span class="n">cause</span><span class="p">,</span> <span class="s2">"lowered"</span> <span class="k">if</span> <span class="n">timeIncrement</span> <span class="o">&lt;</span> <span class="n">enforced</span> <span class="k">else</span> <span class="s2">"raised"</span><span class="p">,</span> <span class="n">enforced</span><span class="p">,</span> <span class="n">timeIncrement</span>
                 <span class="p">),</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
@@ -1493,6 +1490,16 @@
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">model</span><span class="o">.</span><span class="n">advanceVelocity</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">criticalTimeStep</span> <span class="ow">in</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheEntities</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">numberOfEstimates</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                    <span class="s2">"The critical time step of </span><span class="si">{:}</span><span class="s2"> was estimated </span><span class="si">{:}</span><span class="s2"> times in the step, last </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">part</span><span class="p">,</span> <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">numberOfEstimates</span><span class="p">,</span> <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">value</span>
+                    <span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                    <span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
 
         <span class="n">prettyTable</span> <span class="o">=</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">makePrettyTable</span><span class="p">(</span><span class="n">wallTime</span><span class="o">=</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepWallClockTic</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printPrettyTable</span><span class="p">(</span><span class="n">prettyTable</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
@@ -2186,7 +2193,7 @@
 <span class="sd">        :meth:`onNewNumbering` builds is gone, so that no array of the previous numbering is left to be mistaken for</span>
 <span class="sd">        one of the next. The net force and the mass and the damping of the entities that carry their own inertia, which</span>
 <span class="sd">        a resumed step finds from its checkpoint, are dropped as well: whoever needs them takes them before the build (see</span>
-<span class="sd">        :meth:`prepareIncrement`). What is derived from the mesh, the stable time increment and the classification of</span>
+<span class="sd">        :meth:`prepareIncrement`). What is derived from the mesh, the critical time step and the classification of</span>
 <span class="sd">        the fields by time derivative, is no array of the numbering: it is derived again when the mesh changed (see</span>
 <span class="sd">        :meth:`onNewNumbering`)."""</span>
 
@@ -2210,10 +2217,10 @@
 <span class="sd">        them (see :meth:`_assembleLumpedOperators`), the vectors of the increments (the solution, the velocity and the</span>
 <span class="sd">        acceleration read from the model, which holds the state a mesh change interpolated onto its new nodes; the net</span>
 <span class="sd">        force and the internal force zero, see the module documentation, "The net force is solver state, and a step</span>
-<span class="sd">        starts from the model's state"), and the stable time increment of the new mesh.</span>
+<span class="sd">        starts from the model's state"), and the critical time step of the new mesh.</span>
 
 <span class="sd">        The lumped operators are functions of the elements and of the numbering: new locations on the same numbering</span>
-<span class="sd">        keep them. What is derived from the mesh -- the stable time increment, an element pass that evaluates the</span>
+<span class="sd">        keep them. What is derived from the mesh -- the critical time step, an element pass that evaluates the</span>
 <span class="sd">        materials, and the classification of the fields -- is derived for the first numbering of a step and for a new</span>
 <span class="sd">        mesh, not for a new numbering of the same mesh, e.g. when the particles of a meshfree model reach other nodes.</span>
 
@@ -2262,27 +2269,20 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">=</span> <span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfNetForce</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">digest</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheStableIncrementBound</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"carry-stable-increment-weights"</span><span class="p">]</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="p">)</span>
 
         <span class="c1"># After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new</span>
         <span class="c1"># nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).</span>
         <span class="n">system</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheCriticalTimeStep</span> <span class="o">!=</span> <span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">version</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">getCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"courant-number"</span><span class="p">]</span> <span class="o">*</span> <span class="nb">min</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stableTimeIncrementOfEntities</span>
-            <span class="p">)</span>
+        <span class="c1"># Estimated only; the callers enforce it (see the module documentation, "The critical time step").</span>
+        <span class="n">criticalTimeStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span>
+        <span class="k">if</span> <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">isDue</span><span class="p">(</span><span class="n">system</span><span class="p">):</span>
+            <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">estimate</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                <span class="s2">"Critical time step of the elements for explicit dynamics: </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"courant-number"</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheElements</span>
-                <span class="p">),</span>
+                <span class="s2">"The critical time step of the finite elements: </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
                 <span class="mi">1</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_meshOfTheCriticalTimeStep</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">version</span></div>
+            <span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_refuseSlavesAmongTheDofsOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -2323,8 +2323,8 @@
 <a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">onNewLocations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Wrap the vectors of the increments with the new locations, their values kept: the increments continue from</span>
-<span class="sd">        the solution, the velocity, the acceleration and the net force they have. The lumped operators and the stable</span>
-<span class="sd">        time increment are not touched: no element and no node moved.</span>
+<span class="sd">        the solution, the velocity, the acceleration and the net force they have. The lumped operators and the critical</span>
+<span class="sd">        time step are not touched: no element and no node moved.</span>
 
 <span class="sd">        See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations`.</span>
 <span class="sd">        """</span>
@@ -2617,8 +2617,8 @@
 <span class="sd">        coefficient; it cannot refuse a field that is uniformly FIRST order when second order was</span>
 <span class="sd">        intended. Such a run completes and reports success with different physics. That is a</span>
 <span class="sd">        one-token slip: a non-local field is second order only if its material provides a</span>
-<span class="sd">        micro-inertia, which for GCDP is optional material property 21 and legitimately defaults to</span>
-<span class="sd">        zero, so forgetting it silently returns the field to the parabolic scheme -- whose own</span>
+<span class="sd">        micro-inertia, which for some materials is an optional material property that legitimately</span>
+<span class="sd">        defaults to zero, so forgetting it silently returns the field to the parabolic scheme -- whose own</span>
 <span class="sd">        stability limit nothing checks.</span>
 
 <span class="sd">        Raises</span>
@@ -2655,8 +2655,8 @@
                             <span class="n">derived</span><span class="p">[</span><span class="n">fieldName</span><span class="p">],</span>
                             <span class="p">(</span>
                                 <span class="s2">" A non-local field is second order only if its material provides a "</span>
-                                <span class="s2">"micro-inertia; for GCDP that is optional material property 21, and "</span>
-                                <span class="s2">"leaving it off legitimately means zero."</span>
+                                <span class="s2">"micro-inertia; for some materials that is an optional material "</span>
+                                <span class="s2">"property, and leaving it off legitimately means zero."</span>
                                 <span class="k">if</span> <span class="n">expected</span> <span class="o">==</span> <span class="s2">"second order"</span>
                                 <span class="k">else</span> <span class="s2">""</span>
                             <span class="p">),</span>
@@ -2867,32 +2867,6 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
             <span class="mi">1</span><span class="p">,</span>
         <span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="NED.getCriticalTimeStepForExplicitDynamics">
-<a class="viewcode-back" href="../../../analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.getCriticalTimeStepForExplicitDynamics">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">getCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Compute the critical time step for explicit dynamics, over the entities the discrete system names for it</span>
-<span class="sd">        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        U</span>
-<span class="sd">            The solution vector.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        float</span>
-<span class="sd">            The critical time step for explicit dynamics.</span>
-<span class="sd">        """</span>
-        <span class="n">minTimeStep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-
-        <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span><span class="p">:</span>
-            <span class="n">elementTimeStep</span> <span class="o">=</span> <span class="n">element</span><span class="o">.</span><span class="n">computeCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="n">U</span><span class="p">[</span><span class="n">element</span><span class="p">])</span>
-            <span class="k">if</span> <span class="n">elementTimeStep</span> <span class="o">&lt;</span> <span class="n">minTimeStep</span><span class="p">:</span>
-                <span class="n">minTimeStep</span> <span class="o">=</span> <span class="n">elementTimeStep</span>
-
-        <span class="k">return</span> <span class="n">minTimeStep</span></div>
 </div>
 
 </pre></div>

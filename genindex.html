@@ -81,6 +81,7 @@
 <li class="toctree-l1"><a class="reference internal" href="theory/contact.html">Contact mechanics: theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
 <ul>
@@ -1051,6 +1052,18 @@
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly">createSystemMatrixAssembly() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst">criticalTimeStepAtWorst() (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia method)</a>
+</li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate">CriticalTimeStepEstimate (class in edelweissfe.solvers.base.criticaltimestep)</a>
+</li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart">CriticalTimeStepOfAPart (class in edelweissfe.solvers.base.criticaltimestep)</a>
+</li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia">CriticalTimeStepOfEntitiesWithOwnInertia (class in edelweissfe.solvers.base.criticaltimestep)</a>
+</li>
+      <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia">criticalTimeStepOfEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
+</li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements">CriticalTimeStepOfTheElements (class in edelweissfe.solvers.base.criticaltimestep)</a>
+</li>
       <li><a href="developer/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator">CSRGenerator (class in edelweissfe.numerics.csrgeneratorv2)</a>
 </li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.csrGenerator">csrGenerator (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
@@ -2019,6 +2032,13 @@
 </li>
       </ul></li>
       <li>
+    edelweissfe.solvers.base.criticaltimestep
+
+      <ul>
+        <li><a href="theory/criticaltimestep.html#module-edelweissfe.solvers.base.criticaltimestep">module</a>
+</li>
+      </ul></li>
+      <li>
     edelweissfe.solvers.nonlinearexplicitdynamic
 
       <ul>
@@ -2432,8 +2452,6 @@
 </li>
       <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia">entitiesWithOwnInertia (edelweissfe.models.discretesystem.DiscreteSystem property)</a>
 </li>
-      <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertiaCoupleOtherNodes">entitiesWithOwnInertiaCoupleOtherNodes() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
-</li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.entityIds">entityIds (edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly attribute)</a>
 </li>
       <li><a href="developer/fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES">ENTRIES (edelweissfe.fields.nodefield.NodeField attribute)</a>
@@ -2448,6 +2466,12 @@
       </ul></li>
       <li><a href="developer/journal.html#edelweissfe.journal.journal.Journal.errorMessage">errorMessage() (edelweissfe.journal.journal.Journal method)</a>
 </li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.estimate">estimate() (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia method)</a>
+
+      <ul>
+        <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate">(edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements method)</a>
+</li>
+      </ul></li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.SolveRecord.eta">eta (edelweissfe.linsolve.composition.krylov.SolveRecord attribute)</a>
 </li>
       <li><a href="model/analyticalfields.html#edelweissfe.analyticalfields.base.analyticalfieldbase.AnalyticalField.evaluateAtCoordinates">evaluateAtCoordinates() (edelweissfe.analyticalfields.base.analyticalfieldbase.AnalyticalField method)</a>
@@ -2734,8 +2758,6 @@
         <li><a href="model/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.getCoordinatesAtQuadraturePoints">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement method)</a>
 </li>
       </ul></li>
-      <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.getCriticalTimeStepForExplicitDynamics">getCriticalTimeStepForExplicitDynamics() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
-</li>
       <li><a href="model/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getCurrentKinematics">getCurrentKinematics() (edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody method)</a>
 
       <ul>
@@ -3060,6 +3082,12 @@
 </li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.isDeferringFieldBookkeeping">isDeferringFieldBookkeeping (edelweissfe.models.topologypipeline.TopologyPipeline attribute)</a>
 </li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue">isDue() (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia method)</a>
+
+      <ul>
+        <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.isDue">(edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements method)</a>
+</li>
+      </ul></li>
       <li><a href="developer/models.html#edelweissfe.models.modelchange.ModelChange.isEmpty">isEmpty (edelweissfe.models.modelchange.ModelChange property)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.QuasiNewtonFallback.isEngaged">isEngaged (edelweissfe.solvers.nonlinearimplicitstatic.QuasiNewtonFallback attribute)</a>
@@ -3581,6 +3609,8 @@
         <li><a href="analysis/solvers.html#module-edelweissfe.solvers.base.convergencecriteria">edelweissfe.solvers.base.convergencecriteria</a>
 </li>
         <li><a href="analysis/solvers.html#module-edelweissfe.solvers.base.convergencetable">edelweissfe.solvers.base.convergencetable</a>
+</li>
+        <li><a href="theory/criticaltimestep.html#module-edelweissfe.solvers.base.criticaltimestep">edelweissfe.solvers.base.criticaltimestep</a>
 </li>
         <li><a href="analysis/solvers.html#module-edelweissfe.solvers.nonlinearexplicitdynamic">edelweissfe.solvers.nonlinearexplicitdynamic</a>
 </li>
@@ -4231,10 +4261,10 @@
       </ul></li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory">replayHistory() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.report">report() (edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.reportEnergyBalance">reportEnergyBalance() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.reportsSolveSummary">reportsSolveSummary (edelweissfe.linsolve.base.LinearSolver attribute)</a>
@@ -4261,6 +4291,14 @@
 </li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers">reserveNodeNumbers() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
 </li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset">reset() (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart method)</a>
+
+      <ul>
+        <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.reset">(edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia method)</a>
+</li>
+        <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.reset">(edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements method)</a>
+</li>
+      </ul></li>
       <li><a href="model/elements.html#edelweissfe.elements.base.baseelement.BaseElement.resetToLastValidState">resetToLastValidState() (edelweissfe.elements.base.baseelement.BaseElement method)</a>
 
       <ul>
@@ -4629,8 +4667,6 @@
 </li>
       <li><a href="developer/journal.html#edelweissfe.journal.journal.Journal.squelch">squelch() (edelweissfe.journal.journal.Journal method)</a>
 </li>
-      <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia">stableTimeIncrementOfEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
-</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.STALENESS_MIN_EXCESS">STALENESS_MIN_EXCESS (in module edelweissfe.linsolve.composition.krylov)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.RebuildPolicy.stalenessFactor">stalenessFactor (edelweissfe.linsolve.composition.krylov.RebuildPolicy attribute)</a>
@@ -4899,6 +4935,8 @@
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.validateModelCapabilities">(edelweissfe.solvers.nonlinearexplicitstatic.NEST method)</a>
 </li>
       </ul></li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.value">value (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart property)</a>
+</li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprints">verifyFingerprints (edelweissfe.models.topologypipeline.TopologyPipeline attribute)</a>
 </li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprintsPerRecord">verifyFingerprintsPerRecord (edelweissfe.models.topologypipeline.TopologyPipeline attribute)</a>

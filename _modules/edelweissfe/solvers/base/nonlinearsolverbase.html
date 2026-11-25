@@ -81,6 +81,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
 <ul>
@@ -794,8 +795,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">prepareIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">isRetry</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Bring the model up to date before an increment is proposed: the topology update, when due,</span>
 <span class="sd">        and whatever the solver derives from the mesh. Runs before the time stepper proposes the</span>
-<span class="sd">        increment, because it may change what is proposed (an explicit solver lowers its stable time</span>
-<span class="sd">        increment after a refinement).</span>
+<span class="sd">        increment, because it may change what is proposed (an explicit solver lowers its time</span>
+<span class="sd">        increment after a refinement, which lowers the critical time step).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>

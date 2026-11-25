@@ -81,6 +81,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
 <ul>
@@ -312,7 +313,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">enforceTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeIncrement</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Use ``timeIncrement`` for every following increment, instead of adapting it.</span>
 
-<span class="sd">        The caller is an explicit solver, whose stable time increment is a property of the model: set at the start of</span>
+<span class="sd">        The caller is an explicit solver, whose critical time step is a property of the model: set at the start of</span>
 <span class="sd">        the step, and set anew each time the solver takes the critical time step again, e.g. after a refinement or as</span>
 <span class="sd">        entities that carry their own inertia deform; lowered only, or also raised, as the solver chooses.</span>
 

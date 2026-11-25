@@ -81,6 +81,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../theory/contact.html">Contact mechanics: theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
 <ul>
@@ -181,6 +182,7 @@
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.fields.nodefield</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeField</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.criticaltimestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">CriticalTimeStepEstimate</span>
 
 
 <div class="viewcode-block" id="DiscreteSystem">
@@ -257,7 +259,7 @@
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">elementsWithNodalInertia</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The entities whose inertia, damping and stable time increment a solver assembles element by element, at the</span>
+<span class="w">        </span><span class="sd">"""The entities whose inertia, damping and critical time step a solver assembles element by element, at the</span>
 <span class="sd">        nodes (``NID``, ``NED``), and whose forces ``NED`` computes in its pass over the elements. In a finite element</span>
 <span class="sd">        model, these are the :attr:`elements`; a meshfree model names its finite elements only, since its cells and</span>
 <span class="sd">        particles contribute nothing there, and the particles integrate their own inertia (see</span>
@@ -608,7 +610,7 @@
 <span class="sd">        force, their lumped mass and their lumped momentum on the nodes they couple then</span>
 <span class="sd">        (:meth:`assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,</span>
 <span class="sd">        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`, :meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`,</span>
-<span class="sd">        :meth:`stableTimeIncrementOfEntitiesWithOwnInertia`). The nodes they couple carry no total solution: their</span>
+<span class="sd">        :meth:`criticalTimeStepOfEntitiesWithOwnInertia`). The nodes they couple carry no total solution: their</span>
 <span class="sd">        values are the coefficients of one increment, and no element assembles a mass there (see</span>
 <span class="sd">        :meth:`dofsWithNodalInertia`).</span>
 
@@ -657,8 +659,8 @@
 <span class="sd">        residual contribution at the state they accepted, and their lumped momentum, both at the nodes they couple now:</span>
 <span class="sd">        what ``NED`` evaluates after every increment, once the model has reconnected them, with their lumped mass</span>
 <span class="sd">        (:meth:`assembleLumpedMassOfEntitiesWithOwnInertia`), their lumped damping</span>
-<span class="sd">        (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`) and the stable time increment of their assembled system</span>
-<span class="sd">        (:meth:`stableTimeIncrementOfEntitiesWithOwnInertia`). The momentum is what the velocity of these nodes is</span>
+<span class="sd">        (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`) and the critical time step of their assembled system</span>
+<span class="sd">        (:meth:`criticalTimeStepOfEntitiesWithOwnInertia`). The momentum is what the velocity of these nodes is</span>
 <span class="sd">        projected from where the model does not hold it (see :meth:`carriersOfTheMotion`).</span>
 
 <span class="sd">        A finite element model has no such entity: None.</span>
@@ -705,27 +707,28 @@
         <span class="k">return</span> <span class="kc">None</span></div>
 
 
-<div class="viewcode-block" id="DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia">
-<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">stableTimeIncrementOfEntitiesWithOwnInertia</span><span class="p">(</span>
+<div class="viewcode-block" id="DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">criticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">lumpedMass</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">forEachChunk</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
-        <span class="n">weightsOfTheBound</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""A bound of the stable time increment of the explicit scheme for the entities that carry their own inertia</span>
-<span class="sd">        (:attr:`entitiesWithOwnInertia`) at their current configuration. A property of their assembled system, not of</span>
-<span class="sd">        one entity: an entity's stiffness may couple nodes at which its own lumped mass vanishes. ``NED`` takes the</span>
-<span class="sd">        smaller of it and the elements' critical time step.</span>
+        <span class="n">weightsOfTheEstimate</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"CriticalTimeStepEstimate | None"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""An estimate of the critical time step of the explicit scheme for the entities that carry their own inertia</span>
+<span class="sd">        (:attr:`entitiesWithOwnInertia`) at their current configuration, a lower bound of it. A property of their</span>
+<span class="sd">        assembled system, not of one entity: an entity's stiffness may couple nodes at which its own lumped mass</span>
+<span class="sd">        vanishes. ``NED`` takes the smaller of it and the elements' critical time step, and decides when it is estimated</span>
+<span class="sd">        anew (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia`).</span>
 
 <span class="sd">        A bound of the largest eigenvalue of a nonnegative matrix :math:`\\boldsymbol{A}` -- here the absolute value of</span>
 <span class="sd">        the mass-scaled stiffness -- is the Collatz-Wielandt bound :math:`\\rho(\\boldsymbol{A}) \\le \\max_i</span>
 <span class="sd">        (\\boldsymbol{A}\\boldsymbol{w})_i / w_i`, which holds for every positive weight vector :math:`\\boldsymbol{w}`</span>
-<span class="sd">        and is exact for the Perron vector. ``NED`` may carry the weights from one bound to the next</span>
-<span class="sd">        (``carry-stable-increment-weights``): each bound then takes the weights the last one left, and leaves</span>
-<span class="sd">        :math:`\\boldsymbol{A}\\boldsymbol{w}` for the next, one step of the power iteration per bound. Weights of</span>
-<span class="sd">        zero start the iteration anew, from the bound's own start weights.</span>
+<span class="sd">        and is exact for the Perron vector. ``NED`` may carry the weights from one estimate to the next</span>
+<span class="sd">        (``carry-critical-time-step-weights``): each estimate then takes the weights the last one left, and leaves</span>
+<span class="sd">        :math:`\\boldsymbol{A}\\boldsymbol{w}` for the next, one step of the power iteration per estimate. Weights of</span>
+<span class="sd">        zero start the iteration anew, from the estimate's own start weights.</span>
 
 <span class="sd">        A finite element model has no such entity: None.</span>
 
@@ -738,38 +741,19 @@
 <span class="sd">            Their lumped damping, likewise (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`).</span>
 <span class="sd">        forEachChunk</span>
 <span class="sd">            The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.</span>
-<span class="sd">        weightsOfTheBound</span>
-<span class="sd">            The weights the last bound left, a vector of the numbering, zero where a degree of freedom has none yet;</span>
-<span class="sd">            replaced in place by the weights for the next bound. None for the bound with its own start weights alone.</span>
+<span class="sd">        weightsOfTheEstimate</span>
+<span class="sd">            The weights the last estimate left, a vector of the numbering, zero where a degree of freedom has none yet;</span>
+<span class="sd">            replaced in place by the weights for the next estimate. None for the estimate with its own start weights</span>
+<span class="sd">            alone.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        float | None</span>
-<span class="sd">            The stable time increment, unscaled by a courant number; None if the model has no such entity.</span>
+<span class="sd">        CriticalTimeStepEstimate | None</span>
+<span class="sd">            The estimate; its ``value`` is the critical time step, not scaled by a courant number. None if the model has</span>
+<span class="sd">            no such entity.</span>
 <span class="sd">        """</span>
 
         <span class="k">return</span> <span class="kc">None</span></div>
-
-
-<div class="viewcode-block" id="DiscreteSystem.entitiesWithOwnInertiaCoupleOtherNodes">
-<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertiaCoupleOtherNodes">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">entitiesWithOwnInertiaCoupleOtherNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Whether the last connectivity update of the model</span>
-<span class="sd">        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`) changed the nodes that an entity that carries</span>
-<span class="sd">        its own inertia (:attr:`entitiesWithOwnInertia`) couples. Only that changes their assembled system and with it</span>
-<span class="sd">        the bound of its stable time increment (:meth:`stableTimeIncrementOfEntitiesWithOwnInertia`): a constraint</span>
-<span class="sd">        that couples other nodes, e.g. a contact paired anew, changes the locations of the discrete system, but not the</span>
-<span class="sd">        entities' stiffness, mass or damping. ``NED`` bounds the stable time increment anew when it is True.</span>
-
-<span class="sd">        A finite element model has no such entity: False.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        bool</span>
-<span class="sd">            True if an entity that carries its own inertia couples other nodes since the last connectivity update.</span>
-<span class="sd">        """</span>
-
-        <span class="k">return</span> <span class="kc">False</span></div>
 
 
 <div class="viewcode-block" id="DiscreteSystem.updateMaterialPoints">

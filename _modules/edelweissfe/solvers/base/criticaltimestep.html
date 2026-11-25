@@ -1,0 +1,607 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.solvers.base.criticaltimestep &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.solvers.base.criticaltimestep</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.solvers.base.criticaltimestep</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The critical time step of an explicit analysis, estimated part by part.</span>
+
+<span class="sd">The central difference method is stable for :math:`\\Delta t \\le 2/\\omega_\\mathrm{max}`, the critical time step,</span>
+<span class="sd">with :math:`\\omega_\\mathrm{max}^2` the largest eigenvalue of :math:`\\boldsymbol{M}^{-1}\\boldsymbol{K}`. The explicit</span>
+<span class="sd">dynamic solver ``NED`` never solves that eigenvalue problem. It asks the parts of the model for an estimate of their</span>
+<span class="sd">own critical time step -- a lower bound of it, from an upper bound of :math:`\\omega_\\mathrm{max}^2` --, takes the</span>
+<span class="sd">smallest, and runs at the fraction ``courant-number`` of it. The parts have disjoint degrees of freedom, so the</span>
+<span class="sd">smallest of their critical time steps is the model's.</span>
+
+<span class="sd">A part gives its estimate as a :class:`CriticalTimeStepEstimate`. An estimate costs something, and how much its value</span>
+<span class="sd">can change while the analysis runs depends on the part, so every part (:class:`CriticalTimeStepOfAPart`) comes with</span>
+<span class="sd">its own policy of when its estimate is taken anew:</span>
+
+<span class="sd">* :class:`CriticalTimeStepOfTheElements`: the finite elements, estimated **once per mesh**;</span>
+<span class="sd">* :class:`CriticalTimeStepOfEntitiesWithOwnInertia`: the entities that carry their own inertia (the particles of a</span>
+<span class="sd">  meshfree model), estimated anew **when the margin of the last estimate over the time increment in use may be used up**.</span>
+
+<span class="sd">The theory, and what the estimates do not see, are explained in :doc:`/theory/criticaltimestep`.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
+
+
+<div class="viewcode-block" id="CriticalTimeStepEstimate">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepEstimate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A part's estimate of its own critical time step, as the part gives it. A derived class also holds what the</span>
+<span class="sd">    estimate was made from, so that what is added to the part's stiffness can be added to the estimate.</span>
+
+<span class="sd">    Its one field, ``value``, is the critical time step of the part alone, not scaled by a courant number: a lower</span>
+<span class="sd">    bound of :math:`2/\\omega_\\mathrm{max}` of the part's degrees of freedom; infinite for a part without stiffness.</span>
+<span class="sd">    """</span>
+
+    <span class="n">value</span><span class="p">:</span> <span class="nb">float</span></div>
+
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfAPart">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepOfAPart</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The critical time step of one part of a model as last estimated (:attr:`lastEstimate`). A derived class says how</span>
+<span class="sd">    the part is estimated, and when its estimate is taken anew (its policy).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    part</span>
+<span class="sd">        What the part is, for the journal.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">part</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">part</span> <span class="o">=</span> <span class="n">part</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+<div class="viewcode-block" id="CriticalTimeStepOfAPart.reset">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Forget the estimate, at the start of every step: a material property may have changed with the step. The next</span>
+<span class="sd">        estimate is due at once."""</span>
+
+        <span class="c1">#: The last estimate; None before the first one, and for a model without such a part.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: How often the part was estimated in the step.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">numberOfEstimates</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">value</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The critical time step of the part as last estimated, not scaled by a courant number; infinite before the</span>
+<span class="sd">        first estimate, and for a model without such a part."""</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span><span class="o">.</span><span class="n">value</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_take</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">estimate</span><span class="p">:</span> <span class="n">CriticalTimeStepEstimate</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Take a new estimate.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        estimate</span>
+<span class="sd">            The estimate of the part; None if the model has no such part.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span> <span class="o">=</span> <span class="n">estimate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">numberOfEstimates</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfTheElements">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepOfTheElements</span><span class="p">(</span><span class="n">CriticalTimeStepOfAPart</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The critical time step of the finite elements, the smallest of the elements' own estimates</span>
+<span class="sd">    (``computeCriticalTimeStepForExplicitDynamics``): the largest eigenfrequency of an assembled mesh is bounded by the</span>
+<span class="sd">    largest of its elements, so the smallest critical time step of an element is an estimate of the mesh's.</span>
+
+<span class="sd">    **Policy: once per mesh, and at the start of every step.** An element's estimate depends on the mesh, on its lumped</span>
+<span class="sd">    mass and on the wave speed of its material at the state of the estimate; a finite-strain element of Marmot takes its</span>
+<span class="sd">    reference geometry with the wave speed at its current deformation. The policy assumes that within a step neither</span>
+<span class="sd">    the geometry nor the wave speed changes enough to use up the margin that the courant number leaves. A softening</span>
+<span class="sd">    material only raises the true limit; the assumption fails where elements are compressed far at finite strain, or</span>
+<span class="sd">    where their material stiffens with the deformation (a hyperelastic solid in compression, a compacting material).</span>
+<span class="sd">    There, take a lower ``courant-number``, or shorter steps, since every step estimates anew. So the elements are</span>
+<span class="sd">    estimated anew when the mesh changes (a refinement) and at the start of every step, since a material property may</span>
+<span class="sd">    have changed with the step; not for a new numbering of the same mesh, and never within an increment loop that does</span>
+<span class="sd">    not change the mesh.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="s2">"the finite elements"</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CriticalTimeStepOfTheElements.reset">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="c1">#: The version of the mesh the estimate is of (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mesh</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfTheElements.isDue">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.isDue">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isDue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the mesh is not the one of the last estimate.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The discrete system.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if the elements are to be estimated anew.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mesh</span> <span class="o">!=</span> <span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">version</span></div>
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfTheElements.estimate">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">estimate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Estimate the critical time step of the elements of the discrete system</span>
+<span class="sd">        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The discrete system.</span>
+<span class="sd">        U</span>
+<span class="sd">            The solution, which an element may need for its current deformation.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_take</span><span class="p">(</span>
+            <span class="n">CriticalTimeStepEstimate</span><span class="p">(</span>
+                <span class="nb">min</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="n">element</span><span class="o">.</span><span class="n">computeCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="n">U</span><span class="p">[</span><span class="n">element</span><span class="p">])</span>
+                        <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span>
+                    <span class="p">),</span>
+                    <span class="n">default</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mesh</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">version</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfEntitiesWithOwnInertia">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="n">CriticalTimeStepOfAPart</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The critical time step of the entities that carry their own inertia (the particles of a meshfree model), a property</span>
+<span class="sd">    of their assembled system at their current configuration</span>
+<span class="sd">    (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia`).</span>
+
+<span class="sd">    **Policy: when the margin may be used up.** It depends on the state of the entities -- their stiffness, their</span>
+<span class="sd">    positions, their lumped inertia and damping -- and changes from increment to increment, but an estimate costs a pass</span>
+<span class="sd">    over all of them. After an estimate :math:`v`, the solver therefore keeps, in every increment, the critical time</span>
+<span class="sd">    step at worst, :math:`L`: a lower bound of the entities' critical time step now, :math:`n` increments after the</span>
+<span class="sd">    estimate,</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        L = v \\, \\min\\left(1, \\sqrt{\\alpha}, \\beta\\right) (1 - \\delta)^n ,</span>
+
+<span class="sd">    and estimates anew as soon as the increment in use is no longer a ``courant-number`` fraction of it.</span>
+
+<span class="sd">    * :math:`\\alpha = \\min_i M_i / M_i^0 \\le 1` is the smallest ratio of a lumped inertia now to the same inertia at</span>
+<span class="sd">      the estimate (1 if none fell), over the degrees of freedom that had one then and have one now, and</span>
+<span class="sd">      :math:`\\beta` the same for the damping of the degrees of freedom integrated by forward Euler (a damping, no</span>
+<span class="sd">      inertia). This part is exact: the estimate scales the stiffness with :math:`\\boldsymbol{M}^{-1/2}` on both</span>
+<span class="sd">      sides, so with the stiffness held, a fall of the masses to :math:`\\alpha` times raises the bound of</span>
+<span class="sd">      :math:`\\omega_\\mathrm{max}^2` at most :math:`1/\\alpha` times and lowers :math:`2/\\omega_\\mathrm{max}` at most</span>
+<span class="sd">      to :math:`\\sqrt{\\alpha}` times; the forward Euler limit :math:`2/\\lambda_\\mathrm{max}(\\boldsymbol{C}^{-1}</span>
+<span class="sd">      \\boldsymbol{K})` is linear in the damping, so it falls at most to :math:`\\beta` times. The masses are known in</span>
+<span class="sd">      every increment: the solver assembles them anyway.</span>
+<span class="sd">    * :math:`\\delta` (option ``critical-time-step-decrease-per-increment``) is the largest relative fall of the estimate</span>
+<span class="sd">      per increment that its stiffness may cause. This part is an assumption, not a theorem: the tangent of a material</span>
+<span class="sd">      can change abruptly, and the stiffness of a particle changes with its deformation. It rests on what an increment</span>
+<span class="sd">      is -- a fraction of the time a wave needs to cross an entity, so the configuration moves by a fraction of an entity</span>
+<span class="sd">      -- and on measurements, and it is documented with them in :doc:`/theory/criticaltimestep`.</span>
+
+<span class="sd">    The estimate is also taken anew when a degree of freedom has an inertia, or a damping alone, that it did not have at</span>
+<span class="sd">    the last estimate (a node that a particle reaches for the first time: a new row whose mass starts from zero), after</span>
+<span class="sd">    a new numbering, and in the first evaluation of a step. A degree of freedom that loses its inertia leaves the system</span>
+<span class="sd">    and can only raise its critical time step.</span>
+
+<span class="sd">    Where the entities set the time increment, the margin is used up after one increment, and they are estimated in</span>
+<span class="sd">    every increment; where another part sets it, they are estimated only every so many increments, as many as their</span>
+<span class="sd">    margin allows at the rate :math:`\\delta`.</span>
+
+<span class="sd">    **Carried weights** (option ``carry-critical-time-step-weights``). The estimate of the entities is made from a</span>
+<span class="sd">    Collatz-Wielandt bound with weights constant per field</span>
+<span class="sd">    (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia`). With carried</span>
+<span class="sd">    weights, every estimate takes the weights the last one left and leaves the next ones, one step of the power</span>
+<span class="sd">    iteration towards the Perron vector, where the bound is exact. Any positive weights bound the largest eigenvalue</span>
+<span class="sd">    from above, but weights refined at another configuration can bound it less tightly than the weights constant per</span>
+<span class="sd">    field they started from when the stiffness changed faster than the weights followed, e.g. where entities reach</span>
+<span class="sd">    nodes whose weights the power iteration has made small. So an estimate with carried weights below the estimate the</span>
+<span class="sd">    weights started from starts them anew: the entities are estimated again from the weights constant per field, and</span>
+<span class="sd">    the larger of the two estimates is taken. Every estimate is thus at least the one the weights started from: with</span>
+<span class="sd">    the time increment lowered only, it never falls below the smallest estimate with weights constant per field of</span>
+<span class="sd">    the step; followed (``follow-critical-time-step``), it can fall below the estimate without carried weights of the</span>
+<span class="sd">    same configuration, down to the one the weights started from. The weights start anew -- constant per field -- also</span>
+<span class="sd">    with every numbering (the nodes they belong to may have changed) and every step (a material property may have</span>
+<span class="sd">    changed), and after a resume: they are not part of the checkpoint.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    decreasePerIncrement</span>
+<span class="sd">        :math:`\\delta`, in :math:`(0, 1]`; 1 estimates in every increment.</span>
+<span class="sd">    carryWeights</span>
+<span class="sd">        Whether the weights of the estimate are carried from one estimate to the next.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">decreasePerIncrement</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">carryWeights</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">decreasePerIncrement</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"The decrease of the critical time step per increment must lie in (0, 1], not </span><span class="si">{:}</span><span class="s2">."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">decreasePerIncrement</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">decreasePerIncrement</span> <span class="o">=</span> <span class="n">decreasePerIncrement</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">carryWeights</span> <span class="o">=</span> <span class="n">carryWeights</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="s2">"the entities that carry their own inertia"</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CriticalTimeStepOfEntitiesWithOwnInertia.reset">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="c1">#: The numbering, the number of the increment, and the lumped inertia and damping of the last estimate.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numbering</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_increment</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: With carried weights, the weights the last estimate left for the next one, a vector of its numbering, zero</span>
+        <span class="c1">#: where a degree of freedom has none yet; None without carried weights, and before the first estimate on a</span>
+        <span class="c1">#: numbering.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheEstimate</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: With carried weights, the critical time step of the estimate the weights started from, the first one after</span>
+        <span class="c1">#: they were set to zero, with weights constant per field.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_valueTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span></div>
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfEntitiesWithOwnInertia.estimate">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.estimate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">estimate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">lumpedInertia</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">,</span> <span class="n">increment</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Estimate the critical time step of the entities at their current configuration; with carried weights, from</span>
+<span class="sd">        the weights the last estimate left, started anew where it falls below the estimate they started from (see the</span>
+<span class="sd">        class documentation, "Carried weights").</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The discrete system.</span>
+<span class="sd">        lumpedInertia</span>
+<span class="sd">            The lumped inertia of the entities at their current configuration, as the solver has just assembled it.</span>
+<span class="sd">        lumpedDamping</span>
+<span class="sd">            Their lumped damping, likewise.</span>
+<span class="sd">        forEachChunk</span>
+<span class="sd">            The solver's loop over chunks of independent entities.</span>
+<span class="sd">        increment</span>
+<span class="sd">            The number of the increment just accepted.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">carryWeights</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbering</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheEstimate</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheEstimate</span>
+        <span class="n">startsTheWeights</span> <span class="o">=</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">weights</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+
+        <span class="n">estimate</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">criticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">estimate</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">weights</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">startsTheWeights</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_valueTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">estimate</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">elif</span> <span class="n">estimate</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_valueTheWeightsStartedFrom</span><span class="p">:</span>
+                <span class="n">weights</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="n">anew</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">criticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">(</span>
+                    <span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">,</span> <span class="n">weights</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_valueTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">anew</span><span class="o">.</span><span class="n">value</span>
+                <span class="k">if</span> <span class="n">anew</span><span class="o">.</span><span class="n">value</span> <span class="o">&gt;</span> <span class="n">estimate</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                    <span class="n">estimate</span> <span class="o">=</span> <span class="n">anew</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_take</span><span class="p">(</span><span class="n">estimate</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numbering</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_increment</span> <span class="o">=</span> <span class="n">increment</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">lumpedInertia</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">lumpedDamping</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">criticalTimeStepAtWorst</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">increment</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">lumpedInertia</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The critical time step at worst, :math:`L`, after the increment ``increment``, :math:`n` increments after the</span>
+<span class="sd">        last estimate: a lower bound of the entities' critical time step now (see the class documentation). It holds</span>
+<span class="sd">        for the degrees of freedom that had an inertia (or a damping alone) at the last estimate; whether there are</span>
+<span class="sd">        others, :meth:`isDue` asks first.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        increment</span>
+<span class="sd">            The number of the increment just accepted.</span>
+<span class="sd">        lumpedInertia</span>
+<span class="sd">            The lumped inertia of the entities now.</span>
+<span class="sd">        lumpedDamping</span>
+<span class="sd">            Their lumped damping now.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The critical time step at worst.</span>
+<span class="sd">        """</span>
+
+        <span class="n">massFactor</span><span class="p">,</span> <span class="n">stiffnessFactor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fallSinceTheEstimate</span><span class="p">(</span><span class="n">increment</span><span class="p">,</span> <span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">*</span> <span class="n">massFactor</span> <span class="o">*</span> <span class="n">stiffnessFactor</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fallSinceTheEstimate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">increment</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">lumpedInertia</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">DofVector</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The factors :math:`\\min(1, \\sqrt{\\alpha}, \\beta)` and :math:`(1 - \\delta)^n` by which the critical time</span>
+<span class="sd">        step of the entities may have fallen since the last estimate, from their masses and from their stiffness (see</span>
+<span class="sd">        the class documentation).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        increment</span>
+<span class="sd">            The number of the increment just accepted.</span>
+<span class="sd">        lumpedInertia</span>
+<span class="sd">            The lumped inertia of the entities now.</span>
+<span class="sd">        lumpedDamping</span>
+<span class="sd">            Their lumped damping now.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[float, float]</span>
+<span class="sd">            The two factors, each in (0, 1].</span>
+<span class="sd">        """</span>
+
+        <span class="n">inertia</span><span class="p">,</span> <span class="n">damping</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedInertia</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedDamping</span><span class="p">)</span>
+        <span class="n">withInertia</span> <span class="o">=</span> <span class="p">(</span><span class="n">inertia</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">withDampingAlone</span> <span class="o">=</span> <span class="o">~</span><span class="p">(</span><span class="n">inertia</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">damping</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="o">~</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">inertia</span><span class="p">[</span><span class="n">withInertia</span><span class="p">]</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span><span class="p">[</span><span class="n">withInertia</span><span class="p">],</span> <span class="n">initial</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">damping</span><span class="p">[</span><span class="n">withDampingAlone</span><span class="p">]</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">_damping</span><span class="p">[</span><span class="n">withDampingAlone</span><span class="p">],</span> <span class="n">initial</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">alpha</span><span class="p">),</span> <span class="n">beta</span><span class="p">),</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">decreasePerIncrement</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="n">increment</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_increment</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CriticalTimeStepOfEntitiesWithOwnInertia.isDue">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isDue</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">,</span>
+        <span class="n">increment</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">lumpedInertia</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">criticalTimeStepInUse</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the entities are to be estimated anew after the increment ``increment``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The discrete system.</span>
+<span class="sd">        increment</span>
+<span class="sd">            The number of the increment just accepted.</span>
+<span class="sd">        lumpedInertia</span>
+<span class="sd">            The lumped inertia of the entities now.</span>
+<span class="sd">        lumpedDamping</span>
+<span class="sd">            Their lumped damping now.</span>
+<span class="sd">        criticalTimeStepInUse</span>
+<span class="sd">            The critical time step the time increment in use is the ``courant-number`` fraction of.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True in the first evaluation of a step, after a new numbering, when a degree of freedom has an inertia (or a</span>
+<span class="sd">            damping alone) it did not have at the last estimate, and when the critical time step at worst</span>
+<span class="sd">            (:meth:`criticalTimeStepAtWorst`) has fallen below the one in use.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbering</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="n">inertia</span><span class="p">,</span> <span class="n">damping</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedInertia</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedDamping</span><span class="p">)</span>
+        <span class="n">hadInertia</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inertia</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
+        <span class="n">hadDampingAlone</span> <span class="o">=</span> <span class="o">~</span><span class="n">hadInertia</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_damping</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">hasInertia</span> <span class="o">=</span> <span class="n">inertia</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
+        <span class="n">hasDampingAlone</span> <span class="o">=</span> <span class="o">~</span><span class="n">hasInertia</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">damping</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">hasInertia</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">hadInertia</span><span class="p">)</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">hasDampingAlone</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">hadDampingAlone</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">criticalTimeStepAtWorst</span><span class="p">(</span><span class="n">increment</span><span class="p">,</span> <span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">criticalTimeStepInUse</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -84,6 +84,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../theory/contact.html">Contact mechanics: theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
 <ul class="current">
@@ -574,7 +575,7 @@ within the bounds of the minimum and maximum increment size.</p>
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement">
 <span class="sig-name descname"><span class="pre">enforceTimeIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeIncrement</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/base/timestepperbase.html#TimeStepperBase.enforceTimeIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement" title="Link to this definition"></a></dt>
 <dd><p>Use <code class="docutils literal notranslate"><span class="pre">timeIncrement</span></code> for every following increment, instead of adapting it.</p>
-<p>The caller is an explicit solver, whose stable time increment is a property of the model: set at the start of
+<p>The caller is an explicit solver, whose critical time step is a property of the model: set at the start of
 the step, and set anew each time the solver takes the critical time step again, e.g. after a refinement or as
 entities that carry their own inertia deform; lowered only, or also raised, as the solver chooses.</p>
 <dl class="field-list simple">
@@ -1021,7 +1022,7 @@ within the bounds of the minimum and maximum increment size.</p>
 <dt class="sig sig-object py" id="edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.enforceTimeIncrement">
 <span class="sig-name descname"><span class="pre">enforceTimeIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeIncrement</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/timesteppers/simpletimestepper.html#SimpleTimeStepper.enforceTimeIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.enforceTimeIncrement" title="Link to this definition"></a></dt>
 <dd><p>Use <code class="docutils literal notranslate"><span class="pre">timeIncrement</span></code> for every following increment, instead of adapting it.</p>
-<p>The caller is an explicit solver, whose stable time increment is a property of the model: set at the start of
+<p>The caller is an explicit solver, whose critical time step is a property of the model: set at the start of
 the step, and set anew each time the solver takes the critical time step again, e.g. after a refinement or as
 entities that carry their own inertia deform; lowered only, or also raised, as the solver chooses.</p>
 <dl class="field-list simple">

@@ -448,13 +448,13 @@ Contact searches during a step
 An explicit analysis with contact searches while it runs, every ``contact-update-frequency`` increments. A search
 re-assigns which nodes a contact constraint couples, and touches no node, no field, no scalar variable and no element:
 the change is ``LOCATIONS``, ``NED`` only wraps its vectors with the new locations, and the lumped inertia, the
-mass-proportional damping rate, the multi-point-constraint condensation and the stable time increment are kept
+mass-proportional damping rate, the multi-point-constraint condensation and the critical time step are kept
 (:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations`, and :ref:`how-a-change-selects-the-path`).
 
 A change of the mesh -- a refinement -- gives a new numbering
 (:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering`): the operators are assembled anew over the
 elements of the new discrete system, the solution, the velocity and the acceleration are read from the model, which
-interpolated them onto the new nodes, and the stable time increment is computed again.
+interpolated them onto the new nodes, and the critical time step is computed again.
 
 Finite elements and particles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -466,12 +466,12 @@ particles, and evaluates them on the new kernel functions; their lumped mass is 
 elements' in every numbering. A projectile of finite elements gets its initial velocity from the model's velocity at its
 nodes, a body of particles from the velocity of its particles. The particles' lumped damping is taken like their mass,
 so a nonlocal field of gradient-enhanced particles is integrated by its own scheme. Their critical time step enters the
-critical time step with the elements'; it is bounded in the zero increment, whenever the particles couple other nodes
-(not when only a contact is paired anew), and every ``stable-increment-frequency`` increments (0 switches the bound
-off). With ``carry-stable-increment-weights``, every bound starts from the weights the last one left and refines them
-by one step of the power iteration, which tightens it over a few bounds at no extra cost; a bound below the one the
-weights started from starts them anew, so an increment that is lowered only never falls below the smallest bound
-without them (see "Entities that carry their own inertia" above). With
+critical time step with the elements'; it is estimated in the zero increment, and anew whenever the margin of its last
+estimate over the time increment in use may be used up (option ``critical-time-step-decrease-per-increment``, see
+:doc:`/theory/criticaltimestep`). With ``carry-critical-time-step-weights``, every estimate starts from the weights the
+last one left and refines them by one step of the power iteration, which tightens it over a few estimates at no extra
+cost; an estimate below the one the weights started from starts them anew, so an increment that is lowered only never
+falls below the smallest estimate without them (see "Entities that carry their own inertia" above). With
 ``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum in every
 increment.
 
@@ -480,11 +480,10 @@ increment.
 The time increment: lowered only, or followed
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``NED`` takes the critical time step -- the smaller of the elements' and the bound of the entities that carry their own
-inertia (e.g. particles), scaled by ``courant-number`` -- at the start of the step and after a change of the mesh, and,
-for the entities that carry their own inertia, in the zero increment, whenever they couple other nodes and every
-``stable-increment-frequency`` increments. Only at these points is it known; in between, the time increment is
-trusted.
+``NED`` takes the critical time step -- the smaller of the elements' and the entities' that carry their own inertia
+(e.g. particles), scaled by ``courant-number`` -- each time one of them is estimated: the elements at the start of the
+step and after a change of the mesh, the entities whenever the margin of their last estimate may be used up. Only at
+these points is it known; in between, the time increment is trusted.
 
 **Lowered only (the default).** Whenever the critical time step is taken and falls below the time increment in use,
 the increment becomes the critical time step; it is never raised within a step. A step that asks for smaller increments
@@ -494,24 +493,22 @@ the kernel functions of the entities reach only at the edge -- thus sets the inc
 **Followed** (``follow-critical-time-step``). Each time the critical time step is taken, the time increment becomes
 the critical time step, at most the step's ``maxInc``, up as well as down; the step's ``startInc`` is not kept, and a
 step that wants smaller increments sets ``maxInc``. Once a stiff state has passed, the increment comes back with the
-next critical time step taken. As long as no bound is known -- no element reports one, and the entities have not been
-bounded yet, or never are, with ``stable-increment-frequency=0`` -- there is nothing to follow, and the step keeps its
-own increment.
+next critical time step taken. As long as no estimate is known -- no element reports one, and the entities have not been
+estimated yet or report none -- there is nothing to follow, and the step keeps its own increment.
 
 **What following gives up.** Between two critical time steps taken, the increment is trusted: the courant number covers
 the gradual change of the model in between. Lowered only, the increment of a run that has met a stiff state once stays
 low, and is ready for the next time that state returns. The states this option is meant for are brief, but they tend to
 recur: an entity compressed again, a node reached at the edge again. Followed, the increment is raised after the first
-one and meets the next with nothing but the courant margin, for up to ``stable-increment-frequency`` increments before
-the next bound sees it. Use the option with a ``stable-increment-frequency`` small enough to see such a state recur,
-or with a lower ``courant-number``; at a ``courant-number`` close to 1, repeated raising and lowering can also pump
-energy into a mode near the stability limit.
+one and meets the next with nothing but the courant margin until the next estimate sees it -- for the entities, once
+the margin of their last estimate may be used up. Use the option with a ``critical-time-step-decrease-per-increment`` large enough
+to estimate the entities as often as such a state may recur, or with a lower ``courant-number``; at a
+``courant-number`` close to 1, repeated raising and lowering can also pump energy into a mode near the stability limit.
 
 .. code-block:: edelweiss
 
     *solver, solver=NED, name=explicit
     follow-critical-time-step=True
-    stable-increment-frequency=10
 
 Work per increment outside the elements
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

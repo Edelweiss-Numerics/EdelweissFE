@@ -84,6 +84,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../theory/contact.html">Contact mechanics: theory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
 <ul class="current">
@@ -256,8 +257,8 @@ e.g., a contact constraint). Such a contact search can only result in new locati
 constraints with scalar variables. In a model with entities that carry their own inertia, e.g. the particles of a
 meshfree model, <code class="docutils literal notranslate"><span class="pre">NED</span></code> calls <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a> after every increment
 instead, once the model has accepted it: the change may be a new numbering (the active nodes of the meshfree model
-changed), which gives new vectors read from the model, and an element mass assembled anew, but neither a new stable
-time increment nor a new classification of the fields, which belong to the mesh. <code class="docutils literal notranslate"><span class="pre">NEST</span></code> never updates the connectivity during a step, and refuses a constraint
+changed), which gives new vectors read from the model, and an element mass assembled anew, but neither a new critical
+time step nor a new classification of the fields, which belong to the mesh. <code class="docutils literal notranslate"><span class="pre">NEST</span></code> never updates the connectivity during a step, and refuses a constraint
 whose connectivity changes with the motion.</p>
 <p><code class="docutils literal notranslate"><span class="pre">NIST</span></code> predicts the first iterate of an increment by extrapolating the last accepted increments. Once per increment,
 right after the update of the discrete system, it decides whether the prediction may be used
@@ -919,8 +920,8 @@ stays as it is.</p>
 <span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">prepareIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">isRetry</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/nonlinearsolverbase.html#NonlinearSolverBase.prepareIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement" title="Link to this definition"></a></dt>
 <dd><p>Bring the model up to date before an increment is proposed: the topology update, when due,
 and whatever the solver derives from the mesh. Runs before the time stepper proposes the
-increment, because it may change what is proposed (an explicit solver lowers its stable time
-increment after a refinement).</p>
+increment, because it may change what is proposed (an explicit solver lowers its time
+increment after a refinement, which lowers the critical time step).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
