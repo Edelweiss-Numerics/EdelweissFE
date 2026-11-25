@@ -30,7 +30,10 @@
 import pytest
 
 from edelweissfe.numerics import parallelizationutilities
-from edelweissfe.solvers.base.criticaltimestep import CriticalTimeStepOfTheElements
+from edelweissfe.solvers.base.criticaltimestep import (
+    CriticalTimeStepEstimate,
+    CriticalTimeStepOfTheElements,
+)
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 
 
@@ -66,7 +69,7 @@ def criticalTimeStepOfTheElements(monkeypatch):
     def choose(value: float):
         def estimate(self, system, U):
             estimateOfTheElements(self, system, U)
-            self.value = value
+            self.lastEstimate = CriticalTimeStepEstimate(value)
 
         monkeypatch.setattr(CriticalTimeStepOfTheElements, "estimate", estimate)
 

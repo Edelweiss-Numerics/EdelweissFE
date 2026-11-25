@@ -44,7 +44,7 @@ from edelweissfe.timesteppers.timestep import TimeStep
 if TYPE_CHECKING:
     from edelweissfe.fields.nodefield import NodeField
     from edelweissfe.models.femodel import FEModel
-    from edelweissfe.solvers.base.criticaltimestep import CriticalTimeStepBound
+    from edelweissfe.solvers.base.criticaltimestep import CriticalTimeStepEstimate
 
 
 class DiscreteSystem:
@@ -530,8 +530,8 @@ class DiscreteSystem:
         lumpedMass: DofVector,
         lumpedDamping: DofVector,
         forEachChunk: Callable[[list, Callable], None],
-        weightsOfTheBound: np.ndarray | None = None,
-    ) -> "CriticalTimeStepBound | None":
+        weightsOfTheEstimate: np.ndarray | None = None,
+    ) -> "CriticalTimeStepEstimate | None":
         """An estimate of the critical time step of the explicit scheme for the entities that carry their own inertia
         (:attr:`entitiesWithOwnInertia`) at their current configuration, a lower bound of it. A property of their
         assembled system, not of one entity: an entity's stiffness may couple nodes at which its own lumped mass
@@ -557,16 +557,16 @@ class DiscreteSystem:
             Their lumped damping, likewise (:meth:`assembleLumpedDampingOfEntitiesWithOwnInertia`).
         forEachChunk
             The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
-        weightsOfTheBound
+        weightsOfTheEstimate
             The weights the last estimate left, a vector of the numbering, zero where a degree of freedom has none yet;
             replaced in place by the weights for the next estimate. None for the estimate with its own start weights
             alone.
 
         Returns
         -------
-        CriticalTimeStepBound | None
-            The estimate, its critical time step, unscaled by a courant number, its ``value``; None if the model has no
-            such entity.
+        CriticalTimeStepEstimate | None
+            The estimate; its ``value`` is the critical time step, not scaled by a courant number. None if the model has
+            no such entity.
         """
 
         return None

@@ -4,7 +4,7 @@ Theory: the critical time step of an explicit analysis
 An explicit analysis (``NED``, :doc:`/analysis/solvers`) solves no system of equations: it divides the net force by a
 lumped mass and steps on. The price is that it is stable only below a time increment, the *critical time step*. This
 page explains where that limit comes from, why EdelweissFE estimates it instead of computing it, how the estimates of
-the parts of a model are combined, and when each estimate is taken anew. The code is
+the parts of a model are combined, what they do not see, and when each estimate is taken anew. The code is
 :mod:`~edelweissfe.solvers.base.criticaltimestep`.
 
 Where the limit comes from
@@ -48,9 +48,11 @@ cost small against an increment. Two such bounds are used:
   frequency of its elements, each taken alone with its own lumped mass:
   :math:`\omega_\mathrm{max}^2 \le \max_e \lambda_\mathrm{max}(\boldsymbol{M}_e^{-1}\boldsymbol{K}_e)` (the Rayleigh
   quotient of the mesh is a weighted mean of the elements' quotients). An element's eigenvalue problem is small, and
-  Marmot solves it with the element's own strain operator and the largest wave speed of its material, which holds for
-  every element order and distortion -- where the classic "element length over wave speed" is exact only for a linear
-  bar.
+  Marmot bounds it with the element's own strain operator and the largest wave speed of its material, which holds for
+  every element order and distortion of the geometry it is taken on -- where the classic "element length over wave
+  speed" is exact only for a linear bar. A finite-strain element of Marmot takes its reference geometry, with the
+  wave speed at its current deformation: for a strongly deformed element, that no longer bounds its eigenvalue, and
+  the elements' policy rests on an assumption (see "When an estimate is taken anew").
 * **Row sums.** The particles of a meshfree model (RKPM) have no such inequality: the stiffness of a particle couples
   nodes at which its own lumped mass vanishes. Every eigenvalue :math:`\lambda` of a matrix is bounded by its largest
   absolute row sum (Gershgorin), and more sharply by the Collatz-Wielandt bound of its absolute value with positive
@@ -64,25 +66,54 @@ cost small against an increment. Two such bounds are used:
 Both are bounds from above for :math:`\omega_\mathrm{max}`, so the time increment they give is safe; how far below the
 true limit it lies is the price of not computing the eigenvalue.
 
+**Words.** A *bound* is on the side of the eigenvalue: an upper bound of :math:`\omega_\mathrm{max}^2`, as the
+element eigenvalue inequality, Gershgorin's or Collatz-Wielandt's give it. An *estimate* is on the side of time: a
+part's lower bound of its critical time step, made from such a bound
+(:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate`). The *time increment* is what a step
+takes, at most ``courant-number`` times the critical time step. The code, its options and its journal use these words
+in this sense only.
+
 How the parts combine
 ---------------------
 
 A model may hold finite elements and particles. Their degrees of freedom are disjoint -- ``NED`` refuses a node that
 both would carry -- so the matrix :math:`\boldsymbol{M}^{-1}\boldsymbol{K}` of the model is block diagonal in the two
 parts, its eigenvalues are those of the parts, and the critical time step of the model is the **smallest** of the
-parts':
+parts' (as far as the parts' own stiffness goes, see "What the estimate does not see"):
 
 .. math::
 
    \Delta t = \text{courant-number} \times \min\left(\Delta t_\mathrm{crit}^\mathrm{elements},\,
    \Delta t_\mathrm{crit}^\mathrm{particles}\right) .
 
-``courant-number`` is the one safety factor: the fraction of the estimated limit the analysis runs at.
+``courant-number`` is the one safety factor: the fraction of the estimated limit the analysis runs at. A part gives
+its estimate as an object (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate`), whose value
+is the part's critical time step, and which, in a derived class, also holds what it was made from: what is added to a
+part's stiffness can be added to its estimate there.
 
 The particles' estimate has one factor of its own, below one, which is not a safety factor but part of what it
 estimates: their stabilization (NSNI) acts on the increment, so their explicit scheme is not exactly the central
 difference method with their tangent, and it was measured to be stable up to a fraction of the tangent's limit
 (EdelweissMeshfree, ``STABLE_FRACTION_OF_THE_TANGENT_LIMIT``).
+
+What the estimate does not see
+------------------------------
+
+The argument above covers the stiffness of the parts themselves, and nothing else:
+
+* **Penalty constraints and contact.** A penalty adds a stiffness :math:`k` between the points it ties, within a part
+  or between the parts. No part's estimate holds it, and a contact between the elements and the particles -- a
+  projectile on a slab -- couples the two blocks, so :math:`\boldsymbol{M}^{-1}\boldsymbol{K}` is no longer block
+  diagonal, and the smallest of the parts' estimates is no longer the model's. A penalty on a mass :math:`m` alone is
+  stable for :math:`\Delta t \le 2\sqrt{m/k}`.
+* **The tangent of a rate-dependent material.** The stiffness the particles are estimated with is that of a zero
+  increment over a unit time; for a material with a viscosity, e.g. Duvaut-Lions, it is relaxed over that time, softer than the
+  response within an explicit increment, and the estimate may be too large.
+* **The particles' stabilization.** The factor of the particles' NSNI above was measured, on blocks of particles, not
+  derived; a particle arrangement far from those may need a smaller one.
+
+How to check: halve ``courant-number`` and compare the results, and keep :math:`2\sqrt{m/k}` of every penalty well
+above the time increment, with :math:`m` the mass a constrained point carries.
 
 When an estimate is taken anew
 ------------------------------
@@ -91,16 +122,23 @@ The true critical time step changes as the analysis runs: elements are refined, 
 stiffen and soften. Estimating in every increment would always be right, but an estimate of all particles costs a
 noticeable part of an increment. So each part comes with a *policy*, decided by what its estimate depends on.
 
-**The finite elements: once per mesh**
-(:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements`). Their estimate uses the elastic
-wave speed of the material, not its state. A softening material only raises the true limit, so the estimate stays safe
-until the mesh changes; it is taken anew after a refinement and at the start of every step.
+**The finite elements: once per mesh, and at the start of every step**
+(:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements`). Their estimate depends on the
+mesh, on the lumped mass, and on the wave speed of the material at the state of the estimate. An estimate of all
+elements costs a full element pass, so the policy *assumes* that within a step neither the geometry nor the wave speed
+of an element changes enough to use up the margin the courant number leaves. A softening material only raises the
+true limit; the assumption fails where elements are compressed far at finite strain, which shrinks their geometry, or
+where their material stiffens with the deformation: a hyperelastic solid in compression, a compacting material. There,
+take a lower ``courant-number``, or shorter steps, since every step estimates anew. The elements are estimated anew
+after a refinement, and at the start of every step, since a material property may have changed with the step
+(``changeMaterialProperty``).
 
 **The particles: when the margin may be used up**
 (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia`). Their estimate depends
 on their state: on their lumped masses, which change as they move over the nodes of the kernel functions, and on their
 stiffness, which changes with the material and with the deformation of the particles. After an estimate :math:`v`,
-``NED`` keeps in every increment a lower bound of what the estimate can be now, :math:`n` increments later:
+``NED`` keeps in every increment the critical time step at worst, :math:`L`: a lower bound of the particles' critical
+time step now, :math:`n` increments later,
 
 .. math::
 
@@ -108,12 +146,15 @@ stiffness, which changes with the material and with the deformation of the parti
 
 and takes a new estimate when :math:`\text{courant-number} \times L` falls below the time increment in use.
 
-* :math:`\alpha` is the largest relative fall of a lumped mass since the estimate, :math:`\beta` the same for the
-  damping of a forward-Euler field. This factor is **exact**. The estimate scales the stiffness with
-  :math:`\boldsymbol{M}^{-1/2}` on both sides; if every mass is at least :math:`\alpha` times what it was, every scaled
-  row sum, and with them the bound of :math:`\omega_\mathrm{max}^2`, is at most :math:`1/\alpha` times larger (the
-  largest eigenvalue of a nonnegative matrix grows with its entries), so the estimate is at least :math:`\sqrt{\alpha}`
-  times what it was. The masses cost nothing to watch: ``NED`` assembles them in every
+* :math:`\alpha = \min_i M_i / M_i^0 \le 1` is the smallest ratio of a lumped mass now to the same mass at the
+  estimate (1 if none fell), :math:`\beta \le 1` the same for the damping of a forward-Euler field. This factor is
+  **exact**. The estimate scales the stiffness with :math:`\boldsymbol{M}^{-1/2}` on both sides; if every mass is at
+  least :math:`\alpha` times what it was, every scaled row sum, and with them the bound of
+  :math:`\omega_\mathrm{max}^2`, is at most :math:`1/\alpha` times larger (the largest eigenvalue of a nonnegative
+  matrix grows with its entries), so the estimate is at least :math:`\sqrt{\alpha}` times what it was. The damping
+  enters linearly instead: the forward Euler limit :math:`2/\lambda_\mathrm{max}(\boldsymbol{C}^{-1}\boldsymbol{K})`
+  is linear in :math:`\boldsymbol{C}`, while the central differences' :math:`2/\omega_\mathrm{max}` goes with the
+  square root of :math:`\boldsymbol{M}`. The masses cost nothing to watch: ``NED`` assembles them in every
   increment anyway. A node that gets a mass for the first time (a particle reaches a kernel function's node, whose mass
   grows from zero) is a new row whose scaling has no bound: then the particles are estimated anew at once.
 * :math:`\delta`, the option ``critical-time-step-decrease-per-increment``, is the largest relative fall per increment

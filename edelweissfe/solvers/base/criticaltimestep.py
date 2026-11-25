@@ -30,41 +30,43 @@
 The central difference method is stable for :math:`\\Delta t \\le 2/\\omega_\\mathrm{max}`, the critical time step,
 with :math:`\\omega_\\mathrm{max}^2` the largest eigenvalue of :math:`\\boldsymbol{M}^{-1}\\boldsymbol{K}`. The explicit
 dynamic solver ``NED`` never solves that eigenvalue problem. It asks the parts of the model for an estimate of their
-own critical time step -- a lower bound of it --, takes the smallest, and runs at the fraction ``courant-number`` of it.
-The parts have disjoint degrees of freedom, so the smallest of their critical time steps is the model's.
+own critical time step -- a lower bound of it, from an upper bound of :math:`\\omega_\\mathrm{max}^2` --, takes the
+smallest, and runs at the fraction ``courant-number`` of it. The parts have disjoint degrees of freedom, so the
+smallest of their critical time steps is the model's.
 
-An estimate costs something, and how much its value can change while the analysis runs depends on the part, so every
-part comes with its own policy of when its estimate is taken anew:
+A part gives its estimate as a :class:`CriticalTimeStepEstimate`. An estimate costs something, and how much its value
+can change while the analysis runs depends on the part, so every part (:class:`CriticalTimeStepOfAPart`) comes with
+its own policy of when its estimate is taken anew:
 
 * :class:`CriticalTimeStepOfTheElements`: the finite elements, estimated **once per mesh**;
 * :class:`CriticalTimeStepOfEntitiesWithOwnInertia`: the entities that carry their own inertia (the particles of a
   meshfree model), estimated anew **when the margin of the last estimate over the time increment in use may be used up**.
 
-The theory, and what is not estimated, is explained in :doc:`/theory/criticaltimestep`.
+The theory, and what the estimates do not see, are explained in :doc:`/theory/criticaltimestep`.
 """
+
+from dataclasses import dataclass
 
 import numpy as np
 
 from edelweissfe.numerics.dofvector import DofVector
 
 
-class CriticalTimeStepBound:
-    """The estimate of the critical time step of one part of a model, as the part gives it: its value, and, in a derived
-    class, what it was estimated from.
+@dataclass
+class CriticalTimeStepEstimate:
+    """A part's estimate of its own critical time step, as the part gives it. A derived class also holds what the
+    estimate was made from, so that what is added to the part's stiffness can be added to the estimate.
 
-    Attributes
-    ----------
-    value : float
-        The critical time step of the part alone.
+    Its one field, ``value``, is the critical time step of the part alone, not scaled by a courant number: a lower
+    bound of :math:`2/\\omega_\\mathrm{max}` of the part's degrees of freedom; infinite for a part without stiffness.
     """
 
     value: float
 
 
-class CriticalTimeStepEstimate:
-    """The critical time step of one part of a model, :math:`2/\\omega_\\mathrm{max}` of the part's degrees of freedom,
-    as last estimated: a lower bound, not scaled by a courant number. A derived class says how the part is estimated,
-    and when its estimate is taken anew (its policy).
+class CriticalTimeStepOfAPart:
+    """The critical time step of one part of a model as last estimated (:attr:`lastEstimate`). A derived class says how
+    the part is estimated, and when its estimate is taken anew (its policy).
 
     Parameters
     ----------
@@ -80,33 +82,46 @@ class CriticalTimeStepEstimate:
         """Forget the estimate, at the start of every step: a material property may have changed with the step. The next
         estimate is due at once."""
 
-        #: The last estimate; infinite before the first one, and for a part without degrees of freedom.
-        self.value = np.inf
+        #: The last estimate; None before the first one, and for a model without such a part.
+        self.lastEstimate = None
         #: How often the part was estimated in the step.
         self.numberOfEstimates = 0
 
-    def _take(self, value: float | None):
+    @property
+    def value(self) -> float:
+        """The critical time step of the part as last estimated, not scaled by a courant number; infinite before the
+        first estimate, and for a model without such a part."""
+
+        return np.inf if self.lastEstimate is None else self.lastEstimate.value
+
+    def _take(self, estimate: CriticalTimeStepEstimate | None):
         """Take a new estimate.
 
         Parameters
         ----------
-        value
-            The critical time step of the part; None if the model has no such part.
+        estimate
+            The estimate of the part; None if the model has no such part.
         """
 
-        self.value = np.inf if value is None else value
+        self.lastEstimate = estimate
         self.numberOfEstimates += 1
 
 
-class CriticalTimeStepOfTheElements(CriticalTimeStepEstimate):
-    """The critical time step of the finite elements, the smallest of the elements' own
+class CriticalTimeStepOfTheElements(CriticalTimeStepOfAPart):
+    """The critical time step of the finite elements, the smallest of the elements' own estimates
     (``computeCriticalTimeStepForExplicitDynamics``): the largest eigenfrequency of an assembled mesh is bounded by the
-    largest of its elements, so the smallest critical time step of an element bounds the mesh's.
+    largest of its elements, so the smallest critical time step of an element is an estimate of the mesh's.
 
-    **Policy: once per mesh.** An element's estimate depends on its geometry, its lumped mass and the largest wave speed
-    of its material, not on the state the material is in: a softening material only raises the true limit. So it is
-    estimated anew only when the mesh changes (a refinement), and at the start of every step; not for a new numbering of
-    the same mesh, and never within an increment loop that does not change the mesh.
+    **Policy: once per mesh, and at the start of every step.** An element's estimate depends on the mesh, on its lumped
+    mass and on the wave speed of its material at the state of the estimate; a finite-strain element of Marmot takes its
+    reference geometry with the wave speed at its current deformation. The policy assumes that within a step neither
+    the geometry nor the wave speed changes enough to use up the margin that the courant number leaves. A softening
+    material only raises the true limit; the assumption fails where elements are compressed far at finite strain, or
+    where their material stiffens with the deformation (a hyperelastic solid in compression, a compacting material).
+    There, take a lower ``courant-number``, or shorter steps, since every step estimates anew. So the elements are
+    estimated anew when the mesh changes (a refinement) and at the start of every step, since a material property may
+    have changed with the step; not for a new numbering of the same mesh, and never within an increment loop that does
+    not change the mesh.
     """
 
     def __init__(self):
@@ -142,30 +157,33 @@ class CriticalTimeStepOfTheElements(CriticalTimeStepEstimate):
         system
             The discrete system.
         U
-            The solution, which an element may need for its current geometry.
+            The solution, which an element may need for its current deformation.
         """
 
         self._take(
-            min(
-                (
-                    element.computeCriticalTimeStepForExplicitDynamics(U[element])
-                    for element in system.elementsWithNodalInertia
-                ),
-                default=np.inf,
+            CriticalTimeStepEstimate(
+                min(
+                    (
+                        element.computeCriticalTimeStepForExplicitDynamics(U[element])
+                        for element in system.elementsWithNodalInertia
+                    ),
+                    default=np.inf,
+                )
             )
         )
         self._mesh = system.model.topology.version
 
 
-class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
+class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
     """The critical time step of the entities that carry their own inertia (the particles of a meshfree model), a property
     of their assembled system at their current configuration
     (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia`).
 
     **Policy: when the margin may be used up.** It depends on the state of the entities -- their stiffness, their
     positions, their lumped inertia and damping -- and changes from increment to increment, but an estimate costs a pass
-    over all of them. After an estimate :math:`v`, the solver therefore keeps, in every increment, a lower bound of what
-    the estimate could be now, :math:`n` increments later,
+    over all of them. After an estimate :math:`v`, the solver therefore keeps, in every increment, the critical time
+    step at worst, :math:`L`: a lower bound of the entities' critical time step now, :math:`n` increments after the
+    estimate,
 
     .. math::
 
@@ -173,13 +191,15 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
 
     and estimates anew as soon as the increment in use is no longer a ``courant-number`` fraction of it.
 
-    * :math:`\\alpha = \\min_i M_i / M_{0,i}` is the largest relative fall of the lumped inertia since the estimate, over
-      the degrees of freedom that had one then and have one now, and :math:`\\beta` the same for the damping of the
-      degrees of freedom integrated by forward Euler (a damping, no inertia). This part is exact: the estimate scales the
-      stiffness with :math:`\\boldsymbol{M}^{-1/2}` on both sides, so with the stiffness held, a fall of the masses by
-      :math:`\\alpha` raises :math:`\\omega_\\mathrm{max}^2` at most by :math:`1/\\alpha` and lowers :math:`2/\\omega_\\mathrm{max}`
-      at most by :math:`\\sqrt{\\alpha}`; the forward Euler limit :math:`2/\\lambda_\\mathrm{max}(\\boldsymbol{C}^{-1}
-      \\boldsymbol{K})` by :math:`\\beta`. The masses are known in every increment: the solver assembles them anyway.
+    * :math:`\\alpha = \\min_i M_i / M_i^0 \\le 1` is the smallest ratio of a lumped inertia now to the same inertia at
+      the estimate (1 if none fell), over the degrees of freedom that had one then and have one now, and
+      :math:`\\beta` the same for the damping of the degrees of freedom integrated by forward Euler (a damping, no
+      inertia). This part is exact: the estimate scales the stiffness with :math:`\\boldsymbol{M}^{-1/2}` on both
+      sides, so with the stiffness held, a fall of the masses to :math:`\\alpha` times raises the bound of
+      :math:`\\omega_\\mathrm{max}^2` at most :math:`1/\\alpha` times and lowers :math:`2/\\omega_\\mathrm{max}` at most
+      to :math:`\\sqrt{\\alpha}` times; the forward Euler limit :math:`2/\\lambda_\\mathrm{max}(\\boldsymbol{C}^{-1}
+      \\boldsymbol{K})` is linear in the damping, so it falls at most to :math:`\\beta` times. The masses are known in
+      every increment: the solver assembles them anyway.
     * :math:`\\delta` (option ``critical-time-step-decrease-per-increment``) is the largest relative fall of the estimate
       per increment that its stiffness may cause. This part is an assumption, not a theorem: the tangent of a material
       can change abruptly, and the stiffness of a particle changes with its deformation. It rests on what an increment
@@ -195,7 +215,7 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
     every increment; where another part sets it, they are estimated only every so many increments, as many as their
     margin allows at the rate :math:`\\delta`.
 
-    **Carried weights** (option ``carry-critical-time-step-weights``). The estimate of the entities is a
+    **Carried weights** (option ``carry-critical-time-step-weights``). The estimate of the entities is made from a
     Collatz-Wielandt bound with weights constant per field
     (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia`). With carried
     weights, every estimate takes the weights the last one left and leaves the next ones, one step of the power
@@ -232,8 +252,6 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
 
     def reset(self):
         super().reset()
-        #: The last estimate; None before the first one, and for a model without such entities.
-        self.bound = None
         #: The numbering, the number of the increment, and the lumped inertia and damping of the last estimate.
         self._numbering = None
         self._increment = None
@@ -242,7 +260,7 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
         #: With carried weights, the weights the last estimate left for the next one, a vector of its numbering, zero
         #: where a degree of freedom has none yet; None without carried weights, and before the first estimate on a
         #: numbering.
-        self._weightsOfTheBound = None
+        self._weightsOfTheEstimate = None
         #: With carried weights, the critical time step of the estimate the weights started from, the first one after
         #: they were set to zero, with weights constant per field.
         self._valueTheWeightsStartedFrom = np.inf
@@ -267,33 +285,33 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
         """
 
         if self.carryWeights and self._numbering is not system.numbering:
-            self._weightsOfTheBound = np.zeros(system.numbering.nDof)
-        weights = self._weightsOfTheBound
+            self._weightsOfTheEstimate = np.zeros(system.numbering.nDof)
+        weights = self._weightsOfTheEstimate
         startsTheWeights = weights is not None and not weights.any()
 
-        bound = system.criticalTimeStepOfEntitiesWithOwnInertia(lumpedInertia, lumpedDamping, forEachChunk, weights)
-        if bound is not None and weights is not None:
+        estimate = system.criticalTimeStepOfEntitiesWithOwnInertia(lumpedInertia, lumpedDamping, forEachChunk, weights)
+        if estimate is not None and weights is not None:
             if startsTheWeights:
-                self._valueTheWeightsStartedFrom = bound.value
-            elif bound.value < self._valueTheWeightsStartedFrom:
+                self._valueTheWeightsStartedFrom = estimate.value
+            elif estimate.value < self._valueTheWeightsStartedFrom:
                 weights[:] = 0.0
                 anew = system.criticalTimeStepOfEntitiesWithOwnInertia(
                     lumpedInertia, lumpedDamping, forEachChunk, weights
                 )
                 self._valueTheWeightsStartedFrom = anew.value
-                if anew.value > bound.value:
-                    bound = anew
-        self.bound = bound
-        self._take(None if self.bound is None else self.bound.value)
+                if anew.value > estimate.value:
+                    estimate = anew
+        self._take(estimate)
         self._numbering = system.numbering
         self._increment = increment
         self._inertia = np.array(lumpedInertia)
         self._damping = np.array(lumpedDamping)
 
-    def lowerBound(self, increment: int, lumpedInertia: DofVector, lumpedDamping: DofVector) -> float:
-        """The lower bound :math:`L` of the critical time step of the entities after the increment ``increment``, from the
-        last estimate (see the class documentation). It holds for the degrees of freedom that had an inertia (or a
-        damping alone) at the last estimate; whether there are others, :meth:`isDue` asks first.
+    def criticalTimeStepAtWorst(self, increment: int, lumpedInertia: DofVector, lumpedDamping: DofVector) -> float:
+        """The critical time step at worst, :math:`L`, after the increment ``increment``, :math:`n` increments after the
+        last estimate: a lower bound of the entities' critical time step now (see the class documentation). It holds
+        for the degrees of freedom that had an inertia (or a damping alone) at the last estimate; whether there are
+        others, :meth:`isDue` asks first.
 
         Parameters
         ----------
@@ -307,7 +325,7 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
         Returns
         -------
         float
-            The lower bound.
+            The critical time step at worst.
         """
 
         massFactor, stiffnessFactor = self._fallSinceTheEstimate(increment, lumpedInertia, lumpedDamping)
@@ -369,8 +387,8 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
         -------
         bool
             True in the first evaluation of a step, after a new numbering, when a degree of freedom has an inertia (or a
-            damping alone) it did not have at the last estimate, and when the lower bound of the critical time step
-            (:meth:`lowerBound`) has fallen below the one in use.
+            damping alone) it did not have at the last estimate, and when the critical time step at worst
+            (:meth:`criticalTimeStepAtWorst`) has fallen below the one in use.
         """
 
         if self._numbering is not system.numbering:
@@ -382,4 +400,4 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepEstimate):
         hasDampingAlone = ~hasInertia & (damping > 0.0)
         if np.any(hasInertia & ~hadInertia) or np.any(hasDampingAlone & ~hadDampingAlone):
             return True
-        return self.lowerBound(increment, lumpedInertia, lumpedDamping) < criticalTimeStepInUse
+        return self.criticalTimeStepAtWorst(increment, lumpedInertia, lumpedDamping) < criticalTimeStepInUse

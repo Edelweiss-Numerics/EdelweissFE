@@ -15,7 +15,7 @@
 **
 ** The micro-inertia is m_k = eta^2 / 4 = 2.5e-9 s^2 for this deck's eta = 1e-4 s: the largest
 ** value at which the zeroth-order reaction mode does not ring, and the largest is the best because
-** the stable increment grows with sqrt(m_k). It sits in the material property list immediately
+** the critical time step grows with sqrt(m_k). It sits in the material property list immediately
 ** after the viscosity it is bounded by -- that is why it is a material property and not an element
 ** one, and GCDP refuses anything above eta^2 / 4 when it reads the two together. With l = 4 mm and
 ** h = 10 mm the non-local limit is around 6e-5 s against a mechanical ~3e-7 s, so the mechanical
