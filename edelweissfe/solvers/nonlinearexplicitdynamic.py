@@ -1439,10 +1439,13 @@ class NED(NonlinearSolverBase):
         increment the step then takes is within that one. A contact point that could close within that increment then
         enters the estimate before it closes where the constraint bounds its springs
         (:meth:`~edelweissfe.constraints.base.constraintbase.NextIncrement.smallestGaps`), and where it is bounded from its
-        tangent and each spring that can switch acts on degrees of freedom of its own. A constraint bounded from its
-        tangent whose springs share degrees of freedom -- the master facets of a contact, the reference point of a rigid
-        body, as every contact of EdelweissFE has -- is bounded over the increment only as far as one state of it closes
-        its springs together (:meth:`~edelweissfe.constraints.base.constraintbase.NextIncrement.statesWithin`).
+        tangent and each spring that can switch acts on degrees of freedom of its own in the constraint's block -- a
+        contact with a deformable master, which gives each point a copy of its own of the nodes it couples; the row sums
+        of the blocks are added to the rows of the model afterwards. A constraint bounded from its tangent whose springs
+        that close in different states share a degree of freedom within its block -- the reference point of a rigid
+        body; the nodes of a slave facet in a contact of a surface with a discrete rigid body -- is bounded over the
+        increment only as far as one state of it closes its springs together
+        (:meth:`~edelweissfe.constraints.base.constraintbase.NextIncrement.statesWithin`).
 
         Parameters
         ----------

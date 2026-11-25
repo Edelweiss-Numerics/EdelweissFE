@@ -265,11 +265,17 @@ that could close within the next increment has its spring in the estimate before
 grows with the depth is stiffest there. A constraint bounded from its tangent is evaluated in the states that bound the
 increment -- now, and moved on by either part or by both
 (:meth:`~edelweissfe.constraints.base.constraintbase.NextIncrement.statesWithin`) --, and takes the largest absolute
-value of each entry. That is a bound only where each spring that can switch acts on degrees of freedom of its own: each
-spring is closed deepest in a state of its own, and two springs that share a degree of freedom -- the slave points on
-one master facet, every spring of a rigid body at its reference point -- and close in different states are never in
-one tangent together, so the entry misses their sum. The contacts of EdelweissFE are of that kind, and bounded from
-their tangent; a constraint that needs the bound over the next increment there gives its springs. Taking the velocity
+value of each entry. That is a bound where each spring that can switch acts on degrees of freedom of its own in the
+constraint's block: each spring is closed deepest in a state of its own, and the solver adds the row sums of the block
+to the rows of the model only afterwards, where the springs that meet at a node are summed. The contacts with a
+deformable master are of that kind: ``nodeToDeformableSurfacePenalty`` gives each slave node, and
+``surfaceToDeformableSurfacePenalty`` each contact point, a copy of its own of the nodes it couples -- of its master
+facet, and of its slave face -- in the block. Where springs that close in different states share a degree of freedom
+within the block, they are never in one tangent together, and the entry misses their sum: at the reference point of a
+rigid body, on which every spring of a contact with a discrete rigid body acts, and, in
+``surfaceToDiscreteRigidBodyPenalty``, at the nodes of a slave facet, which its contact points share. Every contact of
+EdelweissFE is bounded from its tangent; a constraint that needs the bound over the next increment there gives its
+springs. Taking the velocity
 alone would not do: near the critical time step of the open state, the acceleration can turn a receding point around
 within one increment. The prediction is exact for the leapfrog without damping; damping only slows a point down.
 Raising and lowering the increment is not free: each change of the increment changes the energy the central difference
@@ -296,10 +302,12 @@ The parts' estimates cover the stiffness of the parts themselves, and the penalt
 
 * **A point that closes within an increment.** By default, it enters the estimate one increment late; with
   ``follow-critical-time-step``, before it closes, for a constraint that bounds its springs, and for one bounded from
-  its tangent whose springs that can switch act on degrees of freedom of their own (see "Points that could close").
-* **With follow-critical-time-step, a constraint bounded from its tangent whose springs share degrees of freedom** --
-  every contact of EdelweissFE: over the next increment, it is seen only as far as one state closes its springs
-  together.
+  its tangent whose springs that can switch act on degrees of freedom of their own in its block -- a contact with a
+  deformable master (see "Points that could close").
+* **With follow-critical-time-step, a constraint bounded from its tangent whose springs that close in different states
+  share a degree of freedom within its block** -- a contact with a discrete rigid body, at its reference point, and
+  ``surfaceToDiscreteRigidBodyPenalty`` at the nodes of a slave facet as well: over the next increment, it is seen
+  only as far as one state closes its springs together.
 * **The geometric stiffness of contact.** That of a contact with finite sliding, or of a rigid body whose normals rotate
   with it (of the order of the normal force over the size of a facet or the lever arm, small against the penalty), and
   the coupling of the normal and the tangential force of a sliding frictional contact (the friction coefficient times

@@ -581,8 +581,8 @@ were. A solver that cannot handle a constraint, e.g. ``NEST`` a contact, refuses
 In an explicit analysis, a penalty constraint adds the stiffness it has to the squared frequencies of the degrees of
 freedom it couples, and so lowers the critical time step (``addBoundOfAbsoluteStiffnessTimes``,
 :doc:`/theory/criticaltimestep`, "Penalty constraints"): by default from its tangent; a constraint that evaluates its
-explicit forces without a tangent, or that needs the bound over the next increment while its springs share degrees of
-freedom, gives its springs instead, with one formula for the bound:
+explicit forces without a tangent, or that needs the bound over the next increment while springs of it that close in
+different states share a degree of freedom within its block, gives its springs instead, with one formula for the bound:
 
 .. automodule:: edelweissfe.constraints.base.penaltysprings
     :members:

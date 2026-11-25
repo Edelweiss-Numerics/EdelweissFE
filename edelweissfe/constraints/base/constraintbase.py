@@ -487,12 +487,15 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         This default takes the tangent :meth:`computeKernels` gives, in the scratch :meth:`computeKernelsExplicit` uses.
         At the state given, it is the stiffness of the constraint, correct for every constraint. With
         ``nextIncrement``, it takes the largest absolute value of each entry in the states that bound the increment
-        (:meth:`NextIncrement.statesWithin`): a bound only where each spring that can switch acts on degrees of freedom
-        of its own (a node held against a rigid plane), since each spring is closed deepest in a state of its own.
-        Where springs share degrees of freedom -- the master facets of a contact, the reference point of a rigid body
-        --, two springs that close in different states are never in one tangent together, and the entry misses their
-        sum. A constraint that needs the bound over the next increment there gives its springs: it overrides this
-        with the bound of its springs, from the same springs as its force
+        (:meth:`NextIncrement.statesWithin`): a bound where each spring that can switch acts on degrees of freedom of
+        its own in this constraint's block, since each spring is closed deepest in a state of its own, and the solver
+        adds the row sums of the block to the rows of the model only afterwards -- a node held against a rigid plane,
+        and a contact that gives each point a copy of its own of the nodes it couples (one with a deformable master).
+        Where springs that close in different states share a degree of freedom within the block -- the reference point
+        of a rigid body; the nodes of a slave facet, which its contact points share, in a contact of a surface with a
+        discrete rigid body --, they are never in one tangent together, and the entry misses their sum. A constraint
+        that needs the bound over the next increment there gives its springs: it overrides this with the bound of its
+        springs, from the same springs as its force
         (:func:`~edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings`). So may one whose
         tangent is costly -- one that evaluates its explicit forces without it
         (:class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`) --, and so
