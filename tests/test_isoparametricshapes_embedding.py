@@ -74,7 +74,7 @@ def test_inverse_mapping(shape):
 
 @pytest.mark.parametrize("shape", ["quad4", "quad8", "hexa8", "hexa20", "tria3", "tria6", "tetra4", "tetra10"])
 def test_inverse_mapping_far_from_the_origin(shape):
-    """EMB-01: an element of size h ~ 25 (mm) offset by 1e4 h from the origin, 5 % distorted: interior points are
+    """An element of size h ~ 25 (mm) offset by 1e4 h from the origin, 5 % distorted: interior points are
     found with an error at round-off of the element size. An absolute step tolerance fails here (the residual carries
     eps |x|), which made interior points "outside of all hosts"."""
     rng = np.random.default_rng(2)

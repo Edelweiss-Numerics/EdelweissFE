@@ -349,7 +349,7 @@ def test_rotation_operator(shape, nDim):
 
 @pytest.mark.parametrize("reverse", [False, True])
 def test_rotation_on_a_host_boundary_is_independent_of_the_host_order(reverse):
-    """EMB-02: a beam node on the edge between two quad4 hosts ([0, 1] and [1, 2] x [0, 1]) with the nodal field
+    """A beam node on the edge between two quad4 hosts ([0, 1] and [1, 2] x [0, 1]) with the nodal field
     u_y = -x^2 / 2 (non-uniform: the gradient jumps across the edge): the rotation of the axis e_x at (1, 0.5) is
     -0.5 in the left host and -1.5 in the right one; the constraint averages them to the continuous value -1.0, for
     either order of the hosts"""
@@ -381,7 +381,7 @@ def test_rotation_on_a_host_boundary_is_independent_of_the_host_order(reverse):
 
 
 def test_embedded_region_follows_adaptive_refinement(tmp_path):
-    """EMB-03: the embedded bar of the dynamic refinement deck (two C3D20 hosts, one refined during the step): after
+    """The embedded bar of the dynamic refinement deck (two C3D20 hosts, one refined during the step): after
     the refinement the bar nodes are tied to the refined hosts, i.e. they move with the interpolation of the refined
     field -- not with the coarse elements the constraint was built on"""
     import pathlib
@@ -428,7 +428,7 @@ embeddedElSet=bars, hostElSet=host
     [(set(), False), ({"otherSet"}, False), ({"host"}, True), ({"bars"}, True), ({"host", "bars"}, True)],
 )
 def test_embedded_region_refreshes_only_if_the_change_touches_its_element_sets(changedElementSets, rebuilt):
-    """R2-EMB-01: the records are rebuilt if and only if the model change touches the host or the embedded element
+    """The records are rebuilt if and only if the model change touches the host or the embedded element
     set (as hAdaptivity reports a refined host set in ``changedElementSets``)"""
     from edelweissfe.constraints.embeddedregion import Constraint, EmbeddedRegionSchema
     from edelweissfe.models.modelchange import ModelChange
@@ -444,7 +444,7 @@ def test_embedded_region_refreshes_only_if_the_change_touches_its_element_sets(c
 
 
 def test_embedded_region_explicit_dynamics(tmp_path):
-    """EMB-07: explicit dynamics (NED, masses of the embedded nodes folded onto the hosts): the embedded rebar of the
+    """Explicit dynamics (NED, masses of the embedded nodes folded onto the hosts): the embedded rebar of the
     reinforced strip follows the host field exactly, at the end of the explicit step every rebar node is at the
     interpolation of its host"""
     from edelweissfe.utils.embedding import HostElementLocator
