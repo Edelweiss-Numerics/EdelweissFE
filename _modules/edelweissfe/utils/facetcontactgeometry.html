@@ -1,0 +1,1085 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.utils.facetcontactgeometry &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.utils.facetcontactgeometry</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.utils.facetcontactgeometry</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="sd">"""</span>
+<span class="sd">Exact gap function, gradient, and full Hessian (including the second-derivative term arising</span>
+<span class="sd">from the cross-product-then-normalize/rotate-then-normalize construction of the facet normal) for</span>
+<span class="sd">a slave point against a flat contact facet (Tria3 in 3D, Line2 in 2D), expressed directly in terms</span>
+<span class="sd">of the current nodal coordinates.</span>
+
+<span class="sd">Both facets are exactly flat (a plane through 3 points, or a line through 2 points), so the</span>
+<span class="sd">curvature/second-fundamental-form contribution present in curved-surface contact vanishes</span>
+<span class="sd">identically -- the only surviving second-derivative term is a pose-dependent nonlinearity of the</span>
+<span class="sd">normal's own construction from its defining nodes' positions, not a curvature effect.</span>
+
+<span class="sd">The closed forms below were derived by hand and cross-verified against exact symbolic</span>
+<span class="sd">differentiation (SymPy) at many random, non-degenerate configurations before being transcribed</span>
+<span class="sd">here -- see the derivation/verification scripts referenced in the class docstring of</span>
+<span class="sd">:mod:`~edelweissfe.constraints.nodetodeformablesurfacepenalty` for the underlying methodology.</span>
+<span class="sd">Do not hand-edit these formulas without re-verifying them the same way; this kind of</span>
+<span class="sd">normalize/rotate second-derivative algebra is very easy to get subtly wrong.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NamedTuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csr_matrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.spatial</span><span class="w"> </span><span class="kn">import</span> <span class="n">cKDTree</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.rotations</span><span class="w"> </span><span class="kn">import</span> <span class="n">skewMatrix</span>
+
+<span class="c1">#: The cosine of the largest angle between two normals that still belong to one smooth surface: two adjacent facets</span>
+<span class="c1">#: whose normals differ more meet at a crease, and a contact point whose normal turns more between two contact searches</span>
+<span class="c1">#: has slid over one. The node-based contact restarts the frictional history there.</span>
+<span class="n">cosOfSmoothNormalChangeLimit</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="mf">30.0</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="SurfaceFeatures">
+<a class="viewcode-back" href="../../../developer/utils.html#edelweissfe.utils.facetcontactgeometry.SurfaceFeatures">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SurfaceFeatures</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The edges and vertices of a faceted surface in one configuration: their angle-weighted pseudonormals (not</span>
+<span class="sd">    normalized), and whether they lie on a crease. See :class:`FacetedSurface`."""</span>
+
+    <span class="c1">#: The pseudonormal of each edge (3D; none in 2D), shape ``(nEdges, 3)``.</span>
+    <span class="n">pseudonormalOfEdge</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The pseudonormal of each vertex, shape ``(nVertices, nDim)``; at a vertex where a crease ends on the boundary of</span>
+    <span class="c1">#: the surface, that of the crease's last edge.</span>
+    <span class="n">pseudonormalOfVertex</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: Whether the two facets of an edge meet at a crease.</span>
+    <span class="n">edgeIsCrease</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: Whether a vertex lies on a crease: one of its edges is one, or one of its facets turns away from its</span>
+    <span class="c1">#: pseudonormal by more than half the limit; on the boundary of the surface, only where a crease ends.</span>
+    <span class="n">vertexIsCrease</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span></div>
+
+
+
+<div class="viewcode-block" id="FacetedSurface">
+<a class="viewcode-back" href="../../../developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FacetedSurface</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The facets of a surface and where they meet: in 3D the edges and the vertices of its Tria3 facets, in 2D the</span>
+<span class="sd">    vertices of its Line2 facets. This is what the gap to a surface with corners needs.</span>
+
+<span class="sd">    The closest point of a facet to a point lies inside the facet, on one of its edges, or at one of its vertices --</span>
+<span class="sd">    its *feature*. Inside the facet, the facet's normal tells inside from outside. At a corner it may not: next to an</span>
+<span class="sd">    acute crest, a point outside the body can lie behind the plane of the flank whose edge is closest to it. There,</span>
+<span class="sd">    the **angle-weighted pseudonormal** of the feature (Baerentzen and Aanaes, 2005) does: the sum of the normals of</span>
+<span class="sd">    the facets that meet at an edge, or at a vertex, each weighted with the facet's angle at that vertex. For the</span>
+<span class="sd">    closest feature of a closed surface, the distance vector :math:`\\boldsymbol{x} - \\boldsymbol{x}_c` has a positive</span>
+<span class="sd">    component along the pseudonormal outside the body, a negative one inside, at convex and re-entrant corners alike.</span>
+
+<span class="sd">    An edge is a **crease** where the normals of its two facets differ by more than</span>
+<span class="sd">    :data:`cosOfSmoothNormalChangeLimit` allows (a crest, a root). A vertex is one where one of its edges is, or where</span>
+<span class="sd">    one of its facets turns away from the vertex's pseudonormal by more than half that angle: two of its facets may</span>
+<span class="sd">    then differ by more than the limit although no two neighbours do, as at the tip of a finely faceted cone. Where</span>
+<span class="sd">    all its facets stay within half the limit of the pseudonormal, any two of them differ by at most the limit, and the</span>
+<span class="sd">    normal of each tells the side. Elsewhere the facets tile a smooth surface, and its corners are artefacts of the</span>
+<span class="sd">    tiling.</span>
+
+<span class="sd">    A surface that is not closed has a **boundary**: the edges met by one facet only (in 3D), the vertices met by one</span>
+<span class="sd">    segment (in 2D). A surface that ends does not say what lies beyond it, and the ring of facets around a vertex on</span>
+<span class="sd">    its boundary is incomplete, so that the vertex's pseudonormal does not tell the side either. Beyond its boundary,</span>
+<span class="sd">    the surface is taken to go on as it ends: in the plane of its last facet, and a crease that ends on the boundary</span>
+<span class="sd">    goes on along its last edge -- that vertex takes the pseudonormal of the edge. No other feature on the boundary is</span>
+<span class="sd">    a crease.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nodesOfFacet</span>
+<span class="sd">        The vertices of each facet, as indices into the nodes of the surface, shape ``(nFacets, 3)`` (Tria3) or</span>
+<span class="sd">        ``(nFacets, 2)`` (Line2); the facets oriented with their outward normals, as the surface element generator</span>
+<span class="sd">        makes them.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: For a Tria3 facet, the local vertices that span the edge opposite local vertex k: a closest point whose</span>
+    <span class="c1">#: weight k is zero lies on that edge.</span>
+    <span class="n">_edgeOppositeLocalVertex</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodesOfFacet</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">nodesOfFacet</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)</span>
+        <span class="n">nFacets</span><span class="p">,</span> <span class="n">nVerticesPerFacet</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="o">.</span><span class="n">shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nVertices</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">+</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">nFacets</span> <span class="k">else</span> <span class="mi">0</span>
+
+        <span class="k">if</span> <span class="n">nVerticesPerFacet</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">spanningVertices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="p">[:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_edgeOppositeLocalVertex</span><span class="p">],</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">edges</span><span class="p">,</span> <span class="n">edgeOfFacet</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">spanningVertices</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">return_inverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="c1">#: The two vertices of each edge, shape ``(nEdges, 2)``.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">verticesOfEdge</span> <span class="o">=</span> <span class="n">edges</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+            <span class="c1">#: The edge opposite each local vertex of each facet, shape ``(nFacets, 3)``.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">edgeOppositeVertex</span> <span class="o">=</span> <span class="n">edgeOfFacet</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">nFacets</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+            <span class="c1">#: Whether an edge is met by two facets (not on the boundary of the surface).</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">edgeIsInterior</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">edgeOfFacet</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">minlength</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">verticesOfEdge</span><span class="p">))</span> <span class="o">==</span> <span class="mi">2</span>
+            <span class="n">onTheBoundary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nVertices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+            <span class="n">onTheBoundary</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">verticesOfEdge</span><span class="p">[</span><span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">edgeIsInterior</span><span class="p">]</span><span class="o">.</span><span class="n">ravel</span><span class="p">()]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1">#: Whether a vertex lies inside the surface: on no boundary edge (3D), met by two segments (2D).</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vertexIsInterior</span> <span class="o">=</span> <span class="o">~</span><span class="n">onTheBoundary</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">verticesOfEdge</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">edgeOppositeVertex</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nFacets</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">edgeIsInterior</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vertexIsInterior</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">minlength</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">nVertices</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+
+        <span class="c1"># The facets that share a vertex with a facet, itself included: one ring of facets around it, its patch.</span>
+        <span class="n">facetsAtVertex</span> <span class="o">=</span> <span class="n">csr_matrix</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="o">.</span><span class="n">size</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="o">.</span><span class="n">size</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">nVerticesPerFacet</span><span class="p">),</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nFacets</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nVertices</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">patches</span> <span class="o">=</span> <span class="p">(</span><span class="n">facetsAtVertex</span> <span class="o">@</span> <span class="n">facetsAtVertex</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="n">patches</span><span class="o">.</span><span class="n">sort_indices</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_patchStart</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_facetsOfPatches</span> <span class="o">=</span> <span class="n">patches</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span> <span class="n">patches</span><span class="o">.</span><span class="n">indices</span>
+
+<div class="viewcode-block" id="FacetedSurface.patchOfFacet">
+<a class="viewcode-back" href="../../../developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.patchOfFacet">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">patchOfFacet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">facet</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The facets that share a vertex with a facet, the facet itself included -- one ring of facets around it, the</span>
+<span class="sd">        facets a point on it slides onto first.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        facet</span>
+<span class="sd">            The facet.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The facets, in ascending order.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_facetsOfPatches</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_patchStart</span><span class="p">[</span><span class="n">facet</span><span class="p">]</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_patchStart</span><span class="p">[</span><span class="n">facet</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span></div>
+
+
+<div class="viewcode-block" id="FacetedSurface.features">
+<a class="viewcode-back" href="../../../developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.features">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coordinatesOfFacet</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">normalOfFacet</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SurfaceFeatures</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The pseudonormals of the edges and the vertices, and which of them lie on a crease, in the configuration</span>
+<span class="sd">        given.</span>
+
+<span class="sd">        The pseudonormal of an edge is the sum of the normals of its two facets, of a vertex the sum of the normals of</span>
+<span class="sd">        its facets, each weighted with the facet's angle at the vertex; in 2D, the two segments at a vertex count</span>
+<span class="sd">        alike. They are not normalized: only their direction is used. The normals of the two facets of an edge differ</span>
+<span class="sd">        by the angle whose cosine is :math:`|\\boldsymbol{n}_A + \\boldsymbol{n}_B|^2 / 2 - 1`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coordinatesOfFacet</span>
+<span class="sd">            The node coordinates of each facet, shape ``(nFacets, nVerticesPerFacet, nDim)``.</span>
+<span class="sd">        normalOfFacet</span>
+<span class="sd">            The unit outward normal of each facet, shape ``(nFacets, nDim)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SurfaceFeatures</span>
+<span class="sd">            The pseudonormals and the creases.</span>
+<span class="sd">        """</span>
+
+        <span class="n">nFacets</span><span class="p">,</span> <span class="n">nVerticesPerFacet</span><span class="p">,</span> <span class="n">nDim</span> <span class="o">=</span> <span class="n">coordinatesOfFacet</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">pseudonormalOfEdge</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">edgeIsInterior</span><span class="p">),</span> <span class="n">nDim</span><span class="p">))</span>
+        <span class="n">pseudonormalOfVertex</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nVertices</span><span class="p">,</span> <span class="n">nDim</span><span class="p">))</span>
+        <span class="n">vertexIsCrease</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nVertices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">nVerticesPerFacet</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">pseudonormalOfEdge</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">edgeOppositeVertex</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">normalOfFacet</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="mi">3</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">toNext</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">roll</span><span class="p">(</span><span class="n">coordinatesOfFacet</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">coordinatesOfFacet</span>
+            <span class="n">toPrevious</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">roll</span><span class="p">(</span><span class="n">coordinatesOfFacet</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">coordinatesOfFacet</span>
+            <span class="n">angleAtVertex</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">toNext</span><span class="p">,</span> <span class="n">toPrevious</span><span class="p">),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"fad,fad-&gt;fa"</span><span class="p">,</span> <span class="n">toNext</span><span class="p">,</span> <span class="n">toPrevious</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">pseudonormalOfVertex</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="p">,</span> <span class="n">angleAtVertex</span><span class="p">[:,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">normalOfFacet</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:])</span>
+            <span class="n">edgeIsCrease</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edgeIsInterior</span> <span class="o">&amp;</span> <span class="p">(</span>
+                <span class="mf">0.5</span> <span class="o">*</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">pseudonormalOfEdge</span><span class="p">,</span> <span class="n">pseudonormalOfEdge</span><span class="p">)</span> <span class="o">-</span> <span class="mf">1.0</span> <span class="o">&lt;</span> <span class="n">cosOfSmoothNormalChangeLimit</span>
+            <span class="p">)</span>
+            <span class="n">vertexIsCrease</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">verticesOfEdge</span><span class="p">[</span><span class="n">edgeIsCrease</span><span class="p">]</span><span class="o">.</span><span class="n">ravel</span><span class="p">()]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">pseudonormalOfVertex</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">normalOfFacet</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">edgeIsCrease</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+        <span class="c1"># A facet that turns away from the pseudonormal of its vertex by more than half the limit: its angle to the</span>
+        <span class="c1"># pseudonormal has a cosine below that of half the limit, sqrt((1 + cos) / 2).</span>
+        <span class="n">cosOfHalfTheLimit</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">cosOfSmoothNormalChangeLimit</span><span class="p">))</span>
+        <span class="n">atVertexOfFacet</span> <span class="o">=</span> <span class="n">pseudonormalOfVertex</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="p">]</span>
+        <span class="n">lengthAtVertexOfFacet</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rowDot</span><span class="p">(</span><span class="n">atVertexOfFacet</span><span class="p">,</span> <span class="n">atVertexOfFacet</span><span class="p">))</span>
+        <span class="n">facetTurnsAway</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">normalOfFacet</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="n">atVertexOfFacet</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">cosOfHalfTheLimit</span> <span class="o">*</span> <span class="n">lengthAtVertexOfFacet</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">logical_or</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">vertexIsCrease</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="p">,</span> <span class="n">facetTurnsAway</span><span class="p">)</span>
+
+        <span class="c1"># On the boundary, the ring of facets around a vertex is incomplete, and so is its pseudonormal. Where a crease</span>
+        <span class="c1"># ends on the boundary, the crease goes on beyond it: the vertex takes the pseudonormal of that crease edge.</span>
+        <span class="n">creaseEdges</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">edgeIsCrease</span><span class="p">)</span>
+        <span class="n">nCreaseEdgesAtVertex</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">verticesOfEdge</span><span class="p">[</span><span class="n">creaseEdges</span><span class="p">]</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="n">minlength</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">nVertices</span><span class="p">)</span>
+        <span class="n">endsACrease</span> <span class="o">=</span> <span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">vertexIsInterior</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">nCreaseEdgesAtVertex</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">end</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">endingHere</span> <span class="o">=</span> <span class="n">creaseEdges</span><span class="p">[</span><span class="n">endsACrease</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">verticesOfEdge</span><span class="p">[</span><span class="n">creaseEdges</span><span class="p">,</span> <span class="n">end</span><span class="p">]]]</span>
+            <span class="n">pseudonormalOfVertex</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">verticesOfEdge</span><span class="p">[</span><span class="n">endingHere</span><span class="p">,</span> <span class="n">end</span><span class="p">]]</span> <span class="o">=</span> <span class="n">pseudonormalOfEdge</span><span class="p">[</span><span class="n">endingHere</span><span class="p">]</span>
+        <span class="n">vertexIsCrease</span> <span class="o">&amp;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vertexIsInterior</span> <span class="o">|</span> <span class="n">endsACrease</span>
+
+        <span class="k">return</span> <span class="n">SurfaceFeatures</span><span class="p">(</span><span class="n">pseudonormalOfEdge</span><span class="p">,</span> <span class="n">pseudonormalOfVertex</span><span class="p">,</span> <span class="n">edgeIsCrease</span><span class="p">,</span> <span class="n">vertexIsCrease</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FacetedSurface.gapsAndGradients">
+<a class="viewcode-back" href="../../../developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.gapsAndGradients">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">gapsAndGradients</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">facets</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">coordinatesOfFacet</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">normalOfFacet</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">features</span><span class="p">:</span> <span class="n">SurfaceFeatures</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The gaps of points to the closest points of their facets, negative inside the body, and their gradients</span>
+<span class="sd">        with respect to the points.</span>
+
+<span class="sd">        The gap is the signed distance to the surface where the closest point lies on a crease, and the distance along</span>
+<span class="sd">        the facet normal elsewhere: the two agree inside a facet, and differ only by the small turn of the normal at a</span>
+<span class="sd">        seam of a smooth surface.</span>
+
+<span class="sd">        - The closest point lies on a **crease** of the surface, on an edge or at a vertex: the distance :math:`\\pm d`,</span>
+<span class="sd">          the sign that of :math:`\\boldsymbol{x} - \\boldsymbol{x}_c` along the pseudonormal of the feature, and its</span>
+<span class="sd">          gradient, the unit vector :math:`\\pm(\\boldsymbol{x} - \\boldsymbol{x}_c)/d` from the closest point to the</span>
+<span class="sd">          point. Outside a convex crease (a crest) the gap so grows with the true distance to the edge in every</span>
+<span class="sd">          direction, instead of with the distance to the plane of one of its facets, which is zero or negative for a</span>
+<span class="sd">          point beside the edge; at a re-entrant crease (a root) a point inside is pushed out the shortest way. A point</span>
+<span class="sd">          closer to the feature than :math:`\\sqrt{\\epsilon}` times the facet's size has no direction to working</span>
+<span class="sd">          precision: the gradient is the unit pseudonormal.</span>
+<span class="sd">        - Everywhere else -- inside the facet, on a seam of a smooth surface, on the boundary of a surface that ends</span>
+<span class="sd">          where no crease ends -- the distance along the facet's normal, and the normal as its gradient: beyond its</span>
+<span class="sd">          boundary, the surface goes on in the plane of its last facet.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        points</span>
+<span class="sd">            The points, shape ``(nPairs, nDim)``.</span>
+<span class="sd">        facets</span>
+<span class="sd">            The facet of each point, shape ``(nPairs,)``.</span>
+<span class="sd">        weights</span>
+<span class="sd">            The weights of the closest point of each point in its facet, as :func:`closestFacets` returns them: an</span>
+<span class="sd">            exact zero marks a closest point on the facet's boundary.</span>
+<span class="sd">        coordinatesOfFacet</span>
+<span class="sd">            The node coordinates of all facets, shape ``(nFacets, nVerticesPerFacet, nDim)``.</span>
+<span class="sd">        normalOfFacet</span>
+<span class="sd">            The unit outward normals of all facets, shape ``(nFacets, nDim)``.</span>
+<span class="sd">        features</span>
+<span class="sd">            The pseudonormals and creases, see :meth:`features`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">            The gaps, shape ``(nPairs,)``, and their gradients with respect to the points, ``dGap_dPoint``, unit</span>
+<span class="sd">            vectors of shape ``(nPairs, nDim)``.</span>
+<span class="sd">        """</span>
+
+        <span class="n">toPoint</span> <span class="o">=</span> <span class="n">points</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"pa,pad-&gt;pd"</span><span class="p">,</span> <span class="n">weights</span><span class="p">,</span> <span class="n">coordinatesOfFacet</span><span class="p">[</span><span class="n">facets</span><span class="p">])</span>
+        <span class="n">dGap_dPoint</span> <span class="o">=</span> <span class="n">normalOfFacet</span><span class="p">[</span><span class="n">facets</span><span class="p">]</span>
+        <span class="n">gap</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">dGap_dPoint</span><span class="p">,</span> <span class="n">toPoint</span><span class="p">)</span>
+
+        <span class="n">onTheFacetBoundary</span> <span class="o">=</span> <span class="n">weights</span> <span class="o">==</span> <span class="mf">0.0</span>
+        <span class="n">nZeroWeights</span> <span class="o">=</span> <span class="n">onTheFacetBoundary</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">pseudonormal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">dGap_dPoint</span><span class="p">)</span>
+        <span class="n">onACrease</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">facets</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+        <span class="n">atAVertex</span> <span class="o">=</span> <span class="n">nZeroWeights</span> <span class="o">==</span> <span class="n">weights</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">atAVertex</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">vertex</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodesOfFacet</span><span class="p">[</span><span class="n">facets</span><span class="p">[</span><span class="n">atAVertex</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">onTheFacetBoundary</span><span class="p">[</span><span class="n">atAVertex</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)]</span>
+            <span class="n">pseudonormal</span><span class="p">[</span><span class="n">atAVertex</span><span class="p">]</span> <span class="o">=</span> <span class="n">features</span><span class="o">.</span><span class="n">pseudonormalOfVertex</span><span class="p">[</span><span class="n">vertex</span><span class="p">]</span>
+            <span class="n">onACrease</span><span class="p">[</span><span class="n">atAVertex</span><span class="p">]</span> <span class="o">=</span> <span class="n">features</span><span class="o">.</span><span class="n">vertexIsCrease</span><span class="p">[</span><span class="n">vertex</span><span class="p">]</span>
+
+        <span class="n">onAnEdge</span> <span class="o">=</span> <span class="p">(</span><span class="n">nZeroWeights</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">atAVertex</span>
+        <span class="k">if</span> <span class="n">onAnEdge</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">edge</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">edgeOppositeVertex</span><span class="p">[</span><span class="n">facets</span><span class="p">[</span><span class="n">onAnEdge</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">onTheFacetBoundary</span><span class="p">[</span><span class="n">onAnEdge</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)]</span>
+            <span class="n">pseudonormal</span><span class="p">[</span><span class="n">onAnEdge</span><span class="p">]</span> <span class="o">=</span> <span class="n">features</span><span class="o">.</span><span class="n">pseudonormalOfEdge</span><span class="p">[</span><span class="n">edge</span><span class="p">]</span>
+            <span class="n">onACrease</span><span class="p">[</span><span class="n">onAnEdge</span><span class="p">]</span> <span class="o">=</span> <span class="n">features</span><span class="o">.</span><span class="n">edgeIsCrease</span><span class="p">[</span><span class="n">edge</span><span class="p">]</span>
+
+        <span class="n">creased</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">onACrease</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">creased</span><span class="p">):</span>
+            <span class="n">toFeature</span> <span class="o">=</span> <span class="n">toPoint</span><span class="p">[</span><span class="n">creased</span><span class="p">]</span>
+            <span class="n">distance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rowDot</span><span class="p">(</span><span class="n">toFeature</span><span class="p">,</span> <span class="n">toFeature</span><span class="p">))</span>
+            <span class="n">unitPseudonormal</span> <span class="o">=</span> <span class="n">pseudonormal</span><span class="p">[</span><span class="n">creased</span><span class="p">]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">pseudonormal</span><span class="p">[</span><span class="n">creased</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">]</span>
+            <span class="n">sign</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">rowDot</span><span class="p">(</span><span class="n">unitPseudonormal</span><span class="p">,</span> <span class="n">toFeature</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+
+            <span class="n">_</span><span class="p">,</span> <span class="n">measure</span> <span class="o">=</span> <span class="n">facetNormalAndMeasure</span><span class="p">(</span><span class="n">coordinatesOfFacet</span><span class="p">[</span><span class="n">facets</span><span class="p">[</span><span class="n">creased</span><span class="p">]])</span>
+            <span class="n">facetSize</span> <span class="o">=</span> <span class="n">measure</span> <span class="o">**</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">coordinatesOfFacet</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+            <span class="n">resolved</span> <span class="o">=</span> <span class="n">distance</span> <span class="o">&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span> <span class="o">*</span> <span class="n">facetSize</span>
+
+            <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">):</span>
+                <span class="n">dGap_dPoint</span><span class="p">[</span><span class="n">creased</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                    <span class="n">resolved</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="p">(</span><span class="n">sign</span> <span class="o">/</span> <span class="n">distance</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">toFeature</span><span class="p">,</span> <span class="n">unitPseudonormal</span>
+                <span class="p">)</span>
+            <span class="n">gap</span><span class="p">[</span><span class="n">creased</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">resolved</span><span class="p">,</span> <span class="n">sign</span> <span class="o">*</span> <span class="n">distance</span><span class="p">,</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">unitPseudonormal</span><span class="p">,</span> <span class="n">toFeature</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">gap</span><span class="p">,</span> <span class="n">dGap_dPoint</span></div>
+
+
+<div class="viewcode-block" id="FacetedSurface.acrossAConvexCrease">
+<a class="viewcode-back" href="../../../developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.acrossAConvexCrease">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acrossAConvexCrease</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">fromFacets</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">toFacets</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">coordinatesOfFacet</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">normalOfFacet</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether going from one facet to another crosses a convex crease of the surface: their normals differ by</span>
+<span class="sd">        more than :data:`cosOfSmoothNormalChangeLimit` allows, and the second facet lies behind the plane of the</span>
+<span class="sd">        first (its centroid does) -- the surface turns away, as from the top of a block to its side, or from one side</span>
+<span class="sd">        of a thin body to the other. At a re-entrant crease, such as the root of a thread, the second facet lies in</span>
+<span class="sd">        front of the plane of the first.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fromFacets, toFacets</span>
+<span class="sd">            The facet pairs, shape ``(nPairs,)`` each.</span>
+<span class="sd">        coordinatesOfFacet</span>
+<span class="sd">            The node coordinates of all facets, shape ``(nFacets, nVerticesPerFacet, nDim)``.</span>
+<span class="sd">        normalOfFacet</span>
+<span class="sd">            The unit outward normals of all facets, shape ``(nFacets, nDim)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            True for the pairs across a convex crease.</span>
+<span class="sd">        """</span>
+
+        <span class="n">normalOfFrom</span> <span class="o">=</span> <span class="n">normalOfFacet</span><span class="p">[</span><span class="n">fromFacets</span><span class="p">]</span>
+        <span class="n">creased</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">normalOfFacet</span><span class="p">[</span><span class="n">toFacets</span><span class="p">],</span> <span class="n">normalOfFrom</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">cosOfSmoothNormalChangeLimit</span>
+        <span class="n">centroidOfTo</span> <span class="o">=</span> <span class="n">coordinatesOfFacet</span><span class="p">[</span><span class="n">toFacets</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">behind</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">normalOfFrom</span><span class="p">,</span> <span class="n">centroidOfTo</span> <span class="o">-</span> <span class="n">coordinatesOfFacet</span><span class="p">[</span><span class="n">fromFacets</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mf">0.0</span>
+        <span class="k">return</span> <span class="n">creased</span> <span class="o">&amp;</span> <span class="n">behind</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">tria3GapGradientHessian</span><span class="p">(</span>
+    <span class="n">xs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x3</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Exact gap, gradient, and Hessian of a slave point against a flat Tria3 facet (3D).</span>
+
+<span class="sd">    The facet plane is spanned by ``x1, x2, x3`` (in this local order); the outward normal is</span>
+<span class="sd">    ``cross(x2-x1, x3-x1)``, normalized. The gap is positive outside the facet's half-space,</span>
+<span class="sd">    negative when penetrating.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    xs, x1, x2, x3</span>
+<span class="sd">        Current coordinates (each shape ``(3,)``) of the slave point and the facet's three nodes,</span>
+<span class="sd">        in this fixed local order.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[float, numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        The gap ``g``, its gradient ``w`` (shape ``(12,)``, blocks ``[xs, x1, x2, x3]``), and its</span>
+<span class="sd">        Hessian ``H`` (shape ``(12, 12)``, same block order).</span>
+<span class="sd">    """</span>
+
+    <span class="n">r</span> <span class="o">=</span> <span class="n">xs</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">e1</span> <span class="o">=</span> <span class="n">x2</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">e2</span> <span class="o">=</span> <span class="n">x3</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">e1</span><span class="p">,</span> <span class="n">e2</span><span class="p">)</span>
+    <span class="n">m</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">c</span> <span class="o">/</span> <span class="n">m</span>
+    <span class="n">g</span> <span class="o">=</span> <span class="n">n</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+    <span class="n">blocks</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"xs"</span><span class="p">,</span> <span class="s2">"x1"</span><span class="p">,</span> <span class="s2">"x2"</span><span class="p">,</span> <span class="s2">"x3"</span><span class="p">)</span>
+
+    <span class="n">dr_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="s2">"x3"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))}</span>
+    <span class="n">dc_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="o">-</span><span class="n">skewMatrix</span><span class="p">(</span><span class="n">x2</span> <span class="o">-</span> <span class="n">x3</span><span class="p">),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="o">-</span><span class="n">skewMatrix</span><span class="p">(</span><span class="n">e2</span><span class="p">),</span> <span class="s2">"x3"</span><span class="p">:</span> <span class="n">skewMatrix</span><span class="p">(</span><span class="n">e1</span><span class="p">)}</span>
+
+    <span class="n">projectorOntoTangentPlane</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+    <span class="n">dn_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">projectorOntoTangentPlane</span> <span class="o">@</span> <span class="n">dc_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="o">/</span> <span class="n">m</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">}</span>
+    <span class="n">dm_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">n</span> <span class="o">@</span> <span class="n">dc_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">}</span>  <span class="c1"># row vector</span>
+
+    <span class="n">w_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">r</span> <span class="o">+</span> <span class="n">dr_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">n</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">}</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">w_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">])</span>
+
+    <span class="c1"># The tangential (in-plane) component of r: normal-projected-out, used below since the</span>
+    <span class="c1"># curvature-like second-derivative pieces only couple through r's in-plane part.</span>
+    <span class="n">rTangential</span> <span class="o">=</span> <span class="n">r</span> <span class="o">-</span> <span class="n">g</span> <span class="o">*</span> <span class="n">n</span>
+
+    <span class="c1"># d(dc_dBlock[a])/d(block b) -- dc_dBlock[a] is +/- skew(u_a) for a fixed linear combination</span>
+    <span class="c1"># u_a of the facet's nodes; this is the constant Jacobian du_a/d(block b) for each a.</span>
+    <span class="n">du_dBlock</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"x1"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"x3"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span>  <span class="c1"># u = x3-x2</span>
+        <span class="s2">"x2"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="s2">"x3"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span>  <span class="c1"># u = x3-x1</span>
+        <span class="s2">"x3"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"x3"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))},</span>  <span class="c1"># u = x2-x1</span>
+    <span class="p">}</span>
+    <span class="n">dcSign</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"x1"</span><span class="p">:</span> <span class="o">+</span><span class="mf">1.0</span><span class="p">,</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="s2">"x3"</span><span class="p">:</span> <span class="o">+</span><span class="mf">1.0</span><span class="p">}</span>  <span class="c1"># dc_dBlock[a] = dcSign[a] * skew(u_a)</span>
+
+    <span class="n">H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">12</span><span class="p">,</span> <span class="mi">12</span><span class="p">))</span>
+    <span class="n">blockSlice</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span> <span class="s2">"x3"</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">12</span><span class="p">)}</span>
+
+    <span class="n">H</span><span class="p">[</span><span class="n">blockSlice</span><span class="p">[</span><span class="s2">"xs"</span><span class="p">],</span> <span class="n">blockSlice</span><span class="p">[</span><span class="s2">"xs"</span><span class="p">]]</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"x1"</span><span class="p">,</span> <span class="s2">"x2"</span><span class="p">,</span> <span class="s2">"x3"</span><span class="p">):</span>
+        <span class="n">H</span><span class="p">[</span><span class="n">blockSlice</span><span class="p">[</span><span class="s2">"xs"</span><span class="p">],</span> <span class="n">blockSlice</span><span class="p">[</span><span class="n">b</span><span class="p">]]</span> <span class="o">=</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"x1"</span><span class="p">,</span> <span class="s2">"x2"</span><span class="p">,</span> <span class="s2">"x3"</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">:</span>
+            <span class="c1"># d(dn_dBlock[a])/d(block b), contracted with r on the normal's own index -- the</span>
+            <span class="c1"># exact second derivative of the cross-product-then-normalize construction of n.</span>
+            <span class="n">crossNormalizeTerm</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">m</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">dm_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">r</span><span class="p">)</span> <span class="o">+</span> <span class="n">g</span> <span class="o">*</span> <span class="p">(</span><span class="n">dc_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">])</span>
+            <span class="p">)</span>
+            <span class="n">skewArgumentTerm</span> <span class="o">=</span> <span class="n">dcSign</span><span class="p">[</span><span class="n">a</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">m</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">skewMatrix</span><span class="p">(</span><span class="n">rTangential</span><span class="p">)</span> <span class="o">@</span> <span class="n">du_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">][</span><span class="n">b</span><span class="p">])</span>
+            <span class="n">normalizeDenominatorTerm</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">m</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">rTangential</span> <span class="o">@</span> <span class="n">dc_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">dm_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">])</span>
+
+            <span class="n">d2n_a_contractedWithR</span> <span class="o">=</span> <span class="n">crossNormalizeTerm</span> <span class="o">+</span> <span class="n">skewArgumentTerm</span> <span class="o">+</span> <span class="n">normalizeDenominatorTerm</span>
+            <span class="n">H</span><span class="p">[</span><span class="n">blockSlice</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">blockSlice</span><span class="p">[</span><span class="n">b</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">d2n_a_contractedWithR</span> <span class="o">+</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">dr_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">]</span> <span class="o">+</span> <span class="n">dr_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">]</span>
+            <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">g</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">H</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">line2GapGradientHessian</span><span class="p">(</span><span class="n">xs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Exact gap, gradient, and Hessian of a slave point against a flat Line2 facet (2D).</span>
+
+<span class="sd">    The facet edge runs from ``x1`` to ``x2``; the outward normal is the edge direction rotated</span>
+<span class="sd">    by -90 degrees, normalized. The gap is positive outside the facet's half-plane, negative when</span>
+<span class="sd">    penetrating.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    xs, x1, x2</span>
+<span class="sd">        Current coordinates (each shape ``(2,)``) of the slave point and the facet's two nodes,</span>
+<span class="sd">        in this fixed local order.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[float, numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        The gap ``g``, its gradient ``w`` (shape ``(6,)``, blocks ``[xs, x1, x2]``), and its</span>
+<span class="sd">        Hessian ``H`` (shape ``(6, 6)``, same block order).</span>
+<span class="sd">    """</span>
+
+    <span class="n">r</span> <span class="o">=</span> <span class="n">xs</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">x2</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">length</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+    <span class="n">eHat</span> <span class="o">=</span> <span class="n">e</span> <span class="o">/</span> <span class="n">length</span>
+    <span class="n">rotateMinus90</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]])</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">rotateMinus90</span> <span class="o">@</span> <span class="n">eHat</span>
+    <span class="n">g</span> <span class="o">=</span> <span class="n">n</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+    <span class="n">blocks</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"xs"</span><span class="p">,</span> <span class="s2">"x1"</span><span class="p">,</span> <span class="s2">"x2"</span><span class="p">)</span>
+
+    <span class="n">dr_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">))}</span>
+    <span class="n">de_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">)}</span>
+
+    <span class="n">projectorOntoNormal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">eHat</span><span class="p">,</span> <span class="n">eHat</span><span class="p">)</span>
+    <span class="n">dEHat_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">projectorOntoNormal</span> <span class="o">@</span> <span class="n">de_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="o">/</span> <span class="n">length</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">}</span>
+    <span class="n">dn_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">rotateMinus90</span> <span class="o">@</span> <span class="n">dEHat_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">}</span>
+    <span class="n">dLength_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">eHat</span> <span class="o">@</span> <span class="n">de_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">}</span>  <span class="c1"># row vector</span>
+
+    <span class="n">w_dBlock</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">r</span> <span class="o">+</span> <span class="n">dr_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">n</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">}</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">w_dBlock</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">])</span>
+
+    <span class="c1"># Since dn_dBlock = rotateMinus90 @ dEHat_dBlock, contracting r with n's index equals contracting</span>
+    <span class="c1"># rotateMinus90^T @ r with eHat's index.</span>
+    <span class="n">rRotated</span> <span class="o">=</span> <span class="n">rotateMinus90</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">r</span>
+    <span class="n">rRotatedDotEHat</span> <span class="o">=</span> <span class="n">rRotated</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">eHat</span><span class="p">)</span>
+
+    <span class="n">H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
+    <span class="n">blockSlice</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xs"</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="s2">"x1"</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="s2">"x2"</span><span class="p">:</span> <span class="nb">slice</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">)}</span>
+
+    <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">:</span>
+            <span class="n">normalizeTerm</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">length</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">eHat</span> <span class="o">@</span> <span class="n">de_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">dEHat_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">rRotated</span><span class="p">)</span>
+                <span class="o">+</span> <span class="n">rRotatedDotEHat</span> <span class="o">*</span> <span class="p">(</span><span class="n">de_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">dEHat_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">])</span>
+                <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">dEHat_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">rRotated</span><span class="p">,</span> <span class="n">dLength_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">])</span>
+            <span class="p">)</span>
+            <span class="n">H</span><span class="p">[</span><span class="n">blockSlice</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">blockSlice</span><span class="p">[</span><span class="n">b</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">normalizeTerm</span> <span class="o">+</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">dr_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">]</span> <span class="o">+</span> <span class="n">dr_dBlock</span><span class="p">[</span><span class="n">a</span><span class="p">]</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">dn_dBlock</span><span class="p">[</span><span class="n">b</span><span class="p">]</span>
+            <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">g</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">H</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">rowDot</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Row-wise dot product over the last axis, accumulated left to right onto +0.0 (so a sum of</span>
+<span class="sd">    negative zeros is +0.0), with separate multiplications and additions. The order is fixed here,</span>
+<span class="sd">    not left to a BLAS: ``np.dot`` may fuse multiply and add on one CPU and not on another, and then</span>
+<span class="sd">    differs in the last bit."""</span>
+
+    <span class="n">dot</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="o">+</span> <span class="n">a</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">b</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]):</span>
+        <span class="n">dot</span> <span class="o">=</span> <span class="n">dot</span> <span class="o">+</span> <span class="n">a</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">b</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">k</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">dot</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">tria3ClosestPoint</span><span class="p">(</span><span class="n">xs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x3</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Closest point on the (closed) triangle (x1, x2, x3) to xs, clamped to the triangle's</span>
+<span class="sd">    interior/edge/vertex regions (Ericson's real-time-collision-detection region test), as</span>
+<span class="sd">    barycentric weights (w1, w2, w3) with all w &gt;= 0 and sum(w) == 1, plus the distance.</span>
+
+<span class="sd">    The single-pair form of :func:`tria3ClosestPoints`, which it calls, so that the two can never</span>
+<span class="sd">    disagree."""</span>
+
+    <span class="n">weights</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">tria3ClosestPoints</span><span class="p">(</span><span class="n">xs</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span> <span class="n">x1</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span> <span class="n">x2</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span> <span class="n">x3</span><span class="p">[</span><span class="kc">None</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">float</span><span class="p">(</span><span class="n">distances</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">tria3ClosestPoints</span><span class="p">(</span><span class="n">xs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x3</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Closest points of many (point, triangle) pairs at once, see :func:`tria3ClosestPoint`.</span>
+
+<span class="sd">    Ericson's region test, evaluated for all pairs with array operations instead of one Python call</span>
+<span class="sd">    per pair. Each pair is assigned the region whose condition, in the order the branch-by-branch</span>
+<span class="sd">    test checks them, it satisfies first (a NaN, which satisfies no condition, falls through to the</span>
+<span class="sd">    interior). Every operation acts on each pair alone, so a pair's result does not depend on the</span>
+<span class="sd">    other pairs in the batch.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    xs</span>
+<span class="sd">        The points, shape ``(nPairs, 3)``.</span>
+<span class="sd">    x1, x2, x3</span>
+<span class="sd">        The nodes of each pair's triangle, in its local order, each of shape ``(nPairs, 3)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        The barycentric weights of the closest points, shape ``(nPairs, 3)``, and the distances,</span>
+<span class="sd">        shape ``(nPairs,)``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">e1</span> <span class="o">=</span> <span class="n">x2</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">e2</span> <span class="o">=</span> <span class="n">x3</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">r1</span> <span class="o">=</span> <span class="n">xs</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">r2</span> <span class="o">=</span> <span class="n">xs</span> <span class="o">-</span> <span class="n">x2</span>
+    <span class="n">r3</span> <span class="o">=</span> <span class="n">xs</span> <span class="o">-</span> <span class="n">x3</span>
+
+    <span class="n">d1</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">e1</span><span class="p">,</span> <span class="n">r1</span><span class="p">)</span>
+    <span class="n">d2</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">e2</span><span class="p">,</span> <span class="n">r1</span><span class="p">)</span>
+    <span class="n">d3</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">e1</span><span class="p">,</span> <span class="n">r2</span><span class="p">)</span>
+    <span class="n">d4</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">e2</span><span class="p">,</span> <span class="n">r2</span><span class="p">)</span>
+    <span class="n">d5</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">e1</span><span class="p">,</span> <span class="n">r3</span><span class="p">)</span>
+    <span class="n">d6</span> <span class="o">=</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">e2</span><span class="p">,</span> <span class="n">r3</span><span class="p">)</span>
+    <span class="n">vc</span> <span class="o">=</span> <span class="n">d1</span> <span class="o">*</span> <span class="n">d4</span> <span class="o">-</span> <span class="n">d3</span> <span class="o">*</span> <span class="n">d2</span>
+    <span class="n">va</span> <span class="o">=</span> <span class="n">d3</span> <span class="o">*</span> <span class="n">d6</span> <span class="o">-</span> <span class="n">d5</span> <span class="o">*</span> <span class="n">d4</span>
+    <span class="n">vb</span> <span class="o">=</span> <span class="n">d5</span> <span class="o">*</span> <span class="n">d2</span> <span class="o">-</span> <span class="n">d1</span> <span class="o">*</span> <span class="n">d6</span>
+
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">d1</span><span class="p">),</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">unassigned</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">d1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">claim</span><span class="p">(</span><span class="n">condition</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The still unassigned pairs that satisfy ``condition``, which are assigned hereby."""</span>
+        <span class="n">claimed</span> <span class="o">=</span> <span class="n">unassigned</span> <span class="o">&amp;</span> <span class="n">condition</span>
+        <span class="n">unassigned</span><span class="p">[</span><span class="n">claimed</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">claimed</span>
+
+    <span class="c1"># The regions in the order the scalar test checks them: a pair belongs to the first it satisfies.</span>
+    <span class="n">weights</span><span class="p">[</span><span class="n">claim</span><span class="p">((</span><span class="n">d1</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d2</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">)),</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># vertex x1</span>
+    <span class="n">weights</span><span class="p">[</span><span class="n">claim</span><span class="p">((</span><span class="n">d3</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d4</span> <span class="o">&lt;=</span> <span class="n">d3</span><span class="p">)),</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># vertex x2</span>
+    <span class="n">weights</span><span class="p">[</span><span class="n">claim</span><span class="p">((</span><span class="n">d6</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d5</span> <span class="o">&lt;=</span> <span class="n">d6</span><span class="p">)),</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># vertex x3</span>
+
+    <span class="c1"># A degenerate triangle divides by zero; as in a pairwise evaluation, the result is inf or NaN.</span>
+    <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">):</span>
+        <span class="n">edge</span> <span class="o">=</span> <span class="n">claim</span><span class="p">((</span><span class="n">vc</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d1</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d3</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">))</span>  <span class="c1"># edge x1-x2</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">d1</span><span class="p">[</span><span class="n">edge</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">d1</span><span class="p">[</span><span class="n">edge</span><span class="p">]</span> <span class="o">-</span> <span class="n">d3</span><span class="p">[</span><span class="n">edge</span><span class="p">])</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">edge</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">t</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">edge</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span>
+
+        <span class="n">edge</span> <span class="o">=</span> <span class="n">claim</span><span class="p">((</span><span class="n">vb</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d2</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d6</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">))</span>  <span class="c1"># edge x1-x3</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">d2</span><span class="p">[</span><span class="n">edge</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">d2</span><span class="p">[</span><span class="n">edge</span><span class="p">]</span> <span class="o">-</span> <span class="n">d6</span><span class="p">[</span><span class="n">edge</span><span class="p">])</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">edge</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">t</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">edge</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span>
+
+        <span class="n">d4MinusD3</span> <span class="o">=</span> <span class="n">d4</span> <span class="o">-</span> <span class="n">d3</span>
+        <span class="n">d5MinusD6</span> <span class="o">=</span> <span class="n">d5</span> <span class="o">-</span> <span class="n">d6</span>
+        <span class="n">edge</span> <span class="o">=</span> <span class="n">claim</span><span class="p">((</span><span class="n">va</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d4MinusD3</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">d5MinusD6</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">))</span>  <span class="c1"># edge x2-x3</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">d4MinusD3</span><span class="p">[</span><span class="n">edge</span><span class="p">]</span> <span class="o">/</span> <span class="p">(</span><span class="n">d4MinusD3</span><span class="p">[</span><span class="n">edge</span><span class="p">]</span> <span class="o">+</span> <span class="n">d5MinusD6</span><span class="p">[</span><span class="n">edge</span><span class="p">])</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">edge</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">t</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">edge</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span>
+
+        <span class="n">interior</span> <span class="o">=</span> <span class="n">unassigned</span>
+        <span class="n">denom</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">va</span><span class="p">[</span><span class="n">interior</span><span class="p">]</span> <span class="o">+</span> <span class="n">vb</span><span class="p">[</span><span class="n">interior</span><span class="p">]</span> <span class="o">+</span> <span class="n">vc</span><span class="p">[</span><span class="n">interior</span><span class="p">])</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="n">vb</span><span class="p">[</span><span class="n">interior</span><span class="p">]</span> <span class="o">*</span> <span class="n">denom</span>
+        <span class="n">gamma</span> <span class="o">=</span> <span class="n">vc</span><span class="p">[</span><span class="n">interior</span><span class="p">]</span> <span class="o">*</span> <span class="n">denom</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">interior</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">beta</span> <span class="o">-</span> <span class="n">gamma</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">interior</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">beta</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">interior</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">gamma</span>
+
+    <span class="n">closestPoints</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">x1</span> <span class="o">+</span> <span class="n">weights</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">x2</span> <span class="o">+</span> <span class="n">weights</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">*</span> <span class="n">x3</span>
+    <span class="n">toClosestPoints</span> <span class="o">=</span> <span class="n">xs</span> <span class="o">-</span> <span class="n">closestPoints</span>
+    <span class="k">return</span> <span class="n">weights</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rowDot</span><span class="p">(</span><span class="n">toClosestPoints</span><span class="p">,</span> <span class="n">toClosestPoints</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">line2ClosestPoint</span><span class="p">(</span><span class="n">xs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Closest point on the (closed) segment (x1, x2) to xs, as parametric weights (1-t, t) with</span>
+<span class="sd">    t clamped to [0, 1], plus the distance.</span>
+
+<span class="sd">    The single-pair form of :func:`line2ClosestPoints`, which it calls, so that the two can never</span>
+<span class="sd">    disagree."""</span>
+
+    <span class="n">weights</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">line2ClosestPoints</span><span class="p">(</span><span class="n">xs</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span> <span class="n">x1</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span> <span class="n">x2</span><span class="p">[</span><span class="kc">None</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">float</span><span class="p">(</span><span class="n">distances</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">line2ClosestPoints</span><span class="p">(</span><span class="n">xs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Closest points of many (point, segment) pairs at once, see :func:`line2ClosestPoint`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    xs</span>
+<span class="sd">        The points, shape ``(nPairs, 2)``.</span>
+<span class="sd">    x1, x2</span>
+<span class="sd">        The nodes of each pair's segment, in its local order, each of shape ``(nPairs, 2)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        The weights of the closest points, shape ``(nPairs, 2)``, and the distances, shape</span>
+<span class="sd">        ``(nPairs,)``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">e</span> <span class="o">=</span> <span class="n">x2</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">):</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">rowDot</span><span class="p">(</span><span class="n">xs</span> <span class="o">-</span> <span class="n">x1</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span> <span class="o">/</span> <span class="n">rowDot</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">e</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">t</span><span class="p">,</span> <span class="n">t</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">toClosestPoints</span> <span class="o">=</span> <span class="n">xs</span> <span class="o">-</span> <span class="p">(</span><span class="n">weights</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">x1</span> <span class="o">+</span> <span class="n">weights</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">x2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">weights</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rowDot</span><span class="p">(</span><span class="n">toClosestPoints</span><span class="p">,</span> <span class="n">toClosestPoints</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">tria3Projection</span><span class="p">(</span><span class="n">xs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x3</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Barycentric-like in-plane coordinates (alpha, beta) of the projection of xs onto the</span>
+<span class="sd">    (possibly non-orthogonal) basis spanned by (x2-x1, x3-x1), and whether that projection falls</span>
+<span class="sd">    inside the triangle.</span>
+
+<span class="sd">    Unlike :func:`tria3ClosestPoint`, the projection is not clamped to the triangle."""</span>
+
+    <span class="n">e1</span> <span class="o">=</span> <span class="n">x2</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">e2</span> <span class="o">=</span> <span class="n">x3</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">xs</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">e1</span><span class="p">,</span> <span class="n">e2</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">n</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">rTangential</span> <span class="o">=</span> <span class="n">r</span> <span class="o">-</span> <span class="n">r</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">*</span> <span class="n">n</span>
+
+    <span class="n">A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">e1</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e1</span><span class="p">),</span> <span class="n">e1</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e2</span><span class="p">)],</span> <span class="p">[</span><span class="n">e1</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e2</span><span class="p">),</span> <span class="n">e2</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e2</span><span class="p">)]])</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">e1</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">rTangential</span><span class="p">),</span> <span class="n">e2</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">rTangential</span><span class="p">)])</span>
+    <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+
+    <span class="n">inside</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">&gt;=</span> <span class="mf">0.0</span> <span class="ow">and</span> <span class="n">beta</span> <span class="o">&gt;=</span> <span class="mf">0.0</span> <span class="ow">and</span> <span class="p">(</span><span class="n">alpha</span> <span class="o">+</span> <span class="n">beta</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1.0</span>
+    <span class="k">return</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">inside</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">line2Projection</span><span class="p">(</span><span class="n">xs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Parametric coordinate t of the projection of xs onto the edge (x1,x2), and whether that</span>
+<span class="sd">    projection falls inside the segment.</span>
+
+<span class="sd">    Unlike :func:`line2ClosestPoint`, the projection is not clamped to the segment."""</span>
+
+    <span class="n">e</span> <span class="o">=</span> <span class="n">x2</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="p">(</span><span class="n">xs</span> <span class="o">-</span> <span class="n">x1</span><span class="p">)</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="o">/</span> <span class="n">e</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">t</span><span class="p">,</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">t</span> <span class="o">&lt;=</span> <span class="mf">1.0</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">facetNormalAndMeasure</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""The (non-unit-normalized only in intermediate steps) outward normal and measure (area for a</span>
+<span class="sd">    Tria3 facet, length for a Line2 facet) of a flat facet, as a function of its current node</span>
+<span class="sd">    coordinates; of many facets at once if their coordinates are stacked.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coords</span>
+<span class="sd">        Array of shape ``(3, 3)`` (Tria3, 3D) or ``(2, 2)`` (Line2, 2D) with the facet's current</span>
+<span class="sd">        node coordinates in its fixed local order; or of shape ``(..., 3, 3)`` or ``(..., 2, 2)``, the</span>
+<span class="sd">        coordinates of many facets.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[numpy.ndarray, float | numpy.ndarray]</span>
+<span class="sd">        The outward unit normal, and the facet's measure (area or length); of shapes ``(..., 3)`` (or</span>
+<span class="sd">        ``(..., 2)``) and ``(...)`` for many facets.</span>
+<span class="sd">    """</span>
+
+    <span class="n">nNodes</span><span class="p">,</span> <span class="n">domainSize</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+
+    <span class="k">if</span> <span class="n">nNodes</span> <span class="o">==</span> <span class="mi">3</span> <span class="ow">and</span> <span class="n">domainSize</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">e1</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">e2</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">e1</span><span class="p">,</span> <span class="n">e2</span><span class="p">)</span>
+        <span class="n">cNorm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">c</span> <span class="o">/</span> <span class="n">cNorm</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">cNorm</span>
+
+    <span class="k">elif</span> <span class="n">nNodes</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">domainSize</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">eNorm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Outward normal is e rotated by -90 degrees, consistent with a counter-clockwise</span>
+        <span class="c1"># (node 1 -&gt; node 2) traversal of the solid's boundary.</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">((</span><span class="n">e</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="o">-</span><span class="n">e</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">eNorm</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">eNorm</span>
+
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"facetNormalAndMeasure: unsupported facet shape </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">closestFacetCandidates</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">facetCoords</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">searchDistance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""For each query point, the facets that could possibly be its closest one.</span>
+
+<span class="sd">    Replaces an exhaustive slave x facet sweep with a spatial query, WITHOUT changing which facet</span>
+<span class="sd">    is selected. The exhaustive form called the clamped closest-point routine once per</span>
+<span class="sd">    slave-facet pair -- 778,000 calls on the anchor pry-out model, measured at 5.98 s per</span>
+<span class="sd">    connectivity update, which is why the solver had to be told to search only every few hundred</span>
+<span class="sd">    increments.</span>
+
+<span class="sd">    The bound that makes this exact: let ``F*`` be the truly closest facet, at point-to-closed-</span>
+<span class="sd">    domain distance ``d*``, with centroid ``C*`` and radius ``r*`` (its largest centroid-to-vertex</span>
+<span class="sd">    distance). A triangle's centroid lies inside its own closed domain, so the distance to the</span>
+<span class="sd">    facet owning the nearest centroid is at most ``d0``, the distance to that centroid -- hence</span>
+<span class="sd">    ``d* &lt;= d0``. And ``|x - C*| &lt;= d* + r* &lt;= d0 + rMax``. So every facet that could win, or</span>
+<span class="sd">    even tie, has its centroid inside a ball of radius ``d0 + rMax``, and querying that ball</span>
+<span class="sd">    cannot miss it.</span>
+
+<span class="sd">    Candidates are returned in ascending facet index, so the caller's "first strict minimum"</span>
+<span class="sd">    selection picks exactly the facet the exhaustive sweep would have. The result is bit-identical,</span>
+<span class="sd">    not merely equivalent.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    queryPoints</span>
+<span class="sd">        Current coordinates of the points to be projected, shape ``(nPoints, nDim)``. Slave nodes</span>
+<span class="sd">        for the node-based formulation, quadrature points for the integrated one.</span>
+<span class="sd">    facetCoords</span>
+<span class="sd">        Current coordinates of each facet's nodes.</span>
+<span class="sd">    searchDistance</span>
+<span class="sd">        The caller's cut-off, if any. A facet beyond it is rejected anyway, so the query radius</span>
+<span class="sd">        is capped accordingly.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        One ascending list of candidate facet indices per query point.</span>
+<span class="sd">    """</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">facetCoords</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[[]</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">))]</span>
+
+    <span class="n">stacked</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">facetCoords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>  <span class="c1"># (nFacets, nNodesPerFacet, nDim)</span>
+    <span class="n">centroids</span> <span class="o">=</span> <span class="n">stacked</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">radii</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">stacked</span> <span class="o">-</span> <span class="n">centroids</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">rMax</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">radii</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">cKDTree</span><span class="p">(</span><span class="n">centroids</span><span class="p">)</span>
+    <span class="n">nearestCentroidDistance</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">radius</span> <span class="o">=</span> <span class="n">nearestCentroidDistance</span> <span class="o">+</span> <span class="n">rMax</span>
+    <span class="k">if</span> <span class="n">searchDistance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># The caller rejects facets beyond searchDistance; no facet within it has its centroid beyond</span>
+        <span class="c1"># searchDistance + rMax.</span>
+        <span class="n">radius</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">radius</span><span class="p">,</span> <span class="n">searchDistance</span> <span class="o">+</span> <span class="n">rMax</span><span class="p">)</span>
+
+    <span class="c1"># A few ulps of margin: a facet that exactly ties sits ON the radius, and rounding must not drop it.</span>
+    <span class="n">radius</span> <span class="o">=</span> <span class="n">radius</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="mf">8.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+
+    <span class="n">ballCandidates</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">query_ball_point</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">,</span> <span class="n">radius</span><span class="p">)</span>
+
+    <span class="c1"># The ball uses the global rMax, which is loose on a refined surface. Refine per facet: its closed</span>
+    <span class="c1"># domain is at least |x - C_i| - r_i away and d* &lt;= d0, so a facet with |x - C_i| - r_i &gt; d0 can</span>
+    <span class="c1"># neither win nor tie. Same ulp margin as above.</span>
+    <span class="n">tolerance</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">8.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">finfo</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">eps</span>
+
+    <span class="c1"># Evaluated for all (point, ball candidate) pairs at once, with the same arithmetic per pair as</span>
+    <span class="c1"># one point at a time.</span>
+    <span class="n">queryPoints</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">)</span>
+    <span class="n">pointIndices</span><span class="p">,</span> <span class="n">facetIndices</span> <span class="o">=</span> <span class="n">candidatePairs</span><span class="p">(</span><span class="n">ballCandidates</span><span class="p">)</span>
+    <span class="n">centroidDistances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">centroids</span><span class="p">[</span><span class="n">facetIndices</span><span class="p">]</span> <span class="o">-</span> <span class="n">queryPoints</span><span class="p">[</span><span class="n">pointIndices</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">surviving</span> <span class="o">=</span> <span class="n">centroidDistances</span> <span class="o">-</span> <span class="n">radii</span><span class="p">[</span><span class="n">facetIndices</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">nearestCentroidDistance</span><span class="p">[</span><span class="n">pointIndices</span><span class="p">]</span> <span class="o">*</span> <span class="n">tolerance</span>
+    <span class="n">pointIndices</span><span class="p">,</span> <span class="n">facetIndices</span> <span class="o">=</span> <span class="n">pointIndices</span><span class="p">[</span><span class="n">surviving</span><span class="p">],</span> <span class="n">facetIndices</span><span class="p">[</span><span class="n">surviving</span><span class="p">]</span>
+
+    <span class="c1"># Ascending facet index per point; the pairs stay grouped by point.</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">lexsort</span><span class="p">((</span><span class="n">facetIndices</span><span class="p">,</span> <span class="n">pointIndices</span><span class="p">))</span>
+    <span class="n">survivingFacets</span> <span class="o">=</span> <span class="n">facetIndices</span><span class="p">[</span><span class="n">order</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">ends</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">pointIndices</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">)))</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">survivingFacets</span><span class="p">[</span><span class="n">first</span><span class="p">:</span><span class="n">end</span><span class="p">]</span> <span class="k">for</span> <span class="n">first</span><span class="p">,</span> <span class="n">end</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">ends</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">ends</span><span class="p">)]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">candidatePairs</span><span class="p">(</span><span class="n">candidatesPerPoint</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Flatten per-point candidate lists into (point, facet) index pairs.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    candidatesPerPoint</span>
+<span class="sd">        One list of candidate facet indices per point, as :func:`closestFacetCandidates` returns.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        The point and the facet index of every pair, ordered by point and, per point, in the order</span>
+<span class="sd">        of its candidate list.</span>
+<span class="sd">    """</span>
+
+    <span class="n">counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">len</span><span class="p">,</span> <span class="n">candidatesPerPoint</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">candidatesPerPoint</span><span class="p">))</span>
+    <span class="n">pointIndices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">candidatesPerPoint</span><span class="p">)),</span> <span class="n">counts</span><span class="p">)</span>
+    <span class="n">facetIndices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">(</span>
+        <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span><span class="n">candidatesPerPoint</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">pointIndices</span><span class="p">,</span> <span class="n">facetIndices</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">facetClosestPoints</span><span class="p">(</span><span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">facetCoords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Closest points of many (point, flat facet) pairs at once: :func:`tria3ClosestPoints` for</span>
+<span class="sd">    Tria3 facets in 3D, :func:`line2ClosestPoints` for Line2 facets in 2D.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    points</span>
+<span class="sd">        The points, shape ``(nPairs, nDim)``.</span>
+<span class="sd">    facetCoords</span>
+<span class="sd">        The node coordinates of each pair's facet, shape ``(nPairs, nNodesPerFacet, nDim)``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        The weights of the closest points, shape ``(nPairs, nNodesPerFacet)``, and the distances,</span>
+<span class="sd">        shape ``(nPairs,)``.</span>
+<span class="sd">    """</span>
+
+    <span class="k">if</span> <span class="n">facetCoords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tria3ClosestPoints</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">facetCoords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">facetCoords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">facetCoords</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">facetCoords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">line2ClosestPoints</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">facetCoords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">facetCoords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"facetClosestPoints: unsupported facet shape </span><span class="si">{</span><span class="n">facetCoords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">closestFacets</span><span class="p">(</span>
+    <span class="n">queryPoints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">facetCoords</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">candidatesPerPoint</span><span class="p">:</span> <span class="nb">list</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""For each query point, the closest of its candidate facets, the clamped closest point's</span>
+<span class="sd">    weights in it, and the distance.</span>
+
+<span class="sd">    The selection is exactly that of scanning each point's candidates in their order and keeping a</span>
+<span class="sd">    facet whenever its distance is strictly below the best so far, starting from infinity: the</span>
+<span class="sd">    first candidate at the minimal distance wins, and a point whose candidates are all at an</span>
+<span class="sd">    infinite or NaN distance (or that has none) gets no facet. All (point, candidate) pairs are</span>
+<span class="sd">    evaluated at once, see :func:`facetClosestPoints`, so the weights and distances are</span>
+<span class="sd">    bit-identical to those of the scan.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    queryPoints</span>
+<span class="sd">        The points, shape ``(nPoints, nDim)``.</span>
+<span class="sd">    facetCoords</span>
+<span class="sd">        Current coordinates of each facet's nodes, all of the same shape.</span>
+<span class="sd">    candidatesPerPoint</span>
+<span class="sd">        One list of candidate facet indices per point, see :func:`closestFacetCandidates`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        Per point the closest facet's index, -1 if none; its weights, shape</span>
+<span class="sd">        ``(nPoints, nNodesPerFacet)``, zero if none; and the distance, infinite if none.</span>
+<span class="sd">    """</span>
+
+    <span class="n">queryPoints</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">nPoints</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">)</span>
+    <span class="n">closestFacet</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">nPoints</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)</span>
+    <span class="n">closestDistance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">nPoints</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">facetCoords</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">closestFacet</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nPoints</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span> <span class="n">closestDistance</span>
+
+    <span class="n">stacked</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">facetCoords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>  <span class="c1"># (nFacets, nNodesPerFacet, nDim)</span>
+    <span class="n">closestWeights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nPoints</span><span class="p">,</span> <span class="n">stacked</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+
+    <span class="n">pointIndices</span><span class="p">,</span> <span class="n">facetIndices</span> <span class="o">=</span> <span class="n">candidatePairs</span><span class="p">(</span><span class="n">candidatesPerPoint</span><span class="p">)</span>
+    <span class="n">weights</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">facetClosestPoints</span><span class="p">(</span><span class="n">queryPoints</span><span class="p">[</span><span class="n">pointIndices</span><span class="p">],</span> <span class="n">stacked</span><span class="p">[</span><span class="n">facetIndices</span><span class="p">])</span>
+
+    <span class="c1"># The scan's strict "&lt;" against a best that starts at infinity never accepts an infinite or a</span>
+    <span class="c1"># NaN distance, and among equal distances keeps the first.</span>
+    <span class="n">acceptable</span> <span class="o">=</span> <span class="n">distances</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+    <span class="n">pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">acceptable</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">closestFacet</span><span class="p">,</span> <span class="n">closestWeights</span><span class="p">,</span> <span class="n">closestDistance</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">closestDistance</span><span class="p">,</span> <span class="n">pointIndices</span><span class="p">[</span><span class="n">pairs</span><span class="p">],</span> <span class="n">distances</span><span class="p">[</span><span class="n">pairs</span><span class="p">])</span>
+    <span class="n">pairs</span> <span class="o">=</span> <span class="n">pairs</span><span class="p">[</span><span class="n">distances</span><span class="p">[</span><span class="n">pairs</span><span class="p">]</span> <span class="o">==</span> <span class="n">closestDistance</span><span class="p">[</span><span class="n">pointIndices</span><span class="p">[</span><span class="n">pairs</span><span class="p">]]]</span>
+    <span class="c1"># Pairs are ordered by point, and per point in candidate order: keep each point's first.</span>
+    <span class="n">pairs</span> <span class="o">=</span> <span class="n">pairs</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="n">pointIndices</span><span class="p">[</span><span class="n">pairs</span><span class="p">[</span><span class="mi">1</span><span class="p">:]]</span> <span class="o">!=</span> <span class="n">pointIndices</span><span class="p">[</span><span class="n">pairs</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]]]</span>
+
+    <span class="n">closestFacet</span><span class="p">[</span><span class="n">pointIndices</span><span class="p">[</span><span class="n">pairs</span><span class="p">]]</span> <span class="o">=</span> <span class="n">facetIndices</span><span class="p">[</span><span class="n">pairs</span><span class="p">]</span>
+    <span class="n">closestWeights</span><span class="p">[</span><span class="n">pointIndices</span><span class="p">[</span><span class="n">pairs</span><span class="p">]]</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="n">pairs</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">closestFacet</span><span class="p">,</span> <span class="n">closestWeights</span><span class="p">,</span> <span class="n">closestDistance</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

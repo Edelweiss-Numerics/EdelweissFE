@@ -105,3 +105,21 @@ Module ``edelweissfe.utils.parentfacegeometry``
 
 .. automodule:: edelweissfe.utils.parentfacegeometry
    :members:
+
+Creases of a faceted surface
+----------------------------
+
+The facets of a contact surface and where they meet: the edges and vertices of Tria3 facets (Line2 in 2D), their
+angle-weighted pseudonormals, and which of them lie on a crease. With them, the gap of a point to its closest facet
+tells inside from outside also at the corners of a surface (:ref:`integrated-contact`): the gap is the signed distance
+to the surface where the closest point lies on a crease, and the distance along the facet normal elsewhere; the two
+agree inside a facet, and differ only by the small turn of the normal at a seam of a smooth surface.
+
+Module ``edelweissfe.utils.facetcontactgeometry``
+
+.. autodata:: edelweissfe.utils.facetcontactgeometry.cosOfSmoothNormalChangeLimit
+
+.. autoclass:: edelweissfe.utils.facetcontactgeometry.FacetedSurface
+   :members:
+
+.. autoclass:: edelweissfe.utils.facetcontactgeometry.SurfaceFeatures

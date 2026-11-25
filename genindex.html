@@ -224,6 +224,8 @@
         <li><a href="developer/utils.html#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.acceptTimeStep">(edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper method)</a>
 </li>
       </ul></li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.acrossAConvexCrease">acrossAConvexCrease() (edelweissfe.utils.facetcontactgeometry.FacetedSurface method)</a>
+</li>
       <li><a href="model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.active">active (edelweissfe.constraints.base.constraintbase.ConstraintBase property)</a>
 </li>
       <li><a href="developer/models.html#edelweissfe.models.femodel.FEModel.activeConstraints">activeConstraints() (edelweissfe.models.femodel.FEModel method)</a>
@@ -316,14 +318,14 @@
       </ul></li>
       <li><a href="analysis/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepStart">applyAtStepStart() (edelweissfe.stepactions.base.stepactionbase.StepActionBase method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyCorrection">applyCorrection() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 
       <ul>
         <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyCorrection">(edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyDirichletToResidual">applyDirichletToResidual() (edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase method)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness">applyDirichletToStiffness() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
@@ -1021,6 +1023,8 @@
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.correctionAtStepLength">correctionAtStepLength() (edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.correctionConverged">correctionConverged() (edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion method)</a>
+</li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.cosOfSmoothNormalChangeLimit">cosOfSmoothNormalChangeLimit (in module edelweissfe.utils.facetcontactgeometry)</a>
 </li>
       <li><a href="developer/dofnumbering.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock">countEntriesOfBlock() (in module edelweissfe.numerics.systemmatrixcontributor)</a>
 </li>
@@ -1917,8 +1921,6 @@
         <li><a href="output/outputmanagers.html#module-edelweissfe.outputmanagers.ensight">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     edelweissfe.outputmanagers.fractureenergyintegrator
 
@@ -1926,6 +1928,8 @@
         <li><a href="output/outputmanagers.html#module-edelweissfe.outputmanagers.fractureenergyintegrator">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     edelweissfe.outputmanagers.meshdatatofile
 
@@ -2360,6 +2364,10 @@
         <li><a href="developer/variables.html#module-edelweissfe.variables.scalarvariable">module</a>
 </li>
       </ul></li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.edgeIsInterior">edgeIsInterior (edelweissfe.utils.facetcontactgeometry.FacetedSurface attribute)</a>
+</li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.edgeOppositeVertex">edgeOppositeVertex (edelweissfe.utils.facetcontactgeometry.FacetedSurface attribute)</a>
+</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.EisenstatWalkerTolerance">EisenstatWalkerTolerance (class in edelweissfe.linsolve.composition.krylov)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.eisenstatWalkerTolerance">eisenstatWalkerTolerance() (in module edelweissfe.linsolve.composition.krylov)</a>
@@ -2512,11 +2520,15 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/models.html#edelweissfe.models.modelchange.ModelChange.faceMap">faceMap (edelweissfe.models.modelchange.ModelChange attribute)</a>
 </li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface">FacetedSurface (class in edelweissfe.utils.facetcontactgeometry)</a>
+</li>
       <li><a href="developer/utils.html#edelweissfe.utils.parentfacegeometry.facetQuadratureRule">facetQuadratureRule() (in module edelweissfe.utils.parentfacegeometry)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.base.DirectSolverBackend.factorize">factorize() (edelweissfe.linsolve.base.DirectSolverBackend method)</a>
 </li>
       <li><a href="analysis/steps.html#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint">fallBackToCheckpoint() (edelweissfe.steps.base.stepbase.StepBase method)</a>
+</li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.features">features() (edelweissfe.utils.facetcontactgeometry.FacetedSurface method)</a>
 </li>
       <li><a href="developer/models.html#edelweissfe.models.femodel.FEModel">FEModel (class in edelweissfe.models.femodel)</a>
 </li>
@@ -2606,14 +2618,14 @@
 </li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint">fingerprint() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/utils.html#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.finishedStepProgress">finishedStepProgress (edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper attribute)</a>
 
       <ul>
         <li><a href="developer/utils.html#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.finishedStepProgress">(edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper attribute)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.finishIncrement">finishIncrement() (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase method)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.finishSolve">finishSolve() (edelweissfe.linsolve.composition.base.Preconditioner method)</a>
@@ -2725,6 +2737,8 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.ResidualGapCompensation.gap">gap (edelweissfe.linsolve.composition.krylov.ResidualGapCompensation attribute)</a>
+</li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.gapsAndGradients">gapsAndGradients() (edelweissfe.utils.facetcontactgeometry.FacetedSurface method)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.combinators.gaussSeidelOrder">gaussSeidelOrder() (in module edelweissfe.linsolve.composition.combinators)</a>
 </li>
@@ -4035,6 +4049,8 @@
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.passSystemStateToController">passSystemStateToController() (edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength method)</a>
 </li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.patchOfFacet">patchOfFacet() (edelweissfe.utils.facetcontactgeometry.FacetedSurface method)</a>
+</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.types.PetscLU">PetscLU (class in edelweissfe.linsolve.types)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.placesOfInertia">placesOfInertia (edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic attribute)</a>
@@ -4741,6 +4757,8 @@
       </ul></li>
       <li><a href="analysis/stepactions.html#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.surface">surface (edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase property)</a>
 </li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.SurfaceFeatures">SurfaceFeatures (class in edelweissfe.utils.facetcontactgeometry)</a>
+</li>
       <li><a href="developer/models.html#edelweissfe.models.femodel.FEModel.surfaces">surfaces (edelweissfe.models.femodel.FEModel attribute)</a>
 </li>
       <li><a href="model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn">switchedOn (edelweissfe.constraints.base.constraintbase.ConstraintBase property)</a>
@@ -4947,10 +4965,14 @@
         <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.version">(edelweissfe.models.topologypipeline.TopologyPipeline attribute)</a>
 </li>
       </ul></li>
-      <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.vijArray">vijArray (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.vertexIsInterior">vertexIsInterior (edelweissfe.utils.facetcontactgeometry.FacetedSurface attribute)</a>
+</li>
+      <li><a href="developer/utils.html#edelweissfe.utils.facetcontactgeometry.FacetedSurface.verticesOfEdge">verticesOfEdge (edelweissfe.utils.facetcontactgeometry.FacetedSurface attribute)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.vijArray">vijArray (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
+</li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.vijSliceOfEntity">vijSliceOfEntity (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
 
       <ul>
