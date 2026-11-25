@@ -1251,7 +1251,9 @@ near the corners, which is the whole point of this module.</p>
 angle-weighted pseudonormals, and which of them lie on a crease. With them, the gap of a point to its closest facet
 tells inside from outside also at the corners of a surface (<a class="reference internal" href="../theory/contact.html#integrated-contact"><span class="std std-ref">Integrated contact: distributing with the parent face’s basis</span></a>): the gap is the signed distance
 to the surface where the closest point lies on a crease, and the distance along the facet normal elsewhere; the two
-agree inside a facet, and differ only by the small turn of the normal at a seam of a smooth surface.</p>
+agree inside a facet, and differ only by the small turn of the normal at a seam of a smooth surface. Where the
+closest point changes rule – from a crease onto an edge that is none, or across a seam – the gap, and a penalty
+force on it, jumps by at most <span class="math notranslate nohighlight">\(1 - \cos 30^\circ\)</span> (about 13 %) of the distance; its sign does not.</p>
 <p>Module <code class="docutils literal notranslate"><span class="pre">edelweissfe.utils.facetcontactgeometry</span></code></p>
 <dl class="py data">
 <dt class="sig sig-object py" id="edelweissfe.utils.facetcontactgeometry.cosOfSmoothNormalChangeLimit">
@@ -1387,6 +1389,12 @@ precision: the gradient is the unit pseudonormal.</p></li>
 where no crease ends – the distance along the facet’s normal, and the normal as its gradient: beyond its
 boundary, the surface goes on in the plane of its last facet.</p></li>
 </ul>
+<p>The gap is continuous where the closest point keeps its rule, but not where the rule changes: where the closest
+point moves from a crease onto a feature that is none (from a crease vertex onto an edge that is not a crease),
+or across a seam onto the next facet, the gap jumps between the distance and the distance along a facet normal.
+The jump is at most <span class="math notranslate nohighlight">\(1 - \cos 30^\circ\)</span> (about 13 %) of the distance, the crease limit
+<a class="reference internal" href="#edelweissfe.utils.facetcontactgeometry.cosOfSmoothNormalChangeLimit" title="edelweissfe.utils.facetcontactgeometry.cosOfSmoothNormalChangeLimit"><code class="xref py py-data docutils literal notranslate"><span class="pre">cosOfSmoothNormalChangeLimit</span></code></a>; the sign does not change, so inside and outside stay apart. A penalty
+force on the gap jumps by the same fraction there.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
