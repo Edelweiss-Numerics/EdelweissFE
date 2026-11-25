@@ -78,27 +78,35 @@ mass) -- once per mesh and at the start of every step, and deliberately *not* fo
 an estimate costs a full element pass, and the policy assumes that within a step neither the geometry nor the wave
 speed of an element changes enough to use up the margin of the courant number (see
 :class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements` for where that fails); the
-entities that carry their own inertia (below) when the margin of their last estimate may be used up. It is enforced
-where it is below the largest increment the step allows, and a step that asks for smaller increments keeps them.
+entities that carry their own inertia (below) when the margin of their last estimate may be used up. A penalty
+constraint (contact, a support or a tie held by a penalty) owns no degrees of freedom; it adds its stiffness to the
+frequencies of the degrees of freedom it couples: before every increment, the row sums of its stiffness scaled by the
+lumped mass are added to the parts' estimates there, from the stiffness its law gives it where the increment starts
+(:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints`). It is enforced where it
+is below the largest increment the step allows, and a step that asks for smaller increments keeps them.
 
 When the critical time step is estimated, and where ``NED`` does it:
 
-* :meth:`NED.beginStep`: both parts forget their estimates (``reset``), since a material property may have changed
-  with the step;
+* :meth:`NED.beginStep`: both parts and the penalty constraints forget their estimates (``reset``), since a material
+  property may have changed with the step;
 * :meth:`NED.onNewNumbering`: the elements are estimated, when the mesh is not the one of their last estimate (the
   first numbering of a step, a refinement);
-* :meth:`NED.prepareIncrement`: the critical time step is enforced at the start of a step (not in a resumed step,
-  which keeps the time increment of its checkpoint), and after a refinement;
+* :meth:`NED.prepareIncrement`, before every increment is proposed, in a model without entities that carry their own
+  inertia: after the topology update (a refinement) or the periodic contact search, when due, the penalty constraints
+  are estimated on the mesh and the connectivity the increment uses, and the critical time step is enforced -- at the
+  start of a step not in a resumed step, which keeps the time increment of its checkpoint;
 * :meth:`NED._evaluateTheNetForceOnTheNewConnectivity`: the entities, after every increment, when their estimate is
-  due, and the critical time step is enforced at once;
+  due, and the penalty constraints, after every increment, on the connectivity the next increment uses; the critical
+  time step is enforced at once;
 * :meth:`NED._enforceTheCriticalTimeStep`: the one place where the parts are combined
   (:meth:`NED._criticalTimeStepOfTheModel`) and the time increment is set from them;
 * :meth:`NED.endStep`: the report, how often each part was estimated in the step, and its last estimate.
 
 **Lowered only, or followed.** By default, the time increment is lowered only, never raised within a step; with
 ``follow-critical-time-step``, it follows the critical time step up as well as down, at the cost of the safety margin
-that lowering only keeps against a stiff state that returns. Both, and when to choose which, are explained under
-:ref:`ned-time-increment-lowered-or-followed`.
+that lowering only keeps against a stiff state that returns, and the penalty constraints are then bounded over the next
+increment, not only at its start (:meth:`NED._estimateThePenaltyConstraints`). Both, and when to choose which, are
+explained under :ref:`ned-time-increment-lowered-or-followed`.
 
 **Three cadences, all in increments.** ``output-frequency`` is how often progress is logged and
 field outputs are finalized (a divisor, so it must be at least 1). ``topology-check-frequency`` is
@@ -111,7 +119,9 @@ the latter two, and what they cost in accuracy, is documented under
 
 **Constraints.** Multi-point constraints are enforced by folding a slave's mass and force onto its
 masters (row-sum, mass-conserving) and slaving it kinematically, which leaves the critical time step
-untouched. Other constraints -- contact above all -- are evaluated through
+of the elements untouched where their coefficients are nonnegative, and lowers it at the masters of a
+slave with a negative one (a hanging node of a HEX20 mesh, see
+:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof`). Other constraints -- contact above all -- are evaluated through
 :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`, which
 asks for forces and no tangent, since a tangent assembled here would enter nothing. A constraint
 that can act *only* through its tangent contributes nothing to an explicit increment and is
@@ -221,9 +231,9 @@ since, the kinetic energy, the internal (strain) energy, and what remains unacco
 one check that nothing else performs: the kinetic energy cannot exceed the energy at the start of the
 step plus the external work, because the terms omitted from the balance are all non-negative, so a
 violation means energy is appearing from nowhere and the time step is above the true stability limit
--- which the critical time step does not see in full, as it never sees contact penalty stiffness
-(:doc:`/theory/criticaltimestep`, "What the estimate does not see"), and sees the nonlocal field only where that
-field carries a non-mechanical inertia. Such a field's
+-- which the critical time step does not see in full: it may see a penalty contact late, or not at all
+(:doc:`/theory/criticaltimestep`, "What the estimate does not see"), and the nonlocal field only where that field
+carries a non-mechanical inertia. Such a field's
 own ``0.5 m_k rate^2`` is reported on a separate line and kept out of the balance: with a
 coefficient in seconds squared it has the units of a volume, not of an energy. ``E_0`` is read off
 the model's state, nothing evaluated: zero for a step from rest in a model without strain energy,
@@ -319,6 +329,7 @@ import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
+from edelweissfe.constraints.base.constraintbase import NextIncrement
 from edelweissfe.models.change import Change
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofvector import DofVector
@@ -332,6 +343,7 @@ from edelweissfe.solvers.base.conservationchecks import (
 from edelweissfe.solvers.base.criticaltimestep import (
     CriticalTimeStepOfEntitiesWithOwnInertia,
     CriticalTimeStepOfTheElements,
+    CriticalTimeStepWithThePenaltyConstraints,
 )
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -593,13 +605,15 @@ class NED(NonlinearSolverBase):
         #: derived for: a property of the mesh, derived again when it changed, and at the start of every step, not for a
         #: new numbering of the same mesh. None until it is first derived in a step.
         self._meshOfTheClassification = None
-        #: The critical time steps of the two parts of a model, each estimated by its own policy (see
-        #: :mod:`~edelweissfe.solvers.base.criticaltimestep`): the finite elements once per mesh, the entities that
-        #: carry their own inertia when the margin of their last estimate may be used up.
+        #: The critical time steps of the two parts of a model and of the degrees of freedom the penalty constraints
+        #: couple, each estimated by its own policy (see :mod:`~edelweissfe.solvers.base.criticaltimestep`): the finite
+        #: elements once per mesh, the entities that carry their own inertia when the margin of their last estimate
+        #: may be used up, the penalty constraints in every increment.
         self._criticalTimeStepOfTheElements = CriticalTimeStepOfTheElements()
         self._criticalTimeStepOfTheEntities = CriticalTimeStepOfEntitiesWithOwnInertia(
             self.options["critical-time-step-decrease-per-increment"], self.options["carry-critical-time-step-weights"]
         )
+        self._criticalTimeStepWithThePenaltyConstraints = CriticalTimeStepWithThePenaltyConstraints()
         #: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.
         self._internalEnergy = 0.0
         #: The operators of the explicit update, arrays of the length of the numbering, assembled by
@@ -700,6 +714,7 @@ class NED(NonlinearSolverBase):
         self._meshOfTheClassification = None
         self._criticalTimeStepOfTheElements.reset()
         self._criticalTimeStepOfTheEntities.reset()
+        self._criticalTimeStepWithThePenaltyConstraints.reset()
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
@@ -728,15 +743,21 @@ class NED(NonlinearSolverBase):
         self.forgetDiscreteSystem()
 
     def prepareIncrement(self, step, model: FEModel, isRetry: bool):
-        """The topology update, when due, and the discrete system; see
+        """The topology update or the periodic contact search, when due, the discrete system, and the critical time
+        step of the increment; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement`.
 
         The topology update is due at the start of the step, and after every
         ``topology-check-frequency``-th increment. At the start of the step it runs before anything
         sized by the discrete system exists, so the mesh is final before the lumped mass, the
-        multi-point-constraint condensation and the critical time step are derived from it. It runs
-        here, before the next increment is proposed, because a refinement may lower the critical time
-        step, and with it the time increment that increment has to use.
+        multi-point-constraint condensation and the critical time step are derived from it. The contact
+        search is due before every ``contact-update-frequency``-th increment, unless a topology update
+        runs before it, which searches anyway. Both run here, before the next increment is proposed,
+        because they may lower the critical time step -- a refinement through smaller elements and masses,
+        a search through a point paired anew --, and with it the time increment that increment has to use.
+        So, in a model without entities that carry their own inertia, the penalty constraints are estimated
+        here too, before every increment, on the mesh and the connectivity it uses; with such entities,
+        after every increment, on the connectivity they reach (:meth:`_evaluateTheNetForceOnTheNewConnectivity`).
 
         Parameters
         ----------
@@ -752,6 +773,10 @@ class NED(NonlinearSolverBase):
             # The step-start topology update: the modifiers acting at the start of the analysis (e.g.
             # hAdaptivity's initialOnly markers) and the first contact search.
             self.updateTopologyAndConnectivity(model, step)
+
+        # Why the critical time step is enforced before this increment, and at which journal level; None: only the
+        # penalty constraints were estimated anew.
+        cause = None
 
         if self.system is None:
             # The net force, and the inertia and the damping of the entities that carry their own inertia, of the
@@ -780,38 +805,108 @@ class NED(NonlinearSolverBase):
                 # damping are evaluated (see _startTheMotionOfEntitiesWithOwnInertia).
                 self.formNetForceOfTheModelsState(step.actions["dirichlet"].values())
                 self._energyAtStepStart = self.energyOfTheModelsState()
+            # the Dirichlet indices of the new numbering, which the row sums of the penalty constraints read
+            self.locateConstrainedDofs(step.actions["dirichlet"].values())
             # The time stepper carries (and checkpoints) the time increment; a resumed step keeps its own.
             if step.timeStepper.enforcedTimeIncrement is None:
-                self._enforceTheCriticalTimeStep(step, "The critical time step", 1)
+                cause = ("The critical time step", 1)
 
-        # --- h-adaptivity, mid-run ----------------------------------------------------------------
-        # After every topology-check-frequency-th increment, i.e. after its output: the marker reads the
-        # last finalized field output, and U and the half-step-staggered V pair up only between increments.
+        if self._isTopologyCheckDue():
+            # --- h-adaptivity, mid-run ----------------------------------------------------------------------------
+            # After every topology-check-frequency-th increment, i.e. after its output: the marker reads the last
+            # finalized field output, and U and the half-step-staggered V pair up only between increments.
+            lumpedTotalsBefore = self._perFieldLumpedTotals()
+            momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, self._V, model)
+            kineticBefore = self.kineticEnergy(self._V)
+
+            # A change of the connectivity only moves the locations: the solution, the velocity and the net force
+            # carry over. A change of the mesh gives a new numbering, whose solution and velocity are read from the
+            # model, and whose net force starts at zero (see onNewNumbering).
+            change = self.updateTopologyAndConnectivity(model, step)
+            self.updateDiscreteSystem(model, change)
+            if change >= Change.NUMBERING:
+                # the Dirichlet indices of the new numbering, which the row sums of the penalty constraints read
+                self.locateConstrainedDofs(step.actions["dirichlet"].values())
+
+            if change == Change.MESH:
+                self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, self._V, model)
+                # Only a model without entities that carry their own inertia gets here (live modifiers are refused
+                # with them, see onNewNumbering), so the entities' critical time step never enters it.
+                cause = ("Refinement", 1)
+
+        elif self._isContactSearchDue(step):
+            # Throttled: a node-to-surface search is O(slaves x facets) in Python, which is affordable once per
+            # increment of an implicit analysis -- amortised over a Newton loop and a linear solve -- and not tens
+            # of thousands of times. An explicit time step is tiny: between two searches a node moves
+            # ``V * dT * frequency``, orders of magnitude below a facet dimension.
+            with performancetiming.timeit("constraint connectivity"):
+                change = model.updateConnectivity()
+
+            # Only the locations can change here: the search moves no node, and a constraint of this solver has no
+            # scalar variable.
+            if change > Change.LOCATIONS:
+                raise RuntimeError(
+                    "The connectivity search changed the numbering of the degrees of freedom ({:}). Only a change of "
+                    "the locations is expected here, and that cannot add or remove degrees of freedom -- so the "
+                    "solution, the velocity and the net force cannot be carried across safely.".format(change.name)
+                )
+            self.updateDiscreteSystem(model, change)
+
+        if not self.system.entitiesWithOwnInertia:
+            # The penalty constraints as the increment finds them -- a contact closed at the start of the step, a
+            # point paired anew by the search, the smaller masses of a refinement -- where the step stands: the model
+            # holds that state, so it is evaluated with no increment.
+            self._estimateThePenaltyConstraints(step, self._U, self.system.locations.constructDofVector(), None)
+            if cause is None:
+                cause = ("The penalty constraints", 2)
+        if cause is not None:
+            self._enforceTheCriticalTimeStep(step, *cause)
+
+    def _isTopologyCheckDue(self) -> bool:
+        """Whether the model modifiers that act after the start of the analysis are asked before the next increment:
+        after every ``topology-check-frequency``-th increment.
+
+        Returns
+        -------
+        bool
+            True if the topology update is due.
+        """
+
         topologyCheckFrequency = self.options["topology-check-frequency"]
-        if not (
+        return bool(
             self._liveTopologyModifiers
             and topologyCheckFrequency
             and self.prevTimeStep is not None
             and self.prevTimeStep.number % topologyCheckFrequency == 0
-        ):
-            return
+        )
 
-        lumpedTotalsBefore = self._perFieldLumpedTotals()
-        momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, self._V, model)
-        kineticBefore = self.kineticEnergy(self._V)
+    def _isContactSearchDue(self, step) -> bool:
+        """Whether the constraints whose connectivity is the outcome of a search re-run it before the next increment:
+        before every ``contact-update-frequency``-th increment, in a model whose connectivity changes with the motion and
+        that has no entities that carry their own inertia -- those are reconnected after every increment, with every
+        search of their constraints (see :meth:`acceptIncrement`) --, and unless the topology update runs then, which
+        searches anyway.
 
-        # A change of the connectivity only moves the locations: the solution, the velocity and the net force carry
-        # over. A change of the mesh gives a new numbering, whose solution and velocity are read from the model, and
-        # whose net force starts at zero (see onNewNumbering).
-        change = self.updateTopologyAndConnectivity(model, step)
-        self.updateDiscreteSystem(model, change)
+        Parameters
+        ----------
+        step
+            The step being solved.
 
-        if change == Change.MESH:
-            self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, self._V, model)
+        Returns
+        -------
+        bool
+            True if the contact search is due.
+        """
 
-            # Only a model without entities that carry their own inertia gets here (live modifiers are refused with
-            # them, see onNewNumbering), so the entities' critical time step never enters it.
-            self._enforceTheCriticalTimeStep(step, "Refinement", 1)
+        contactUpdateFrequency = self.options["contact-update-frequency"]
+        number = step.timeStepper.numberOfIncrementsDone()
+        return bool(
+            self._modelConnectivityChangesWithMotion
+            and contactUpdateFrequency
+            and number > 0
+            and number % contactUpdateFrequency == 0
+            and not self.system.entitiesWithOwnInertia
+        )
 
     def isOutputIncrement(self, timeStep: TimeStep) -> bool:
         """Only every ``output-frequency``-th increment: an explicit run has millions.
@@ -830,7 +925,7 @@ class NED(NonlinearSolverBase):
         return timeStep.number % self.options["output-frequency"] == 0
 
     def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
-        """The periodic contact search, when due, and the central-difference update; see
+        """The central-difference update; see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.
 
         Parameters
@@ -847,9 +942,6 @@ class NED(NonlinearSolverBase):
         StepFailed
             If a material requests a cutback: an explicit increment is not retried smaller.
         """
-
-        contactUpdateFrequency = self.options["contact-update-frequency"]
-        topologyCheckFrequency = self.options["topology-check-frequency"]
 
         if timeStep.number % self.options["output-frequency"] == 0:
             self.journal.printSeperationLine()
@@ -872,48 +964,12 @@ class NED(NonlinearSolverBase):
                     self.identification,
                 )
 
-        # A topology check due at the end of this increment re-runs every connectivity search anyway
-        # (and a refinement would invalidate this one), so the contact search is skipped then.
-        topologyCheckDueThisIncrement = bool(
-            self._liveTopologyModifiers
-            and topologyCheckFrequency
-            and timeStep.number > 0
-            and timeStep.number % topologyCheckFrequency == 0
-        )
-
         if self.system.entitiesWithOwnInertia and self._inertiaOfEntities is None and timeStep.timeIncrement:
             raise ValueError(
                 "The first increment of a step must be the zero increment for {:} in a model with entities that carry "
                 "their own inertia (particles): in it, they evaluate the force and the mass of the configuration the "
                 "step starts from, before anything moves.".format(self.identification)
             )
-
-        # A model whose entities carry their own inertia is reconnected after every increment (see acceptIncrement),
-        # with every connectivity search of its constraints: the periodic search would only repeat it.
-        if (
-            self._modelConnectivityChangesWithMotion
-            and contactUpdateFrequency
-            and timeStep.number > 0
-            and timeStep.number % contactUpdateFrequency == 0
-            and not topologyCheckDueThisIncrement
-            and not self.system.entitiesWithOwnInertia
-        ):
-            # Throttled: a node-to-surface search is O(slaves x facets) in Python, which is affordable once per
-            # increment of an implicit analysis -- amortised over a Newton loop and a linear solve -- and not tens
-            # of thousands of times. An explicit time step is tiny: between two searches a node moves
-            # ``V * dT * frequency``, orders of magnitude below a facet dimension.
-            with performancetiming.timeit("constraint connectivity"):
-                change = model.updateConnectivity()
-
-            # Only the locations can change here: the search moves no node, and a constraint of this solver has no
-            # scalar variable.
-            if change > Change.LOCATIONS:
-                raise RuntimeError(
-                    "The connectivity search changed the numbering of the degrees of freedom ({:}). Only a change of "
-                    "the locations is expected here, and that cannot add or remove degrees of freedom -- so the "
-                    "solution, the velocity and the net force cannot be carried across safely.".format(change.name)
-                )
-            self.updateDiscreteSystem(model, change)
 
         U, dU, V, netForce, internalForce = self._U, self._dU, self._V, self._netForce, self._internalForce
 
@@ -1110,9 +1166,12 @@ class NED(NonlinearSolverBase):
         ids = self.ids_inertiaOfEntities
         self._V[ids[self._Minv[ids] == 0.0]] = 0.0
 
-        # The entities are estimated after the net force, though the order is not required: the estimate needs only
-        # their lumped inertia and damping, just assembled, and nothing in the net force depends on it. What it decides
-        # is the time increment of the next increment.
+        # The critical time steps, after the net force and the velocity. For the entities the order is not required:
+        # their estimate needs only their lumped inertia and damping, just assembled, and nothing in the net force
+        # depends on it. The penalty constraints bound the stiffness they were just evaluated with in the net force,
+        # with follow-critical-time-step also over the next increment. What they decide is the time increment of the
+        # next increment.
+        rowSumsOfThePenaltyConstraints = self._rowSumsOfThePenaltyConstraints(self._U, noIncrement, timeStep, None)
         criticalTimeStep = self._criticalTimeStepOfTheEntities
         if criticalTimeStep.isDue(
             system,
@@ -1120,12 +1179,16 @@ class NED(NonlinearSolverBase):
             self._inertiaOfEntities,
             self._dampingOfEntities,
             self._timeIncrementInUse(step) / self.options["courant-number"],
+            rowSumsOfThePenaltyConstraints,
         ):
             with performancetiming.timeit("critical time step of entities"):
                 criticalTimeStep.estimate(
                     system, self._inertiaOfEntities, self._dampingOfEntities, self.forEachChunk, timeStep.number
                 )
             self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia", 2)
+        if rowSumsOfThePenaltyConstraints is not None:
+            self._estimateThePenaltyConstraints(step, self._U, noIncrement, timeStep, rowSumsOfThePenaltyConstraints)
+            self._enforceTheCriticalTimeStep(step, "The penalty constraints", 2)
 
         if timeStep.timeIncrement > 0.0 and timeStep.number % self.options["output-frequency"] == 0:
             self.reportEnergyBalance(self._V, timeStep)
@@ -1234,9 +1297,191 @@ class NED(NonlinearSolverBase):
         enforced = timeStepper.enforcedTimeIncrement
         return enforced if enforced is not None else timeStepper.increment * step.length
 
+    def _theLargestNextIncrement(self, step, timeStep: TimeStep | None) -> NextIncrement:
+        """The next increment the step may take with ``follow-critical-time-step``, over which the penalty constraints
+        bound their stiffness (:class:`~edelweissfe.constraints.base.constraintbase.NextIncrement`,
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). Its time
+        increment is at most the largest one the step could take next, :math:`\\Delta t_\\mathrm{max}`: the largest
+        time increment the critical time step of the model as last estimated allows -- the penalty constraints at the
+        state they are in -- (:attr:`_largestTimeIncrement`), at most ``maxInc``. The leapfrog takes an increment of
+        length :math:`s` as :math:`s\\, \\boldsymbol{v} + \\tfrac{1}{2} s (\\Delta t_\\mathrm{last} + s)\\,
+        \\boldsymbol{a}`, with the velocity of the last increment, its length, and the acceleration at its end
+        (:meth:`accelerationAtTheEndOfTheIncrement`, damping included); the two parts are taken at
+        :math:`\\Delta t_\\mathrm{max}`.
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        timeStep
+            The increment just taken, before the time stepper accepts it; None where the step stands, the last
+            increment accepted.
+
+        Returns
+        -------
+        NextIncrement
+            The next increment, its parts vectors of the discrete system.
+        """
+
+        timeIncrement = min(self._largestTimeIncrement, step.timeStepper.maxIncrement * step.length)
+        if timeStep is None:
+            # where the step stands: at its start, or the last increment accepted
+            timeStepper = step.timeStepper
+            lastTimeIncrement = 0.0 if self.prevTimeStep is None else self.prevTimeStep.timeIncrement
+            number, stepProgress = timeStepper.numberOfIncrementsDone(), timeStepper.finishedStepProgress
+            stepTime = step.length * stepProgress
+            totalTime = timeStepper.currentTime + stepTime
+        else:
+            lastTimeIncrement = timeStep.timeIncrement
+            number, stepProgress, stepTime, totalTime = (
+                timeStep.number,
+                timeStep.stepProgress,
+                timeStep.stepTime,
+                timeStep.totalTime,
+            )
+        acceleration = self.accelerationAtTheEndOfTheIncrement(
+            self._stepActions["dirichlet"].values(), lastTimeIncrement, self.system.locations.constructDofVector()
+        )
+        stepProgressIncrement = timeIncrement / step.length
+        return NextIncrement(
+            self._V * timeIncrement,
+            (0.5 * timeIncrement * (lastTimeIncrement + timeIncrement)) * acceleration,
+            TimeStep(
+                number + 1,
+                stepProgressIncrement,
+                stepProgress + stepProgressIncrement,
+                timeIncrement,
+                stepTime + timeIncrement,
+                totalTime + timeIncrement,
+            ),
+        )
+
+    def _rowSumsOfThePenaltyConstraints(
+        self, U: DofVector, dU: DofVector, timeStep: TimeStep | None, nextIncrement: NextIncrement | None
+    ) -> np.ndarray | None:
+        """The row sums of the absolute value of the penalty constraints' stiffness, scaled by the lumped mass on both
+        sides, :math:`r_i = \\sum_j |K^\\mathrm{c}_{ij}| / \\sqrt{M_i M_j}`: what the constraints add to the squared
+        frequency of every degree of freedom they couple (see :doc:`/theory/criticaltimestep`). Every constraint of the
+        discrete system bounds its own
+        (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`), at the
+        state it is evaluated in, and over the next increment if it is given, with the column weights
+        :math:`1/\\sqrt{M_j}`.
+
+        The masses are those the increment divides by, on the degrees of freedom integrated by central differences; a
+        degree of freedom without one, or with a prescribed motion, has no equation of motion and neither oscillates
+        nor lets a spring oscillate it: its weight and its row are zero. A multi-point-constraint slave moves with its
+        masters: its weight is the sum of theirs, by the absolute value of its coefficients, and its row is folded onto
+        them likewise.
+
+        Parameters
+        ----------
+        U
+            The solution the constraints are evaluated with.
+        dU
+            The increment they are evaluated with.
+        timeStep
+            The increment; None at the start of a step.
+        nextIncrement
+            The largest increment the step may take next (:meth:`_theLargestNextIncrement`); None to bound the state
+            alone.
+
+        Returns
+        -------
+        numpy.ndarray | None
+            The row sums, one per degree of freedom; None if the discrete system has no constraints.
+        """
+
+        constraints = self.system.constraints
+        if not constraints:
+            return None
+
+        scaling = np.sqrt(self._Minv) * self._secondOrderMask
+        for dirichlet in self._stepActions["dirichlet"].values():
+            scaling[dirichlet.constrainedDofIndices] = 0.0
+
+        weights = scaling
+        if self.mpcTransformation is not None:
+            weights = self.mpcTransformation.slaveWeightsOfAbsoluteCoefficients(scaling)
+
+        rowSums = np.zeros_like(scaling)
+        with performancetiming.timeit("critical time step of penalty constraints"):
+            for constraint in constraints:
+                _, indices, _ = self._explicitEvaluationPlanOf(constraint)
+                bound = np.zeros(constraint.nDof)
+                constraint.addBoundOfAbsoluteStiffnessTimes(
+                    U[constraint],
+                    dU[constraint],
+                    weights[indices],
+                    bound,
+                    timeStep,
+                    None if nextIncrement is None else nextIncrement.restrictedTo(constraint),
+                )
+                np.add.at(rowSums, indices, bound)
+
+        if self.mpcTransformation is not None:
+            rowSums = self.mpcTransformation.foldRowSumsOfAbsoluteCoefficients(rowSums)
+
+        return scaling * rowSums
+
+    def _estimateThePenaltyConstraints(
+        self,
+        step,
+        U: DofVector,
+        dU: DofVector,
+        timeStep: TimeStep | None,
+        rowSumsAtTheState: np.ndarray | None = None,
+    ):
+        """Estimate the critical time step of the parts with the penalty constraints, from the last estimates of the
+        parts (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints`), at the
+        state they are evaluated in; nothing if the discrete system has no constraints. With
+        ``follow-critical-time-step``, then over the next increment the step may take with it
+        (:meth:`_theLargestNextIncrement`): the constraints can only lower the critical time step of the state, so the
+        increment the step then takes is within that one. A contact point that could close within that increment then
+        enters the estimate before it closes where the constraint bounds its springs
+        (:meth:`~edelweissfe.constraints.base.constraintbase.NextIncrement.smallestGaps`), and where it is bounded from its
+        tangent and each spring that can switch acts on degrees of freedom of its own. A constraint bounded from its
+        tangent whose springs share degrees of freedom -- the master facets of a contact, the reference point of a rigid
+        body, as every contact of EdelweissFE has -- is bounded over the increment only as far as one state of it closes
+        its springs together (:meth:`~edelweissfe.constraints.base.constraintbase.NextIncrement.statesWithin`).
+
+        Parameters
+        ----------
+        step
+            The step being solved.
+        U
+            The solution the constraints are evaluated with.
+        dU
+            The increment they are evaluated with.
+        timeStep
+            The increment just taken, before the time stepper accepts it; None where the step stands.
+        rowSumsAtTheState
+            The row sums of the constraints at the state, if they are known already
+            (:meth:`_rowSumsOfThePenaltyConstraints`).
+        """
+
+        rowSums = (
+            self._rowSumsOfThePenaltyConstraints(U, dU, timeStep, None)
+            if rowSumsAtTheState is None
+            else rowSumsAtTheState
+        )
+        if rowSums is None:
+            return
+        penaltyConstraints = self._criticalTimeStepWithThePenaltyConstraints
+        parts = (self._criticalTimeStepOfTheElements, self._criticalTimeStepOfTheEntities)
+        multiPointConstraints = (self.mpcTransformation, self._inertiaOfTheElements)
+        penaltyConstraints.estimate(self.system, rowSums, *parts, *multiPointConstraints)
+        if self.options["follow-critical-time-step"]:
+            rowSumsOverTheNextIncrement = self._rowSumsOfThePenaltyConstraints(
+                U, dU, timeStep, self._theLargestNextIncrement(step, timeStep)
+            )
+            penaltyConstraints.estimate(self.system, rowSumsOverTheNextIncrement, *parts, *multiPointConstraints)
+
     def _criticalTimeStepOfTheModel(self) -> float:
-        """The critical time step of the model as last estimated: the smallest of its parts', the elements' and the
-        entities'.
+        """The critical time step of the model as last estimated: the smallest of the elements', the entities' and the
+        one of the parts with the penalty constraints. The third value is not the constraints' own: it is the critical
+        time step of the parts *with* the constraints' rows added at the degrees of freedom they couple. It is never
+        above the parts' own estimates, so the minimum with them changes nothing while they are current; they are kept
+        in it for the increments in which a part was estimated after the constraints.
 
         Returns
         -------
@@ -1244,7 +1489,11 @@ class NED(NonlinearSolverBase):
             The critical time step, not scaled by the courant number; infinite if no part has one.
         """
 
-        return min(self._criticalTimeStepOfTheElements.value, self._criticalTimeStepOfTheEntities.value)
+        return min(
+            self._criticalTimeStepOfTheElements.value,
+            self._criticalTimeStepOfTheEntities.value,
+            self._criticalTimeStepWithThePenaltyConstraints.value,
+        )
 
     @property
     def _largestTimeIncrement(self) -> float:
@@ -1279,7 +1528,11 @@ class NED(NonlinearSolverBase):
 
         # Python's min() keeps its first argument when the comparison with NaN is false, so each part is checked;
         # infinity is legal: a part without an estimate.
-        parts = (self._criticalTimeStepOfTheElements, self._criticalTimeStepOfTheEntities)
+        parts = (
+            self._criticalTimeStepOfTheElements,
+            self._criticalTimeStepOfTheEntities,
+            self._criticalTimeStepWithThePenaltyConstraints,
+        )
         notANumber = [part for part in parts if np.isnan(part.value)]
         if notANumber:
             raise ValueError(
@@ -1331,7 +1584,11 @@ class NED(NonlinearSolverBase):
         if self.prevTimeStep is not None:
             model.advanceVelocity(0.5 * self.prevTimeStep.timeIncrement)
 
-        for criticalTimeStep in (self._criticalTimeStepOfTheElements, self._criticalTimeStepOfTheEntities):
+        for criticalTimeStep in (
+            self._criticalTimeStepOfTheElements,
+            self._criticalTimeStepOfTheEntities,
+            self._criticalTimeStepWithThePenaltyConstraints,
+        ):
             if criticalTimeStep.numberOfEstimates:
                 self.journal.message(
                     "The critical time step of {:} was estimated {:} times in the step, last {:e}".format(
@@ -1345,7 +1602,9 @@ class NED(NonlinearSolverBase):
         self.journal.printPrettyTable(prettyTable, self.identification)
         performancetiming.reset()
 
-    def accelerationAtTheEndOfTheIncrement(self, dirichlets, timeIncrement: float) -> DofVector:
+    def accelerationAtTheEndOfTheIncrement(
+        self, dirichlets, timeIncrement: float, A: DofVector | None = None
+    ) -> DofVector:
         """The acceleration this solver publishes as the node field entry ``A`` of the increment just completed, the
         one at its end (see the module documentation, "The velocity and the acceleration it publishes"): with the
         velocity at that time, half an increment after the staggered one, it satisfies the equation of motion,
@@ -1362,6 +1621,8 @@ class NED(NonlinearSolverBase):
             The Dirichlet boundary conditions of the step, located on the current discrete system.
         timeIncrement
             The time increment just completed.
+        A
+            The vector to hold it; by default the one the model receives.
 
         Returns
         -------
@@ -1369,7 +1630,8 @@ class NED(NonlinearSolverBase):
             The acceleration, the system's vector.
         """
 
-        A = self._A
+        if A is None:
+            A = self._A
         A[:] = 0.0
         coefficient = self._inertia + (0.5 * timeIncrement) * self._damping
         hasEquationOfMotion = coefficient > 0.0
@@ -1733,10 +1995,11 @@ class NED(NonlinearSolverBase):
                 "THE SOLUTION HAS DIVERGED in increment {:}: the energy balance is no longer a "
                 "finite number (external work {:e}, kinetic {:e}), which means the state itself "
                 "is not. The time step is above the true stability limit -- and dt_crit does not "
-                "see all of it: it never sees contact penalty stiffness, and it sees the nonlocal "
-                "field only where that field carries a non-mechanical inertia, a first-order one "
-                "having a forward-Euler limit that nothing checks. Resume from a checkpoint with "
-                "a smaller courant-number.".format(timeStep.number, Wext, Wkin)
+                "see all of it: it may see a penalty contact late, or not at all (see the theory page "
+                "on the critical time step), and the nonlocal field only where that field carries a "
+                "non-mechanical inertia, a "
+                "first-order one having a forward-Euler limit that nothing checks. Resume from a "
+                "checkpoint with a smaller courant-number.".format(timeStep.number, Wext, Wkin)
             )
 
         # Checked only while the prescribed degrees of freedom do work in this step: the work of the loads is not
@@ -1747,9 +2010,11 @@ class NED(NonlinearSolverBase):
                 "the step plus the external work, {:e}, by {:.1f} %. That is impossible -- the "
                 "unreported terms (strain energy, dissipation, damage) can only add to the balance. "
                 "The time step is above the true stability limit, which dt_crit does not see in "
-                "full: it ignores the nonlocal field entirely and never sees contact penalty "
-                "stiffness. Reduce courant-number, or resume from a checkpoint with a smaller "
-                "one.".format(Wkin, suppliedEnergy, (Wkin / suppliedEnergy - 1.0) * 100),
+                "full: it ignores the nonlocal field entirely and may see a penalty contact late, or "
+                "not at all (see the theory page on the critical time step). Reduce courant-number, or "
+                "resume from a checkpoint with a smaller one.".format(
+                    Wkin, suppliedEnergy, (Wkin / suppliedEnergy - 1.0) * 100
+                ),
                 self.identification,
                 0,
             )
@@ -2078,7 +2343,7 @@ class NED(NonlinearSolverBase):
         # Estimated only; the callers enforce it (see the module documentation, "The critical time step").
         criticalTimeStep = self._criticalTimeStepOfTheElements
         if criticalTimeStep.isDue(system):
-            criticalTimeStep.estimate(system, self._U)
+            criticalTimeStep.estimate(system, self._U, self.mpcTransformation, self._inertiaOfTheElements)
             self.journal.message(
                 "The critical time step of the finite elements: {:e}".format(criticalTimeStep.value),
                 self.identification,

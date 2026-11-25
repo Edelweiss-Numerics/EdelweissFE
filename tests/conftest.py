@@ -67,8 +67,8 @@ def criticalTimeStepOfTheElements(monkeypatch):
     estimateOfTheElements = CriticalTimeStepOfTheElements.estimate
 
     def choose(value: float):
-        def estimate(self, system, U):
-            estimateOfTheElements(self, system, U)
+        def estimate(self, system, U, mpcTransformation=None, lumpedMass=None):
+            estimateOfTheElements(self, system, U, mpcTransformation, lumpedMass)
             self.lastEstimate = CriticalTimeStepEstimate(value)
 
         monkeypatch.setattr(CriticalTimeStepOfTheElements, "estimate", estimate)

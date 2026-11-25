@@ -88,6 +88,7 @@ class _Host:
 
     _constraintForcePlans = None
     system = None
+    _explicitEvaluationPlanOf = NonlinearSolverBase._explicitEvaluationPlanOf
 
     def assemble(self, constraints, P):
         return NonlinearSolverBase.assembleConstraintForces(self, constraints, P, P, P, None)

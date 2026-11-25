@@ -70,7 +70,9 @@ from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.solvers.base.criticaltimestep import CriticalTimeStepEstimate
+from edelweissfe.solvers.base.criticaltimestep import (
+    CriticalTimeStepEstimateFromTheBoundOfEachDof,
+)
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.steps.adaptivestepforexplicitsimulations import (
     AdaptiveStepForExplicitSimulations,
@@ -176,7 +178,11 @@ class SystemOfMassesOnSprings(DiscreteSystem):
 
         entities = self.entitiesWithOwnInertia
         squaredFrequencies = np.array([squaredFrequencyOf(entity) for entity in entities])
-        return CriticalTimeStepEstimate(2.0 / np.sqrt(squaredFrequencies.max()))
+        return CriticalTimeStepEstimateFromTheBoundOfEachDof(
+            2.0 / np.sqrt(squaredFrequencies.max()),
+            np.concatenate([self.locations[entity] for entity in entities]),
+            np.repeat(squaredFrequencies, [entity.nDof for entity in entities]),
+        )
 
     def _onTheNodes(self, valueOf) -> DofVector:
         vector = self.locations.constructDofVector()
@@ -259,8 +265,12 @@ class SystemOfMassesOnSpringsWhoseCriticalTimeStepIsNotANumber(SystemOfMassesOnS
     def criticalTimeStepOfEntitiesWithOwnInertia(
         self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate=None
     ):
-        super().criticalTimeStepOfEntitiesWithOwnInertia(lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate)
-        return CriticalTimeStepEstimate(np.nan)
+        estimate = super().criticalTimeStepOfEntitiesWithOwnInertia(
+            lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate
+        )
+        return CriticalTimeStepEstimateFromTheBoundOfEachDof(
+            np.nan, estimate.dofs, np.full_like(estimate.squaredFrequencies, np.nan)
+        )
 
 
 class ModelOfMassesOnSpringsWhoseCriticalTimeStepIsNotANumber(ModelOfMassesOnSprings):
@@ -276,8 +286,12 @@ class SystemOfMassesOnSpringsReportingNoCriticalTimeStep(SystemOfMassesOnSprings
     def criticalTimeStepOfEntitiesWithOwnInertia(
         self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate=None
     ):
-        super().criticalTimeStepOfEntitiesWithOwnInertia(lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate)
-        return CriticalTimeStepEstimate(np.inf)
+        estimate = super().criticalTimeStepOfEntitiesWithOwnInertia(
+            lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate
+        )
+        return CriticalTimeStepEstimateFromTheBoundOfEachDof(
+            np.inf, estimate.dofs, np.zeros_like(estimate.squaredFrequencies)
+        )
 
 
 class ModelOfMassesOnSpringsReportingNoCriticalTimeStep(ModelOfMassesOnSprings):
@@ -299,7 +313,9 @@ class SystemWhoseCarriedWeightsFallBehind(SystemOfMassesOnSprings):
         estimate = super().criticalTimeStepOfEntitiesWithOwnInertia(
             lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate
         )
-        return CriticalTimeStepEstimate(factor * estimate.value)
+        return CriticalTimeStepEstimateFromTheBoundOfEachDof(
+            factor * estimate.value, estimate.dofs, estimate.squaredFrequencies / factor**2
+        )
 
 
 class ModelWhoseCarriedWeightsFallBehind(ModelOfMassesOnSprings):

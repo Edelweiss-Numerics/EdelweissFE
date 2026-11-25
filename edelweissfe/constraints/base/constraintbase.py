@@ -27,6 +27,7 @@
 #  ---------------------------------------------------------------------
 
 from abc import abstractmethod
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -45,11 +46,115 @@ from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
+@dataclass(frozen=True)
+class NextIncrement:
+    """The next increment an explicit solver may take, over which a penalty constraint bounds its stiffness for the
+    critical time step (:meth:`ConstraintBase.addBoundOfAbsoluteStiffnessTimes`, which says for which constraints this
+    is a bound), so that a point that could close within it has its spring in the bound before it closes. ``NED`` gives
+    it with ``follow-critical-time-step``.
+
+    The leapfrog takes the next increment of length :math:`s` as :math:`\\Delta\\boldsymbol{U}(s) = s\\,
+    \\boldsymbol{v} + \\tfrac{1}{2} s (\\Delta t_\\mathrm{last} + s)\\, \\boldsymbol{a}`, with the velocity of the
+    last increment and the acceleration at its end, and :math:`s` at most the largest time increment the solver could
+    take next, :math:`\\Delta t_\\mathrm{max}`. This holds the two parts at :math:`\\Delta t_\\mathrm{max}`, and
+    the time step at its end, for what moves with time (a moving obstacle, the ramp of an initial overlap).
+    """
+
+    #: The part of the increment from the velocity, :math:`\\Delta t_\\mathrm{max}\\, \\boldsymbol{v}`, a vector of the
+    #: discrete system or restricted to an entity (:meth:`restrictedTo`).
+    byTheVelocity: np.ndarray
+    #: The part from the acceleration, :math:`\\tfrac{1}{2} \\Delta t_\\mathrm{max} (\\Delta t_\\mathrm{last} +
+    #: \\Delta t_\\mathrm{max})\\, \\boldsymbol{a}`, likewise.
+    byTheAcceleration: np.ndarray
+    #: The time step at the end of the increment.
+    timeStep: TimeStep
+
+    def restrictedTo(self, entity) -> "NextIncrement":
+        """The next increment at the degrees of freedom of an entity.
+
+        Parameters
+        ----------
+        entity
+            The entity, e.g. a constraint, by which the vectors of the discrete system are indexed.
+
+        Returns
+        -------
+        NextIncrement
+            The next increment, restricted.
+        """
+
+        return NextIncrement(self.byTheVelocity[entity], self.byTheAcceleration[entity], self.timeStep)
+
+    def smallestGaps(self, gapsAt, U_np: np.ndarray, dU: np.ndarray, timeStep: TimeStep) -> np.ndarray:
+        """The smallest gap each contact point may have within the next increment, the one a contact gives its law
+        for the bound of its stiffness: a point that could close within the increment is closed at it. With the
+        pairing and the normals held, as within an increment, a gap is affine in the displacements, so it changes over
+        an increment of length :math:`s` by :math:`s\\, \\dot{g}_v + \\tfrac{1}{2} s (\\Delta t_\\mathrm{last} + s)\\,
+        \\dot{g}_a`, from the velocity and from the acceleration. Each part, where it closes the gap, closes it most at
+        :math:`s = \\Delta t_\\mathrm{max}`, so the gap is at least :math:`g + \\min(0, \\Delta g_v) + \\min(0,
+        \\Delta g_a)`, with the changes of the gap by the two parts at :math:`\\Delta t_\\mathrm{max}`: whatever the
+        increment the solver then takes, up to it, and wherever the point closes within it. A law whose stiffness grows
+        with the depth is stiffest at this gap.
+
+        Parameters
+        ----------
+        gapsAt
+            The gaps of the contact points at a state, ``gapsAt(U_np, dU, timeStep)``.
+        U_np
+            The solution now, restricted to the constraint.
+        dU
+            The increment now, likewise.
+        timeStep
+            The time step now.
+
+        Returns
+        -------
+        numpy.ndarray
+            The smallest gaps.
+        """
+
+        gaps = gapsAt(U_np, dU, timeStep)
+        byTheVelocity = gapsAt(U_np + self.byTheVelocity, dU + self.byTheVelocity, self.timeStep) - gaps
+        byTheAcceleration = gapsAt(U_np + self.byTheAcceleration, dU + self.byTheAcceleration, timeStep) - gaps
+        return gaps + np.minimum(byTheVelocity, 0.0) + np.minimum(byTheAcceleration, 0.0)
+
+    def statesWithin(self, U_np: np.ndarray, dU: np.ndarray, timeStep: TimeStep) -> list[tuple]:
+        """The states that bound the next increment, as a constraint is evaluated in them: now, and moved on by either
+        part of the increment or by both (see :meth:`smallestGaps`), the parts from the velocity at the time step at
+        the end of the increment. For a constraint whose springs, if they switch, each act on degrees of freedom of
+        their own with a gap affine in them, one of these states is the one in which a spring is closed deepest.
+
+        Parameters
+        ----------
+        U_np
+            The solution now, restricted to the constraint.
+        dU
+            The increment now, likewise.
+        timeStep
+            The time step now.
+
+        Returns
+        -------
+        list[tuple]
+            The four states, each the solution, the increment and the time step.
+        """
+
+        states = []
+        for byTheVelocity, timeStepOfTheState in ((0.0, timeStep), (self.byTheVelocity, self.timeStep)):
+            for byTheAcceleration in (0.0, self.byTheAcceleration):
+                move = byTheVelocity + byTheAcceleration
+                states.append((U_np + move, dU + move, timeStepOfTheState))
+        return states
+
+
 class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixContributorBase):
     #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block
     #: the constraint has in the discrete system it is evaluated in; None until its first evaluation there (see
     #: :meth:`prepareExplicitEvaluation`).
     _discardedTangentScratch = None
+    #: The local rows and columns of the entries of that scratch, for a constraint that lists them; None until
+    #: :meth:`addBoundOfAbsoluteStiffnessTimes` first needs them in the discrete system.
+    _localEntriesOfTheDiscardedTangent = None
 
     #: The state this constraint carries from one increment to the next, by attribute name and type;
     #: see :mod:`~edelweissfe.utils.checkpointedstate`. Every constraint declares it (empty if it carries
@@ -302,8 +407,9 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         one, or one whose constraints are re-located), before it evaluates the constraint there with
         :meth:`computeKernelsExplicit`.
 
-        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation
-        sizes it, once, for the block the constraint has now. The size is the number of entries of the block
+        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away (and
+        :meth:`addBoundOfAbsoluteStiffnessTimes` bounds), so that the next evaluation sizes it, once, for the block
+        the constraint has now. The size is the number of entries of the block
         (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists
         its entries means building the list: once per discrete system, not in every increment. A constraint that
         evaluates its forces without a tangent needs nothing here.
@@ -315,6 +421,7 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         """
 
         self._discardedTangentScratch = None
+        self._localEntriesOfTheDiscardedTangent = None
 
     def computeKernelsExplicit(
         self,
@@ -354,6 +461,105 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
 
         K = self.shapeBlock(scratch)
         self.computeKernels(U_np, dU, P, K, timeStep)
+
+    def addBoundOfAbsoluteStiffnessTimes(
+        self,
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        weights: np.ndarray,
+        bound: np.ndarray,
+        timeStep: TimeStep,
+        nextIncrement: NextIncrement | None = None,
+    ):
+        """Add an upper bound of the row sums of the absolute value of this constraint's stiffness, weighted by column,
+        :math:`b_a \\mathrel{+}= \\sum_b |K_{ab}|\\, w_b`, at the state an explicit solver evaluates it in. The
+        explicit dynamic solver ``NED`` takes the weights :math:`w_b = 1/\\sqrt{M_b}` and adds what the constraints
+        couple to the frequencies of their degrees of freedom: the critical time step of a model with penalty
+        constraints (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints`).
+
+        Given ``nextIncrement``, the next increment the solver may take, the bound is meant to hold over it: a spring
+        that acts at any state within it is in it. A contact that bounds its springs takes the smallest gap of each
+        point within the increment (:meth:`NextIncrement.smallestGaps`), and sums over its springs, so that a point
+        that could close within it enters the critical time step before it closes, whichever degrees of freedom the
+        springs share. ``NED`` gives it with ``follow-critical-time-step``, under which the time increment may be
+        raised.
+
+        This default takes the tangent :meth:`computeKernels` gives, in the scratch :meth:`computeKernelsExplicit` uses.
+        At the state given, it is the stiffness of the constraint, correct for every constraint. With
+        ``nextIncrement``, it takes the largest absolute value of each entry in the states that bound the increment
+        (:meth:`NextIncrement.statesWithin`): a bound only where each spring that can switch acts on degrees of freedom
+        of its own (a node held against a rigid plane), since each spring is closed deepest in a state of its own.
+        Where springs share degrees of freedom -- the master facets of a contact, the reference point of a rigid body
+        --, two springs that close in different states are never in one tangent together, and the entry misses their
+        sum. A constraint that needs the bound over the next increment there gives its springs: it overrides this
+        with the bound of its springs, from the same springs as its force
+        (:func:`~edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings`). So may one whose
+        tangent is costly -- one that evaluates its explicit forces without it
+        (:class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`) --, and so
+        must one whose explicit forces are not the ones :meth:`computeKernels` gives the tangent of.
+
+        Parameters
+        ----------
+        U_np
+            The current solution, restricted to this constraint's degrees of freedom.
+        dU
+            The current solution increment, likewise restricted.
+        weights
+            The weight of each column, likewise restricted.
+        bound
+            The row sums to augment, one per degree of freedom of this constraint.
+        timeStep
+            The current time step.
+        nextIncrement
+            The next increment the solver may take, restricted to this constraint's degrees of freedom; None to bound
+            the stiffness at the state given alone.
+        """
+
+        # Within the next increment first, so that the constraint is evaluated last at the state given.
+        withinTheNextIncrement = []
+        if nextIncrement is not None:
+            withinTheNextIncrement = [
+                self._absoluteTangentAt(*state) for state in nextIncrement.statesWithin(U_np, dU, timeStep)[1:]
+            ]
+        absoluteStiffness = self._absoluteTangentAt(U_np, dU, timeStep)
+        for absoluteStiffnessWithin in withinTheNextIncrement:
+            absoluteStiffness = np.maximum(absoluteStiffness, absoluteStiffnessWithin)
+
+        if self.couplesAllItsDofs:
+            bound += absoluteStiffness.reshape((self.nDof, self.nDof), order="F") @ weights
+        else:
+            if self._localEntriesOfTheDiscardedTangent is None:
+                self._localEntriesOfTheDiscardedTangent = self.localEntriesOfBlock()
+            rows, columns = self._localEntriesOfTheDiscardedTangent
+            np.add.at(bound, rows, absoluteStiffness * weights[columns])
+
+    def _absoluteTangentAt(self, U_np: np.ndarray, dU: np.ndarray, timeStep: TimeStep) -> np.ndarray:
+        """The absolute value of the entries of the tangent :meth:`computeKernels` gives at a state, in the order of the
+        scratch :meth:`computeKernelsExplicit` uses (see :meth:`addBoundOfAbsoluteStiffnessTimes`).
+
+        Parameters
+        ----------
+        U_np
+            The solution, restricted to this constraint's degrees of freedom.
+        dU
+            The solution increment, likewise restricted.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        numpy.ndarray
+            The absolute values of the entries.
+        """
+
+        scratch = self._discardedTangentScratch
+        if scratch is None:
+            scratch = self._discardedTangentScratch = np.zeros(countEntriesOfBlock(self))
+        else:
+            scratch[:] = 0.0
+
+        self.computeKernels(U_np, dU, np.zeros(self.nDof), self.shapeBlock(scratch), timeStep)
+        return np.abs(scratch)
 
     @abstractmethod
     def computeKernels(

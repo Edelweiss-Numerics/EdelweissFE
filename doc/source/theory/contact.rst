@@ -1033,8 +1033,10 @@ Explicit dynamics
 Under ``NED`` (:doc:`/analysis/solvers`) the same formulation is used, with two differences that follow from
 what an explicit increment is.
 
-**No tangent is assembled.** An explicit increment solves no linear system, so a constraint
-stiffness enters nothing. The solver calls
+**No tangent is assembled for the forces.** An explicit increment solves no linear system, so a
+constraint's stiffness enters only the critical time step: the contact adds the row sums of its stiffness, scaled by the
+lumped mass, to the frequencies of the nodes it couples, from the tangent ``computeKernels`` gives at the state
+(:doc:`/theory/criticaltimestep`, "Penalty constraints"). For the forces, the solver calls
 :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`
 instead of ``computeKernels``, and this constraint overrides it to evaluate the contact forces
 without building a tangent at all. The base-class default forwards to ``computeKernels`` with a
@@ -1047,8 +1049,9 @@ block writes.
 :math:`\mathcal{O}(n_\text{slave} \times n_\text{facet})` work in Python, affordable once per
 increment of an implicit analysis -- where it is amortised over a Newton loop and a linear
 solve -- and not affordable at every one of millions of explicit increments. It therefore runs
-every ``contact-update-frequency`` increments, and is skipped entirely on an increment where a
-mid-run topology check is due, because that check re-searches every constraint anyway *after* a
+before every ``contact-update-frequency``-th increment, before that increment is proposed, so that
+the critical time step of the increment sees the new pairing; it is skipped where a mid-run topology
+check runs before the increment, because that check re-searches every constraint anyway *after* a
 possible refinement (:doc:`/theory/adaptivity`).
 
 What makes throttling defensible rather than merely cheap is that an explicit time step is tiny:
@@ -1057,7 +1060,7 @@ magnitude below a facet dimension. This is reported rather than assumed -- on ev
 changes the connectivity the solver prints the largest nodal motion accumulated since the previous
 one, so the configured frequency can be checked against a given model's facet size instead of
 trusted. A connectivity change gives new locations on the same numbering, and reuses the lumped
-operators and the critical time step: the mesh is unchanged, so they are unchanged, and
+operators and the critical time step of the elements: the mesh is unchanged, so they are unchanged, and
 recomputing them would cost a full element pass.
 
 A candidate-facet pre-filter (a centroid k-d tree with a triangle-inequality radius bound) reduces

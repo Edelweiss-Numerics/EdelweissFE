@@ -86,8 +86,14 @@ For explicit dynamics with a lumped (diagonal) mass vector, the consistent row-s
 :math:`T^T M T` stays diagonal: each master receives its own mass plus the :math:`N_a`-weighted
 mass of the slaves glued to it (total mass is conserved when :math:`\\sum_a N_a = 1`, which holds
 for interpolation-type constraints). Forces are folded as :math:`\\tilde{P} = T^T P`, and the slave
-kinematics are assigned directly from the masters, adding zero stiffness and hence leaving the
-critical time step untouched.
+kinematics are assigned directly from the masters, adding zero stiffness. With coefficients that are nonnegative and
+sum to one -- a ``tie``, the hanging nodes of linear elements --, a master carries at least the share of mass each
+element at its slaves lends it, and the elements keep their critical time steps. A negative coefficient -- the hanging
+nodes of HEX20 and QUAD8 meshes, whose serendipity weights go down to -1/4 -- gives a master less: the explicit solver
+bounds the elements there with the ratio of the mass they need to the mass folded
+(:meth:`MultiPointConstraintTransformation.ratioOfTheMassLentToTheMassFolded`). Where a penalty constraint adds to the
+frequency of a master, the elements at its slaves count there too
+(:meth:`MultiPointConstraintTransformation.foldLargestOntoMasters`).
 """
 
 
@@ -456,6 +462,116 @@ class MultiPointConstraintTransformation:
         """
 
         return self._T.T @ P
+
+    def slaveWeightsOfAbsoluteCoefficients(self, weights: np.ndarray) -> np.ndarray:
+        """The column weights of a bound of the row sums of a stiffness on the slave DOFs:
+        :math:`|T|\\, w`, i.e. :math:`w_s = \\sum_a |N_a| \\, w_{m_a}` on a slave, unchanged elsewhere. With
+        :meth:`foldRowSumsOfAbsoluteCoefficients`, :math:`|T|^T |K| \\, |T| w` bounds the row sums of the absolute value
+        of the folded stiffness :math:`T^T K T` the masters see.
+
+        Parameters
+        ----------
+        weights
+            The weights of the independent DOFs; the entries of the slaves are not read.
+
+        Returns
+        -------
+        np.ndarray
+            The weights with those of the slaves.
+        """
+
+        weights = np.array(weights)
+        weights[self.slaveDofIndices] = abs(self._W) @ weights
+        return weights
+
+    def foldRowSumsOfAbsoluteCoefficients(self, rowSums: np.ndarray) -> np.ndarray:
+        """Fold row sums of the absolute value of a stiffness from the slave DOFs onto their masters, by the absolute
+        value of the coefficients: :math:`|T|^T b` (slave rows zero); see :meth:`slaveWeightsOfAbsoluteCoefficients`.
+
+        Parameters
+        ----------
+        rowSums
+            The row sums on all DOFs.
+
+        Returns
+        -------
+        np.ndarray
+            The folded row sums.
+        """
+
+        return abs(self._T).T @ rowSums
+
+    def foldLargestOntoMasters(self, values: np.ndarray) -> np.ndarray:
+        """Fold values per DOF from the slave DOFs onto their masters by the largest: a master takes the largest of its
+        own value and those of the slaves that move with it (a nonzero coefficient),
+        :math:`v_m \\leftarrow \\max(v_m, \\max_{s:\\, N_{sm} \\ne 0} v_s)`; every other entry stays as it is.
+
+        The explicit dynamic solver folds the elements' bounds of the squared frequencies with it
+        (:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof`):
+        an element at a slave acts on the masters of the slave, through :math:`T^T K T`.
+
+        Parameters
+        ----------
+        values
+            The values on all DOFs.
+
+        Returns
+        -------
+        np.ndarray
+            The folded values.
+        """
+
+        values = np.array(values)
+        W = self._W.tocoo()
+        moves = W.data != 0.0
+        np.maximum.at(values, W.col[moves], values[self.slaveDofIndices[W.row[moves]]])
+        return values
+
+    def ratioOfTheMassLentToTheMassFolded(self, lumpedMass: np.ndarray) -> np.ndarray:
+        """The ratio :math:`\\kappa_m` of the mass the elements at the slaves of a master need to lend it, for their
+        bounds of the squared frequency to hold for the condensed system, to the mass :meth:`foldLumpedMass` gives it.
+
+        An element at a slave :math:`s` sees the motion :math:`u_s = \\sum_a N_{sa} u_a` of its masters. With
+        coefficients that sum to one, their absolute values sum to :math:`\\sigma_s = 1 + 2 n_s`, with :math:`n_s` the
+        sum of the absolute values of the negative ones, and Cauchy-Schwarz bounds :math:`u_s^2 \\le \\sigma_s \\sum_a
+        |N_{sa}| u_a^2`: the slave's mass :math:`M_s` is needed at master :math:`m` as :math:`\\sigma_s |N_{sm}| M_s`, where
+        the fold gives it :math:`N_{sm} M_s`. So
+
+        .. math::
+
+            \\kappa_m = 1 + \\frac{1}{\\tilde{M}_m} \\sum_s 2 \\left(N^-_{sm} + n_s |N_{sm}|\\right) M_s ,
+
+        with :math:`N^-` the absolute value of a negative coefficient (zero otherwise) and :math:`\\tilde{M}_m` the
+        folded mass of the master. Exactly one where every slave of the master has nonnegative coefficients (Jensen's
+        inequality is then the bound, :math:`u_s^2 \\le \\sum_a N_{sa} u_a^2`), and on every degree of freedom that is no
+        master; above one at the masters of a slave with a negative coefficient, e.g. the hanging nodes of a HEX20 mesh.
+        Infinite at such a master whose folded mass is not positive.
+
+        Parameters
+        ----------
+        lumpedMass
+            The lumped (diagonal) mass vector before the fold.
+
+        Returns
+        -------
+        np.ndarray
+            :math:`\\kappa`, one per DOF.
+        """
+
+        W = self._W.tocsr()
+        negative = (-W).maximum(0)
+        sumOfTheNegative = np.asarray(negative.sum(axis=1)).ravel()
+        slaveMasses = np.asarray(lumpedMass)[self.slaveDofIndices]
+        excess = 2.0 * (negative.T @ slaveMasses + abs(W).T @ (sumOfTheNegative * slaveMasses))
+
+        folded = np.array(lumpedMass, dtype=float)
+        self.foldLumpedMass(folded)
+        ratio = np.ones(self.nDof)
+        hasExcess = excess > 0.0
+        ratio[hasExcess] = np.inf
+        positive = hasExcess & (folded > 0.0)
+        ratio[positive] = 1.0 + excess[positive] / folded[positive]
+        return ratio
 
     def applySlaveKinematics(self, V: np.ndarray):
         """Assign the slave DOFs their master-interpolated values (in place):

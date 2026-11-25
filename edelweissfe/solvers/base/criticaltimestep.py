@@ -34,17 +34,28 @@ own critical time step -- a lower bound of it, from an upper bound of :math:`\\o
 smallest, and runs at the fraction ``courant-number`` of it. The parts have disjoint degrees of freedom, so the
 smallest of their critical time steps is the model's.
 
-A part gives its estimate as a :class:`CriticalTimeStepEstimate`. An estimate costs something, and how much its value
-can change while the analysis runs depends on the part, so every part (:class:`CriticalTimeStepOfAPart`) comes with
-its own policy of when its estimate is taken anew:
+A part gives its estimate as a :class:`CriticalTimeStepEstimate`. A penalty constraint -- a contact, a support, a tie
+held by a penalty -- owns no degrees of freedom: it adds stiffness to the ones of the parts it couples. It has no
+critical time step of its own to take the minimum with; it adds to the parts' estimates at the degrees of freedom it
+couples: a part gives its estimate for them as a :class:`CriticalTimeStepEstimateOfTheDofs`, to which the row sums of
+the constraints' mass-scaled stiffness are added.
+
+An estimate costs something, and how much its value can change while the analysis runs depends on the part, so every
+part (:class:`CriticalTimeStepOfAPart`) comes with its own policy of when its estimate is taken anew:
 
 * :class:`CriticalTimeStepOfTheElements`: the finite elements, estimated **once per mesh**;
 * :class:`CriticalTimeStepOfEntitiesWithOwnInertia`: the entities that carry their own inertia (the particles of a
-  meshfree model), estimated anew **when the margin of the last estimate over the time increment in use may be used up**.
+  meshfree model), estimated anew **when the margin of the last estimate over the time increment in use may be used up**;
+* :class:`CriticalTimeStepWithThePenaltyConstraints`: the parts with the penalty constraints, estimated **before every
+  increment**, from the stiffness the constraints have then. This third value is not the constraints' own: it is the
+  critical time step of the parts *with* the constraints' rows added at the degrees of freedom they couple. It is never
+  above the parts' own estimates, so the minimum with them changes nothing while they are current; they are kept in it
+  for the increments in which a part was estimated after the constraints.
 
 The theory, and what the estimates do not see, are explained in :doc:`/theory/criticaltimestep`.
 """
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import numpy as np
@@ -55,13 +66,69 @@ from edelweissfe.numerics.dofvector import DofVector
 @dataclass
 class CriticalTimeStepEstimate:
     """A part's estimate of its own critical time step, as the part gives it. A derived class also holds what the
-    estimate was made from, so that what is added to the part's stiffness can be added to the estimate.
+    estimate was made from, so that what is added to the part's stiffness can be added to the estimate
+    (:class:`CriticalTimeStepEstimateOfTheDofs`).
 
     Its one field, ``value``, is the critical time step of the part alone, not scaled by a courant number: a lower
     bound of :math:`2/\\omega_\\mathrm{max}` of the part's degrees of freedom; infinite for a part without stiffness.
     """
 
     value: float
+
+
+@dataclass(eq=False)
+class CriticalTimeStepEstimateOfTheDofs(CriticalTimeStepEstimate, ABC):
+    """A part's estimate in a form the penalty constraints can be added to: made from upper bounds of the squared
+    frequencies :math:`\\omega^2` of the part's degrees of freedom. A penalty constraint adds, at every degree of freedom
+    :math:`i` it couples, the row sum :math:`r_i` of the absolute value of its stiffness scaled by the lumped mass on both
+    sides, :math:`r_i = \\sum_j |K_{ij}| / \\sqrt{M_i M_j}`; the part's estimate with these additions is a lower bound of
+    the critical time step of the part and the constraints together (see :doc:`/theory/criticaltimestep`, "Penalty
+    constraints").
+
+    Besides ``value``, its field ``dofs`` holds the degrees of freedom of the part, indices into the numbering it was
+    estimated on.
+    """
+
+    dofs: np.ndarray
+
+    @abstractmethod
+    def criticalTimeStep(self, rowSumsOfThePenaltyConstraints: np.ndarray) -> float:
+        """The critical time step of the part with the penalty constraints at its degrees of freedom: ``value`` where
+        no constraint couples them.
+
+        Parameters
+        ----------
+        rowSumsOfThePenaltyConstraints
+            The row sums :math:`r_i` of the penalty constraints, one per degree of freedom of the numbering; zero where no
+            constraint acts.
+
+        Returns
+        -------
+        float
+            The critical time step, at most ``value``.
+        """
+
+
+@dataclass(eq=False)
+class CriticalTimeStepEstimateFromTheBoundOfEachDof(CriticalTimeStepEstimateOfTheDofs):
+    """A part's estimate from one upper bound of the squared frequency per degree of freedom, :math:`\\omega_i^2`: the
+    critical time step with the penalty constraints is :math:`2 / \\sqrt{\\max_i (\\omega_i^2 + r_i)}` over the degrees
+    of freedom the constraints couple, or the part's own where that is smaller. The finite elements give it, with the
+    largest squared frequency of the elements at each degree of freedom
+    (:meth:`CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof`).
+
+    Besides ``value`` and ``dofs``, its field ``squaredFrequencies`` holds the upper bound of the squared frequency of
+    each degree of freedom, in the order of ``dofs``.
+    """
+
+    squaredFrequencies: np.ndarray
+
+    def criticalTimeStep(self, rowSumsOfThePenaltyConstraints: np.ndarray) -> float:
+        rowSums = rowSumsOfThePenaltyConstraints[self.dofs]
+        coupled = rowSums > 0.0
+        if not coupled.any():
+            return self.value
+        return min(self.value, 2.0 / np.sqrt(np.max(self.squaredFrequencies[coupled] + rowSums[coupled])))
 
 
 class CriticalTimeStepOfAPart:
@@ -110,7 +177,10 @@ class CriticalTimeStepOfAPart:
 class CriticalTimeStepOfTheElements(CriticalTimeStepOfAPart):
     """The critical time step of the finite elements, the smallest of the elements' own estimates
     (``computeCriticalTimeStepForExplicitDynamics``): the largest eigenfrequency of an assembled mesh is bounded by the
-    largest of its elements, so the smallest critical time step of an element is an estimate of the mesh's.
+    largest of its elements, so the smallest critical time step of an element is an estimate of the mesh's. A
+    multi-point constraint with a negative coefficient (a hanging node of a HEX20 mesh) lends its masters less mass than
+    the elements at its slave need there, and lowers it at the masters
+    (:meth:`estimateFromTheBoundOfEachDof`).
 
     **Policy: once per mesh, and at the start of every step.** An element's estimate depends on the mesh, on its lumped
     mass and on the wave speed of its material at the state of the estimate; a finite-strain element of Marmot takes its
@@ -131,6 +201,14 @@ class CriticalTimeStepOfTheElements(CriticalTimeStepOfAPart):
         super().reset()
         #: The version of the mesh the estimate is of (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`).
         self._mesh = None
+        #: The elements and their critical time steps, as last estimated.
+        self._elements = []
+        self._criticalTimeStepOfElement = np.zeros(0)
+        #: The estimate from the bound of each degree of freedom (:meth:`estimateFromTheBoundOfEachDof`), and the
+        #: numbering and the multi-point constraints it is of.
+        self._estimateFromTheBoundOfEachDof = None
+        self._numberingOfThatEstimate = None
+        self._mpcTransformationOfThatEstimate = None
 
     def isDue(self, system) -> bool:
         """Whether the mesh is not the one of the last estimate.
@@ -148,9 +226,11 @@ class CriticalTimeStepOfTheElements(CriticalTimeStepOfAPart):
 
         return self._mesh != system.model.topology.version
 
-    def estimate(self, system, U: DofVector):
+    def estimate(self, system, U: DofVector, mpcTransformation=None, lumpedMass: np.ndarray | None = None):
         """Estimate the critical time step of the elements of the discrete system
-        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).
+        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`): the smallest of the
+        elements' own, and, with multi-point constraints, at most the one of the bound of each degree of freedom
+        (:meth:`estimateFromTheBoundOfEachDof`), which is smaller where a slave has a negative coefficient.
 
         Parameters
         ----------
@@ -158,20 +238,90 @@ class CriticalTimeStepOfTheElements(CriticalTimeStepOfAPart):
             The discrete system.
         U
             The solution, which an element may need for its current deformation.
+        mpcTransformation
+            The condensation of the multi-point constraints of the discrete system; None if it has none.
+        lumpedMass
+            The lumped mass before the multi-point constraints fold it; read only with ``mpcTransformation``.
         """
 
-        self._take(
-            CriticalTimeStepEstimate(
-                min(
-                    (
-                        element.computeCriticalTimeStepForExplicitDynamics(U[element])
-                        for element in system.elementsWithNodalInertia
-                    ),
-                    default=np.inf,
-                )
-            )
+        self._elements = list(system.elementsWithNodalInertia)
+        self._criticalTimeStepOfElement = np.array(
+            [element.computeCriticalTimeStepForExplicitDynamics(U[element]) for element in self._elements]
         )
         self._mesh = system.model.topology.version
+        self._estimateFromTheBoundOfEachDof = None
+        smallestOfTheElements = np.min(self._criticalTimeStepOfElement, initial=np.inf)
+        if mpcTransformation is not None:
+            smallestOfTheElements = self.estimateFromTheBoundOfEachDof(system, mpcTransformation, lumpedMass).value
+        self._take(CriticalTimeStepEstimate(smallestOfTheElements))
+
+    def estimateFromTheBoundOfEachDof(
+        self, system, mpcTransformation=None, lumpedMass: np.ndarray | None = None
+    ) -> CriticalTimeStepEstimateFromTheBoundOfEachDof:
+        """The last estimate in the form the penalty constraints add to: at each degree of freedom of the elements, the
+        bound of its squared frequency, the largest squared frequency of the elements there, :math:`\\omega_i^2 =
+        \\max_{e \\ni i} (2 / \\Delta t_e)^2`. Formed anew for every numbering, from the elements' critical time steps
+        of the last estimate.
+
+        With multi-point constraints, a slave moves with its masters, and an element at the slave acts on the masters
+        (through :math:`T^T K T`): a master takes the largest squared frequency of the elements at it and at its slaves
+        (:meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters`),
+        times the ratio :math:`\\kappa_m \\ge 1` of the mass the elements at its slaves need to lend it to the mass the
+        fold gives it
+        (:meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.ratioOfTheMassLentToTheMassFolded`):
+        one where every coefficient of its slaves is nonnegative, above one where a slave has a negative coefficient, as
+        the hanging nodes of a HEX20 mesh have (see :doc:`/theory/criticaltimestep`, "With multi-point constraints").
+        The row sums of the penalty constraints are folded onto the masters as well, so the two meet there. Its
+        ``value`` is the smallest critical time step of the elements, and at most :math:`2/\\sqrt{\\kappa_m
+        \\omega_m^2}` at a master with :math:`\\kappa_m > 1`.
+
+        Parameters
+        ----------
+        system
+            The discrete system, whose numbering the estimate is of.
+        mpcTransformation
+            The condensation of the multi-point constraints of the discrete system; None if it has none.
+        lumpedMass
+            The lumped mass before the multi-point constraints fold it; read only with ``mpcTransformation``.
+
+        Returns
+        -------
+        CriticalTimeStepEstimateFromTheBoundOfEachDof
+            The estimate.
+        """
+
+        if (
+            self._estimateFromTheBoundOfEachDof is None
+            or self._numberingOfThatEstimate is not system.numbering
+            or self._mpcTransformationOfThatEstimate is not mpcTransformation
+        ):
+            dofsOfElement = [np.asarray(system.locations[element]) for element in self._elements]
+            dofs = np.concatenate([np.zeros(0, dtype=np.intp)] + dofsOfElement)
+            squaredFrequencyOfElement = (2.0 / self._criticalTimeStepOfElement) ** 2
+            squaredFrequencies = np.zeros(system.numbering.nDof)
+            np.maximum.at(
+                squaredFrequencies, dofs, np.repeat(squaredFrequencyOfElement, [len(d) for d in dofsOfElement])
+            )
+            dofs = np.unique(dofs)
+            value = np.min(self._criticalTimeStepOfElement, initial=np.inf)
+            if mpcTransformation is not None:
+                ofTheElements = np.zeros(system.numbering.nDof)
+                ofTheElements[dofs] = 1.0
+                dofs = np.flatnonzero(mpcTransformation.foldLargestOntoMasters(ofTheElements))
+                massRatio = mpcTransformation.ratioOfTheMassLentToTheMassFolded(lumpedMass)[dofs]
+                squaredFrequencies = mpcTransformation.foldLargestOntoMasters(squaredFrequencies)[dofs] * massRatio
+                # exactly one where no slave has a negative coefficient: there the elements' own estimate stands
+                raised = massRatio > 1.0
+                if raised.any():
+                    value = min(value, 2.0 / np.sqrt(np.max(squaredFrequencies[raised])))
+            else:
+                squaredFrequencies = squaredFrequencies[dofs]
+            self._estimateFromTheBoundOfEachDof = CriticalTimeStepEstimateFromTheBoundOfEachDof(
+                value, dofs, squaredFrequencies
+            )
+            self._numberingOfThatEstimate = system.numbering
+            self._mpcTransformationOfThatEstimate = mpcTransformation
+        return self._estimateFromTheBoundOfEachDof
 
 
 class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
@@ -367,6 +517,7 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
         lumpedInertia: DofVector,
         lumpedDamping: DofVector,
         criticalTimeStepInUse: float,
+        rowSumsOfThePenaltyConstraints: np.ndarray | None = None,
     ) -> bool:
         """Whether the entities are to be estimated anew after the increment ``increment``.
 
@@ -382,13 +533,18 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
             Their lumped damping now.
         criticalTimeStepInUse
             The critical time step the time increment in use is the ``courant-number`` fraction of.
+        rowSumsOfThePenaltyConstraints
+            The row sums of the penalty constraints in this increment
+            (:class:`CriticalTimeStepWithThePenaltyConstraints`), if the model has penalty constraints.
 
         Returns
         -------
         bool
             True in the first evaluation of a step, after a new numbering, when a degree of freedom has an inertia (or a
             damping alone) it did not have at the last estimate, and when the critical time step at worst
-            (:meth:`criticalTimeStepAtWorst`) has fallen below the one in use.
+            (:meth:`criticalTimeStepAtWorst`) has fallen below the one in use -- alone, or with the penalty constraints
+            that couple the entities' degrees of freedom: their row sums are those of now, the entities' stiffness may
+            have grown by the square of the same factor as in :meth:`criticalTimeStepAtWorst`.
         """
 
         if self._numbering is not system.numbering:
@@ -400,4 +556,104 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
         hasDampingAlone = ~hasInertia & (damping > 0.0)
         if np.any(hasInertia & ~hadInertia) or np.any(hasDampingAlone & ~hadDampingAlone):
             return True
-        return self.criticalTimeStepAtWorst(increment, lumpedInertia, lumpedDamping) < criticalTimeStepInUse
+        if self.criticalTimeStepAtWorst(increment, lumpedInertia, lumpedDamping) < criticalTimeStepInUse:
+            return True
+        if rowSumsOfThePenaltyConstraints is None or not np.any(
+            rowSumsOfThePenaltyConstraints[self.lastEstimate.dofs] > 0.0
+        ):
+            return False
+        # With the entities' stiffness grown by 1/fall^2, their critical time step with the constraints is fall times
+        # the one with the constraints' row sums scaled by fall^2.
+        massFactor, stiffnessFactor = self._fallSinceTheEstimate(increment, lumpedInertia, lumpedDamping)
+        fall = massFactor * stiffnessFactor
+        return (
+            fall * self.lastEstimate.criticalTimeStep(fall**2 * rowSumsOfThePenaltyConstraints) < criticalTimeStepInUse
+        )
+
+    def withThePenaltyConstraints(self, rowSumsOfThePenaltyConstraints: np.ndarray) -> float:
+        """The critical time step of the entities with the penalty constraints that couple their degrees of freedom,
+        from the last estimate (:meth:`CriticalTimeStepEstimateOfTheDofs.criticalTimeStep`).
+
+        Parameters
+        ----------
+        rowSumsOfThePenaltyConstraints
+            The row sums of the penalty constraints, one per degree of freedom.
+
+        Returns
+        -------
+        float
+            The critical time step; infinite in a model without such entities.
+        """
+
+        return (
+            np.inf if self.lastEstimate is None else self.lastEstimate.criticalTimeStep(rowSumsOfThePenaltyConstraints)
+        )
+
+
+class CriticalTimeStepWithThePenaltyConstraints(CriticalTimeStepOfAPart):
+    """The critical time step of the parts with the penalty constraints -- contacts, supports and ties held by a
+    penalty: the estimate of each part (:class:`CriticalTimeStepEstimateOfTheDofs`) with the row sums of the
+    constraints added at the degrees of freedom they couple,
+
+    .. math::
+
+        \\omega_\\mathrm{max}^2 \\le \\max_i \\left(\\omega_i^2 + r_i\\right), \\qquad
+        r_i = \\frac{1}{\\sqrt{M_i}} \\sum_j |K^\\mathrm{c}_{ij}| \\frac{1}{\\sqrt{M_j}} ,
+
+    with :math:`\\omega_i^2` the part's bound of the squared frequency at the degree of freedom :math:`i` and
+    :math:`\\boldsymbol{K}^\\mathrm{c}` the stiffness of the constraints
+    (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). A constraint
+    has no critical time step of its own: it raises the frequencies of the degrees of freedom it couples, so it lowers
+    the critical time step only where it acts, and only by what it adds there. What this part holds is therefore never
+    above the parts' own estimates.
+
+    **Policy: before every increment.** The stiffness of a constraint follows the state of the contact -- which of its
+    points are closed, and how deep --, which changes from increment to increment, and bounding it costs about as much
+    as evaluating its force. It is estimated from the stiffness the constraints have where the next increment starts, on
+    the connectivity and the mesh that increment uses: a point that closes within an increment enters the estimate
+    after it.
+    """
+
+    def __init__(self):
+        super().__init__("the parts with the penalty constraints")
+
+    def estimate(
+        self,
+        system,
+        rowSumsOfThePenaltyConstraints: np.ndarray,
+        elements: CriticalTimeStepOfTheElements,
+        entities: CriticalTimeStepOfEntitiesWithOwnInertia,
+        mpcTransformation=None,
+        lumpedMass: np.ndarray | None = None,
+    ):
+        """Estimate the critical time step of the parts with the penalty constraints, from the last estimates of the
+        parts.
+
+        Parameters
+        ----------
+        system
+            The discrete system.
+        rowSumsOfThePenaltyConstraints
+            The row sums :math:`r_i` of the penalty constraints, one per degree of freedom of the numbering, folded onto
+            the masters of multi-point constraints.
+        elements
+            The critical time step of the finite elements, as last estimated.
+        entities
+            The critical time step of the entities that carry their own inertia, as last estimated.
+        mpcTransformation
+            The condensation of the multi-point constraints of the discrete system; None if it has none
+            (:meth:`CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof`).
+        lumpedMass
+            The lumped mass before the multi-point constraints fold it; read only with ``mpcTransformation``.
+        """
+
+        self._take(
+            CriticalTimeStepEstimate(
+                min(
+                    elements.estimateFromTheBoundOfEachDof(system, mpcTransformation, lumpedMass).criticalTimeStep(
+                        rowSumsOfThePenaltyConstraints
+                    ),
+                    entities.withThePenaltyConstraints(rowSumsOfThePenaltyConstraints),
+                )
+            )
+        )
