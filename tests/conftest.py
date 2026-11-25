@@ -30,6 +30,10 @@
 import pytest
 
 from edelweissfe.numerics import parallelizationutilities
+from edelweissfe.solvers.base.criticaltimestep import (
+    CriticalTimeStepEstimate,
+    CriticalTimeStepOfTheElements,
+)
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 
 
@@ -50,6 +54,24 @@ def workerThreads(monkeypatch):
     def choose(numThreads: int):
         monkeypatch.setenv("OMP_NUM_THREADS", str(numThreads))
         monkeypatch.setattr(parallelizationutilities, "getNumberOfWorkerThreads", lambda: numThreads)
+
+    return choose
+
+
+@pytest.fixture
+def criticalTimeStepOfTheElements(monkeypatch):
+    """Replace the critical time step of the finite elements by a chosen one: a test that follows the state of a given
+    increment calls ``criticalTimeStepOfTheElements(value)``. The elements are still estimated, once per mesh as always
+    (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements`), only the value is replaced."""
+
+    estimateOfTheElements = CriticalTimeStepOfTheElements.estimate
+
+    def choose(value: float):
+        def estimate(self, system, U):
+            estimateOfTheElements(self, system, U)
+            self.lastEstimate = CriticalTimeStepEstimate(value)
+
+        monkeypatch.setattr(CriticalTimeStepOfTheElements, "estimate", estimate)
 
     return choose
 

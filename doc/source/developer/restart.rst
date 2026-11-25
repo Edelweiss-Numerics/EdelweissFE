@@ -60,8 +60,8 @@ every solver:
                                                 ▲
     a resumed run starts here ──────────────────┘  with increment n + 1
 
-The topology update comes before the proposal, because a refinement may lower the stable time
-increment of an explicit analysis. An increment retried after a cutback starts from the same
+The topology update comes before the proposal, because a refinement may lower the critical time
+step of an explicit analysis, and with it the time increment. An increment retried after a cutback starts from the same
 accepted state, so the model modifiers are not asked again: they decide once per accepted state.
 
 Restoring a checkpoint
