@@ -195,7 +195,7 @@ def test_pull_out_linear_bond_converges_with_second_order(tmp_path):
 
 
 def test_pull_out_far_from_the_origin(tmp_path):
-    """BOND-01: host and bar shifted by 1e5 element sizes give the force of the model at the origin"""
+    """Host and bar shifted by 1e5 element sizes give the force of the model at the origin"""
     deck = _pullOutDeck(_linearBond(1000.0), 10)
     _, (F,) = _run(tmp_path, deck, "F")
     _, (FFar,) = _run(tmp_path, _pullOutDeck(_linearBond(1000.0), 10, origin=(1e5, -3e5)), "F")
@@ -350,7 +350,7 @@ rebars
 
 
 def test_adaptive_refinement_of_bond_hosts_is_rejected(tmp_path):
-    """BOND-06: hAdaptivity cannot refine the hosts of bond elements (the bond elements would keep the coarse host
+    """HAdaptivity cannot refine the hosts of bond elements (the bond elements would keep the coarse host
     nodes): the dynamic refinement deck with an embedded, bonded bar stops with an error"""
     deck = (pathlib.Path(__file__).parent.parent / "testfiles/marmot/AMR_DynamicRefinement/test.inp").read_text()
     # the deck's element set "all" would also contain the bars (and give them the solid section): name the hosts
