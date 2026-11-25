@@ -259,6 +259,13 @@ class FacetedSurface:
           where no crease ends -- the distance along the facet's normal, and the normal as its gradient: beyond its
           boundary, the surface goes on in the plane of its last facet.
 
+        The gap is continuous where the closest point keeps its rule, but not where the rule changes: where the closest
+        point moves from a crease onto a feature that is none (from a crease vertex onto an edge that is not a crease),
+        or across a seam onto the next facet, the gap jumps between the distance and the distance along a facet normal.
+        The jump is at most :math:`1 - \\cos 30^\\circ` (about 13 %) of the distance, the crease limit
+        :data:`cosOfSmoothNormalChangeLimit`; the sign does not change, so inside and outside stay apart. A penalty
+        force on the gap jumps by the same fraction there.
+
         Parameters
         ----------
         points
