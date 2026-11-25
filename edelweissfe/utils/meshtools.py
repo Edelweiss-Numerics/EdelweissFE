@@ -114,7 +114,8 @@ def extractNodeCoordinatesFromElset(elementSet, displacementResult=False, displa
 def currentNodeDisplacements(nodes: list, model: "FEModel", nDim: int) -> np.ndarray:
     """The current displacements of nodes, from the model's displacement field.
 
-    Nodes without a displacement entry, and every node of a model without a displacement field, have none (zero).
+    Nodes without a displacement entry, and every node of a model without a displacement field, get a zero
+    displacement.
 
     Parameters
     ----------

@@ -54,10 +54,9 @@ from scipy.spatial import cKDTree
 
 from edelweissfe.utils.rotations import skewMatrix
 
-#: The cosine of the largest change of the normal between two updates of a contact search that still counts as sliding
-#: over a smooth surface: a larger change is a crease of the master surface. A contact point in contact does not
-#: move across a convex crease (the integrated contact), or restarts its frictional history at any crease (the
-#: node-based one).
+#: The cosine of the largest angle between two normals that still belong to one smooth surface: two adjacent facets
+#: whose normals differ more meet at a crease, and a contact point whose normal turns more between two contact searches
+#: has slid over one. The node-based contact restarts the frictional history there.
 cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
 
 
@@ -67,11 +66,13 @@ class SurfaceFeatures(NamedTuple):
 
     #: The pseudonormal of each edge (3D; none in 2D), shape ``(nEdges, 3)``.
     pseudonormalOfEdge: np.ndarray
-    #: The pseudonormal of each vertex, shape ``(nVertices, nDim)``.
+    #: The pseudonormal of each vertex, shape ``(nVertices, nDim)``; at a vertex where a crease ends on the boundary of
+    #: the surface, that of the crease's last edge.
     pseudonormalOfVertex: np.ndarray
     #: Whether the two facets of an edge meet at a crease.
     edgeIsCrease: np.ndarray
-    #: Whether a vertex lies on a crease: in 2D its two facets meet at one, in 3D one of its edges is one.
+    #: Whether a vertex lies on a crease: one of its edges is one, or one of its facets turns away from its
+    #: pseudonormal by more than half the limit; on the boundary of the surface, only where a crease ends.
     vertexIsCrease: np.ndarray
 
 
@@ -84,16 +85,23 @@ class FacetedSurface:
     acute crest, a point outside the body can lie behind the plane of the flank whose edge is closest to it. There,
     the **angle-weighted pseudonormal** of the feature (Baerentzen and Aanaes, 2005) does: the sum of the normals of
     the facets that meet at an edge, or at a vertex, each weighted with the facet's angle at that vertex. For the
-    closest feature of a closed surface, the distance vector :math:`\\boldsymbol{x} - \\boldsymbol{x}_c` points along
-    the pseudonormal outside the body and against it inside, at convex and re-entrant corners alike.
+    closest feature of a closed surface, the distance vector :math:`\\boldsymbol{x} - \\boldsymbol{x}_c` has a positive
+    component along the pseudonormal outside the body, a negative one inside, at convex and re-entrant corners alike.
 
     An edge is a **crease** where the normals of its two facets differ by more than
-    :data:`cosOfSmoothNormalChangeLimit` allows (a crest, a root); a vertex is one where one of its edges is (in 2D,
-    where its two facets differ so). Elsewhere the facets tile a smooth surface, and its corners are artefacts of the
+    :data:`cosOfSmoothNormalChangeLimit` allows (a crest, a root). A vertex is one where one of its edges is, or where
+    one of its facets turns away from the vertex's pseudonormal by more than half that angle: two of its facets may
+    then differ by more than the limit although no two neighbours do, as at the tip of a finely faceted cone. Where
+    all its facets stay within half the limit of the pseudonormal, any two of them differ by at most the limit, and the
+    normal of each tells the side. Elsewhere the facets tile a smooth surface, and its corners are artefacts of the
     tiling.
 
-    A feature that is not met by exactly two facets (an edge, in 3D) or that lies on such an edge -- the boundary of
-    a surface that is not closed -- has no outside to tell: a surface that ends does not say what lies beyond it.
+    A surface that is not closed has a **boundary**: the edges met by one facet only (in 3D), the vertices met by one
+    segment (in 2D). A surface that ends does not say what lies beyond it, and the ring of facets around a vertex on
+    its boundary is incomplete, so that the vertex's pseudonormal does not tell the side either. Beyond its boundary,
+    the surface is taken to go on as it ends: in the plane of its last facet, and a crease that ends on the boundary
+    goes on along its last edge -- that vertex takes the pseudonormal of the edge. No other feature on the boundary is
+    a crease.
 
     Parameters
     ----------
@@ -123,7 +131,7 @@ class FacetedSurface:
             self.edgeIsInterior = np.bincount(edgeOfFacet.ravel(), minlength=len(self.verticesOfEdge)) == 2
             onTheBoundary = np.zeros(self.nVertices, dtype=bool)
             onTheBoundary[self.verticesOfEdge[~self.edgeIsInterior].ravel()] = True
-            #: Whether a vertex lies on no boundary edge of the surface.
+            #: Whether a vertex lies inside the surface: on no boundary edge (3D), met by two segments (2D).
             self.vertexIsInterior = ~onTheBoundary
         else:
             self.verticesOfEdge = np.zeros((0, 2), dtype=np.intp)
@@ -167,8 +175,8 @@ class FacetedSurface:
 
         The pseudonormal of an edge is the sum of the normals of its two facets, of a vertex the sum of the normals of
         its facets, each weighted with the facet's angle at the vertex; in 2D, the two segments at a vertex count
-        alike. They are not normalized: only their direction is used. The normals of the two facets of an edge (of a
-        vertex, in 2D) differ by the angle whose cosine is :math:`|\\boldsymbol{n}_A + \\boldsymbol{n}_B|^2 / 2 - 1`.
+        alike. They are not normalized: only their direction is used. The normals of the two facets of an edge differ
+        by the angle whose cosine is :math:`|\\boldsymbol{n}_A + \\boldsymbol{n}_B|^2 / 2 - 1`.
 
         Parameters
         ----------
@@ -184,28 +192,46 @@ class FacetedSurface:
         """
 
         nFacets, nVerticesPerFacet, nDim = coordinatesOfFacet.shape
-        ofEdge = np.zeros((len(self.edgeIsInterior), nDim))
-        ofVertex = np.zeros((self.nVertices, nDim))
+        pseudonormalOfEdge = np.zeros((len(self.edgeIsInterior), nDim))
+        pseudonormalOfVertex = np.zeros((self.nVertices, nDim))
+        vertexIsCrease = np.zeros(self.nVertices, dtype=bool)
         if nVerticesPerFacet == 3:
-            np.add.at(ofEdge, self.edgeOppositeVertex, np.repeat(normalOfFacet[:, None, :], 3, axis=1))
+            np.add.at(pseudonormalOfEdge, self.edgeOppositeVertex, np.repeat(normalOfFacet[:, None, :], 3, axis=1))
             toNext = np.roll(coordinatesOfFacet, -1, axis=1) - coordinatesOfFacet
             toPrevious = np.roll(coordinatesOfFacet, 1, axis=1) - coordinatesOfFacet
             angleAtVertex = np.arctan2(
                 np.linalg.norm(np.cross(toNext, toPrevious), axis=-1), np.einsum("fad,fad->fa", toNext, toPrevious)
             )
-            np.add.at(ofVertex, self.nodesOfFacet, angleAtVertex[:, :, None] * normalOfFacet[:, None, :])
-            edgeIsCrease = self.edgeIsInterior & (0.5 * rowDot(ofEdge, ofEdge) - 1.0 < cosOfSmoothNormalChangeLimit)
-            vertexIsCrease = np.zeros(self.nVertices, dtype=bool)
+            np.add.at(pseudonormalOfVertex, self.nodesOfFacet, angleAtVertex[:, :, None] * normalOfFacet[:, None, :])
+            edgeIsCrease = self.edgeIsInterior & (
+                0.5 * rowDot(pseudonormalOfEdge, pseudonormalOfEdge) - 1.0 < cosOfSmoothNormalChangeLimit
+            )
             vertexIsCrease[self.verticesOfEdge[edgeIsCrease].ravel()] = True
         else:
-            np.add.at(ofVertex, self.nodesOfFacet, np.repeat(normalOfFacet[:, None, :], 2, axis=1))
+            np.add.at(pseudonormalOfVertex, self.nodesOfFacet, np.repeat(normalOfFacet[:, None, :], 2, axis=1))
             edgeIsCrease = np.zeros(0, dtype=bool)
-            vertexIsCrease = self.vertexIsInterior & (
-                0.5 * rowDot(ofVertex, ofVertex) - 1.0 < cosOfSmoothNormalChangeLimit
-            )
-        return SurfaceFeatures(ofEdge, ofVertex, edgeIsCrease, vertexIsCrease)
 
-    def signedDistances(
+        # A facet that turns away from the pseudonormal of its vertex by more than half the limit: its angle to the
+        # pseudonormal has a cosine below that of half the limit, sqrt((1 + cos) / 2).
+        cosOfHalfTheLimit = np.sqrt(0.5 * (1.0 + cosOfSmoothNormalChangeLimit))
+        atVertexOfFacet = pseudonormalOfVertex[self.nodesOfFacet]
+        lengthAtVertexOfFacet = np.sqrt(rowDot(atVertexOfFacet, atVertexOfFacet))
+        facetTurnsAway = rowDot(normalOfFacet[:, None, :], atVertexOfFacet) < cosOfHalfTheLimit * lengthAtVertexOfFacet
+        np.logical_or.at(vertexIsCrease, self.nodesOfFacet, facetTurnsAway)
+
+        # On the boundary, the ring of facets around a vertex is incomplete, and so is its pseudonormal. Where a crease
+        # ends on the boundary, the crease goes on beyond it: the vertex takes the pseudonormal of that crease edge.
+        creaseEdges = np.flatnonzero(edgeIsCrease)
+        nCreaseEdgesAtVertex = np.bincount(self.verticesOfEdge[creaseEdges].ravel(), minlength=self.nVertices)
+        endsACrease = ~self.vertexIsInterior & (nCreaseEdgesAtVertex == 1)
+        for end in (0, 1):
+            endingHere = creaseEdges[endsACrease[self.verticesOfEdge[creaseEdges, end]]]
+            pseudonormalOfVertex[self.verticesOfEdge[endingHere, end]] = pseudonormalOfEdge[endingHere]
+        vertexIsCrease &= self.vertexIsInterior | endsACrease
+
+        return SurfaceFeatures(pseudonormalOfEdge, pseudonormalOfVertex, edgeIsCrease, vertexIsCrease)
+
+    def gapsAndGradients(
         self,
         points: np.ndarray,
         facets: np.ndarray,
@@ -214,20 +240,24 @@ class FacetedSurface:
         normalOfFacet: np.ndarray,
         features: SurfaceFeatures,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """The gaps of points to the closest points of their facets, negative inside the body, and the directions in
-        which they grow (their gradients with respect to the points).
+        """The gaps of points to the closest points of their facets, negative inside the body, and their gradients
+        with respect to the points.
 
-        - The closest point lies on a **crease** of the surface, on an edge or at a vertex: the line from the closest
-          point to the point, :math:`\\pm(\\boldsymbol{x} - \\boldsymbol{x}_c)/d`, and the distance :math:`\\pm d`, the
-          sign that of :math:`\\boldsymbol{x} - \\boldsymbol{x}_c` along the pseudonormal of the feature. Outside a
-          convex crease (a crest) the gap so grows with the true distance to the edge in every direction, instead of
-          with the distance to the plane of one of its facets, which is zero or negative for a point beside the edge;
-          at a re-entrant crease (a root) a point inside is pushed out the shortest way. A point closer to the feature
-          than :math:`\\sqrt{\\epsilon}` times the facet's size has no direction to working precision: the
-          pseudonormal is taken.
-        - Everywhere else -- inside the facet, on a seam of a smooth surface, on the boundary of a surface that ends --
-          the facet's normal, and the distance along it: beyond its boundary, the surface goes on in the plane of its
-          last facet.
+        The gap is the signed distance to the surface where the closest point lies on a crease, and the distance along
+        the facet normal elsewhere: the two agree inside a facet, and differ only by the small turn of the normal at a
+        seam of a smooth surface.
+
+        - The closest point lies on a **crease** of the surface, on an edge or at a vertex: the distance :math:`\\pm d`,
+          the sign that of :math:`\\boldsymbol{x} - \\boldsymbol{x}_c` along the pseudonormal of the feature, and its
+          gradient, the unit vector :math:`\\pm(\\boldsymbol{x} - \\boldsymbol{x}_c)/d` from the closest point to the
+          point. Outside a convex crease (a crest) the gap so grows with the true distance to the edge in every
+          direction, instead of with the distance to the plane of one of its facets, which is zero or negative for a
+          point beside the edge; at a re-entrant crease (a root) a point inside is pushed out the shortest way. A point
+          closer to the feature than :math:`\\sqrt{\\epsilon}` times the facet's size has no direction to working
+          precision: the gradient is the unit pseudonormal.
+        - Everywhere else -- inside the facet, on a seam of a smooth surface, on the boundary of a surface that ends
+          where no crease ends -- the distance along the facet's normal, and the normal as its gradient: beyond its
+          boundary, the surface goes on in the plane of its last facet.
 
         Parameters
         ----------
@@ -248,16 +278,17 @@ class FacetedSurface:
         Returns
         -------
         tuple[numpy.ndarray, numpy.ndarray]
-            The gaps, shape ``(nPairs,)``, and the unit directions, shape ``(nPairs, nDim)``.
+            The gaps, shape ``(nPairs,)``, and their gradients with respect to the points, ``dGap_dPoint``, unit
+            vectors of shape ``(nPairs, nDim)``.
         """
 
         toPoint = points - np.einsum("pa,pad->pd", weights, coordinatesOfFacet[facets])
-        direction = normalOfFacet[facets]
-        gap = rowDot(direction, toPoint)
+        dGap_dPoint = normalOfFacet[facets]
+        gap = rowDot(dGap_dPoint, toPoint)
 
         onTheFacetBoundary = weights == 0.0
         nZeroWeights = onTheFacetBoundary.sum(axis=1)
-        pseudonormal = np.zeros_like(direction)
+        pseudonormal = np.zeros_like(dGap_dPoint)
         onACrease = np.zeros(len(facets), dtype=bool)
 
         atAVertex = nZeroWeights == weights.shape[1] - 1
@@ -284,12 +315,12 @@ class FacetedSurface:
             resolved = distance > np.sqrt(np.finfo(float).eps) * facetSize
 
             with np.errstate(divide="ignore", invalid="ignore"):
-                direction[creased] = np.where(
+                dGap_dPoint[creased] = np.where(
                     resolved[:, None], (sign / distance)[:, None] * toFeature, unitPseudonormal
                 )
             gap[creased] = np.where(resolved, sign * distance, rowDot(unitPseudonormal, toFeature))
 
-        return gap, direction
+        return gap, dGap_dPoint
 
     def acrossAConvexCrease(
         self, fromFacets: np.ndarray, toFacets: np.ndarray, coordinatesOfFacet: np.ndarray, normalOfFacet: np.ndarray
