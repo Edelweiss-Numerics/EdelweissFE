@@ -334,3 +334,171 @@ def test_going_over_the_crest_crosses_a_convex_crease_and_over_a_root_not(surfac
         normalOfFacet,
     )
     np.testing.assert_array_equal(across, [True, True, False, False])
+
+
+def _windingNumbers(points: np.ndarray, coordinatesOfFacet: np.ndarray) -> np.ndarray:
+    """The generalized winding numbers of points with respect to a closed surface: the sum of the signed angles of its
+    segments (2D), or of the signed solid angles of its triangles (van Oosterom and Strackee, 3D), over a full turn."""
+
+    toVertices = coordinatesOfFacet[None, :, :, :] - points[:, None, None, :]
+    if points.shape[1] == 2:
+        a, b = toVertices[:, :, 0], toVertices[:, :, 1]
+        angles = np.arctan2(a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0], np.einsum("pfi,pfi->pf", a, b))
+        return angles.sum(axis=1) / (2.0 * np.pi)
+    a, b, c = toVertices[:, :, 0], toVertices[:, :, 1], toVertices[:, :, 2]
+    la, lb, lc = (np.linalg.norm(v, axis=-1) for v in (a, b, c))
+    dot = lambda u, v: np.einsum("pfi,pfi->pf", u, v)  # noqa: E731
+    halfSolidAngles = np.arctan2(
+        dot(a, np.cross(b, c)), la * lb * lc + dot(a, b) * lc + dot(a, c) * lb + dot(b, c) * la
+    )
+    return halfSolidAngles.sum(axis=1) / (2.0 * np.pi)
+
+
+def _closestPointsByBruteForce(points: np.ndarray, coordinatesOfFacet: np.ndarray):
+    """The closest facet of each point, the weights of its closest point (exact zeros off the feature it lies on) and
+    the distance, from all facets: the projection onto the plane of a facet where it falls inside, otherwise the
+    closest point of the facet's edges -- not the region test of the module."""
+
+    nPoints, (nFacets, nVerticesPerFacet, _) = len(points), coordinatesOfFacet.shape
+    distances = np.full((nPoints, nFacets), np.inf)
+    weights = np.zeros((nPoints, nFacets, nVerticesPerFacet))
+    for k in range(nVerticesPerFacet):  # the edges (the segment itself in 2D)
+        m = (k + 1) % nVerticesPerFacet
+        a, b = coordinatesOfFacet[None, :, k], coordinatesOfFacet[None, :, m]
+        t = np.clip(np.einsum("pfi,pfi->pf", points[:, None] - a, b - a) / np.einsum("pfi,pfi->pf", b - a, b - a), 0, 1)
+        d = np.linalg.norm(points[:, None] - (a + t[..., None] * (b - a)), axis=-1)
+        closer = d < distances
+        distances = np.where(closer, d, distances)
+        onThisEdge = np.zeros_like(weights)
+        onThisEdge[..., k], onThisEdge[..., m] = 1.0 - t, t
+        weights = np.where(closer[..., None], onThisEdge, weights)
+        if nVerticesPerFacet == 2:
+            break
+    if nVerticesPerFacet == 3:
+        x1, x2, x3 = (coordinatesOfFacet[None, :, k] for k in range(3))
+        normal = np.cross(x2 - x1, x3 - x1)
+        normal /= np.linalg.norm(normal, axis=-1)[..., None]
+        height = np.einsum("pfi,pfi->pf", points[:, None] - x1, normal)
+        projected = points[:, None] - height[..., None] * normal
+        subAreas = np.stack(
+            [
+                np.einsum("pfi,pfi->pf", np.cross(xb - xa, projected - xa), normal)
+                for xa, xb in ((x2, x3), (x3, x1), (x1, x2))
+            ],
+            axis=-1,
+        )
+        inside = np.all(subAreas >= 0.0, axis=-1)
+        distances = np.where(inside, np.abs(height), distances)
+        weights = np.where(inside[..., None], subAreas / subAreas.sum(axis=-1)[..., None], weights)
+    closestFacet = np.argmin(distances, axis=1)
+    everyPoint = np.arange(nPoints)
+    return closestFacet, weights[everyPoint, closestFacet], distances[everyPoint, closestFacet]
+
+
+def _revolvedThread(nAround: int = 16) -> tuple[np.ndarray, np.ndarray]:
+    """A screw-like solid: three saw teeth of 40 degrees on a core, revolved about z in nAround steps, closed at both
+    ends, as Tria3 facets with outward normals."""
+
+    profile = [(0.0, 0.0), (1.0, 0.0)]
+    for k in range(3):
+        profile += [
+            (1.0, k + 0.5 - 0.6 * np.tan(np.deg2rad(20.0))),
+            (1.6, k + 0.5),
+            (1.0, k + 0.5 + 0.6 * np.tan(np.deg2rad(20.0))),
+        ]
+    profile += [(1.0, 3.0), (0.0, 3.0)]
+    angles = 2.0 * np.pi * np.arange(nAround) / nAround
+    vertices, indexOf = [], {}
+    for j, (r, z) in enumerate(profile):
+        for k in [0] if r == 0.0 else range(nAround):
+            indexOf[j, k] = len(vertices)
+            vertices.append((r * np.cos(angles[k]), r * np.sin(angles[k]), z))
+    vertexAt = lambda j, k: indexOf[j, 0] if profile[j][0] == 0.0 else indexOf[j, k % nAround]  # noqa: E731
+    facets = []
+    for j in range(len(profile) - 1):
+        for k in range(nAround):
+            a, b, c, d = vertexAt(j, k), vertexAt(j, k + 1), vertexAt(j + 1, k + 1), vertexAt(j + 1, k)
+            facets += [f for f in ((a, b, c), (a, c, d)) if len(set(f)) == 3]
+    return np.array(vertices), np.array(facets)
+
+
+def _randomStarPolyhedron(rng, nDirections: int = 60) -> tuple[np.ndarray, np.ndarray]:
+    """A random star-shaped polyhedron: random directions, triangulated by their convex hull, at random radii -- convex
+    and re-entrant creases, saddles; radial scaling keeps the hull's outward orientation."""
+
+    from scipy.spatial import ConvexHull
+
+    directions = rng.normal(size=(nDirections, 3))
+    directions /= np.linalg.norm(directions, axis=1)[:, None]
+    facets = ConvexHull(directions).simplices
+    x1, x2, x3 = (directions[facets[:, k]] for k in range(3))
+    outward = rowDot(np.cross(x2 - x1, x3 - x1), x1) > 0.0
+    facets = np.where(outward[:, None], facets, facets[:, ::-1])
+    return directions * rng.uniform(0.4, 1.2, size=(nDirections, 1)), facets
+
+
+@pytest.mark.parametrize(
+    "surface",
+    (
+        lambda: (np.array([[0, 0], [1, 0], [1.0, 0.39], [1.6, 0.5], [1.0, 0.61], [1.0, 1.39], [1.6, 1.5], [1.0, 1.61],
+                           [1, 2], [0, 2]], dtype=float), np.array([[i, (i + 1) % 10] for i in range(10)])),  # fmt: skip
+        _revolvedThread,
+        lambda: _pyramidSurface(nSides=64, halfAngle=5.0),
+        lambda: _randomStarPolyhedron(np.random.default_rng(13)),
+    ),
+    ids=("saw-tooth profile", "revolved saw-tooth thread", "needle cone tip", "random star polyhedron"),
+)
+def test_the_gap_agrees_with_a_winding_number_and_a_brute_force_distance(surface):
+    """Against oracles that share nothing with the module: the sign of the gap is that of the generalized winding
+    number of the closed surface, and its magnitude is the distance to the closest facet by brute force, exactly where
+    the closest point lies inside a facet or on a crease; elsewhere -- a seam between facets less than 30 degrees apart
+    -- the distance along the facet's normal, at least cos(30 degrees) of it. The points lie near random vertices, at
+    distances from 1e-6 to 1 of the size of their facets, and in a box around the surface."""
+
+    vertices, nodesOfFacet = surface()
+    nDim = vertices.shape[1]
+    coordinatesOfFacet = vertices[nodesOfFacet]
+    normalOfFacet, measure = facetNormalAndMeasure(coordinatesOfFacet)
+    size = np.median(measure ** (1.0 / (nDim - 1)))
+
+    rng = np.random.default_rng(355)
+    nearVertices = vertices[rng.integers(0, len(vertices), 1500)]
+    directions = rng.normal(size=(1500, nDim))
+    directions /= np.linalg.norm(directions, axis=1)[:, None]
+    distances = size * np.exp(rng.uniform(np.log(1e-6), 0.0, size=(1500, 1)))
+    low, high = vertices.min(axis=0), vertices.max(axis=0)
+    points = np.vstack(
+        (
+            nearVertices + distances * directions,
+            rng.uniform(low - 0.2 * (high - low), high + 0.2 * (high - low), (500, nDim)),
+        )
+    )
+
+    inside = np.abs(_windingNumbers(points, coordinatesOfFacet)) > 0.5
+    closestFacet, weights, distance = _closestPointsByBruteForce(points, coordinatesOfFacet)
+    surfaceOfFacets = FacetedSurface(nodesOfFacet)
+    features = surfaceOfFacets.features(coordinatesOfFacet, normalOfFacet)
+    gap, _ = surfaceOfFacets.gapsAndGradients(
+        points, closestFacet, weights, coordinatesOfFacet, normalOfFacet, features
+    )
+
+    resolved = distance > 1e-8 * size
+    np.testing.assert_array_equal((gap < 0.0)[resolved], inside[resolved])
+
+    # The feature of the closest point, from the exact zeros of the brute force: a vertex, an edge (3D), or the facet.
+    onTheFeature = weights != 0.0
+    atAVertex = onTheFeature.sum(axis=1) == 1
+    vertex = nodesOfFacet[closestFacet, np.argmax(onTheFeature, axis=1)]
+    onACrease = atAVertex & features.vertexIsCrease[vertex]
+    inTheFacet = onTheFeature.all(axis=1)
+    if nDim == 3:
+        onAnEdge = onTheFeature.sum(axis=1) == 2
+        spanning = np.sort(np.where(onTheFeature, nodesOfFacet[closestFacet], -1), axis=1)[:, 1:]
+        edgeIndex = {tuple(e): i for i, e in enumerate(surfaceOfFacets.verticesOfEdge.tolist())}
+        edge = np.array([edgeIndex.get(tuple(e), 0) for e in spanning.tolist()])
+        onACrease |= onAnEdge & features.edgeIsCrease[edge]
+    exact = resolved & (onACrease | inTheFacet)
+    roundOff = 1e-13 * size
+    np.testing.assert_allclose(np.abs(gap[exact]), distance[exact], rtol=1e-9, atol=roundOff)
+    assert np.all(np.abs(gap[resolved]) <= distance[resolved] * (1.0 + 1e-9) + roundOff)
+    assert np.all(np.abs(gap[resolved]) >= np.cos(np.deg2rad(30.0)) * distance[resolved] * (1.0 - 1e-9) - roundOff)
