@@ -1396,12 +1396,12 @@ per-slave outer product and four block writes.
 (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`): the contact
 adds the row sums of its stiffness, scaled by the lumped mass, to the frequencies of the nodes it couples. It asks
 right after the force, with the same arguments, so that the trial state of the friction, which ``computeKernels``
-writes for the next increment, is written again as the force wrote it. The surface-to-surface contact bounds the
-springs its law puts at the closed points, the same springs as its force
-(:mod:`~edelweissfe.constraints.base.penaltysprings`), and builds no tangent for it. The node-to-surface contact and
-the contact of a surface with a discrete rigid body are bounded from the tangent ``computeKernels`` gives at the state:
-``NED`` builds it once per increment for the bound, in a scratch of the size of the block kept per location of the
-constraint, and their forces are still evaluated without it. While a point slips, the friction makes the tangent
+writes for the next increment, is written again as the force wrote it. The contacts with a deformable master bound
+the springs their law puts at the closed points, the same springs as their force
+(:mod:`~edelweissfe.constraints.base.penaltysprings`), and build no tangent for it. The contact of a surface with a
+discrete rigid body is bounded from the tangent ``computeKernels`` gives at the state: ``NED`` builds it once per
+increment for the bound, in a scratch of the size of the block kept per location of the constraint, and its forces are
+still evaluated without it. While a point slips, the friction makes the tangent
 unsymmetric (:ref:`friction-tangent`); the bound takes the rows of its symmetric part there as well.
 
 **The connectivity search is throttled.** The closest-facet search is

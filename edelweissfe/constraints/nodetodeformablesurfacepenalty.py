@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -45,11 +45,17 @@ from edelweissfe.constraints.base.frozencontactsearch import (
     unpackPerPointArrays,
 )
 from edelweissfe.constraints.base.penaltylaw import penaltyLaw
+from edelweissfe.constraints.base.penaltysprings import (
+    SpringGradientOnOwnNodes,
+    addBoundOfAbsoluteStiffnessOfSprings,
+    smallestGapsWithin,
+)
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.numerics.systemmatrixcontributor import localEntriesOfSubBlocks
 from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.solvers.base.criticaltimestep import NextIncrement
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
     closestFacetCandidates,
@@ -81,6 +87,53 @@ tick -- no separate wiring needed. A retained slave node (same across the rebuil
 identity) keeps its frictional history and augmented-Lagrange multiplier; a newly exposed one
 starts at rest.
 """
+
+
+@dataclass(frozen=True)
+class _ContactOfSlave:
+    """The contact of a slave node with its facet, see :meth:`Constraint._contactOfSlave`."""
+
+    #: The gap, negative when penetrating.
+    gap: float
+    #: Its gradient :math:`\boldsymbol{a}_p = [c, -N^m] \otimes \bar{n}` over the slave node and the nodes of its
+    #: facet.
+    gradient: np.ndarray
+    #: Its Hessian with finite sliding; None with small sliding, where it vanishes.
+    hessian: np.ndarray | None
+    #: :math:`[c, -N^m] = [1, -N_1, \ldots, -N_k]`: how the gap moves with the slave node (:math:`c = [1]`) and with
+    #: the nodes of its facet (their shape functions at the projection).
+    nodeCoefficients: np.ndarray
+    #: :math:`\bar{n}`, the unit normal of the facet.
+    normal: np.ndarray
+    #: The normal force (the law's and the multiplier's), negative in contact; None for an open gap without a
+    #: multiplier: no force and no spring.
+    normalForce: float | None
+    #: The stiffness of the normal force, :math:`\mathrm{d}f/\mathrm{d}g`.
+    stiffness: float
+
+
+def _tangentDirections(normal: np.ndarray, first: np.ndarray | None = None) -> np.ndarray:
+    """An orthonormal basis of the plane normal to a unit normal: one direction in 2D, two in 3D.
+
+    Parameters
+    ----------
+    normal
+        The unit normal.
+    first
+        A unit direction in the plane to start the basis with (3D); None for any.
+
+    Returns
+    -------
+    numpy.ndarray
+        The directions, one per row.
+    """
+
+    if len(normal) == 2:
+        return np.array([[-normal[1], normal[0]]])
+    if first is None:
+        first = np.cross(normal, np.eye(3)[np.argmin(np.abs(normal))])
+        first /= np.linalg.norm(first)
+    return np.array([first, np.cross(normal, first)])
 
 
 @dataclass(frozen=True)
@@ -675,6 +728,116 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             ]
         return localEntriesOfSubBlocks(subBlocks)
 
+    def _slavesWithAFacet(self):
+        """The slave nodes with a facet assigned, in the order of the block, with where each sits in it.
+
+        Yields
+        ------
+        tuple[int, list[int], list[int]]
+            The slave, its degrees of freedom in the block, and those of the nodes of its facet.
+        """
+
+        localOffset = 0
+        for s in range(self.nSlaves):
+            pStart = localOffset
+            localOffset += self.nDim
+            if self._assignedFacetIdx[s] is None:
+                continue
+            m = len(self.facetElements[self._assignedFacetIdx[s]].nodes) * self.nDim
+            fStart = localOffset
+            localOffset += m
+            yield s, list(range(pStart, pStart + self.nDim)), list(range(fStart, fStart + m))
+
+    def _contactOfSlave(self, s: int, U_np: np.ndarray, pIdcs: list, fIdcs: list) -> "_ContactOfSlave | None":
+        """The contact of a slave node with its facet: the gap, its gradient and Hessian, and the normal force and the
+        stiffness the law (and the augmented-Lagrange multiplier) gives it. The force (:meth:`computeKernels`) and the
+        bound of the stiffness (:meth:`addBoundOfAbsoluteStiffnessTimes`) are made from it.
+
+        Parameters
+        ----------
+        s
+            The slave.
+        U_np
+            The solution of the constraint's block.
+        pIdcs
+            The degrees of freedom of the slave in the block.
+        fIdcs
+            Those of the nodes of its facet.
+
+        Returns
+        -------
+        _ContactOfSlave | None
+            The contact; None if, with finite sliding, the projection has left the facet.
+        """
+
+        facetElement = self.facetElements[self._assignedFacetIdx[s]]
+        nFacetNodes = len(facetElement.nodes)
+
+        xs = self._referenceCoordsSlaves[s] + U_np[pIdcs]
+        facetU = U_np[fIdcs].reshape((nFacetNodes, self.nDim))
+        facetCoords = self._referenceCoordsFacets[self._assignedFacetIdx[s]] + facetU
+
+        if self.sliding == "small":
+            # Frozen projection: gap is linear in the DOFs, gradient w is constant, and the
+            # geometric (Hessian) term vanishes identically. The gradient has the same block
+            # structure as the finite case: w = [nBar, -NBar_1 nBar, ..., -NBar_k nBar],
+            # compactly w = kron(c, nBar) with c = [1, -NBar_1, ..., -NBar_k].
+            weights = self._frozenWeights[s]
+            nBar = self._frozenNormals[s]
+            g = nBar.dot(xs - weights @ facetCoords)
+            c = np.concatenate(([1.0], -weights))
+            w = np.kron(c, nBar)
+            H = None
+        else:
+            # The gap of a point against a flat facet: its gradient is again w = kron(c, n), with the facet's shape
+            # functions at the projection in c and the facet normal n, its slave block.
+            if nFacetNodes == 3:
+                alpha, beta, inside = tria3Projection(xs, *facetCoords)
+                if not inside:
+                    return None
+                g, w, H = tria3GapGradientHessian(xs, *facetCoords)
+                c = np.array([1.0, -(1.0 - alpha - beta), -alpha, -beta])
+            else:
+                t, inside = line2Projection(xs, *facetCoords)
+                if not inside:
+                    return None
+                g, w, H = line2GapGradientHessian(xs, *facetCoords)
+                c = np.array([1.0, -(1.0 - t), -t])
+            nBar = w[: self.nDim]
+
+        return _ContactOfSlave(g, w, H, c, nBar, *self._normalForceOfSlave(s, g))
+
+    def _normalForceOfSlave(self, s: int, g: float) -> tuple[float | None, float]:
+        """The normal force and its stiffness the law and the augmented-Lagrange multiplier give a slave node at a gap.
+
+        Parameters
+        ----------
+        s
+            The slave.
+        g
+            The gap.
+
+        Returns
+        -------
+        tuple[float | None, float]
+            The normal force, negative in contact, None for an open gap without a multiplier; and its stiffness
+            :math:`\\mathrm{d}f/\\mathrm{d}g`.
+        """
+
+        lambdaForce = self._lambdaN[s] if self.augmentedLagrange else 0.0
+
+        if g >= 0.0 and lambdaForce == 0.0:
+            return None, 0.0
+
+        if g >= 0.0:
+            # Open gap, but a not-yet-released multiplier: apply its constant force only.
+            return lambdaForce, 0.0
+
+        # f_n carries the sign of g (negative in contact), so that the contact force on the nodes,
+        # -f_n * w, pushes the slave outward; see edelweissfe.constraints.base.penaltylaw.
+        penaltyForce, stiffness = self.law.normalForce(self.penalty * self.tributaryAreas[s], g)
+        return lambdaForce + penaltyForce, stiffness
+
     def computeKernels(
         self,
         U_np: np.ndarray,
@@ -686,77 +849,21 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         """Add the residual contribution of the contact forces, and the tangent unless ``K`` is None."""
 
         self.totalNormalForce = 0.0
+        self._tangentialForceCurrent[:] = 0.0
+        self._normalForceCurrent[:] = 0.0
 
-        localOffset = 0
-        activeIdx = 0
-        for s in range(self.nSlaves):
-            pStart = localOffset
-            localOffset += self.nDim
-
-            self._tangentialForceCurrent[s] = 0.0
-            self._normalForceCurrent[s] = 0.0
-
-            if self._assignedFacetIdx[s] is None:
+        for activeIdx, (s, pIdcs, fIdcs) in enumerate(self._slavesWithAFacet()):
+            contact = self._contactOfSlave(s, U_np, pIdcs, fIdcs)
+            if contact is None:
                 continue
 
-            facetElement = self.facetElements[self._assignedFacetIdx[s]]
-            nFacetNodes = len(facetElement.nodes)
-            m = nFacetNodes * self.nDim
-            fStart = localOffset
-            localOffset += m
-
-            pIdcs = list(range(pStart, pStart + self.nDim))
-            fIdcs = list(range(fStart, fStart + m))
-
-            xs = self._referenceCoordsSlaves[s] + U_np[pIdcs]
-            facetU = U_np[fIdcs].reshape((nFacetNodes, self.nDim))
-            facetCoords = self._referenceCoordsFacets[self._assignedFacetIdx[s]] + facetU
-
             if self.sliding == "small":
-                # Frozen projection: gap is linear in the DOFs, gradient w is constant, and the
-                # geometric (Hessian) term vanishes identically. The gradient has the same block
-                # structure as the finite case: w = [nBar, -NBar_1 nBar, ..., -NBar_k nBar],
-                # compactly w = kron(c, nBar) with c = [1, -NBar_1, ..., -NBar_k].
-                weights = self._frozenWeights[s]
-                nBar = self._frozenNormals[s]
-                g = nBar.dot(xs - weights @ facetCoords)
-                c = np.concatenate(([1.0], -weights))
-                w = np.kron(c, nBar)
-                H = None
-            else:
-                if nFacetNodes == 3:
-                    alpha, beta, inside = tria3Projection(xs, *facetCoords)
-                    if not inside:
-                        activeIdx += 1
-                        continue
-                    g, w, H = tria3GapGradientHessian(xs, *facetCoords)
-                else:
-                    t, inside = line2Projection(xs, *facetCoords)
-                    if not inside:
-                        activeIdx += 1
-                        continue
-                    g, w, H = line2GapGradientHessian(xs, *facetCoords)
+                self._gapCurrent[s] = contact.gap
 
-            if self.sliding == "small":
-                self._gapCurrent[s] = g
-
-            lambdaForce = self._lambdaN[s] if self.augmentedLagrange else 0.0
-
-            if g >= 0.0 and lambdaForce == 0.0:
-                activeIdx += 1
+            if contact.normalForce is None:
                 continue
 
-            penaltyTimesArea = self.penalty * self.tributaryAreas[s]
-
-            if g >= 0.0:
-                # Open gap, but a not-yet-released multiplier: apply its constant force only.
-                f_n = lambdaForce
-                stiffness = 0.0
-            else:
-                # f_n carries the sign of g (negative in contact), so that the contact force on the nodes,
-                # -f_n * w, pushes the slave outward; see edelweissfe.constraints.base.penaltylaw.
-                penaltyForce, stiffness = self.law.normalForce(penaltyTimesArea, g)
-                f_n = lambdaForce + penaltyForce
+            f_n, stiffness, w, H = contact.normalForce, contact.stiffness, contact.gradient, contact.hessian
 
             # the residual contribution is the negative of the contact force on the nodes
             PLocal = f_n * w
@@ -770,7 +877,16 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
             if self.mu > 0.0:
                 PFriction, KFriction = self._computeFriction(
-                    s, c, nBar, f_n, stiffness, w, dU, pIdcs, fIdcs, computeTangent=(KLocal is not None)
+                    s,
+                    contact.nodeCoefficients,
+                    contact.normal,
+                    f_n,
+                    stiffness,
+                    w,
+                    dU,
+                    pIdcs,
+                    fIdcs,
+                    computeTangent=(KLocal is not None),
                 )
                 PLocal += PFriction
                 if KLocal is not None:
@@ -787,7 +903,150 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
             self._normalForceCurrent[s] = f_n
             self.totalNormalForce += f_n
-            activeIdx += 1
+
+    def _contactAtTheSmallestGapWithinTheNextIncrement(
+        self,
+        s: int,
+        contact: "_ContactOfSlave",
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        pIdcs: list,
+        fIdcs: list,
+        nextIncrement: NextIncrement,
+        timeStep: TimeStep,
+    ) -> "_ContactOfSlave":
+        """The contact of a slave node at its smallest gap within the next increment
+        (:func:`~edelweissfe.constraints.base.penaltysprings.smallestGapsWithin`), for the bound of the
+        stiffness over it: the normal force and the stiffness the law gives that gap, the gradient and the Hessian of
+        now. With finite sliding, a part of the increment that moves the projection off the facet is not counted (a
+        neighbouring facet is not seen), and the normal turns within the increment, so the gap is affine in it, as
+        ``smallestGapsWithin`` takes it, only to first order.
+
+        Parameters
+        ----------
+        s
+            The slave.
+        contact
+            Its contact now (:meth:`_contactOfSlave`).
+        U_np
+            The solution of the constraint's block.
+        dU
+            The increment of the constraint's block.
+        pIdcs
+            The degrees of freedom of the slave in the block.
+        fIdcs
+            Those of the nodes of its facet.
+        nextIncrement
+            The next increment.
+        timeStep
+            The time step now.
+
+        Returns
+        -------
+        _ContactOfSlave
+            The contact at the smallest gap.
+        """
+
+        def gapAt(U, dU, timeStep):
+            contactThere = self._contactOfSlave(s, U, pIdcs, fIdcs)
+            return np.inf if contactThere is None else contactThere.gap
+
+        gap = smallestGapsWithin(nextIncrement, gapAt, U_np, dU, timeStep)
+        if not (gap < contact.gap and gap < 0.0):
+            return contact
+        normalForce, stiffness = self._normalForceOfSlave(s, gap)
+        return replace(contact, gap=gap, normalForce=normalForce, stiffness=stiffness)
+
+    def addBoundOfAbsoluteStiffnessTimes(
+        self,
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        weights: np.ndarray,
+        bound: np.ndarray,
+        timeStep: TimeStep,
+        nextIncrement: NextIncrement | None = None,
+    ):
+        """Add the row sums of the absolute value of the stiffness of the contact, weighted by column, from the springs
+        of its force; see
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`.
+
+        Every slave node in contact (:meth:`_contactOfSlave`, as for the force) has a spring along the normal: it acts
+        with the vector :math:`\\boldsymbol{a}_p = [c, -N^m] \\otimes \\bar{n}`, the gradient of its gap over the slave
+        node and the nodes of its facet, with the stiffness :math:`k_p = \\mathrm{d}f/\\mathrm{d}g` the law gives it.
+        With friction, it has a spring of the tangential penalty :math:`k_T` along every direction :math:`t` of the
+        tangent plane, :math:`\\boldsymbol{a}_p = [c, -N^m] \\otimes t`: together, the tangent of sticking. The bound
+        of the springs is the one of every penalty spring
+        (:func:`~edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings`). Two parts of the
+        tangent are not springs; they are added by their absolute row sums, from what the force computes:
+
+        * the geometric stiffness of finite sliding, :math:`f_n \\boldsymbol{H}`, the normal force times the second
+          derivative of the gap (against the spring, of the order of the penetration over the size of a facet);
+        * while the node slips in the direction :math:`\\boldsymbol{e}_s`, the coupling of the tangential to the normal
+          force, :math:`\\mu k_p\\, ([c, -N^m] \\otimes \\boldsymbol{e}_s) \\otimes \\boldsymbol{a}_p`, which is not
+          symmetric: in every row the larger of its absolute row sums and of their mean with its absolute column sums,
+          as the default bound of a tangent (the elements' argument needs the symmetric part). The rest of the
+          tangent of slipping is a spring along the direction :math:`q` of the tangent plane normal to
+          :math:`\\boldsymbol{e}_s`, softer than :math:`k_T`: the directions :math:`t` start with
+          :math:`\\boldsymbol{e}_s` then, so that it lies under the spring along :math:`q`.
+
+        At the state, the bound holds what the default bound of the tangent gives, since the absolute value of a sum is
+        at most the sum of the absolute values: it is at least that, and above it where
+        :math:`k_p \\boldsymbol{a}_p \\otimes \\boldsymbol{a}_p`, :math:`f_n \\boldsymbol{H}` and the coupling cancel in
+        part, and by the spring along :math:`\\boldsymbol{e}_s` of a slipping node, which its tangent does not have;
+        without friction and with small sliding, it is them. Over the next increment, every slave node in contact
+        within it enters as it is where its gap is the smallest
+        (:meth:`_contactAtTheSmallestGapWithinTheNextIncrement`), with the gradient, the Hessian and the slip of now (a
+        node open now enters sticking).
+
+        Each slave node acts on its own copy of the nodes of its facet in the block (:meth:`localEntriesOfBlock`), and
+        ``NED`` adds the copies after the bound, so the tangent, too, would bound it over the next increment. The bound
+        is taken from the springs so that there is one way to bound a contact: from the same code as its force
+        (:meth:`_contactOfSlave`), as for every contact, and without forming a tangent only for the bound in a
+        constraint that evaluates its explicit forces without one
+        (:class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`).
+        """
+
+        nodeCoefficients, directions, stiffness, dofs = [], [], [], []
+        for s, pIdcs, fIdcs in self._slavesWithAFacet():
+            contact = self._contactOfSlave(s, U_np, pIdcs, fIdcs)
+            if contact is None:
+                continue
+            slipDirection = None
+            if self.mu > 0.0 and contact.normalForce is not None:
+                _, slipDirection = self._stickPredictor(s, contact.normal, contact.normalForce, dU, pIdcs, fIdcs)
+            if nextIncrement is not None:
+                contact = self._contactAtTheSmallestGapWithinTheNextIncrement(
+                    s, contact, U_np, dU, pIdcs, fIdcs, nextIncrement, timeStep
+                )
+            if contact.normalForce is None:
+                continue
+
+            rows = pIdcs + fIdcs
+            springs = [(contact.normal, contact.stiffness)]
+            if self.mu > 0.0:
+                kTangent = self.tangentPenalty * self.tributaryAreas[s]
+                springs += [(t, kTangent) for t in _tangentDirections(contact.normal, slipDirection)]
+            for direction, k in springs:
+                nodeCoefficients.append(contact.nodeCoefficients)
+                directions.append(direction)
+                stiffness.append(k)
+                dofs.append(np.reshape(rows, (-1, self.nDim)))
+
+            if contact.hessian is not None:
+                bound[rows] += np.abs(contact.normalForce * contact.hessian) @ weights[rows]
+            if slipDirection is not None:
+                # The coupling mu k u (x) a_p is not symmetric: in every row the larger of the row sums of its absolute
+                # value and of their mean with its column sums, as the default bound of a tangent.
+                coupling = self.mu * abs(contact.stiffness)
+                absoluteU = np.abs(np.kron(contact.nodeCoefficients, slipDirection))
+                absoluteGradient = np.abs(contact.gradient)
+                rowsOfTheCoupling = coupling * absoluteU * (absoluteGradient @ weights[rows])
+                columnsOfTheCoupling = coupling * absoluteGradient * (absoluteU @ weights[rows])
+                bound[rows] += np.maximum(rowsOfTheCoupling, 0.5 * (rowsOfTheCoupling + columnsOfTheCoupling))
+
+        if stiffness:
+            gradient = [SpringGradientOnOwnNodes(np.array(nodeCoefficients), np.array(directions), np.array(dofs))]
+            addBoundOfAbsoluteStiffnessOfSprings(bound, weights, np.array(stiffness), gradient)
 
     def getNormalPressures(self) -> np.ndarray:
         """The current per-slave normal contact pressures (positive in compression), ordered like
@@ -847,24 +1106,17 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         """
 
         nDim = self.nDim
-        weights = self._frozenWeights[s]
-
         projectorOntoTangentPlane = np.eye(nDim) - np.outer(nBar, nBar)
         kTangent = self.tangentPenalty * self.tributaryAreas[s]
+        slipLimit = self.mu * -f_n
+        stickForce, slipDirection = self._stickPredictor(s, nBar, f_n, dU, pIdcs, fIdcs)
 
-        dURelative = dU[pIdcs] - weights @ dU[fIdcs].reshape((len(weights), nDim))
-        stickForce = self._tangentialForceConverged[s] - kTangent * (projectorOntoTangentPlane @ dURelative)
-
-        normalForceMagnitude = -f_n
-        slipLimit = self.mu * normalForceMagnitude
-        stickForceMagnitude = np.linalg.norm(stickForce)
-
-        if stickForceMagnitude <= slipLimit:
+        if slipDirection is None:
             tangentialForce = stickForce
             # d(stickForce)_d(dURelative) = -kTangent * projector; K = -G.T dfT_dU G
             KFriction = np.kron(np.outer(c, c), kTangent * projectorOntoTangentPlane) if computeTangent else None
         else:
-            slipDirection = stickForce / stickForceMagnitude
+            stickForceMagnitude = np.linalg.norm(stickForce)
             tangentialForce = slipLimit * slipDirection
             if computeTangent:
                 # dfT_dU = slipDirection * mu * dN_dU + slipLimit * dSlipDirection_dU, with
@@ -883,6 +1135,47 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         # the friction force on the slave is f_T and on the facet nodes -NBar_a f_T, i.e. G.T f_T
         PFriction = -np.kron(c, tangentialForce)
         return PFriction, KFriction
+
+    def _stickPredictor(
+        self, s: int, nBar: np.ndarray, f_n: float, dU: np.ndarray, pIdcs: list, fIdcs: list
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """The tangential force of a slave node in contact if it sticks (the elastic predictor from the converged
+        tangential force and the increment of the relative displacement), and the direction it slips in.
+
+        Parameters
+        ----------
+        s
+            The slave.
+        nBar
+            The unit normal of its facet.
+        f_n
+            The normal force, negative in contact.
+        dU
+            The increment of the constraint's block.
+        pIdcs
+            The degrees of freedom of the slave in the block.
+        fIdcs
+            Those of the nodes of its facet.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray | None]
+            The stick predictor; and the unit direction of the slip, None while the predictor lies within the friction
+            cone :math:`|f_T| \\le \\mu N` (the node sticks).
+        """
+
+        nDim = self.nDim
+        weights = self._frozenWeights[s]
+        projectorOntoTangentPlane = np.eye(nDim) - np.outer(nBar, nBar)
+        kTangent = self.tangentPenalty * self.tributaryAreas[s]
+
+        dURelative = dU[pIdcs] - weights @ dU[fIdcs].reshape((len(weights), nDim))
+        stickForce = self._tangentialForceConverged[s] - kTangent * (projectorOntoTangentPlane @ dURelative)
+
+        stickForceMagnitude = np.linalg.norm(stickForce)
+        if stickForceMagnitude <= self.mu * -f_n:
+            return stickForce, None
+        return stickForce, stickForce / stickForceMagnitude
 
     def acceptLastState(self):
         """Promote the tangential forces of the last (converged) Newton iterate to the frictional

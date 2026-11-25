@@ -216,13 +216,18 @@ and above it otherwise, and a direction oblique to the axes spreads the spring o
 the larger of the row sums of :math:`|\boldsymbol{K}^\mathrm{c}|`, which the particles' argument needs, and of
 :math:`\tfrac{1}{2}(|\boldsymbol{K}^\mathrm{c}| + |\boldsymbol{K}^\mathrm{c}|^T)`, which the elements' argument needs
 for an unsymmetric tangent; for a symmetric tangent, the two are equal. A constraint whose tangent is costly, or that
-has none -- one evaluated without a tangent in an explicit analysis, such as ``surfaceToDeformableSurfacePenalty`` --,
+has none -- one evaluated without a tangent in an explicit analysis, such as the contacts with a deformable master --,
 gives its stiffness as springs instead: a spring :math:`p` with the vector :math:`\boldsymbol{a}_p` with which it acts
 and the stiffness :math:`k_p` of its law -- the normal spring of a closed point, a support's spring along the axis it
 holds. The row sums are then, with the weights :math:`\boldsymbol{w}` of the columns, :math:`b_i \mathrel{+}= \sum_p
 |k_p|\, |a_{p,i}|\, (|\boldsymbol{a}_p| \cdot \boldsymbol{w})` (:mod:`edelweissfe.constraints.base.penaltysprings`),
 one formula for every such constraint, and the constraint takes the springs for its bound from the same code it takes
-them for its force, so that a change of the force cannot leave the bound behind.
+them for its force, so that a change of the force cannot leave the bound behind. What of its tangent is not a spring, it
+adds by the absolute row sums of what its force computes: ``nodeToDeformableSurfacePenalty`` the geometric stiffness of
+finite sliding, the normal force times the second derivative of the gap, and, while a node slips, the coupling of the
+tangential to the normal force, each by its own absolute value (the unsymmetric coupling, as the default does, with the
+mean of its rows and columns where that is larger): at least the default bound of the tangent, above it where the parts
+cancel.
 
 **At which state.** The central difference method integrates in each increment the net force evaluated at the end of
 the increment before, :math:`\boldsymbol{v}_{n+1/2} = \boldsymbol{v}_{n-1/2} + \tfrac{1}{2}(\Delta t_n + \Delta
@@ -285,9 +290,8 @@ a copy of its own of the nodes it couples -- of its master facet, and of its sla
 that close at different corners share a degree of freedom within the block, the entry misses their sum: at the
 reference point of a rigid body, on which every spring of a contact with a discrete rigid body acts, and, in
 ``surfaceToDiscreteRigidBodyPenalty``, at the nodes of a slave facet, which its contact points share. A constraint that
-needs the bound over the next increment there gives its springs; the node-to-surface contact and the contacts with a
-discrete rigid body are bounded from their tangent, and ``surfaceToDeformableSurfacePenalty`` gives its springs, from
-the same code as its force.
+needs the bound over the next increment there gives its springs; the contacts with a discrete rigid body are bounded
+from their tangent, and the contacts with a deformable master give their springs, from the same code as their force.
 
 Taking the velocity alone would not do: near the critical time step of the open state, the acceleration can turn a
 receding point around within one increment. The prediction is exact for the leapfrog without damping; damping only
@@ -345,10 +349,9 @@ The parts' estimates cover the stiffness of the parts themselves, and the penalt
   still bound the condensed system there is assumed, not shown, with or without penalty constraints.
 * **A multi-point constraint whose coefficients do not sum to one** (a linearized rigid body): the argument above
   assumes coefficients that sum to one.
-* **The geometric stiffness of contact,** for a constraint that bounds its springs: that of a contact with finite
-  sliding, or of a rigid body whose normals rotate with it (of the order of the normal force over the size of a facet or
-  the lever arm, small against the penalty). A constraint bounded from its tangent has in its bound what its tangent
-  holds.
+* **The geometric stiffness of a rigid body whose normals rotate with it**, in a contact with a discrete rigid body:
+  it is bounded from its tangent, which omits the :math:`\theta\theta` block; against the spring, of the order of the
+  penetration over the lever arm.
 * **A constraint that couples particles and finite elements at once**: taken with the larger of the two arguments,
   which is not proven (see "The particles").
 * **A penalty on a field integrated by forward Euler** (a field with a damping and no inertia): its rows are added to

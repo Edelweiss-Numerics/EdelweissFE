@@ -38,6 +38,7 @@ from test_residual_tangent_convention import (
     _nodeToDeformableSurfaceCase,
 )
 
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.solvers.base.criticaltimestep import (
     CriticalTimeStepEstimate,
@@ -499,7 +500,7 @@ def test_the_default_bound_of_an_unsymmetric_tangent_bounds_its_symmetric_part(t
     _, K = residualContributionAndTangent(constraint, U, U, timeStep)
     weights = np.random.default_rng(3).uniform(0.5, 2.0, constraint.nDof)
     bound = np.zeros(constraint.nDof)
-    constraint.addBoundOfAbsoluteStiffnessTimes(U, U, weights, bound, timeStep)
+    ConstraintBase.addBoundOfAbsoluteStiffnessTimes(constraint, U, U, weights, bound, timeStep)
 
     rowsOfK = np.abs(K) @ weights
     rowsOfTheSymmetricPart = np.abs(0.5 * (K + K.T)) @ weights
@@ -544,7 +545,7 @@ def test_the_default_bound_over_the_next_increment_takes_the_largest_entries_of_
     monkeypatch.setattr(type(constraint), "computeKernels", recordingComputeKernels)
     weights = rng.uniform(0.5, 2.0, constraint.nDof)
     bound = np.zeros(constraint.nDof)
-    constraint.addBoundOfAbsoluteStiffnessTimes(U, U, weights, bound, timeStep, nextIncrement)
+    ConstraintBase.addBoundOfAbsoluteStiffnessTimes(constraint, U, U, weights, bound, timeStep, nextIncrement)
 
     rowsOfK = largest @ weights
     np.testing.assert_allclose(bound, np.maximum(rowsOfK, 0.5 * (rowsOfK + largest.T @ weights)), rtol=1e-14)
