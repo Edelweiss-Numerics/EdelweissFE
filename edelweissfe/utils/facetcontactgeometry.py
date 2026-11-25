@@ -46,11 +46,280 @@ normalize/rotate second-derivative algebra is very easy to get subtly wrong.
 """
 
 import itertools
+from typing import NamedTuple
 
 import numpy as np
+from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
 
 from edelweissfe.utils.rotations import skewMatrix
+
+#: The cosine of the largest change of the normal between two updates of a contact search that still counts as sliding
+#: over a smooth surface: a larger change is a crease of the master surface. A contact point in contact does not
+#: move across a convex crease (the integrated contact), or restarts its frictional history at any crease (the
+#: node-based one).
+cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
+
+
+class SurfaceFeatures(NamedTuple):
+    """The edges and vertices of a faceted surface in one configuration: their angle-weighted pseudonormals (not
+    normalized), and whether they lie on a crease. See :class:`FacetedSurface`."""
+
+    #: The pseudonormal of each edge (3D; none in 2D), shape ``(nEdges, 3)``.
+    pseudonormalOfEdge: np.ndarray
+    #: The pseudonormal of each vertex, shape ``(nVertices, nDim)``.
+    pseudonormalOfVertex: np.ndarray
+    #: Whether the two facets of an edge meet at a crease.
+    edgeIsCrease: np.ndarray
+    #: Whether a vertex lies on a crease: in 2D its two facets meet at one, in 3D one of its edges is one.
+    vertexIsCrease: np.ndarray
+
+
+class FacetedSurface:
+    """The facets of a surface and where they meet: in 3D the edges and the vertices of its Tria3 facets, in 2D the
+    vertices of its Line2 facets. This is what the gap to a surface with corners needs.
+
+    The closest point of a facet to a point lies inside the facet, on one of its edges, or at one of its vertices --
+    its *feature*. Inside the facet, the facet's normal tells inside from outside. At a corner it may not: next to an
+    acute crest, a point outside the body can lie behind the plane of the flank whose edge is closest to it. There,
+    the **angle-weighted pseudonormal** of the feature (Baerentzen and Aanaes, 2005) does: the sum of the normals of
+    the facets that meet at an edge, or at a vertex, each weighted with the facet's angle at that vertex. For the
+    closest feature of a closed surface, the distance vector :math:`\\boldsymbol{x} - \\boldsymbol{x}_c` points along
+    the pseudonormal outside the body and against it inside, at convex and re-entrant corners alike.
+
+    An edge is a **crease** where the normals of its two facets differ by more than
+    :data:`cosOfSmoothNormalChangeLimit` allows (a crest, a root); a vertex is one where one of its edges is (in 2D,
+    where its two facets differ so). Elsewhere the facets tile a smooth surface, and its corners are artefacts of the
+    tiling.
+
+    A feature that is not met by exactly two facets (an edge, in 3D) or that lies on such an edge -- the boundary of
+    a surface that is not closed -- has no outside to tell: a surface that ends does not say what lies beyond it.
+
+    Parameters
+    ----------
+    nodesOfFacet
+        The vertices of each facet, as indices into the nodes of the surface, shape ``(nFacets, 3)`` (Tria3) or
+        ``(nFacets, 2)`` (Line2); the facets oriented with their outward normals, as the surface element generator
+        makes them.
+    """
+
+    #: For a Tria3 facet, the local vertices that span the edge opposite local vertex k: a closest point whose
+    #: weight k is zero lies on that edge.
+    _edgeOppositeLocalVertex = np.array([[1, 2], [0, 2], [0, 1]])
+
+    def __init__(self, nodesOfFacet: np.ndarray):
+        self.nodesOfFacet = np.asarray(nodesOfFacet, dtype=np.intp)
+        nFacets, nVerticesPerFacet = self.nodesOfFacet.shape
+        self.nVertices = int(self.nodesOfFacet.max()) + 1 if nFacets else 0
+
+        if nVerticesPerFacet == 3:
+            spanningVertices = np.sort(self.nodesOfFacet[:, self._edgeOppositeLocalVertex], axis=-1)
+            edges, edgeOfFacet = np.unique(spanningVertices.reshape((-1, 2)), axis=0, return_inverse=True)
+            #: The two vertices of each edge, shape ``(nEdges, 2)``.
+            self.verticesOfEdge = edges.reshape((-1, 2))
+            #: The edge opposite each local vertex of each facet, shape ``(nFacets, 3)``.
+            self.edgeOppositeVertex = edgeOfFacet.reshape((nFacets, 3))
+            #: Whether an edge is met by two facets (not on the boundary of the surface).
+            self.edgeIsInterior = np.bincount(edgeOfFacet.ravel(), minlength=len(self.verticesOfEdge)) == 2
+            onTheBoundary = np.zeros(self.nVertices, dtype=bool)
+            onTheBoundary[self.verticesOfEdge[~self.edgeIsInterior].ravel()] = True
+            #: Whether a vertex lies on no boundary edge of the surface.
+            self.vertexIsInterior = ~onTheBoundary
+        else:
+            self.verticesOfEdge = np.zeros((0, 2), dtype=np.intp)
+            self.edgeOppositeVertex = np.zeros((nFacets, 0), dtype=np.intp)
+            self.edgeIsInterior = np.zeros(0, dtype=bool)
+            self.vertexIsInterior = np.bincount(self.nodesOfFacet.ravel(), minlength=self.nVertices) == 2
+
+        # The facets that share a vertex with a facet, itself included: one ring of facets around it, its patch.
+        facetsAtVertex = csr_matrix(
+            (
+                np.ones(self.nodesOfFacet.size),
+                self.nodesOfFacet.ravel(),
+                np.arange(0, self.nodesOfFacet.size + 1, nVerticesPerFacet),
+            ),
+            shape=(nFacets, self.nVertices),
+        )
+        patches = (facetsAtVertex @ facetsAtVertex.T).tocsr()
+        patches.sort_indices()
+        self._patchStart, self._facetsOfPatches = patches.indptr, patches.indices
+
+    def patchOfFacet(self, facet: int) -> np.ndarray:
+        """The facets that share a vertex with a facet, the facet itself included -- one ring of facets around it, the
+        facets a point on it slides onto first.
+
+        Parameters
+        ----------
+        facet
+            The facet.
+
+        Returns
+        -------
+        numpy.ndarray
+            The facets, in ascending order.
+        """
+
+        return self._facetsOfPatches[self._patchStart[facet] : self._patchStart[facet + 1]]
+
+    def features(self, coordinatesOfFacet: np.ndarray, normalOfFacet: np.ndarray) -> SurfaceFeatures:
+        """The pseudonormals of the edges and the vertices, and which of them lie on a crease, in the configuration
+        given.
+
+        The pseudonormal of an edge is the sum of the normals of its two facets, of a vertex the sum of the normals of
+        its facets, each weighted with the facet's angle at the vertex; in 2D, the two segments at a vertex count
+        alike. They are not normalized: only their direction is used. The normals of the two facets of an edge (of a
+        vertex, in 2D) differ by the angle whose cosine is :math:`|\\boldsymbol{n}_A + \\boldsymbol{n}_B|^2 / 2 - 1`.
+
+        Parameters
+        ----------
+        coordinatesOfFacet
+            The node coordinates of each facet, shape ``(nFacets, nVerticesPerFacet, nDim)``.
+        normalOfFacet
+            The unit outward normal of each facet, shape ``(nFacets, nDim)``.
+
+        Returns
+        -------
+        SurfaceFeatures
+            The pseudonormals and the creases.
+        """
+
+        nFacets, nVerticesPerFacet, nDim = coordinatesOfFacet.shape
+        ofEdge = np.zeros((len(self.edgeIsInterior), nDim))
+        ofVertex = np.zeros((self.nVertices, nDim))
+        if nVerticesPerFacet == 3:
+            np.add.at(ofEdge, self.edgeOppositeVertex, np.repeat(normalOfFacet[:, None, :], 3, axis=1))
+            toNext = np.roll(coordinatesOfFacet, -1, axis=1) - coordinatesOfFacet
+            toPrevious = np.roll(coordinatesOfFacet, 1, axis=1) - coordinatesOfFacet
+            angleAtVertex = np.arctan2(
+                np.linalg.norm(np.cross(toNext, toPrevious), axis=-1), np.einsum("fad,fad->fa", toNext, toPrevious)
+            )
+            np.add.at(ofVertex, self.nodesOfFacet, angleAtVertex[:, :, None] * normalOfFacet[:, None, :])
+            edgeIsCrease = self.edgeIsInterior & (0.5 * rowDot(ofEdge, ofEdge) - 1.0 < cosOfSmoothNormalChangeLimit)
+            vertexIsCrease = np.zeros(self.nVertices, dtype=bool)
+            vertexIsCrease[self.verticesOfEdge[edgeIsCrease].ravel()] = True
+        else:
+            np.add.at(ofVertex, self.nodesOfFacet, np.repeat(normalOfFacet[:, None, :], 2, axis=1))
+            edgeIsCrease = np.zeros(0, dtype=bool)
+            vertexIsCrease = self.vertexIsInterior & (
+                0.5 * rowDot(ofVertex, ofVertex) - 1.0 < cosOfSmoothNormalChangeLimit
+            )
+        return SurfaceFeatures(ofEdge, ofVertex, edgeIsCrease, vertexIsCrease)
+
+    def signedDistances(
+        self,
+        points: np.ndarray,
+        facets: np.ndarray,
+        weights: np.ndarray,
+        coordinatesOfFacet: np.ndarray,
+        normalOfFacet: np.ndarray,
+        features: SurfaceFeatures,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """The gaps of points to the closest points of their facets, negative inside the body, and the directions in
+        which they grow (their gradients with respect to the points).
+
+        - The closest point lies on a **crease** of the surface, on an edge or at a vertex: the line from the closest
+          point to the point, :math:`\\pm(\\boldsymbol{x} - \\boldsymbol{x}_c)/d`, and the distance :math:`\\pm d`, the
+          sign that of :math:`\\boldsymbol{x} - \\boldsymbol{x}_c` along the pseudonormal of the feature. Outside a
+          convex crease (a crest) the gap so grows with the true distance to the edge in every direction, instead of
+          with the distance to the plane of one of its facets, which is zero or negative for a point beside the edge;
+          at a re-entrant crease (a root) a point inside is pushed out the shortest way. A point closer to the feature
+          than :math:`\\sqrt{\\epsilon}` times the facet's size has no direction to working precision: the
+          pseudonormal is taken.
+        - Everywhere else -- inside the facet, on a seam of a smooth surface, on the boundary of a surface that ends --
+          the facet's normal, and the distance along it: beyond its boundary, the surface goes on in the plane of its
+          last facet.
+
+        Parameters
+        ----------
+        points
+            The points, shape ``(nPairs, nDim)``.
+        facets
+            The facet of each point, shape ``(nPairs,)``.
+        weights
+            The weights of the closest point of each point in its facet, as :func:`closestFacets` returns them: an
+            exact zero marks a closest point on the facet's boundary.
+        coordinatesOfFacet
+            The node coordinates of all facets, shape ``(nFacets, nVerticesPerFacet, nDim)``.
+        normalOfFacet
+            The unit outward normals of all facets, shape ``(nFacets, nDim)``.
+        features
+            The pseudonormals and creases, see :meth:`features`.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            The gaps, shape ``(nPairs,)``, and the unit directions, shape ``(nPairs, nDim)``.
+        """
+
+        toPoint = points - np.einsum("pa,pad->pd", weights, coordinatesOfFacet[facets])
+        direction = normalOfFacet[facets]
+        gap = rowDot(direction, toPoint)
+
+        onTheFacetBoundary = weights == 0.0
+        nZeroWeights = onTheFacetBoundary.sum(axis=1)
+        pseudonormal = np.zeros_like(direction)
+        onACrease = np.zeros(len(facets), dtype=bool)
+
+        atAVertex = nZeroWeights == weights.shape[1] - 1
+        if atAVertex.any():
+            vertex = self.nodesOfFacet[facets[atAVertex], np.argmin(onTheFacetBoundary[atAVertex], axis=1)]
+            pseudonormal[atAVertex] = features.pseudonormalOfVertex[vertex]
+            onACrease[atAVertex] = features.vertexIsCrease[vertex]
+
+        onAnEdge = (nZeroWeights == 1) & ~atAVertex
+        if onAnEdge.any():
+            edge = self.edgeOppositeVertex[facets[onAnEdge], np.argmax(onTheFacetBoundary[onAnEdge], axis=1)]
+            pseudonormal[onAnEdge] = features.pseudonormalOfEdge[edge]
+            onACrease[onAnEdge] = features.edgeIsCrease[edge]
+
+        creased = np.flatnonzero(onACrease)
+        if len(creased):
+            toFeature = toPoint[creased]
+            distance = np.sqrt(rowDot(toFeature, toFeature))
+            unitPseudonormal = pseudonormal[creased] / np.linalg.norm(pseudonormal[creased], axis=1)[:, None]
+            sign = np.where(rowDot(unitPseudonormal, toFeature) < 0.0, -1.0, 1.0)
+
+            _, measure = facetNormalAndMeasure(coordinatesOfFacet[facets[creased]])
+            facetSize = measure ** (1.0 / (coordinatesOfFacet.shape[2] - 1))
+            resolved = distance > np.sqrt(np.finfo(float).eps) * facetSize
+
+            with np.errstate(divide="ignore", invalid="ignore"):
+                direction[creased] = np.where(
+                    resolved[:, None], (sign / distance)[:, None] * toFeature, unitPseudonormal
+                )
+            gap[creased] = np.where(resolved, sign * distance, rowDot(unitPseudonormal, toFeature))
+
+        return gap, direction
+
+    def acrossAConvexCrease(
+        self, fromFacets: np.ndarray, toFacets: np.ndarray, coordinatesOfFacet: np.ndarray, normalOfFacet: np.ndarray
+    ) -> np.ndarray:
+        """Whether going from one facet to another crosses a convex crease of the surface: their normals differ by
+        more than :data:`cosOfSmoothNormalChangeLimit` allows, and the second facet lies behind the plane of the
+        first (its centroid does) -- the surface turns away, as from the top of a block to its side, or from one side
+        of a thin body to the other. At a re-entrant crease, such as the root of a thread, the second facet lies in
+        front of the plane of the first.
+
+        Parameters
+        ----------
+        fromFacets, toFacets
+            The facet pairs, shape ``(nPairs,)`` each.
+        coordinatesOfFacet
+            The node coordinates of all facets, shape ``(nFacets, nVerticesPerFacet, nDim)``.
+        normalOfFacet
+            The unit outward normals of all facets, shape ``(nFacets, nDim)``.
+
+        Returns
+        -------
+        numpy.ndarray
+            True for the pairs across a convex crease.
+        """
+
+        normalOfFrom = normalOfFacet[fromFacets]
+        creased = rowDot(normalOfFacet[toFacets], normalOfFrom) < cosOfSmoothNormalChangeLimit
+        centroidOfTo = coordinatesOfFacet[toFacets].mean(axis=1)
+        behind = rowDot(normalOfFrom, centroidOfTo - coordinatesOfFacet[fromFacets, 0]) < 0.0
+        return creased & behind
 
 
 def tria3GapGradientHessian(

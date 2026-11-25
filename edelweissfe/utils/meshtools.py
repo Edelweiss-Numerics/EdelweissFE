@@ -111,10 +111,37 @@ def extractNodeCoordinatesFromElset(elementSet, displacementResult=False, displa
     return elCoordinatesList
 
 
-def currentNodeCoordinates(nodes: list, model: "FEModel", referenceCoordinates: np.ndarray) -> np.ndarray:
-    """The current coordinates of nodes: reference coordinates plus the current displacement.
+def currentNodeDisplacements(nodes: list, model: "FEModel", nDim: int) -> np.ndarray:
+    """The current displacements of nodes, from the model's displacement field.
 
-    Nodes without a displacement entry keep their reference coordinates.
+    Nodes without a displacement entry, and every node of a model without a displacement field, have none (zero).
+
+    Parameters
+    ----------
+    nodes
+        The nodes.
+    model
+        The model tree, holding the displacement field.
+    nDim
+        The number of components of a displacement.
+
+    Returns
+    -------
+    np.ndarray
+        The displacements, of shape (nNodes, nDim).
+    """
+    displacementField = model.nodeFields.get("displacement")
+    if displacementField is None:
+        return np.zeros((len(nodes), nDim))
+    indexOfNode = displacementField._indicesOfNodesInArray
+    return np.array(
+        [displacementField["U"][indexOfNode[n]] if n in indexOfNode else np.zeros(nDim) for n in nodes]
+    ).reshape((len(nodes), nDim))
+
+
+def currentNodeCoordinates(nodes: list, model: "FEModel", referenceCoordinates: np.ndarray) -> np.ndarray:
+    """The current coordinates of nodes: reference coordinates plus the current displacement
+    (:func:`currentNodeDisplacements`).
 
     Parameters
     ----------
@@ -130,12 +157,4 @@ def currentNodeCoordinates(nodes: list, model: "FEModel", referenceCoordinates: 
     np.ndarray
         The current coordinates, of shape (nNodes, nDim).
     """
-    displacementField = model.nodeFields.get("displacement")
-    if displacementField is None:
-        return referenceCoordinates.copy()
-    indexOfNode = displacementField._indicesOfNodesInArray
-    nDim = referenceCoordinates.shape[1]
-    displacements = np.array(
-        [displacementField["U"][indexOfNode[n]] if n in indexOfNode else np.zeros(nDim) for n in nodes]
-    )
-    return referenceCoordinates + displacements
+    return referenceCoordinates + currentNodeDisplacements(nodes, model, referenceCoordinates.shape[1])
