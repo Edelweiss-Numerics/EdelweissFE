@@ -532,13 +532,14 @@
 <span class="sd">    from above, but weights refined at another configuration can bound it less tightly than the weights constant per</span>
 <span class="sd">    field they started from when the stiffness changed faster than the weights followed, e.g. where entities reach</span>
 <span class="sd">    nodes whose weights the power iteration has made small. So an estimate with carried weights below the estimate the</span>
-<span class="sd">    weights started from starts them anew: the entities are estimated again from the weights constant per field, and</span>
-<span class="sd">    the larger of the two estimates is taken. Every estimate is thus at least the one the weights started from: with</span>
-<span class="sd">    the time increment lowered only, it never falls below the smallest estimate with weights constant per field of</span>
-<span class="sd">    the step; followed (``follow-critical-time-step``), it can fall below the estimate without carried weights of the</span>
-<span class="sd">    same configuration, down to the one the weights started from. The weights start anew -- constant per field -- also</span>
-<span class="sd">    with every numbering (the nodes they belong to may have changed) and every step (a material property may have</span>
-<span class="sd">    changed), and after a resume: they are not part of the checkpoint.</span>
+<span class="sd">    weights started from checks a fresh estimate from weights constant per field, and keeps the larger of the two</span>
+<span class="sd">    estimates together with its weights (starting the weights anew only when the fresh estimate beats the carried one).</span>
+<span class="sd">    Every estimate is thus at least the one the weights started from: with the time increment lowered only, it never</span>
+<span class="sd">    falls below the smallest estimate with weights constant per field of the step; followed</span>
+<span class="sd">    (``follow-critical-time-step``), it can fall below the estimate without carried weights of the same configuration,</span>
+<span class="sd">    down to the one the weights started from. The weights start anew -- constant per field -- also with every numbering</span>
+<span class="sd">    (the nodes they belong to may have changed) and every step (a material property may have changed), and after a</span>
+<span class="sd">    resume: they are not part of the checkpoint.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -608,13 +609,14 @@
             <span class="k">if</span> <span class="n">startsTheWeights</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_valueTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">estimate</span><span class="o">.</span><span class="n">value</span>
             <span class="k">elif</span> <span class="n">estimate</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_valueTheWeightsStartedFrom</span><span class="p">:</span>
-                <span class="n">weights</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="n">freshWeights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
                 <span class="n">anew</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">criticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">(</span>
-                    <span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">,</span> <span class="n">weights</span>
+                    <span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">,</span> <span class="n">freshWeights</span>
                 <span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_valueTheWeightsStartedFrom</span> <span class="o">=</span> <span class="n">anew</span><span class="o">.</span><span class="n">value</span>
                 <span class="k">if</span> <span class="n">anew</span><span class="o">.</span><span class="n">value</span> <span class="o">&gt;</span> <span class="n">estimate</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
                     <span class="n">estimate</span> <span class="o">=</span> <span class="n">anew</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_weightsOfTheEstimate</span> <span class="o">=</span> <span class="n">freshWeights</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_take</span><span class="p">(</span><span class="n">estimate</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_numbering</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_increment</span> <span class="o">=</span> <span class="n">increment</span>
