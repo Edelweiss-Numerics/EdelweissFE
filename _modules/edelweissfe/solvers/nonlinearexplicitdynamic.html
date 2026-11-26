@@ -1235,31 +1235,41 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_acceptTheStateOfTheModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
-        <span class="n">numberingOfTheIncrement</span><span class="p">,</span> <span class="n">internalForceOfTheElements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span>
+        <span class="n">numberingOfTheIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span>
+        <span class="n">internalForceOfTheElements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span>
+        <span class="n">incrementOfTheElements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span>
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"reconnect"</span><span class="p">):</span>
             <span class="n">change</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">updateDiscreteSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
+        <span class="n">increment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">numberingOfTheIncrement</span><span class="p">:</span>
             <span class="c1"># The elements were computed on the numbering of the increment. Their nodes keep their degrees of freedom</span>
-            <span class="c1"># in the new one, only with other indices: their force is carried over element by element.</span>
+            <span class="c1"># in the new one, only with other indices: their force and increment are carried over element by element.</span>
             <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span><span class="p">[</span><span class="n">element</span><span class="p">]</span> <span class="o">=</span> <span class="n">internalForceOfTheElements</span><span class="p">[</span><span class="n">element</span><span class="p">]</span>
+                <span class="n">increment</span><span class="p">[</span><span class="n">element</span><span class="p">]</span> <span class="o">=</span> <span class="n">incrementOfTheElements</span><span class="p">[</span><span class="n">element</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">increment</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfElementsWithNodalInertia</span><span class="p">]</span> <span class="o">=</span> <span class="n">incrementOfTheElements</span><span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfElementsWithNodalInertia</span>
+            <span class="p">]</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">increment</span><span class="p">)</span>
 
         <span class="n">P</span><span class="p">,</span> <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forceAndAccelerationToPublish</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
 
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"entities with own inertia"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_evaluateTheNetForceOnTheNewConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">increment</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Evaluate, at the configuration just accepted and on the connectivity the entities that carry their own</span>
 <span class="sd">        inertia reach now, what the next increment starts from: their internal force, their lumped momentum and their</span>
 <span class="sd">        lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), their critical time step</span>
 <span class="sd">        when its estimate is due</span>
 <span class="sd">        (:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue`), and, with the internal force of the</span>
-<span class="sd">        elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The configuration is</span>
-<span class="sd">        accepted: no increment is left, so the loads and the constraints are evaluated with a zero increment, and the</span>
-<span class="sd">        nodes of the entities carry no total solution.</span>
+<span class="sd">        elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The</span>
+<span class="sd">        entities' DOFs get a zero increment; the finite elements' DOFs get the increment just taken. Limitations: a</span>
+<span class="sd">        constraint spanning finite elements and entities still sees zero on the entity side (EdelweissFE#364), and</span>
+<span class="sd">        because ``advanceToTime`` runs before this evaluation, stateful constraints accept their trial state one</span>
+<span class="sd">        increment late (EdelweissFE#365).</span>
 
 <span class="sd">        In the zero increment, the motion of the entities starts (:meth:`_startTheMotionOfEntitiesWithOwnInertia`);</span>
 <span class="sd">        with ``project-velocity-every-increment``, the velocity of their nodes is projected from their momentum in every</span>
@@ -1273,6 +1283,9 @@
 <span class="sd">            The step being solved.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The increment just accepted.</span>
+<span class="sd">        increment</span>
+<span class="sd">            The displacement increment on the current numbering: the increment just taken on the finite elements'</span>
+<span class="sd">            degrees of freedom, and zero on those of the entities that carry their own inertia.</span>
 <span class="sd">        """</span>
 
         <span class="n">system</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span>
@@ -1287,9 +1300,8 @@
             <span class="n">system</span><span class="o">.</span><span class="n">assembleLumpedDampingOfEntitiesWithOwnInertia</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">),</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span> <span class="o">+=</span> <span class="n">internalForceOfEntities</span>
-        <span class="n">noIncrement</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleNetForce</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="n">noIncrement</span><span class="p">,</span> <span class="n">timeStep</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_netForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_internalForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="n">increment</span><span class="p">,</span> <span class="n">timeStep</span>
         <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
@@ -1305,7 +1317,7 @@
         <span class="c1"># depends on it. The penalty constraints are bounded with the stiffness they had in the net force, with the same</span>
         <span class="c1"># arguments, after the entities, since their estimate adds to the entities' last one. The time increment is set</span>
         <span class="c1"># once, from both: what they decide is the time increment of the next increment, which integrates that force.</span>
-        <span class="n">rowSumsOfThePenaltyConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rowSumsOfThePenaltyConstraints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="n">noIncrement</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="n">rowSumsOfThePenaltyConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rowSumsOfThePenaltyConstraints</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="n">increment</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
         <span class="n">criticalTimeStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfTheEntities</span>
         <span class="n">entitiesAreDue</span> <span class="o">=</span> <span class="n">criticalTimeStep</span><span class="o">.</span><span class="n">isDue</span><span class="p">(</span>
             <span class="n">system</span><span class="p">,</span>
@@ -2439,6 +2451,11 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">ids_inertiaOfEntities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">setdiff1d</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_dofIndicesOfFields</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">fields</span><span class="p">),</span> <span class="n">system</span><span class="o">.</span><span class="n">dofsWithNodalInertia</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfElementsWithNodalInertia</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span><span class="p">]))</span>
+            <span class="k">if</span> <span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span>
+            <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_refuseSlavesAmongTheDofsOfEntitiesWithOwnInertia</span><span class="p">()</span>
 
