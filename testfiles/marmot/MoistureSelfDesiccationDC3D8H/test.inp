@@ -1,0 +1,25 @@
+** Moisture in a concrete prism (DC3D8H), 40 x 20 x 20 mm (units mm, day), initially at h = 0.98: BSB sorption
+** isotherm, Bazant-Najjar diffusivity, self-desiccation; wetted by a prescribed moisture flux on x = 40 mm and drying
+** through a moisture film on x = 0.
+*modelGenerator, generator=boxGen, name=gen
+x0=0, y0=0, z0=0, lX=40, lY=20, lZ=20, nX=4, nY=2, nZ=2, elType=DC3D8H
+
+** D1 [kg/m3 mm2/d], alpha0, hc, n, isotherm type (1: BSB), C, k, Vm [kg/m3], dw_inf [kg/m3], tau_s [d]
+*material, name=MoistureDiffusion, id=concrete
+3000.0, 0.05, 0.8, 15.0, 1, 18.0, 0.73, 20.0, 5.0, 30.0
+
+*section, name=section1, material=concrete, type=solid
+all
+
+*job, name=moisturejob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=rh, elSet=all, field=relative humidity, result=U
+>>perElement, name=flux, elSet=all, result=flux, quadraturePoint=0
+
+*step, solver=theSolver
+startInc=0.05, maxInc=0.05, minInc=1e-3, maxNumInc=40, maxIter=12, stepLength=20
+>>setfield, name=initial, fieldOutput=rh, type=uniform, value=0.98
+>>distributedload, name=film, surface=gen_left, type=moisture film, magnitude='1000.0, 0.6', f(t)='1'
+>>distributedload, name=wetting, surface=gen_right, type=moisture flux, magnitude=2.0, f(t)='1'

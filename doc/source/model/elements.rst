@@ -14,6 +14,60 @@ Relevant module: ``edelweissfe.elements.marmotelement.element``
 .. autoclass:: edelweissfe.elements.marmotelement.element.MarmotElementWrapper
    :members:
 
+Heat conduction elements
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Marmot's transport elements ``DC2D3T``, ``DC2D4T``, ``DC2D8T`` (plane, ``type=plane`` section with a thickness),
+``DCAX4T``, ``DCAX8T`` (axisymmetric, ``domain=axisymmetric``, :math:`r = x`; a plane section, whose thickness they do
+not use) and ``DC3D4T``, ``DC3D8T``, ``DC3D20T`` (solid) carry the scalar field ``temperature`` and take a transport
+material such as ``HeatConduction``. They integrate transient heat conduction with the backward Euler method over the
+time increment of the step; a material with zero heat capacity gives steady state conduction. Loads:
+
+- ``distributedload`` of ``type=heat flux`` (``magnitude=q``, into the body), ``type=heat film``
+  (``magnitude='h, T_inf'``, convection) and ``type=heat radiation`` (``magnitude='c, T_inf, T_0'``,
+  :math:`c = \varepsilon\sigma`, :math:`T_0` the absolute zero of the temperature scale). The amplitude scales all
+  values: use ``f(t)='1'`` to apply them at once.
+- ``bodyforce`` with ``forceVector`` the volumetric heat source.
+- The initial temperature is set with ``setfield`` on a ``perNode`` field output of the result ``U`` in the first step.
+
+A zero time increment (such as the one a step begins with) lets no heat flow. The heat flow at prescribed temperatures
+is the result ``P`` of the field ``temperature``, in W (through the thickness of plane elements, over the full ring of
+axisymmetric ones).
+
+.. literalinclude:: ../../../testfiles/marmot/HeatTransientDC2D4T/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/HeatTransientDC2D4T/test.inp``
+
+Worked examples with figures (fire exposure of a column section and of a cube, a pipe wall heated to steady state against
+its closed form) are in ``examples/HeatTransfer``.
+
+Moisture diffusion elements
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The same eight element shapes with the suffix ``H`` (``DC2D3H``, ``DC2D4H``, ``DC2D8H``, ``DCAX4H``, ``DCAX8H``,
+``DC3D4H``, ``DC3D8H``, ``DC3D20H``) carry the scalar field ``relative humidity`` (pore relative humidity, 0 ... 1) and
+take the transport material ``MoistureDiffusion`` (Bažant–Najjar diffusivity, linear or BSB sorption isotherm,
+optional self-desiccation). Loads:
+
+- ``distributedload`` of ``type=moisture flux`` (``magnitude=q``, into the body) and ``type=moisture film``
+  (``magnitude='beta, h_inf'``, exchange with an environment at the relative humidity ``h_inf``). As for the heat film,
+  the amplitude scales both values: use ``f(t)='1'`` to expose a surface at once.
+- ``bodyforce`` with ``forceVector`` a volumetric moisture source.
+- The initial relative humidity is set with ``setfield`` on a ``perNode`` field output of the result ``U``.
+
+The field ``relative humidity`` is converged when the correction is below 1e-8 (dimensionless) and the flux residual
+below 1e-8 of the averaged element flux, or below the absolute floor 1e-14. The flux unit depends on the units of the
+material (e.g. kg/(m² s), or m/s in the classical form with a unit moisture capacity): where the element fluxes cancel
+(e.g. a sealed, uniformly self-desiccating body), raise the floor with
+``*updateConfiguration, configuration=absoluteFluxResidualTolerance`` to a value fitting the units.
+
+.. literalinclude:: ../../../testfiles/marmot/MoistureDryingDC2D8H/test.inp
+    :language: edelweiss
+    :caption: Example: ``testfiles/marmot/MoistureDryingDC2D8H/test.inp``
+
+Worked examples with figures (drying of a column section and of a standard cylinder, a curing slab with
+self-desiccation) are in ``examples/MoistureDiffusion``.
+
 Provider ``marmotsingleqpelement``
 ----------------------------------
 

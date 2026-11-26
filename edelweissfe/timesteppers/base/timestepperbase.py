@@ -51,6 +51,12 @@ import numpy as np
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
 
+#: Increments sum up to the step progress 1 only up to round-off (e.g. 70 increments of 1/70 leave about 1e-14 of the
+#: step). An increment that would leave no more than this of the step takes the whole remainder instead: else the step
+#: would end with a sliver increment whose time increment is round-off, in which a transient (e.g. diffusion) problem,
+#: with its capacity divided by the time increment, cannot converge.
+stepProgressRoundOff = 1e-12
+
 
 class TimeStepperBase(ABC):
     """Base class for all time steppers.

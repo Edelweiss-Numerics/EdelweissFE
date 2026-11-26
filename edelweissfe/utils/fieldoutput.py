@@ -44,7 +44,7 @@ from typing import Callable, Union
 
 import numpy as np
 
-from edelweissfe.fields.nodefield import NodeField
+from edelweissfe.fields.nodefield import NodeField, NodeFieldSubset
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.elementset import ElementSet
@@ -574,6 +574,52 @@ class NodeFieldOutput(_FieldOutputBase):
         result = self._nodeField[self.entry]
 
         return super()._applyResultsPipleline(result)
+
+    def getNodeCoordinates(self) -> list:
+        """The coordinates of the nodes of this field output, in the order of its results.
+
+        Returns
+        -------
+        list
+            One coordinate array per node.
+        """
+
+        self._nodeField[self.entry]  # a subset brings its nodes up to date with its parent field on access
+        return [node.coordinates for node in self._nodeField.nodes]
+
+    def setResults(self, values: np.ndarray):
+        """Set the solution ``U`` of the node field on the nodes of this field output, e.g. as the initial condition
+        of a transient analysis (``setfield``).
+
+        The solvers read the solution from the node fields when they build their discrete system, i.e. before the
+        first increment: a value set at the beginning of the first step is its initial condition.
+
+        Parameters
+        ----------
+        values
+            The values, one row per node.
+
+        Raises
+        ------
+        Exception
+            For modified results (``f(x)``), or for another entry than ``U``.
+        """
+
+        if self.f:
+            raise Exception("cannot set field output for modified results (f(x) != None) !")
+        if self.entry != "U":
+            raise Exception(
+                "field output {:}: only the solution U of a node field can be set, not {:}".format(
+                    self.name, self.entry
+                )
+            )
+
+        nodeField = self._nodeField
+        values = np.reshape(np.asarray(values, dtype=float), nodeField[self.entry].shape)
+        if isinstance(nodeField, NodeFieldSubset):
+            nodeField.parentNodeField[self.entry][nodeField._indicesOfNodesInParentArray] = values
+        else:
+            nodeField[self.entry][:] = values
 
 
 class RigidBodyFieldOutput(_FieldOutputBase):

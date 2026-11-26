@@ -253,7 +253,14 @@ def randomInputs(seed: int, n: int):
 
 def test_legacy_defaults_decide_as_the_original_criterion():
     criterion = legacy()
-    fields = [field for field in phenomena.fieldCorrectionTolerance if field != "scalar variables"]
+    # the original criterion had the absolute flux residual floor 1e-7 for every field; fields added since may default
+    # to another floor on purpose (e.g. 'relative humidity', whose fluxes are small in SI units), and are not compared
+    fields = [
+        field
+        for field in phenomena.fieldCorrectionTolerance
+        if field != "scalar variables" and phenomena.absoluteFluxResidualTolerance[field] == 1e-7
+    ]
+    assert "displacement" in fields
 
     for number, (R, ddU, dU, F, iteration) in enumerate(randomInputs(seed=1, n=20000)):
         field = fields[number % len(fields)]

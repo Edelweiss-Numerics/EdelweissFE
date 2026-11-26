@@ -30,6 +30,7 @@ from abc import abstractmethod
 
 import numpy as np
 
+from edelweissfe.config.phenomena import rateFluxFields
 from edelweissfe.numerics.doflocations import DofLocations
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
@@ -74,6 +75,10 @@ class NodalLoadBase(LoadBase):
         on the node set; a dead load, so without a tangent. See
         :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
 
+        Nothing is added in a zero time increment for a field whose fluxes are rates
+        (:data:`~edelweissfe.config.phenomena.rateFluxFields`, e.g. ``temperature``): no time passes, so a point
+        source supplies nothing, like the distributed and body loads of the transport elements.
+
         Only the nodes of the set that are part of the discrete system are loaded (see
         :meth:`~edelweissfe.numerics.dofnumbering.DofNumbering.locateFieldOnNodeSet`): every node of the set in a finite
         element model, those in the active domain in a meshfree one.
@@ -93,6 +98,13 @@ class NodalLoadBase(LoadBase):
         locations
             The locations of the entities in the discrete system, from which the load finds where it acts.
         """
+
+        # A point load on a field whose flux is a rate (e.g. a heat source in W on 'temperature') supplies nothing while
+        # no time passes. In the zero increment at the beginning of a step, the transport elements balance the content
+        # increment only (nothing flows); a point load acting there would be balanced against the capacity alone and
+        # add the supply of one unit of time, at the beginning of every step.
+        if timeStep.timeIncrement == 0.0 and self.field in rateFluxFields:
+            return
 
         dofIndices, nodePositions = locations.numbering.locateFieldOnNodeSet(self.field, self.nodeSet)
         # one row of the load per node of the set: those of the nodes in the discrete system
