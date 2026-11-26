@@ -1045,11 +1045,9 @@ class NED(NonlinearSolverBase):
         self.writeResultsToModel(self._U, self._dU, None, self._V, None)
         self._acceptTheStateOfTheModel(model, timeStep)
 
-        numberingOfTheIncrement, internalForceOfTheElements, incrementOfTheElements = (
-            self.system.numbering,
-            self._internalForce,
-            self._dU,
-        )
+        numberingOfTheIncrement = self.system.numbering
+        internalForceOfTheElements = self._internalForce
+        incrementOfTheElements = self._dU
         with performancetiming.timeit("reconnect"):
             change = model.updateConnectivity()
         self.updateDiscreteSystem(model, change)
@@ -1061,8 +1059,9 @@ class NED(NonlinearSolverBase):
                 self._internalForce[element] = internalForceOfTheElements[element]
                 increment[element] = incrementOfTheElements[element]
         else:
-            increment[:] = incrementOfTheElements
-            increment[self.ids_inertiaOfEntities] = 0.0
+            increment[self._dofsOfElementsWithNodalInertia] = incrementOfTheElements[
+                self._dofsOfElementsWithNodalInertia
+            ]
 
         self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep, increment)
 
@@ -1076,11 +1075,11 @@ class NED(NonlinearSolverBase):
         lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), their critical time step
         when its estimate is due
         (:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue`), and, with the internal force of the
-        elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The nodes
-        of the entities carry no total solution or carried increment across reconnections (their entries in
-        ``increment`` are zero), while finite-element degrees of freedom keep the increment just taken so that
-        increment-dependent constraints (e.g. frictional contact on finite elements) see the true displacement
-        increment.
+        elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The
+        entities' DOFs get a zero increment; the finite elements' DOFs get the increment just taken. Limitations: a
+        constraint spanning finite elements and entities still sees zero on the entity side (EdelweissFE#364), and
+        because ``advanceToTime`` runs before this evaluation, stateful constraints accept their trial state one
+        increment late (EdelweissFE#365).
 
         In the zero increment, the motion of the entities starts (:meth:`_startTheMotionOfEntitiesWithOwnInertia`);
         with ``project-velocity-every-increment``, the velocity of their nodes is projected from their momentum in every
@@ -2070,6 +2069,11 @@ class NED(NonlinearSolverBase):
 
         self.ids_inertiaOfEntities = np.setdiff1d(
             self._dofIndicesOfFields(system.numbering.fields), system.dofsWithNodalInertia(system.numbering.fields)
+        )
+        self._dofsOfElementsWithNodalInertia = (
+            np.unique(np.concatenate([system.locations[el] for el in system.elementsWithNodalInertia]))
+            if system.elementsWithNodalInertia
+            else np.zeros(0, dtype=np.intp)
         )
         self._refuseSlavesAmongTheDofsOfEntitiesWithOwnInertia()
 

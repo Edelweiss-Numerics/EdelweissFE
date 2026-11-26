@@ -59,11 +59,13 @@ import numpy as np
 import pytest
 
 from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
 from edelweissfe.elements.pointmass import PointMass
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.change import Change
 from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofvector import DofVector
@@ -654,10 +656,7 @@ def test_a_constraint_on_finite_elements_in_a_hybrid_model_receives_their_displa
     """In a hybrid model (finite elements and entities that carry their own inertia), a constraint evaluated in
     ``_evaluateTheNetForceOnTheNewConnectivity`` receives the displacement increment ``dU`` just taken on the finite
     elements' degrees of freedom (and zero on the entities' degrees of freedom), both when the numbering stays the same
-    and when a reconnection builds a new numbering."""
-
-    from edelweissfe.constraints.base.constraintbase import ConstraintBase
-    from edelweissfe.models.change import Change
+    and when a reconnection reorders the degrees of freedom into a new numbering."""
 
     class _RecordingConstraint(ConstraintBase):
         def __init__(self, nodes):
@@ -704,6 +703,8 @@ def test_a_constraint_on_finite_elements_in_a_hybrid_model_receives_their_displa
             self.calls = []
             self.weightsOfTheEstimates = []
             self.newmarkParametersOfEntities = (0.25, 0.5)
+            self._buildCount = 0
+            self.feDofLocations = []
             entityNode = Node(1, np.array([0.0, 0.0]))
             feNode = Node(2, np.array([1.0, 0.0]))
             self.nodes[1] = entityNode
@@ -716,7 +717,15 @@ def test_a_constraint_on_finite_elements_in_a_hybrid_model_receives_their_displa
             self.constraints["recording"] = self.constraint
 
         def buildDiscreteSystem(self) -> _HybridSystem:
-            return _HybridSystem(self, FEModel.buildDiscreteSystem(self).locations)
+            self._buildCount += 1
+            if changeNumbering:
+                # Alternate the node order in the displacement NodeField so the finite-element DOFs genuinely move
+                # between [2, 3] and [0, 1] across reconnections.
+                order = [self.nodes[2], self.nodes[1]] if self._buildCount % 2 == 0 else [self.nodes[1], self.nodes[2]]
+                self.nodeFields["displacement"].resize(order)
+            locations = FEModel.buildDiscreteSystem(self).locations
+            self.feDofLocations.append(tuple(locations[self.elements[2]].tolist()))
+            return _HybridSystem(self, locations)
 
         def updateConnectivity(self):
             self.calls.append("reconnect")
@@ -746,6 +755,9 @@ def test_a_constraint_on_finite_elements_in_a_hybrid_model_receives_their_displa
         maxNumInc=1000,
     ).solve()
     fieldOutputController.finalizeJob()
+
+    if changeNumbering:
+        assert len(set(model.feDofLocations)) == 2, "DOF remapping must move the finite element's global DOF indices"
 
     records = model.constraint.recorded
     assert len(records) > 3
