@@ -272,6 +272,39 @@
 <span class="sd">        """</span></div>
 
 
+<div class="viewcode-block" id="MultiPointConstraintBase.nodalDofRecords">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.nodalDofRecords">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nodalDofRecords</span><span class="p">(</span><span class="n">fieldVariableIndices</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">slaveNode</span><span class="p">,</span> <span class="n">masters</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The degree-of-freedom records of one nodal dependency :math:`\\boldsymbol{u}_s = \\sum_a w_a</span>
+<span class="sd">        \\boldsymbol{u}_a`, component by component: each record becomes one row :math:`s` of the transformation</span>
+<span class="sd">        :math:`\\mathbf{T}` of :class:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation`,</span>
+<span class="sd">        which condenses the system matrix to :math:`\\mathbf{T}^\\mathsf{T} \\mathbf{K} \\mathbf{T}`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fieldVariableIndices</span>
+<span class="sd">            The global indices of the field variables, ``numbering.idcsOfFieldVariablesInDofVector``.</span>
+<span class="sd">        field</span>
+<span class="sd">            The field of the slave and the masters.</span>
+<span class="sd">        slaveNode</span>
+<span class="sd">            The slave node.</span>
+<span class="sd">        masters</span>
+<span class="sd">            ``[(masterNode, weight), ...]``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[tuple[int, list[tuple[int, float]]]]</span>
+<span class="sd">            One record per component of the field.</span>
+<span class="sd">        """</span>
+        <span class="n">slaveDofs</span> <span class="o">=</span> <span class="n">fieldVariableIndices</span><span class="p">[</span><span class="n">slaveNode</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">field</span><span class="p">]]</span>
+        <span class="n">masterDofs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">fieldVariableIndices</span><span class="p">[</span><span class="n">mNode</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">mNode</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">masters</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">slaveDofs</span><span class="p">[</span><span class="n">component</span><span class="p">],</span> <span class="p">[(</span><span class="n">mDofs</span><span class="p">[</span><span class="n">component</span><span class="p">],</span> <span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">mDofs</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">masterDofs</span> <span class="k">if</span> <span class="n">w</span> <span class="o">!=</span> <span class="mf">0.0</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">component</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">slaveDofs</span><span class="p">))</span>
+        <span class="p">]</span></div>
+
+
 <div class="viewcode-block" id="MultiPointConstraintBase.claimedSlaveNodes">
 <a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase.claimedSlaveNodes">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">claimedSlaveNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">:</span>
