@@ -182,6 +182,7 @@ _addBuiltins(
     [
         "amrtransparencyprobe",
         "directionalspringpenalty",
+        "embeddedregion",
         "equalvaluelagrangian",
         "equalvaluepenalty",
         "hangingnode",

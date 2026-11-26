@@ -41,6 +41,8 @@ from itertools import product
 
 import numpy as np
 
+from edelweissfe.utils.isoparametricshapes import newtonInverseMapping
+
 
 class TopologyBase(ABC):
     """Abstract base class for element topologies in adaptive refinement.
@@ -186,9 +188,11 @@ class TopologyBase(ABC):
         side = n - 1 if rows[0, axis] == 2 else 0
         return [index for index, position in enumerate(product(range(n), repeat=self.dim)) if position[axis] == side]
 
-    def inverse_map(self, point, elementNodeCoords, tol=1e-11, itmax=30) -> np.ndarray:
-        """Map a physical point into the reference domain of an element, by Newton's method from the element
-        center; the result is clipped to ``[-1.2, 1.2]`` per axis if it does not converge.
+    def inverse_map(self, point, elementNodeCoords, itmax=30) -> np.ndarray:
+        """Map a physical point into the reference domain of an element, by the one Newton inverse mapping of
+        EdelweissFE (:func:`edelweissfe.utils.isoparametricshapes.newtonInverseMapping`, on this topology's node
+        ordering) from the element center; the result is clipped to ``[-1.2, 1.2]`` per axis if it does not converge.
+        The convergence criterion is the dimensionless one of the shared mapping.
 
         Parameters
         ----------
@@ -196,27 +200,13 @@ class TopologyBase(ABC):
             The physical coordinates of the point.
         elementNodeCoords
             The element's node coordinates, in local order.
-        tol
-            The tolerance of the physical residual.
         itmax
             The maximum number of Newton iterations.
         """
-        coords = np.asarray(elementNodeCoords, dtype=float)
-        xi = np.zeros(self.dim)
-        for _ in range(itmax):
-            N, dN = self.shape_functions_and_grad(*xi)
-            residual = N @ coords - point
-            if float(np.linalg.norm(residual)) < tol:
-                return xi
-            jacobian = coords.T @ dN  # jacobian[i, k] = dx_i / dxi_k
-            try:
-                dxi = np.linalg.solve(jacobian, residual)
-            except np.linalg.LinAlgError:
-                break
-            xi -= dxi
-            if float(np.linalg.norm(dxi)) < 1e-10:
-                break
-        return np.clip(xi, -1.2, 1.2)
+        xi, converged = newtonInverseMapping(
+            lambda xi_: self.shape_functions_and_grad(*xi_), elementNodeCoords, point, np.zeros(self.dim), itmax
+        )
+        return xi if converged else np.clip(xi, -1.2, 1.2)
 
     def subdivide(self, parent_coords: np.ndarray, n: int) -> list:
         """The physical node coordinates of the children of an ``n``-per-axis split of one parent element,
