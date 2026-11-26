@@ -48,6 +48,10 @@ class ForcesOnlyExplicitEvaluation:
     :meth:`computeKernels` loop with ``K=None``. One loop rather than two, so the physics cannot
     drift between the implicit and the explicit path. :meth:`computeKernels` must therefore skip
     every tangent contribution when ``K`` is None.
+
+    Only the forces are evaluated without the tangent: ``NED`` still asks for the tangent once per
+    increment, for the bound of its critical time step
+    (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`).
     """
 
     def computeKernelsExplicit(

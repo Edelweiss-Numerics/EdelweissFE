@@ -46,10 +46,13 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
 class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixContributorBase):
-    #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block
-    #: the constraint has in the discrete system it is evaluated in; None until its first evaluation there (see
-    #: :meth:`prepareExplicitEvaluation`).
-    _discardedTangentScratch = None
+    #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, and that
+    #: :meth:`addBoundOfAbsoluteStiffnessTimes` bounds, sized for the block the constraint has in the discrete system it
+    #: is evaluated in; None until its first evaluation there (see :meth:`prepareExplicitEvaluation`).
+    _tangentScratch = None
+    #: The local rows and columns of the entries of that scratch, for a constraint that lists them; None until
+    #: :meth:`addBoundOfAbsoluteStiffnessTimes` first needs them in the discrete system.
+    _localEntriesOfTheTangentScratch = None
 
     #: The state this constraint carries from one increment to the next, by attribute name and type;
     #: see :mod:`~edelweissfe.utils.checkpointedstate`. Every constraint declares it (empty if it carries
@@ -57,7 +60,7 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
     checkpointedState: dict | None = None
 
     #: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:
-    #: e.g. a contact constraint whose partner is far away is not, and takes no part in the discrete system then (see
+    #: e.g. a constraint whose partner is out of reach is not, and takes no part in the discrete system then (see
     #: :attr:`active`). A constraint sets it there; the model sees the change of :attr:`active` itself (see
     #: :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). A constraint that does not check stays within
     #: reach.
@@ -214,12 +217,11 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         """The total number of degrees of freedom this constraint is associated with."""
 
     def updateConnectivity(self, model: FEModel) -> bool:
-        """Called once at the start of every increment, before the global discrete system is
-        (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based
-        contact pairs) and declare whether the nodes it couples (``nodes``/``fields``/``nDof``) have
-        changed since the last call. A constraint that is not always within reach also sets
-        :attr:`withinReach` here; it does not report the change of :attr:`active` itself, the model compares it (see
-        :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`).
+        """Called once at the start of every increment, before the global discrete system is (re)created, so a
+        constraint can refresh a dynamic candidate set and declare whether the nodes it couples
+        (``nodes``/``fields``/``nDof``) have changed since the last call. A constraint that is not always within reach
+        also sets :attr:`withinReach` here; it does not report the change of :attr:`active` itself, the model compares
+        it (see :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`).
 
         The default implementation does nothing and reports no change, which is correct for every
         constraint whose nodes are fixed at construction (i.e. every constraint that does
@@ -240,8 +242,8 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
 
     def acceptLastState(self):
         """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
-        is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of
-        the last (converged) Newton iterate to its history. Only an :attr:`active` constraint is called: one that took
+        is accepted, so a stateful constraint can promote the state of the last (converged) Newton
+        iterate to its history. Only an :attr:`active` constraint is called: one that took
         no part in the increment keeps its history.
 
         The default implementation does nothing, which is correct for every stateless constraint
@@ -302,19 +304,23 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         one, or one whose constraints are re-located), before it evaluates the constraint there with
         :meth:`computeKernelsExplicit`.
 
-        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation
-        sizes it, once, for the block the constraint has now. The size is the number of entries of the block
+        This default forgets the scratch of the tangent that :meth:`computeKernelsExplicit` throws away and
+        :meth:`addBoundOfAbsoluteStiffnessTimes` bounds, so that the next evaluation sizes it, once, for the block
+        the constraint has now. The size is the number of entries of the block
         (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists
-        its entries means building the list: once per discrete system, not in every increment. A constraint that
-        evaluates its forces without a tangent needs nothing here.
+        its entries means building the list: once per discrete system, not in every increment. A constraint that neither
+        evaluates nor bounds through the tangent -- that overrides both :meth:`computeKernelsExplicit` and
+        :meth:`addBoundOfAbsoluteStiffnessTimes` -- needs nothing here.
 
         A solver that evaluates constraints itself, rather than through
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`, calls this
         whenever the constraint is located anew: the default :meth:`computeKernelsExplicit` does not size its tangent
-        again on its own, and a block whose size has changed (a contact with other slave nodes) would not fit it.
+        again on its own, and a block whose size has changed, e.g. after a connectivity update
+        (:meth:`updateConnectivity`), would not fit it.
         """
 
-        self._discardedTangentScratch = None
+        self._tangentScratch = None
+        self._localEntriesOfTheTangentScratch = None
 
     def computeKernelsExplicit(
         self,
@@ -345,15 +351,87 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
             The current time step.
         """
 
-        # The discarded tangent buffer is sized once per discrete system, and re-zeroed in every increment.
-        scratch = self._discardedTangentScratch
-        if scratch is None:
-            scratch = self._discardedTangentScratch = np.zeros(countEntriesOfBlock(self))
-        else:
-            scratch[:] = 0.0
+        self.computeKernels(U_np, dU, P, self.shapeBlock(self._zeroedTangentScratch()), timeStep)
 
-        K = self.shapeBlock(scratch)
-        self.computeKernels(U_np, dU, P, K, timeStep)
+    def addBoundOfAbsoluteStiffnessTimes(
+        self,
+        U_np: np.ndarray,
+        dU: np.ndarray,
+        weights: np.ndarray,
+        bound: np.ndarray,
+        timeStep: TimeStep,
+    ):
+        """Add an upper bound of the row sums of the absolute value of this constraint's stiffness, weighted by column,
+        :math:`b_i \\mathrel{+}= \\sum_j |K_{ij}|\\, w_j`, at the state given; for a stiffness that is not symmetric, of
+        both :math:`\\boldsymbol{K}` and its symmetric part :math:`\\tfrac{1}{2}(\\boldsymbol{K} + \\boldsymbol{K}^T)`.
+        An explicit solver needs it for its critical time step: the stiffness of a constraint adds to the squared
+        frequencies of the degrees of freedom it couples (:doc:`/theory/criticaltimestep`). The explicit dynamic solver
+        ``NED`` takes the weights :math:`w_j = 1/\\sqrt{M_j}` and scales the rows by :math:`1/\\sqrt{M_i}`. It calls
+        this right after the constraint's force, with the same arguments, so that the state :meth:`computeKernels`
+        writes for the next increment is written again as the force wrote it.
+
+        This default bounds the tangent :meth:`computeKernels` gives at the state, in the scratch
+        :meth:`computeKernelsExplicit` uses: the stiffness itself, not a decomposition of it. Two arguments use the
+        bound. The one for the finite elements is the Rayleigh quotient's, which sees the symmetric part only,
+        :math:`\\boldsymbol{x}^T \\boldsymbol{K} \\boldsymbol{x} = \\boldsymbol{x}^T \\tfrac{1}{2}(\\boldsymbol{K} +
+        \\boldsymbol{K}^T) \\boldsymbol{x}`, bounded entry by entry by :math:`\\tfrac{1}{2}(|\\boldsymbol{K}| +
+        |\\boldsymbol{K}|^T)`; the one for the entities that carry their own inertia holds for any matrix and needs
+        :math:`|\\boldsymbol{K}|` itself. So the default adds, in every row, the larger of the two row sums; for a
+        symmetric tangent they are equal. It holds for every constraint whose forces are those of
+        that tangent, whether it evaluates them with the tangent or without it
+        (:class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`). A
+        constraint whose :meth:`computeKernels` gives no tangent must override it; one that has its stiffness in a
+        cheaper form may.
+
+        Parameters
+        ----------
+        U_np
+            The current solution, restricted to this constraint's degrees of freedom.
+        dU
+            The current solution increment, likewise restricted.
+        weights
+            The weight of each column, likewise restricted.
+        bound
+            The row sums to augment, one per degree of freedom of this constraint.
+        timeStep
+            The time step of the state: the increment that ended at it, or one of zero length where the state ends
+            none, e.g. at the start of a step.
+        """
+
+        scratch = self._zeroedTangentScratch()
+        self.computeKernels(U_np, dU, np.zeros(self.nDof), self.shapeBlock(scratch), timeStep)
+        absoluteStiffness = np.abs(scratch)
+
+        # The rows of |K| and of |K|^T; in each row the larger of |K|'s and of their mean.
+        if self.couplesAllItsDofs:
+            absoluteStiffness = absoluteStiffness.reshape((self.nDof, self.nDof), order="F")
+            rowsOfK = absoluteStiffness @ weights
+            rowsOfKTransposed = absoluteStiffness.T @ weights
+        else:
+            if self._localEntriesOfTheTangentScratch is None:
+                self._localEntriesOfTheTangentScratch = self.localEntriesOfBlock()
+            rows, columns = self._localEntriesOfTheTangentScratch
+            rowsOfK = np.zeros(self.nDof)
+            rowsOfKTransposed = np.zeros(self.nDof)
+            np.add.at(rowsOfK, rows, absoluteStiffness * weights[columns])
+            np.add.at(rowsOfKTransposed, columns, absoluteStiffness * weights[rows])
+        bound += np.maximum(rowsOfK, 0.5 * (rowsOfK + rowsOfKTransposed))
+
+    def _zeroedTangentScratch(self) -> np.ndarray:
+        """The scratch of the tangent (:attr:`_tangentScratch`), zeroed: sized once per discrete system, and re-zeroed
+        in every evaluation.
+
+        Returns
+        -------
+        numpy.ndarray
+            The scratch, one entry per entry of the block.
+        """
+
+        if self._tangentScratch is None:
+            self._tangentScratch = np.zeros(countEntriesOfBlock(self))
+        else:
+            self._tangentScratch[:] = 0.0
+        return self._tangentScratch
 
     @abstractmethod
     def computeKernels(
@@ -369,8 +447,8 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         A constraint follows the rule every element and every load follows (see
         :ref:`residual-and-tangent-convention`): ``P`` is the force the constraint needs at its
         degrees of freedom, i.e. the *negative* of the force it exerts on the nodes, exactly as an
-        element of the same mechanics would add its internal force. A penalty spring of stiffness
-        :math:`k` that pulls a degree of freedom :math:`u` towards :math:`\\bar{u}`, for example, adds
+        element of the same mechanics would add its internal force. A constraint that holds a degree
+        of freedom :math:`u` at :math:`\\bar{u}` with the stiffness :math:`k`, for example, adds
 
         .. math::
 

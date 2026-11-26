@@ -578,6 +578,17 @@ were. A solver that cannot handle a constraint, e.g. ``NEST`` a contact, refuses
 .. automodule:: edelweissfe.constraints.base.constraintbase
     :members:
 
+In an explicit analysis, a penalty constraint adds the stiffness it has to the squared frequencies of the degrees of
+freedom it couples, and so lowers the critical time step (``addBoundOfAbsoluteStiffnessTimes``,
+:doc:`/theory/criticaltimestep`, "Penalty constraints"): by default from its tangent, also where it evaluates its
+explicit forces without one. A constraint that has no tangent, or whose tangent is costly, gives its springs instead,
+with one formula for the bound; a worked example from the tangent is ``directionalSpringPenalty``
+(``tests/test_ned_penalty_constraints.py``), from the springs EdelweissMeshfree's
+``ParticlePenaltyCartesianBoundaryConstraintExplicit``:
+
+.. automodule:: edelweissfe.constraints.base.penaltysprings
+    :members:
+
 Multi-point (DOF-elimination) constraints subclass from
 ``edelweissfe.constraints.base.multipointconstraintbase`` instead -- they contribute nothing to
 the load vector or system matrix; they only declare linear dependency records, which the solvers
