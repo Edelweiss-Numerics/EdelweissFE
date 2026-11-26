@@ -225,12 +225,12 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
     nodes whose weights the power iteration has made small. So an estimate with carried weights below the estimate the
     weights started from checks a fresh estimate from weights constant per field, and keeps the larger of the two
     estimates together with its weights (starting the weights anew only when the fresh estimate beats the carried one).
-    Every estimate is thus at least the one the weights started from: with
-    the time increment lowered only, it never falls below the smallest estimate with weights constant per field of
-    the step; followed (``follow-critical-time-step``), it can fall below the estimate without carried weights of the
-    same configuration, down to the one the weights started from. The weights start anew -- constant per field -- also
-    with every numbering (the nodes they belong to may have changed) and every step (a material property may have
-    changed), and after a resume: they are not part of the checkpoint.
+    Every estimate is thus at least the one the weights started from: with the time increment lowered only, it never
+    falls below the smallest estimate with weights constant per field of the step; followed
+    (``follow-critical-time-step``), it can fall below the estimate without carried weights of the same configuration,
+    down to the one the weights started from. The weights start anew -- constant per field -- also with every numbering
+    (the nodes they belong to may have changed) and every step (a material property may have changed), and after a
+    resume: they are not part of the checkpoint.
 
     Parameters
     ----------
@@ -302,7 +302,7 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
                 self._valueTheWeightsStartedFrom = anew.value
                 if anew.value > estimate.value:
                     estimate = anew
-                    weights[:] = freshWeights
+                    self._weightsOfTheEstimate = freshWeights
         self._take(estimate)
         self._numbering = system.numbering
         self._increment = increment

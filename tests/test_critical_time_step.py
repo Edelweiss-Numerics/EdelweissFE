@@ -334,11 +334,15 @@ def test_carried_weights_are_kept_when_they_beat_the_fresh_estimate_after_stiffe
     assert criticalTimeStep.value >= keptValue * (1.0 - 1e-12)
 
     # Now rotate K so the old carried weights point at the wrong mode and lose to a fresh constant-weight estimate:
-    # the fresh weights must take over.
+    # the fresh estimate must win, and its 1-step weights must take over for the next estimate.
     perm = np.roll(np.arange(8), 4)
     system.K = 1.5 * K0[np.ix_(perm, perm)]
+    expectedFresh = _gershgorinEstimate(system.K, M)
+    A_rot = np.abs(system.K)
+    expectedFreshWeights = (A_rot @ np.ones(8)) / np.linalg.norm(A_rot @ np.ones(8))
     criticalTimeStep.estimate(system, M, C, None, 8)
     assert not system.handed[-1].any()
-    freshBaseline = criticalTimeStep.value
+    assert criticalTimeStep.value == pytest.approx(expectedFresh, rel=1e-14)
     criticalTimeStep.estimate(system, M, C, None, 9)
-    assert criticalTimeStep.value > freshBaseline
+    np.testing.assert_allclose(system.handed[-1], expectedFreshWeights, rtol=1e-14)
+    assert criticalTimeStep.value > expectedFresh
