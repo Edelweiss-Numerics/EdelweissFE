@@ -1159,7 +1159,7 @@ class NED(NonlinearSolverBase):
         # depends on it. The penalty constraints are bounded with the stiffness they had in the net force, with the same
         # arguments, after the entities, since their estimate adds to the entities' last one. The time increment is set
         # once, from both: what they decide is the time increment of the next increment, which integrates that force.
-        rowSumsOfThePenaltyConstraints = self._rowSumsOfThePenaltyConstraints(self._U, noIncrement, timeStep)
+        rowSumsOfThePenaltyConstraints = self._rowSumsOfThePenaltyConstraints(self._U, increment, timeStep)
         criticalTimeStep = self._criticalTimeStepOfTheEntities
         entitiesAreDue = criticalTimeStep.isDue(
             system,
