@@ -224,8 +224,14 @@
 <span class="sd">:math:`T^T M T` stays diagonal: each master receives its own mass plus the :math:`N_a`-weighted</span>
 <span class="sd">mass of the slaves glued to it (total mass is conserved when :math:`\\sum_a N_a = 1`, which holds</span>
 <span class="sd">for interpolation-type constraints). Forces are folded as :math:`\\tilde{P} = T^T P`, and the slave</span>
-<span class="sd">kinematics are assigned directly from the masters, adding zero stiffness and hence leaving the</span>
-<span class="sd">critical time step untouched.</span>
+<span class="sd">kinematics are assigned directly from the masters, adding zero stiffness. With coefficients that are nonnegative and</span>
+<span class="sd">sum to one -- a ``tie``, the hanging nodes of linear elements --, a master carries at least the share of mass each</span>
+<span class="sd">element at its slaves lends it, and the elements keep their critical time steps. A negative coefficient -- the hanging</span>
+<span class="sd">nodes of HEX20 and QUAD8 meshes, whose serendipity weights go down to -1/4 -- gives a master less; that the elements'</span>
+<span class="sd">critical time steps still hold there is assumed, not shown (:doc:`/theory/criticaltimestep`, "What the estimate does</span>
+<span class="sd">not see"). Where a penalty constraint adds to the frequency of a master, its row sums are folded onto the master by</span>
+<span class="sd">the absolute value of the coefficients (:meth:`MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients`),</span>
+<span class="sd">and the elements at its slaves count there too (:meth:`MultiPointConstraintTransformation.foldLargestOntoMasters`).</span>
 <span class="sd">"""</span>
 
 
@@ -619,6 +625,79 @@
 <span class="sd">        """</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_T</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">P</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">slaveWeightsOfAbsoluteCoefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The column weights of a bound of the row sums of a stiffness on the slave DOFs:</span>
+<span class="sd">        :math:`|T|\\, w`, i.e. :math:`w_s = \\sum_a |N_a| \\, w_{m_a}` on a slave, unchanged elsewhere. With</span>
+<span class="sd">        :meth:`foldRowSumsOfAbsoluteCoefficients`, :math:`|T|^T |K| \\, |T| w` bounds the row sums of the absolute value</span>
+<span class="sd">        of the folded stiffness :math:`T^T K T` the masters see.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        weights</span>
+<span class="sd">            The weights of the independent DOFs; the entries of the slaves are not read.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The weights with those of the slaves.</span>
+<span class="sd">        """</span>
+
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="n">weights</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_W</span><span class="p">)</span> <span class="o">@</span> <span class="n">weights</span>
+        <span class="k">return</span> <span class="n">weights</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">foldRowSumsOfAbsoluteCoefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rowSums</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Fold row sums of the absolute value of a stiffness from the slave DOFs onto their masters, by the absolute</span>
+<span class="sd">        value of the coefficients: :math:`|T|^T b` (slave rows zero); see :meth:`slaveWeightsOfAbsoluteCoefficients`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rowSums</span>
+<span class="sd">            The row sums on all DOFs.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The folded row sums.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="nb">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">rowSums</span></div>
+
+
+<div class="viewcode-block" id="MultiPointConstraintTransformation.foldLargestOntoMasters">
+<a class="viewcode-back" href="../../../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">foldLargestOntoMasters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Fold values per DOF from the slave DOFs onto their masters by the largest: a master takes the largest of its</span>
+<span class="sd">        own value and those of the slaves that move with it (a nonzero coefficient),</span>
+<span class="sd">        :math:`v_m \\leftarrow \\max(v_m, \\max_{s:\\, N_{sm} \\ne 0} v_s)`; every other entry stays as it is.</span>
+
+<span class="sd">        The explicit dynamic solver folds the elements' bounds of the squared frequencies with it</span>
+<span class="sd">        (:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof`):</span>
+<span class="sd">        an element at a slave acts on the masters of the slave, through :math:`T^T K T`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values</span>
+<span class="sd">            The values on all DOFs.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The folded values.</span>
+<span class="sd">        """</span>
+
+        <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">W</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_W</span><span class="o">.</span><span class="n">tocoo</span><span class="p">()</span>
+        <span class="n">moves</span> <span class="o">=</span> <span class="n">W</span><span class="o">.</span><span class="n">data</span> <span class="o">!=</span> <span class="mf">0.0</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">W</span><span class="o">.</span><span class="n">col</span><span class="p">[</span><span class="n">moves</span><span class="p">],</span> <span class="n">values</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">slaveDofIndices</span><span class="p">[</span><span class="n">W</span><span class="o">.</span><span class="n">row</span><span class="p">[</span><span class="n">moves</span><span class="p">]]])</span>
+        <span class="k">return</span> <span class="n">values</span></div>
 
 
 <div class="viewcode-block" id="MultiPointConstraintTransformation.applySlaveKinematics">

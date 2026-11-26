@@ -89,11 +89,21 @@
 <li class="toctree-l2"><a class="reference internal" href="#where-the-limit-comes-from">Where the limit comes from</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#why-bounds-not-eigenvalues">Why bounds, not eigenvalues</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#how-the-parts-combine">How the parts combine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#penalty-constraints">Penalty constraints</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#what-the-estimate-does-not-see">What the estimate does not see</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#when-an-estimate-is-taken-anew">When an estimate is taken anew</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#module-edelweissfe.solvers.base.criticaltimestep">The code</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepEstimate</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateFromTheBoundOfEachDof</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs.criticalTimeStep()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfAPart</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfAPart.forget()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfAPart.reset()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.value"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfAPart.value</span></code></a></li>
 </ul>
@@ -103,12 +113,18 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.estimate"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfEntitiesWithOwnInertia.estimate()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfEntitiesWithOwnInertia.isDue()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.reset"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfEntitiesWithOwnInertia.reset()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements.estimate()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.isDue"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements.isDue()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.reset"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements.reset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepWithThePenaltyConstraints</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints.estimate"><code class="docutils literal notranslate"><span class="pre">CriticalTimeStepWithThePenaltyConstraints.estimate()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -173,8 +189,8 @@
 <p>An explicit analysis (<code class="docutils literal notranslate"><span class="pre">NED</span></code>, <a class="reference internal" href="../analysis/solvers.html"><span class="doc">Solvers</span></a>) solves no system of equations: it divides the net force by a
 lumped mass and steps on. The price is that it is stable only below a time increment, the <em>critical time step</em>. This
 page explains where that limit comes from, why EdelweissFE estimates it instead of computing it, how the estimates of
-the parts of a model are combined, what they do not see, and when each estimate is taken anew. The code is
-<a class="reference internal" href="#module-edelweissfe.solvers.base.criticaltimestep" title="edelweissfe.solvers.base.criticaltimestep"><code class="xref py py-mod docutils literal notranslate"><span class="pre">criticaltimestep</span></code></a>.</p>
+the parts of a model are combined, what penalty constraints add to them, what the estimates do not see, and when each
+estimate is taken anew. The code is <a class="reference internal" href="#module-edelweissfe.solvers.base.criticaltimestep" title="edelweissfe.solvers.base.criticaltimestep"><code class="xref py py-mod docutils literal notranslate"><span class="pre">criticaltimestep</span></code></a>.</p>
 <section id="where-the-limit-comes-from">
 <h2>Where the limit comes from<a class="headerlink" href="#where-the-limit-comes-from" title="Link to this heading"></a></h2>
 <p>Linearize the equation of motion about the current state, <span class="math notranslate nohighlight">\(\boldsymbol{M}\ddot{\boldsymbol{u}} +
@@ -237,36 +253,191 @@ in this sense only.</p>
 <p>A model may hold finite elements and particles. Their degrees of freedom are disjoint – <code class="docutils literal notranslate"><span class="pre">NED</span></code> refuses a node that
 both would carry – so the matrix <span class="math notranslate nohighlight">\(\boldsymbol{M}^{-1}\boldsymbol{K}\)</span> of the model is block diagonal in the two
 parts, its eigenvalues are those of the parts, and the critical time step of the model is the <strong>smallest</strong> of the
-parts’ (as far as the parts’ own stiffness goes, see “What the estimate does not see”):</p>
+parts’ (as far as the parts’ own stiffness goes; what penalty constraints add is explained below):</p>
 <div class="math notranslate nohighlight">
 \[\Delta t = \text{courant-number} \times \min\left(\Delta t_\mathrm{crit}^\mathrm{elements},\,
 \Delta t_\mathrm{crit}^\mathrm{particles}\right) .\]</div>
 <p><code class="docutils literal notranslate"><span class="pre">courant-number</span></code> is the one safety factor: the fraction of the estimated limit the analysis runs at. A part gives
 its estimate as an object (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepEstimate</span></code></a>), whose value
 is the part’s critical time step, and which, in a derived class, also holds what it was made from: what is added to a
-part’s stiffness can be added to its estimate there.</p>
+part’s stiffness can be added to its estimate there
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs</span></code></a>). With penalty constraints, a
+third value joins the minimum (below). It is not the constraints’ own: it is the critical time step of the parts <em>with</em>
+the constraints’ rows added at the degrees of freedom they couple, never above the parts’ own estimates
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepWithThePenaltyConstraints</span></code></a> says why the minimum
+with the parts is kept all the same).</p>
 <p>The particles’ estimate has one factor of its own, below one, which is not a safety factor but part of what it
 estimates: their stabilization (NSNI) acts on the increment, so their explicit scheme is not exactly the central
 difference method with their tangent, and it was measured to be stable up to a fraction of the tangent’s limit
 (EdelweissMeshfree, <code class="docutils literal notranslate"><span class="pre">STABLE_FRACTION_OF_THE_TANGENT_LIMIT</span></code>).</p>
 </section>
+<section id="penalty-constraints">
+<h2>Penalty constraints<a class="headerlink" href="#penalty-constraints" title="Link to this heading"></a></h2>
+<p>A penalty constraint – a contact, a support held by a penalty, a spring between two nodes – is a set of springs. A
+spring <span class="math notranslate nohighlight">\(p\)</span> measures a stretch <span class="math notranslate nohighlight">\(g_p\)</span>, e.g. the gap of a contact point; the vector with which it acts on the
+degrees of freedom is the gradient of the stretch, <span class="math notranslate nohighlight">\(\boldsymbol{a}_p = \partial g_p / \partial \boldsymbol{u}\)</span>,
+and a spring of stiffness <span class="math notranslate nohighlight">\(k_p\)</span> adds <span class="math notranslate nohighlight">\(k_p\,\boldsymbol{a}_p\boldsymbol{a}_p^T\)</span> to the stiffness of the
+nodes it couples. For a contact point, <span class="math notranslate nohighlight">\(k_p\)</span> is what the contact law gives the point at its gap: the penalty for
+the linear law, zero while the gap is open.</p>
+<p>Such a constraint owns no degrees of freedom: it couples those of the parts, and has no critical time step of its own
+to take the minimum with – the spring <em>adds</em> to the frequencies of the nodes it couples. A mass <span class="math notranslate nohighlight">\(m\)</span> on a spring
+<span class="math notranslate nohighlight">\(k_1\)</span> (an element) and held by a penalty <span class="math notranslate nohighlight">\(k_2\)</span> oscillates with <span class="math notranslate nohighlight">\(\omega^2 = (k_1 + k_2)/m\)</span>, not with
+the larger of the two. Adding the constraint’s largest frequency to the parts’ largest one would be safe but blunt: a
+stiff contact far from the smallest element would lower the time increment of the whole model.</p>
+<p><strong>The estimate: the constraint adds where it acts.</strong> For every degree of freedom <span class="math notranslate nohighlight">\(i\)</span> of the finite elements, let
+<span class="math notranslate nohighlight">\(\omega_i^2\)</span> be the largest <span class="math notranslate nohighlight">\(\lambda_e = (2/\Delta t_e)^2\)</span> of the elements at <span class="math notranslate nohighlight">\(i\)</span>, and let</p>
+<div class="math notranslate nohighlight">
+\[r_i = \frac{1}{\sqrt{M_i}} \sum_j |K^\mathrm{c}_{ij}| \frac{1}{\sqrt{M_j}}\]</div>
+<p>be the row sum of the absolute value of the constraints’ stiffness, scaled by the lumped mass on both sides (every
+constraint gives it: <code class="docutils literal notranslate"><span class="pre">addBoundOfAbsoluteStiffnessTimes</span></code>). Then</p>
+<div class="math notranslate nohighlight">
+\[\omega_\mathrm{max}^2 \le \Lambda = \max_i \left(\omega_i^2 + r_i\right) .\]</div>
+<p>At a degree of freedom no constraint couples, <span class="math notranslate nohighlight">\(r_i = 0\)</span> and the elements’ estimate stands; a constraint lowers the
+critical time step only if the frequency it adds at its nodes, on top of the elements’ there, exceeds the largest one
+of the model. For a mass <span class="math notranslate nohighlight">\(m\)</span> held by a penalty <span class="math notranslate nohighlight">\(k\)</span> alone, <span class="math notranslate nohighlight">\(r = k/m\)</span> and the estimate is the exact
+<span class="math notranslate nohighlight">\(2\sqrt{m/k}\)</span>; for two equal masses joined by a penalty, <span class="math notranslate nohighlight">\(r = 2k/m\)</span>, again exact.</p>
+<p><strong>Why it is safe: lend the constraint a part of the mass.</strong> The argument of the element eigenvalue inequality holds for
+<em>any</em> split of the lumped mass among the pieces of the stiffness: if <span class="math notranslate nohighlight">\(\boldsymbol{K} = \sum_a
+\boldsymbol{K}_a\)</span> and <span class="math notranslate nohighlight">\(\boldsymbol{M} = \sum_a \boldsymbol{M}_a\)</span> (all diagonal, nonnegative), then</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{x}^T\boldsymbol{K}\boldsymbol{x} = \sum_a \boldsymbol{x}^T\boldsymbol{K}_a\boldsymbol{x}
+\le \sum_a \lambda_a\, \boldsymbol{x}^T\boldsymbol{M}_a\boldsymbol{x}
+\le \max_a \lambda_a \; \boldsymbol{x}^T\boldsymbol{M}\boldsymbol{x} ,
+\qquad \lambda_a = \lambda_\mathrm{max}(\boldsymbol{M}_a^{-1}\boldsymbol{K}_a) .\]</div>
+<p>The constraint has no mass of its own, so it is lent the fraction <span class="math notranslate nohighlight">\(\theta_i = r_i/\Lambda\)</span> of the mass of every
+degree of freedom it couples, and the elements keep the rest, <span class="math notranslate nohighlight">\((1 - \theta_i) M_i\)</span>.</p>
+<ul class="simple">
+<li><p>The constraint with the masses <span class="math notranslate nohighlight">\(\theta_i M_i\)</span>: by the row sums with the weights <span class="math notranslate nohighlight">\(\sqrt{\theta_i}\)</span>
+(Collatz-Wielandt), its largest eigenvalue is at most <span class="math notranslate nohighlight">\(\max_i r_i/\theta_i = \Lambda\)</span>.</p></li>
+<li><p>An element with the masses <span class="math notranslate nohighlight">\((1-\theta_i)\)</span> times its own: its eigenvalue grows at most by <span class="math notranslate nohighlight">\(1/(1 -
+\max_{i \in e}\theta_i)\)</span>, and <span class="math notranslate nohighlight">\(\lambda_e \le \omega_i^2 \le \Lambda - r_i = \Lambda (1 - \theta_i)\)</span>
+at each of its nodes, so it stays below <span class="math notranslate nohighlight">\(\Lambda\)</span>.</p></li>
+</ul>
+<p>Every piece is below <span class="math notranslate nohighlight">\(\Lambda\)</span> with its share of the mass, so the whole is. The argument is only as safe as each
+<span class="math notranslate nohighlight">\(\lambda_e\)</span> is a bound of its element: the estimate is each element’s own, and the one of the Python elements
+lies above their exact critical time step (EdelweissFE#323). The argument is the Rayleigh quotient’s, which sees the
+symmetric part of a stiffness only, <span class="math notranslate nohighlight">\(\boldsymbol{x}^T\boldsymbol{K}\boldsymbol{x} =
+\boldsymbol{x}^T\tfrac{1}{2}(\boldsymbol{K} + \boldsymbol{K}^T)\boldsymbol{x}\)</span>; so <span class="math notranslate nohighlight">\(r_i\)</span> has to bound the row
+sums of the absolute value of the constraint’s symmetric part. A penalty spring is symmetric (a closed point with a
+frozen projection), and the elements’ estimate bounds their elastic stiffness; the tangent of a frictional contact
+while it slips is not (the coupling of its normal and tangential parts, <a class="reference internal" href="contact.html#friction-tangent"><span class="std std-ref">Consistent tangent</span></a>), and its symmetric
+part is bounded entry by entry by <span class="math notranslate nohighlight">\(\tfrac{1}{2}(|\boldsymbol{K}^\mathrm{c}| + |\boldsymbol{K}^\mathrm{c}|^T)\)</span>,
+whose row sums the bound takes there (below, “From the tangent, or from the springs”).</p>
+<p><strong>The particles: the rows inside their field matrix.</strong> The tangent of gradient-enhanced particles is not symmetric, and
+their estimate is not a bound per degree of freedom: it is the Perron root of their field matrix <span class="math notranslate nohighlight">\(\boldsymbol{Q}\)</span>
+of the largest weighted row sums per block of fields (EdelweissMeshfree,
+<code class="docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateFromTheFieldMatrix</span></code>), which bounds every eigenvalue of any matrix whose absolute value it
+bounds block by block. So the constraint’s rows go there. Entry by entry, <span class="math notranslate nohighlight">\(|\boldsymbol{S} + \boldsymbol{R}| \le
+|\boldsymbol{S}| + |\boldsymbol{R}|\)</span>, with <span class="math notranslate nohighlight">\(\boldsymbol{S}\)</span> and <span class="math notranslate nohighlight">\(\boldsymbol{R}\)</span> the mass-scaled stiffness
+of the particles and of the constraint. A constraint that couples degrees of freedom of one field block <span class="math notranslate nohighlight">\(g\)</span> adds
+at most <span class="math notranslate nohighlight">\(r_i\)</span> to the weighted row sum of <span class="math notranslate nohighlight">\(i\)</span> within <span class="math notranslate nohighlight">\(g\)</span>, where the weights are constant on that field;
+so <span class="math notranslate nohighlight">\(Q_{gg}\)</span> raised to <span class="math notranslate nohighlight">\(\max_{i \in g} (Z_{ig} + r_i)\)</span>, with <span class="math notranslate nohighlight">\(Z_{ig}\)</span> the particles’ own row sum of
+<span class="math notranslate nohighlight">\(i\)</span> within <span class="math notranslate nohighlight">\(g\)</span>, bounds the block row sums of <span class="math notranslate nohighlight">\(|\boldsymbol{S}| + |\boldsymbol{R}|\)</span>, and the Perron
+root of a nonnegative matrix grows with its entries. This holds for any matrix, symmetric or not. With carried weights,
+the particles keep their weights constant per field in every field a constraint acts on, so that the rows add as they
+are.</p>
+<p>A constraint that couples particles and finite elements at once – a projectile of elements on a slab of particles –
+is taken with the larger of the two: <span class="math notranslate nohighlight">\(\Lambda\)</span> of the elements, and the particles’ field matrix with the rows
+added. This is not proven: the elements’ argument needs the Rayleigh quotient, which the unsymmetric particles do not
+have, and the particles’ needs a bound per block, which the elements do not give.</p>
+<p><strong>With multi-point constraints</strong> (a <code class="docutils literal notranslate"><span class="pre">tie</span></code> of a fine mesh to a coarse one, hanging nodes), a slave moves with its
+masters, <span class="math notranslate nohighlight">\(u_s = \sum_a N_{sa} u_a\)</span>, and the system that oscillates is the condensed one,
+<span class="math notranslate nohighlight">\(\boldsymbol{T}^T \boldsymbol{K} \boldsymbol{T}\)</span> over the independent degrees of freedom <span class="math notranslate nohighlight">\(\boldsymbol{y}\)</span>,
+<span class="math notranslate nohighlight">\(\boldsymbol{u} = \boldsymbol{T}\boldsymbol{y}\)</span>, with the slave masses folded onto the masters, <span class="math notranslate nohighlight">\(\tilde{M}_m
+= M_m + \sum_s N_{sm} M_s\)</span>. A spring at a slave acts on its masters: its row sums are taken with the weights of the
+masters, <span class="math notranslate nohighlight">\(w_s = \sum_a |N_{sa}| w_a\)</span>, and folded onto them by <span class="math notranslate nohighlight">\(|\boldsymbol{T}|\)</span>, since
+<span class="math notranslate nohighlight">\(|\boldsymbol{T}^T \boldsymbol{K}^\mathrm{c} \boldsymbol{T}| \le |\boldsymbol{T}|^T |\boldsymbol{K}^\mathrm{c}|
+|\boldsymbol{T}|\)</span> entry by entry, whatever the signs of the coefficients
+(<a class="reference internal" href="../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">foldRowSumsOfAbsoluteCoefficients()</span></code></a>).</p>
+<p>So does an element at a slave: it acts on the masters through <span class="math notranslate nohighlight">\(\boldsymbol{T}^T \boldsymbol{K}_e
+\boldsymbol{T}\)</span>, so a master takes the largest <span class="math notranslate nohighlight">\(\lambda_e\)</span> of the elements at it <em>and at its slaves</em>
+(<a class="reference internal" href="../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters"><code class="xref py py-meth docutils literal notranslate"><span class="pre">foldLargestOntoMasters()</span></code></a>), and the
+rows of the constraints meet it there. Without that fold, a stiff element at a slave would be missing at its master
+just where a penalty there adds the most. The element at the slave sees <span class="math notranslate nohighlight">\(u_s^2\)</span>, which the masters must pay for
+with mass. With coefficients that are nonnegative and sum to one – a <code class="docutils literal notranslate"><span class="pre">tie</span></code>, the hanging nodes of linear elements –
+Jensen’s inequality, <span class="math notranslate nohighlight">\((\sum_a N_{sa} u_a)^2 \le \sum_a N_{sa} u_a^2\)</span>, asks master <span class="math notranslate nohighlight">\(m\)</span> for <span class="math notranslate nohighlight">\(N_{sm}
+M_s\)</span>, just what the fold of the mass gives it, and the argument above holds for the condensed system. The hanging nodes
+of a HEX20 or QUAD8 mesh are tied with the serendipity functions of the coarse face, which are negative at some masters
+(<span class="math notranslate nohighlight">\(-1/8\)</span> for a node at a quarter of a coarse edge, <span class="math notranslate nohighlight">\(-1/4\)</span> at the corners for one at the centre of a coarse
+face); Jensen’s inequality fails there, and that the elements’ estimates hold at their masters is not shown (below).</p>
+<p>What the bound gives away is the Gershgorin step: the row sum is the exact frequency for springs between equal masses
+and above it otherwise, and a direction oblique to the axes spreads the spring over the components of a node.</p>
+<p><strong>From the tangent, or from the springs.</strong> By default, a constraint is bounded from the tangent it gives at the state
+(<a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addBoundOfAbsoluteStiffnessTimes()</span></code></a>): in every row,
+the larger of the row sums of <span class="math notranslate nohighlight">\(|\boldsymbol{K}^\mathrm{c}|\)</span>, which the particles’ argument needs, and of
+<span class="math notranslate nohighlight">\(\tfrac{1}{2}(|\boldsymbol{K}^\mathrm{c}| + |\boldsymbol{K}^\mathrm{c}|^T)\)</span>, which the elements’ argument needs
+for an unsymmetric tangent; for a symmetric tangent, the two are equal. A constraint whose tangent is costly, or that
+has none – one evaluated without a tangent in an explicit analysis –, gives its stiffness as springs instead: a spring
+<span class="math notranslate nohighlight">\(p\)</span> with the vector <span class="math notranslate nohighlight">\(\boldsymbol{a}_p\)</span> with which it acts and the stiffness <span class="math notranslate nohighlight">\(k_p\)</span> of its law – the
+normal spring of a closed point, a support’s spring along the axis it holds. The row sums are then, with the weights
+<span class="math notranslate nohighlight">\(\boldsymbol{w}\)</span> of the columns, <span class="math notranslate nohighlight">\(b_i \mathrel{+}= \sum_p |k_p|\, |a_{p,i}|\, (|\boldsymbol{a}_p| \cdot
+\boldsymbol{w})\)</span> (<a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.base.penaltysprings" title="edelweissfe.constraints.base.penaltysprings"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.constraints.base.penaltysprings</span></code></a>), one formula for every such constraint, and the
+constraint takes the springs for its bound from the same code it takes them for its force, so that a change of the force
+cannot leave the bound behind.</p>
+<p><strong>At which state.</strong> The central difference method integrates in each increment the net force evaluated at the end of
+the increment before, <span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1/2} = \boldsymbol{v}_{n-1/2} + \tfrac{1}{2}(\Delta t_n + \Delta
+t_{n+1})\, \boldsymbol{M}^{-1} \boldsymbol{f}_n\)</span>. The stiffness that limits <span class="math notranslate nohighlight">\(\Delta t_{n+1}\)</span> is the one
+<span class="math notranslate nohighlight">\(\boldsymbol{f}_n\)</span> was evaluated with: which points of a contact were closed, and how deep, and which points a
+contact search had paired. So <code class="docutils literal notranslate"><span class="pre">NED</span></code> bounds the constraints right after every evaluation of the net force, with the
+same state: at the start of a step, and at the end of every increment. The bound limits <span class="math notranslate nohighlight">\(\Delta t_{n+1}\)</span>, and
+<span class="math notranslate nohighlight">\(\boldsymbol{f}_n\)</span> is integrated over the average with <span class="math notranslate nohighlight">\(\Delta t_n\)</span>, which was taken with
+<span class="math notranslate nohighlight">\(\boldsymbol{f}_{n-1}\)</span>. Whatever stiffness is new in <span class="math notranslate nohighlight">\(\boldsymbol{f}_n\)</span> is therefore half an increment
+late: a point that closed in increment <span class="math notranslate nohighlight">\(n\)</span>, a point a contact search paired at its start. The first increment
+that integrates its force does so over the average of its own time increment and the one taken without it (see “What
+the estimate does not see” for what that means, and why it is accepted).</p>
+<p>After a refinement, the net force of the new mesh starts at zero: the first increment on it integrates no force, and
+the one after integrates the first force on the new mesh over the average with the increment of the first. That
+increment is set at the refinement; with the constraints as last bounded, on the old mesh with its larger masses, it
+would be half an increment late in the same way. So <code class="docutils literal notranslate"><span class="pre">NED</span></code> bounds the constraints also right after a refinement, at
+the state on the new mesh, as at the start of a step, and both increments are taken with the masses of the new mesh.</p>
+</section>
 <section id="what-the-estimate-does-not-see">
 <h2>What the estimate does not see<a class="headerlink" href="#what-the-estimate-does-not-see" title="Link to this heading"></a></h2>
-<p>The argument above covers the stiffness of the parts themselves, and nothing else:</p>
+<p>The parts’ estimates cover the stiffness of the parts themselves, and the penalty constraints add theirs where they act
+(above), within a part and between the parts. Not seen are:</p>
 <ul class="simple">
-<li><p><strong>Penalty constraints and contact.</strong> A penalty adds a stiffness <span class="math notranslate nohighlight">\(k\)</span> between the points it ties, within a part
-or between the parts. No part’s estimate holds it, and a contact between the elements and the particles – a
-projectile on a slab – couples the two blocks, so <span class="math notranslate nohighlight">\(\boldsymbol{M}^{-1}\boldsymbol{K}\)</span> is no longer block
-diagonal, and the smallest of the parts’ estimates is no longer the model’s. A penalty on a mass <span class="math notranslate nohighlight">\(m\)</span> alone is
-stable for <span class="math notranslate nohighlight">\(\Delta t \le 2\sqrt{m/k}\)</span>.</p></li>
+<li><p><strong>Stiffness that is new in a net force</strong>: a point that closed in the increment that evaluated the force, a point a
+contact search paired at its start. It enters the estimate right after the force, and so the time increment of the
+next increment, but that increment integrates the force over the average of its own time increment and the one before,
+which was taken without the new stiffness (“At which state”): for one increment, the average, half-way between the
+two, may lie above the critical time step of the force it integrates. What this means: in that one increment, the
+oscillation of the new stiffness is integrated with too large a time increment, and grows once, by a factor of the
+order of <span class="math notranslate nohighlight">\(\Delta t_n / \Delta t_{n+1}\)</span>, the ratio of the time increments before and after the new stiffness.
+Lowered only, the time increment is never raised again within the step, so every later increment is within the limit
+of that stiffness, and the growth does not compound: this is not an instability. Why it is accepted: avoiding it would
+need the stiffness of a force before the force is evaluated, a bound over the states the next increment can reach. The
+energy balance of <code class="docutils literal notranslate"><span class="pre">NED</span></code> (the kinetic energy may not exceed the energy at the start of the step plus the external
+work) remains the check. A stiffness that lowers the time increment by more than the margin of the
+<code class="docutils literal notranslate"><span class="pre">courant-number</span></code> in one increment – a penalty law whose stiffness grows with the penetration – exceeds the limit
+in that increment. With <code class="docutils literal notranslate"><span class="pre">follow-critical-time-step</span></code>, the time increment is raised again as soon as a contact
+has opened, and the next point that closes meets the full raised increment: there, take a lower <code class="docutils literal notranslate"><span class="pre">courant-number</span></code>.</p></li>
+<li><p><strong>The skew part of an unsymmetric tangent</strong> (a frictional contact while it slips): it does no work in
+<span class="math notranslate nohighlight">\(\boldsymbol{x}^T\boldsymbol{K}\boldsymbol{x}\)</span> and is outside the argument above. Where it makes an eigenvalue
+of <span class="math notranslate nohighlight">\(\boldsymbol{M}^{-1}\boldsymbol{K}\)</span> complex, the central difference method grows at every time increment,
+as the motion of the model itself does (flutter): that is a property of the model, which no time increment cures.</p></li>
+<li><p><strong>The hanging nodes of HEX20 and QUAD8 meshes.</strong> Their multi-point coefficients are negative at some masters, where
+the fold of the slave masses gives a master less than the elements at its slaves need; that the elements’ estimates
+still bound the condensed system there is assumed, not shown, with or without penalty constraints.</p></li>
+<li><p><strong>A multi-point constraint whose coefficients do not sum to one</strong> (a linearized rigid body): the argument above
+assumes coefficients that sum to one.</p></li>
+<li><p><strong>The geometric stiffness of contact,</strong> for a constraint that bounds its springs: that of a contact with finite
+sliding, or of a rigid body whose normals rotate with it (of the order of the normal force over the size of a facet or
+the lever arm, small against the penalty). A constraint bounded from its tangent has in its bound what its tangent
+holds.</p></li>
+<li><p><strong>A constraint that couples particles and finite elements at once</strong>: taken with the larger of the two arguments,
+which is not proven (see “The particles”).</p></li>
+<li><p><strong>A penalty on a field integrated by forward Euler</strong> (a field with a damping and no inertia): its rows are added to
+no estimate.</p></li>
+<li><p><strong>A constraint that bounds nothing</strong>: EdelweissMeshfree’s <code class="docutils literal notranslate"><span class="pre">ParticlePenaltyFacetContactExplicit</span></code> gives neither a
+tangent nor its springs; its stiffness stays outside the estimate.</p></li>
 <li><p><strong>The tangent of a rate-dependent material.</strong> The stiffness the particles are estimated with is that of a zero
-increment over a unit time; for a material with a viscosity, e.g. Duvaut-Lions, it is relaxed over that time, softer than the
-response within an explicit increment, and the estimate may be too large.</p></li>
+increment over a unit time; for a material with a viscosity, e.g. Duvaut-Lions, it is relaxed over that time, softer
+than the response within an explicit increment, and the estimate may be too large.</p></li>
 <li><p><strong>The particles’ stabilization.</strong> The factor of the particles’ NSNI above was measured, on blocks of particles, not
 derived; a particle arrangement far from those may need a smaller one.</p></li>
 </ul>
-<p>How to check: halve <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> and compare the results, and keep <span class="math notranslate nohighlight">\(2\sqrt{m/k}\)</span> of every penalty well
-above the time increment, with <span class="math notranslate nohighlight">\(m\)</span> the mass a constrained point carries.</p>
+<p>How to check: halve <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> and compare the results, and watch the energy balance of <code class="docutils literal notranslate"><span class="pre">NED</span></code>: kinetic energy
+that appears from nowhere is the sign of a time increment above the true limit.</p>
 </section>
 <section id="when-an-estimate-is-taken-anew">
 <h2>When an estimate is taken anew<a class="headerlink" href="#when-an-estimate-is-taken-anew" title="Link to this heading"></a></h2>
@@ -322,6 +493,18 @@ use <em>is</em> courant-number times their last estimate, the margin is used up 
 every increment – as they must be, since their estimate is what limits the analysis. Where another part sets it, the
 estimate of the particles is above the increment in use by some factor <span class="math notranslate nohighlight">\(m\)</span>, and it is taken anew only every
 <span class="math notranslate nohighlight">\(\ln m / -\ln(1-\delta)\)</span> increments, unless their masses fall faster than expected.</p>
+<p>Where penalty constraints couple the particles, the same critical time step at worst is kept for the particles’ rows
+with the constraints added: the particles’ stiffness may have grown by <span class="math notranslate nohighlight">\(1/f^2\)</span>, <span class="math notranslate nohighlight">\(f = \min(1,
+\sqrt{\alpha}, \beta)(1 - \delta)^n\)</span>, the constraints’ rows are those of now. The particles are estimated anew also
+when <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> times that one falls below the time increment in use – the margin a contact at the particles’
+nodes leaves is smaller than their own.</p>
+<p><strong>The penalty constraints: after every evaluation of the net force</strong>
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepWithThePenaltyConstraints</span></code></a>). Their stiffness follows
+the state of the contact – which points are closed, and how deep, for a law whose stiffness grows with the
+penetration –, and changes from increment to increment; their row sums cost about as much as their force. So they are
+formed right after the net force, at the state it was evaluated at (see “At which state”): at the start of a step,
+after every increment, and after a refinement, at the state on the new mesh. They are added to the parts’ last
+estimates; only this addition is renewed, and the parts keep their own policies.</p>
 </section>
 <section id="module-edelweissfe.solvers.base.criticaltimestep">
 <span id="the-code"></span><h2>The code<a class="headerlink" href="#module-edelweissfe.solvers.base.criticaltimestep" title="Link to this heading"></a></h2>
@@ -332,20 +515,29 @@ dynamic solver <code class="docutils literal notranslate"><span class="pre">NED<
 own critical time step – a lower bound of it, from an upper bound of <span class="math notranslate nohighlight">\(\omega_\mathrm{max}^2\)</span> –, takes the
 smallest, and runs at the fraction <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> of it. The parts have disjoint degrees of freedom, so the
 smallest of their critical time steps is the model’s.</p>
-<p>A part gives its estimate as a <a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepEstimate</span></code></a>. An estimate costs something, and how much its value
-can change while the analysis runs depends on the part, so every part (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepOfAPart</span></code></a>) comes with
-its own policy of when its estimate is taken anew:</p>
+<p>A part gives its estimate as a <a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepEstimate</span></code></a>. A penalty constraint – a contact, a support, a tie
+held by a penalty – owns no degrees of freedom: it adds stiffness to the ones of the parts it couples. It has no
+critical time step of its own to take the minimum with; it adds to the parts’ estimates at the degrees of freedom it
+couples: a part gives its estimate for them as a <a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs</span></code></a>, to which the row sums of
+the constraints’ mass-scaled stiffness are added.</p>
+<p>An estimate costs something, and how much its value can change while the analysis runs depends on the part, so every
+part (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepOfAPart</span></code></a>) comes with its own policy of when its estimate is taken anew:</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements</span></code></a>: the finite elements, estimated <strong>once per mesh</strong>;</p></li>
 <li><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepOfEntitiesWithOwnInertia</span></code></a>: the entities that carry their own inertia (the particles of a
-meshfree model), estimated anew <strong>when the margin of the last estimate over the time increment in use may be used up</strong>.</p></li>
+meshfree model), estimated anew <strong>when the margin of the last estimate over the time increment in use may be used
+up</strong>;</p></li>
+<li><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepWithThePenaltyConstraints</span></code></a>: the parts with the penalty constraints, estimated <strong>after every
+evaluation of the net force</strong>, from the stiffness the constraints had in it. This third value is not the constraints’
+own critical time step (see the class).</p></li>
 </ul>
 <p>The theory, and what the estimates do not see, are explained in <a class="reference internal" href="#"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.solvers.base.criticaltimestep.</span></span><span class="sig-name descname"><span class="pre">CriticalTimeStepEstimate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepEstimate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate" title="Link to this definition"></a></dt>
 <dd><p>A part’s estimate of its own critical time step, as the part gives it. A derived class also holds what the
-estimate was made from, so that what is added to the part’s stiffness can be added to the estimate.</p>
+estimate was made from, so that what is added to the part’s stiffness can be added to the estimate
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs</span></code></a>).</p>
 <p>Its one field, <code class="docutils literal notranslate"><span class="pre">value</span></code>, is the critical time step of the part alone, not scaled by a courant number: a lower
 bound of <span class="math notranslate nohighlight">\(2/\omega_\mathrm{max}\)</span> of the part’s degrees of freedom; infinite for a part without stiffness.</p>
 <dl class="field-list simple">
@@ -353,6 +545,102 @@ bound of <span class="math notranslate nohighlight">\(2/\omega_\mathrm{max}\)</s
 <dd class="field-odd"><p><strong>value</strong> (<em>float</em>)</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.solvers.base.criticaltimestep.</span></span><span class="sig-name descname"><span class="pre">CriticalTimeStepEstimateFromTheBoundOfEachDof</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">squaredFrequencies</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepEstimateFromTheBoundOfEachDof"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof" title="Link to this definition"></a></dt>
+<dd><p>A part’s estimate from one upper bound of the squared frequency per degree of freedom, <span class="math notranslate nohighlight">\(\omega_i^2\)</span>: the
+critical time step with the penalty constraints is <span class="math notranslate nohighlight">\(2 / \sqrt{\max_i (\omega_i^2 + r_i)}\)</span> over the degrees
+of freedom the constraints couple, or the part’s own where that is smaller. The finite elements give it, with the
+largest squared frequency of the elements at each degree of freedom
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof"><code class="xref py py-meth docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof()</span></code></a>).</p>
+<p>Besides <code class="docutils literal notranslate"><span class="pre">value</span></code> and <code class="docutils literal notranslate"><span class="pre">dofs</span></code>, its field <code class="docutils literal notranslate"><span class="pre">squaredFrequencies</span></code> holds the upper bound of the squared frequency of
+each degree of freedom, in the order of <code class="docutils literal notranslate"><span class="pre">dofs</span></code>.</p>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">criticalTimeStep</span></code></a>(rowSumsOfThePenaltyConstraints)</p></td>
+<td><p>The critical time step of the part with the penalty constraints at its degrees of freedom: <code class="docutils literal notranslate"><span class="pre">value</span></code> where no constraint couples them.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value</strong> (<em>float</em>)</p></li>
+<li><p><strong>dofs</strong> (<em>ndarray</em>)</p></li>
+<li><p><strong>squaredFrequencies</strong> (<em>ndarray</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep">
+<span class="sig-name descname"><span class="pre">criticalTimeStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rowSumsOfThePenaltyConstraints</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep" title="Link to this definition"></a></dt>
+<dd><p>The critical time step of the part with the penalty constraints at its degrees of freedom: <code class="docutils literal notranslate"><span class="pre">value</span></code> where
+no constraint couples them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>rowSumsOfThePenaltyConstraints</strong> (<em>ndarray</em>) – The row sums <span class="math notranslate nohighlight">\(r_i\)</span> of the penalty constraints, one per degree of freedom of the numbering; zero where
+no constraint acts.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The critical time step, at most <code class="docutils literal notranslate"><span class="pre">value</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.solvers.base.criticaltimestep.</span></span><span class="sig-name descname"><span class="pre">CriticalTimeStepEstimateOfTheDofs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepEstimateOfTheDofs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs" title="Link to this definition"></a></dt>
+<dd><p>A part’s estimate in a form the penalty constraints can be added to: made from upper bounds of the squared
+frequencies <span class="math notranslate nohighlight">\(\omega^2\)</span> of the part’s degrees of freedom. A penalty constraint adds, at every degree of
+freedom <span class="math notranslate nohighlight">\(i\)</span> it couples, the row sum <span class="math notranslate nohighlight">\(r_i\)</span> of the absolute value of its stiffness scaled by the lumped
+mass on both sides, <span class="math notranslate nohighlight">\(r_i = \sum_j |K_{ij}| / \sqrt{M_i M_j}\)</span>; the part’s estimate with these additions is a
+lower bound of the critical time step of the part and the constraints together (see <a class="reference internal" href="#"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>,
+“Penalty constraints”).</p>
+<p>Besides <code class="docutils literal notranslate"><span class="pre">value</span></code>, its field <code class="docutils literal notranslate"><span class="pre">dofs</span></code> holds the degrees of freedom of the part, indices into the numbering it was
+estimated on.</p>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">criticalTimeStep</span></code></a>(rowSumsOfThePenaltyConstraints)</p></td>
+<td><p>The critical time step of the part with the penalty constraints at its degrees of freedom: <code class="docutils literal notranslate"><span class="pre">value</span></code> where no constraint couples them.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value</strong> (<em>float</em>)</p></li>
+<li><p><strong>dofs</strong> (<em>ndarray</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">criticalTimeStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rowSumsOfThePenaltyConstraints</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepEstimateOfTheDofs.criticalTimeStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep" title="Link to this definition"></a></dt>
+<dd><p>The critical time step of the part with the penalty constraints at its degrees of freedom: <code class="docutils literal notranslate"><span class="pre">value</span></code> where
+no constraint couples them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>rowSumsOfThePenaltyConstraints</strong> (<em>ndarray</em>) – The row sums <span class="math notranslate nohighlight">\(r_i\)</span> of the penalty constraints, one per degree of freedom of the numbering; zero where
+no constraint acts.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The critical time step, at most <code class="docutils literal notranslate"><span class="pre">value</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -374,11 +662,22 @@ the part is estimated, and when its estimate is taken anew (its policy).</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget"><code class="xref py py-obj docutils literal notranslate"><span class="pre">forget</span></code></a>()</p></td>
+<td><p>Forget the last estimate, without counting an estimate: the model has no such part any more, e.g. the discrete system has lost its last penalty constraint.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset</span></code></a>()</p></td>
 <td><p>Forget the estimate, at the start of every step: a material property may have changed with the step.</p></td>
 </tr>
 </tbody>
 </table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget">
+<span class="sig-name descname"><span class="pre">forget</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfAPart.forget"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget" title="Link to this definition"></a></dt>
+<dd><p>Forget the last estimate, without counting an estimate: the model has no such part any more, e.g. the
+discrete system has lost its last penalty constraint. Its critical time step is infinite until it is estimated
+again.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset">
 <span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfAPart.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.reset" title="Link to this definition"></a></dt>
@@ -470,11 +769,17 @@ changed), and after a resume: they are not part of the checkpoint.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.estimate" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">estimate</span></code></a>(system, lumpedInertia, ...)</p></td>
 <td><p>Estimate the critical time step of the entities at their current configuration; with carried weights, from the weights the last estimate left, started anew where it falls below the estimate they started from (see the class documentation, &quot;Carried weights&quot;).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">isDue</span></code></a>(system, increment, lumpedInertia, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">forget</span></code>()</p></td>
+<td><p>Forget the last estimate, without counting an estimate: the model has no such part any more, e.g. the discrete system has lost its last penalty constraint.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">isDue</span></code></a>(system, increment, lumpedInertia, ...)</p></td>
 <td><p>Whether the entities are to be estimated anew after the increment <code class="docutils literal notranslate"><span class="pre">increment</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.reset" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.reset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.reset" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.reset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset</span></code></a>()</p></td>
 <td><p>Forget the estimate, at the start of every step: a material property may have changed with the step.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">withThePenaltyConstraints</span></code></a>(...)</p></td>
+<td><p>The critical time step of the entities with the penalty constraints that couple their degrees of freedom, from the last estimate (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs.criticalTimeStep()</span></code></a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -523,7 +828,7 @@ class documentation, “Carried weights”).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue">
-<span class="sig-name descname"><span class="pre">isDue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">increment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lumpedInertia</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lumpedDamping</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">criticalTimeStepInUse</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfEntitiesWithOwnInertia.isDue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">isDue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">increment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lumpedInertia</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lumpedDamping</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">criticalTimeStepInUse</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rowSumsOfThePenaltyConstraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfEntitiesWithOwnInertia.isDue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue" title="Link to this definition"></a></dt>
 <dd><p>Whether the entities are to be estimated anew after the increment <code class="docutils literal notranslate"><span class="pre">increment</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -533,12 +838,17 @@ class documentation, “Carried weights”).</p>
 <li><p><strong>lumpedInertia</strong> (<a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The lumped inertia of the entities now.</p></li>
 <li><p><strong>lumpedDamping</strong> (<a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – Their lumped damping now.</p></li>
 <li><p><strong>criticalTimeStepInUse</strong> (<em>float</em>) – The critical time step the time increment in use is the <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> fraction of.</p></li>
+<li><p><strong>rowSumsOfThePenaltyConstraints</strong> (<em>ndarray</em><em> | </em><em>None</em>) – The row sums of the penalty constraints in this increment
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepWithThePenaltyConstraints</span></code></a>), if the model has penalty constraints.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>True in the first evaluation of a step, after a new numbering, when a degree of freedom has an inertia (or a
 damping alone) it did not have at the last estimate, and when the critical time step at worst
-(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst"><code class="xref py py-meth docutils literal notranslate"><span class="pre">criticalTimeStepAtWorst()</span></code></a>) has fallen below the one in use.</p>
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst"><code class="xref py py-meth docutils literal notranslate"><span class="pre">criticalTimeStepAtWorst()</span></code></a>) has fallen below the one in use – alone, or with the penalty constraints
+that couple the entities’ degrees of freedom: their row sums are those of now, the entities’ stiffness may
+have grown by the square of the same factor as in <a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst"><code class="xref py py-meth docutils literal notranslate"><span class="pre">criticalTimeStepAtWorst()</span></code></a>. The penalty constraints
+make nothing due where the last estimate is none (a discrete system whose entities give no estimate).</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>bool</p>
@@ -551,6 +861,24 @@ damping alone) it did not have at the last estimate, and when the critical time 
 <span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfEntitiesWithOwnInertia.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.reset" title="Link to this definition"></a></dt>
 <dd><p>Forget the estimate, at the start of every step: a material property may have changed with the step. The next
 estimate is due at once.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints">
+<span class="sig-name descname"><span class="pre">withThePenaltyConstraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rowSumsOfThePenaltyConstraints</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints" title="Link to this definition"></a></dt>
+<dd><p>The critical time step of the entities with the penalty constraints that couple their degrees of freedom,
+from the last estimate (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs.criticalTimeStep()</span></code></a>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>rowSumsOfThePenaltyConstraints</strong> (<em>ndarray</em>) – The row sums of the penalty constraints, one per degree of freedom.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The critical time step; infinite in a model without such entities.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>
@@ -583,7 +911,13 @@ not change the mesh.</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">estimate</span></code></a>(system, U)</p></td>
-<td><p>Estimate the critical time step of the elements of the discrete system (<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a>).</p></td>
+<td><p>Estimate the critical time step of the elements of the discrete system (<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a>): the smallest of the elements' own.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof"><code class="xref py py-obj docutils literal notranslate"><span class="pre">estimateFromTheBoundOfEachDof</span></code></a>(system[, ...])</p></td>
+<td><p>The last estimate in the form the penalty constraints add to: at each degree of freedom of the elements, the bound of its squared frequency, the largest squared frequency of the elements there, <span class="math notranslate nohighlight">\(\omega_i^2 = \max_{e \ni i} (2 / \Delta t_e)^2\)</span>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">forget</span></code>()</p></td>
+<td><p>Forget the last estimate, without counting an estimate: the model has no such part any more, e.g. the discrete system has lost its last penalty constraint.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.isDue" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.isDue"><code class="xref py py-obj docutils literal notranslate"><span class="pre">isDue</span></code></a>(system)</p></td>
 <td><p>Whether the mesh is not the one of the last estimate.</p></td>
@@ -597,13 +931,43 @@ not change the mesh.</p>
 <dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate">
 <span class="sig-name descname"><span class="pre">estimate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfTheElements.estimate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate" title="Link to this definition"></a></dt>
 <dd><p>Estimate the critical time step of the elements of the discrete system
-(<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a>).</p>
+(<a class="reference internal" href="../developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">elementsWithNodalInertia</span></code></a>): the smallest of the
+elements’ own. Each element’s is kept, for the bound of each degree of freedom the penalty constraints add to
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof"><code class="xref py py-meth docutils literal notranslate"><span class="pre">estimateFromTheBoundOfEachDof()</span></code></a>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>system</strong> – The discrete system.</p></li>
 <li><p><strong>U</strong> (<a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution, which an element may need for its current deformation.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof">
+<span class="sig-name descname"><span class="pre">estimateFromTheBoundOfEachDof</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mpcTransformation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof" title="Link to this definition"></a></dt>
+<dd><p>The last estimate in the form the penalty constraints add to: at each degree of freedom of the elements, the
+bound of its squared frequency, the largest squared frequency of the elements there, <span class="math notranslate nohighlight">\(\omega_i^2 =
+\max_{e \ni i} (2 / \Delta t_e)^2\)</span>. Formed anew for every numbering, from the elements’ critical time steps
+of the last estimate; its <code class="docutils literal notranslate"><span class="pre">value</span></code> is the smallest of them.</p>
+<p>With multi-point constraints, a slave moves with its masters, and an element at the slave acts on the masters
+(through <span class="math notranslate nohighlight">\(T^T K T\)</span>): a master takes the largest squared frequency of the elements at it and at its slaves
+(<a class="reference internal" href="../developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters"><code class="xref py py-meth docutils literal notranslate"><span class="pre">foldLargestOntoMasters()</span></code></a>),
+where the row sums of the penalty constraints, folded onto the masters as well, meet it (see
+<a class="reference internal" href="#"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>, “With multi-point constraints”).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>system</strong> – The discrete system, whose numbering the estimate is of.</p></li>
+<li><p><strong>mpcTransformation</strong> – The condensation of the multi-point constraints of the discrete system; None if it has none.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The estimate.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof">CriticalTimeStepEstimateFromTheBoundOfEachDof</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -630,6 +994,84 @@ not change the mesh.</p>
 <span class="sig-name descname"><span class="pre">reset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepOfTheElements.reset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.reset" title="Link to this definition"></a></dt>
 <dd><p>Forget the estimate, at the start of every step: a material property may have changed with the step. The next
 estimate is due at once.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.solvers.base.criticaltimestep.</span></span><span class="sig-name descname"><span class="pre">CriticalTimeStepWithThePenaltyConstraints</span></span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepWithThePenaltyConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints" title="Link to this definition"></a></dt>
+<dd><p>The critical time step of the parts with the penalty constraints – contacts, supports and ties held by a
+penalty: the estimate of each part (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs</span></code></a>) with the row sums of the
+constraints added at the degrees of freedom they couple,</p>
+<div class="math notranslate nohighlight">
+\[\omega_\mathrm{max}^2 \le \max_i \left(\omega_i^2 + r_i\right), \qquad
+r_i = \frac{1}{\sqrt{M_i}} \sum_j |K^\mathrm{c}_{ij}| \frac{1}{\sqrt{M_j}} ,\]</div>
+<p>with <span class="math notranslate nohighlight">\(\omega_i^2\)</span> the part’s bound of the squared frequency at the degree of freedom <span class="math notranslate nohighlight">\(i\)</span> and
+<span class="math notranslate nohighlight">\(\boldsymbol{K}^\mathrm{c}\)</span> the stiffness of the constraints
+(<a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addBoundOfAbsoluteStiffnessTimes()</span></code></a>). A constraint
+has no critical time step of its own: it raises the frequencies of the degrees of freedom it couples, so it lowers
+the critical time step only where it acts, and only by what it adds there.</p>
+<p><strong>The value is not the constraints’ own.</strong> It is the critical time step of the parts <em>with</em> the constraints’ rows
+added at the degrees of freedom they couple, so it is never above the parts’ own estimates as they were when it was
+taken; and a part estimated anew is estimated before it (the elements of a new mesh, the entities right before it),
+so it is never above their current ones either. The model’s critical time step is nevertheless the minimum of all
+three (<code class="docutils literal notranslate"><span class="pre">NED._criticalTimeStepOfTheModel</span></code>), so that it needs no knowledge of which part has constraints: without
+constraints this value is infinite – before their first estimate in a step, and from the estimate that finds the
+discrete system without any (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forget()</span></code></a>), e.g. once the last particle has left a wall,
+so that the time increment it lowered can follow the parts again.</p>
+<p><strong>Policy: after every evaluation of the net force.</strong> Increment <span class="math notranslate nohighlight">\(n+1\)</span> integrates the net force
+<span class="math notranslate nohighlight">\(\boldsymbol{f}_n\)</span>, evaluated at the end of increment <span class="math notranslate nohighlight">\(n\)</span>, over the average of its own time
+increment and the one before, <span class="math notranslate nohighlight">\(\tfrac{1}{2}(\Delta t_n + \Delta t_{n+1})\)</span>. <span class="math notranslate nohighlight">\(\Delta t_{n+1}\)</span> is set
+right after <span class="math notranslate nohighlight">\(\boldsymbol{f}_n\)</span>, so it has to be within the critical time step of the stiffness that force
+was evaluated with. The stiffness of a constraint follows the state of the contact – which of its points are
+closed, and how deep –, which changes from increment to increment, and bounding it costs about as much as
+evaluating its force. So it is estimated right after the net force is, at the same state and on the same
+connectivity: at the start of a step and after every increment; and after a refinement, at the state on the new
+mesh, before the first increment on it. <span class="math notranslate nohighlight">\(\Delta t_n\)</span> was set with <span class="math notranslate nohighlight">\(\boldsymbol{f}_{n-1}\)</span>: stiffness
+that is new in <span class="math notranslate nohighlight">\(\boldsymbol{f}_n\)</span> – a point that closed in increment <span class="math notranslate nohighlight">\(n\)</span>, a point a contact search
+paired at its start – is half an increment late, since the average still holds an increment taken without it
+(<a class="reference internal" href="#"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>, “What the estimate does not see”).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.value" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.value"><code class="xref py py-obj docutils literal notranslate"><span class="pre">value</span></code></a></dt><dd><p>The critical time step of the part as last estimated, not scaled by a courant number; infinite before the first estimate, and for a model without such a part.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints.estimate" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints.estimate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">estimate</span></code></a>(system, ...[, mpcTransformation])</p></td>
+<td><p>Estimate the critical time step of the parts with the penalty constraints, from the last estimates of the parts.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">forget</span></code>()</p></td>
+<td><p>Forget the last estimate, without counting an estimate: the model has no such part any more, e.g. the discrete system has lost its last penalty constraint.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reset</span></code>()</p></td>
+<td><p>Forget the estimate, at the start of every step: a material property may have changed with the step.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints.estimate">
+<span class="sig-name descname"><span class="pre">estimate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rowSumsOfThePenaltyConstraints</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mpcTransformation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/criticaltimestep.html#CriticalTimeStepWithThePenaltyConstraints.estimate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints.estimate" title="Link to this definition"></a></dt>
+<dd><p>Estimate the critical time step of the parts with the penalty constraints, from the last estimates of the
+parts.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>system</strong> – The discrete system.</p></li>
+<li><p><strong>rowSumsOfThePenaltyConstraints</strong> (<em>ndarray</em>) – The row sums <span class="math notranslate nohighlight">\(r_i\)</span> of the penalty constraints, one per degree of freedom of the numbering, folded onto
+the masters of multi-point constraints.</p></li>
+<li><p><strong>elements</strong> (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements"><em>CriticalTimeStepOfTheElements</em></a>) – The critical time step of the finite elements, as last estimated.</p></li>
+<li><p><strong>entities</strong> (<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia"><em>CriticalTimeStepOfEntitiesWithOwnInertia</em></a>) – The critical time step of the entities that carry their own inertia, as last estimated.</p></li>
+<li><p><strong>mpcTransformation</strong> – The condensation of the multi-point constraints of the discrete system; None if it has none
+(<a class="reference internal" href="#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof"><code class="xref py py-meth docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof()</span></code></a>).</p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>

@@ -172,17 +172,27 @@
 <span class="sd">smallest, and runs at the fraction ``courant-number`` of it. The parts have disjoint degrees of freedom, so the</span>
 <span class="sd">smallest of their critical time steps is the model's.</span>
 
-<span class="sd">A part gives its estimate as a :class:`CriticalTimeStepEstimate`. An estimate costs something, and how much its value</span>
-<span class="sd">can change while the analysis runs depends on the part, so every part (:class:`CriticalTimeStepOfAPart`) comes with</span>
-<span class="sd">its own policy of when its estimate is taken anew:</span>
+<span class="sd">A part gives its estimate as a :class:`CriticalTimeStepEstimate`. A penalty constraint -- a contact, a support, a tie</span>
+<span class="sd">held by a penalty -- owns no degrees of freedom: it adds stiffness to the ones of the parts it couples. It has no</span>
+<span class="sd">critical time step of its own to take the minimum with; it adds to the parts' estimates at the degrees of freedom it</span>
+<span class="sd">couples: a part gives its estimate for them as a :class:`CriticalTimeStepEstimateOfTheDofs`, to which the row sums of</span>
+<span class="sd">the constraints' mass-scaled stiffness are added.</span>
+
+<span class="sd">An estimate costs something, and how much its value can change while the analysis runs depends on the part, so every</span>
+<span class="sd">part (:class:`CriticalTimeStepOfAPart`) comes with its own policy of when its estimate is taken anew:</span>
 
 <span class="sd">* :class:`CriticalTimeStepOfTheElements`: the finite elements, estimated **once per mesh**;</span>
 <span class="sd">* :class:`CriticalTimeStepOfEntitiesWithOwnInertia`: the entities that carry their own inertia (the particles of a</span>
-<span class="sd">  meshfree model), estimated anew **when the margin of the last estimate over the time increment in use may be used up**.</span>
+<span class="sd">  meshfree model), estimated anew **when the margin of the last estimate over the time increment in use may be used</span>
+<span class="sd">  up**;</span>
+<span class="sd">* :class:`CriticalTimeStepWithThePenaltyConstraints`: the parts with the penalty constraints, estimated **after every</span>
+<span class="sd">  evaluation of the net force**, from the stiffness the constraints had in it. This third value is not the constraints'</span>
+<span class="sd">  own critical time step (see the class).</span>
 
 <span class="sd">The theory, and what the estimates do not see, are explained in :doc:`/theory/criticaltimestep`.</span>
 <span class="sd">"""</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -195,13 +205,81 @@
 <span class="nd">@dataclass</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepEstimate</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""A part's estimate of its own critical time step, as the part gives it. A derived class also holds what the</span>
-<span class="sd">    estimate was made from, so that what is added to the part's stiffness can be added to the estimate.</span>
+<span class="sd">    estimate was made from, so that what is added to the part's stiffness can be added to the estimate</span>
+<span class="sd">    (:class:`CriticalTimeStepEstimateOfTheDofs`).</span>
 
 <span class="sd">    Its one field, ``value``, is the critical time step of the part alone, not scaled by a courant number: a lower</span>
 <span class="sd">    bound of :math:`2/\\omega_\\mathrm{max}` of the part's degrees of freedom; infinite for a part without stiffness.</span>
 <span class="sd">    """</span>
 
     <span class="n">value</span><span class="p">:</span> <span class="nb">float</span></div>
+
+
+
+<div class="viewcode-block" id="CriticalTimeStepEstimateOfTheDofs">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepEstimateOfTheDofs</span><span class="p">(</span><span class="n">CriticalTimeStepEstimate</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A part's estimate in a form the penalty constraints can be added to: made from upper bounds of the squared</span>
+<span class="sd">    frequencies :math:`\\omega^2` of the part's degrees of freedom. A penalty constraint adds, at every degree of</span>
+<span class="sd">    freedom :math:`i` it couples, the row sum :math:`r_i` of the absolute value of its stiffness scaled by the lumped</span>
+<span class="sd">    mass on both sides, :math:`r_i = \\sum_j |K_{ij}| / \\sqrt{M_i M_j}`; the part's estimate with these additions is a</span>
+<span class="sd">    lower bound of the critical time step of the part and the constraints together (see :doc:`/theory/criticaltimestep`,</span>
+<span class="sd">    "Penalty constraints").</span>
+
+<span class="sd">    Besides ``value``, its field ``dofs`` holds the degrees of freedom of the part, indices into the numbering it was</span>
+<span class="sd">    estimated on.</span>
+<span class="sd">    """</span>
+
+    <span class="n">dofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+
+<div class="viewcode-block" id="CriticalTimeStepEstimateOfTheDofs.criticalTimeStep">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">criticalTimeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The critical time step of the part with the penalty constraints at its degrees of freedom: ``value`` where</span>
+<span class="sd">        no constraint couples them.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rowSumsOfThePenaltyConstraints</span>
+<span class="sd">            The row sums :math:`r_i` of the penalty constraints, one per degree of freedom of the numbering; zero where</span>
+<span class="sd">            no constraint acts.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The critical time step, at most ``value``.</span>
+<span class="sd">        """</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="CriticalTimeStepEstimateFromTheBoundOfEachDof">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">eq</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepEstimateFromTheBoundOfEachDof</span><span class="p">(</span><span class="n">CriticalTimeStepEstimateOfTheDofs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A part's estimate from one upper bound of the squared frequency per degree of freedom, :math:`\\omega_i^2`: the</span>
+<span class="sd">    critical time step with the penalty constraints is :math:`2 / \\sqrt{\\max_i (\\omega_i^2 + r_i)}` over the degrees</span>
+<span class="sd">    of freedom the constraints couple, or the part's own where that is smaller. The finite elements give it, with the</span>
+<span class="sd">    largest squared frequency of the elements at each degree of freedom</span>
+<span class="sd">    (:meth:`CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof`).</span>
+
+<span class="sd">    Besides ``value`` and ``dofs``, its field ``squaredFrequencies`` holds the upper bound of the squared frequency of</span>
+<span class="sd">    each degree of freedom, in the order of ``dofs``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">squaredFrequencies</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+
+<div class="viewcode-block" id="CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">criticalTimeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="n">rowSums</span> <span class="o">=</span> <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dofs</span><span class="p">]</span>
+        <span class="n">coupled</span> <span class="o">=</span> <span class="n">rowSums</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">coupled</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="mf">2.0</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">squaredFrequencies</span><span class="p">[</span><span class="n">coupled</span><span class="p">]</span> <span class="o">+</span> <span class="n">rowSums</span><span class="p">[</span><span class="n">coupled</span><span class="p">])))</span></div>
+</div>
 
 
 
@@ -227,10 +305,20 @@
 <span class="w">        </span><span class="sd">"""Forget the estimate, at the start of every step: a material property may have changed with the step. The next</span>
 <span class="sd">        estimate is due at once."""</span>
 
-        <span class="c1">#: The last estimate; None before the first one, and for a model without such a part.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
         <span class="c1">#: How often the part was estimated in the step.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">numberOfEstimates</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfAPart.forget">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forget</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Forget the last estimate, without counting an estimate: the model has no such part any more, e.g. the</span>
+<span class="sd">        discrete system has lost its last penalty constraint. Its critical time step is infinite until it is estimated</span>
+<span class="sd">        again."""</span>
+
+        <span class="c1">#: The last estimate; None before the first one, and for a model without such a part.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
     <span class="nd">@property</span>
@@ -281,7 +369,15 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
         <span class="c1">#: The version of the mesh the estimate is of (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`).</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_mesh</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mesh</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The elements and their critical time steps, as last estimated.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_elements</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfElement</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="c1">#: The estimate from the bound of each degree of freedom (:meth:`estimateFromTheBoundOfEachDof`), and the</span>
+        <span class="c1">#: numbering and the multi-point constraints it is of.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_estimateFromTheBoundOfEachDof</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfThatEstimate</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mpcTransformationOfThatEstimate</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="CriticalTimeStepOfTheElements.isDue">
@@ -307,7 +403,9 @@
 <a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">estimate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Estimate the critical time step of the elements of the discrete system</span>
-<span class="sd">        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).</span>
+<span class="sd">        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`): the smallest of the</span>
+<span class="sd">        elements' own. Each element's is kept, for the bound of each degree of freedom the penalty constraints add to</span>
+<span class="sd">        (:meth:`estimateFromTheBoundOfEachDof`).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -317,18 +415,68 @@
 <span class="sd">            The solution, which an element may need for its current deformation.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_take</span><span class="p">(</span>
-            <span class="n">CriticalTimeStepEstimate</span><span class="p">(</span>
-                <span class="nb">min</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="n">element</span><span class="o">.</span><span class="n">computeCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="n">U</span><span class="p">[</span><span class="n">element</span><span class="p">])</span>
-                        <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span>
-                    <span class="p">),</span>
-                    <span class="n">default</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_elements</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">elementsWithNodalInertia</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfElement</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">element</span><span class="o">.</span><span class="n">computeCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="n">U</span><span class="p">[</span><span class="n">element</span><span class="p">])</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_elements</span><span class="p">]</span>
         <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_mesh</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">version</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mesh</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">version</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_estimateFromTheBoundOfEachDof</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_take</span><span class="p">(</span><span class="n">CriticalTimeStepEstimate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfElement</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)))</span></div>
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">estimateFromTheBoundOfEachDof</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">mpcTransformation</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CriticalTimeStepEstimateFromTheBoundOfEachDof</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The last estimate in the form the penalty constraints add to: at each degree of freedom of the elements, the</span>
+<span class="sd">        bound of its squared frequency, the largest squared frequency of the elements there, :math:`\\omega_i^2 =</span>
+<span class="sd">        \\max_{e \\ni i} (2 / \\Delta t_e)^2`. Formed anew for every numbering, from the elements' critical time steps</span>
+<span class="sd">        of the last estimate; its ``value`` is the smallest of them.</span>
+
+<span class="sd">        With multi-point constraints, a slave moves with its masters, and an element at the slave acts on the masters</span>
+<span class="sd">        (through :math:`T^T K T`): a master takes the largest squared frequency of the elements at it and at its slaves</span>
+<span class="sd">        (:meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters`),</span>
+<span class="sd">        where the row sums of the penalty constraints, folded onto the masters as well, meet it (see</span>
+<span class="sd">        :doc:`/theory/criticaltimestep`, "With multi-point constraints").</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The discrete system, whose numbering the estimate is of.</span>
+<span class="sd">        mpcTransformation</span>
+<span class="sd">            The condensation of the multi-point constraints of the discrete system; None if it has none.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        CriticalTimeStepEstimateFromTheBoundOfEachDof</span>
+<span class="sd">            The estimate.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_estimateFromTheBoundOfEachDof</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfThatEstimate</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mpcTransformationOfThatEstimate</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">mpcTransformation</span>
+        <span class="p">):</span>
+            <span class="n">dofsOfElement</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">[</span><span class="n">element</span><span class="p">])</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_elements</span><span class="p">]</span>
+            <span class="n">dofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)]</span> <span class="o">+</span> <span class="n">dofsOfElement</span><span class="p">)</span>
+            <span class="n">squaredFrequencyOfElement</span> <span class="o">=</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfElement</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+            <span class="n">squaredFrequencies</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="o">.</span><span class="n">at</span><span class="p">(</span>
+                <span class="n">squaredFrequencies</span><span class="p">,</span> <span class="n">dofs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">squaredFrequencyOfElement</span><span class="p">,</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">dofsOfElement</span><span class="p">])</span>
+            <span class="p">)</span>
+            <span class="n">dofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">dofs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">ofTheElements</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+                <span class="n">ofTheElements</span><span class="p">[</span><span class="n">dofs</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+                <span class="n">dofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">foldLargestOntoMasters</span><span class="p">(</span><span class="n">ofTheElements</span><span class="p">))</span>
+                <span class="n">squaredFrequencies</span> <span class="o">=</span> <span class="n">mpcTransformation</span><span class="o">.</span><span class="n">foldLargestOntoMasters</span><span class="p">(</span><span class="n">squaredFrequencies</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_estimateFromTheBoundOfEachDof</span> <span class="o">=</span> <span class="n">CriticalTimeStepEstimateFromTheBoundOfEachDof</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_criticalTimeStepOfElement</span><span class="p">,</span> <span class="n">initial</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">),</span> <span class="n">dofs</span><span class="p">,</span> <span class="n">squaredFrequencies</span><span class="p">[</span><span class="n">dofs</span><span class="p">]</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_numberingOfThatEstimate</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mpcTransformationOfThatEstimate</span> <span class="o">=</span> <span class="n">mpcTransformation</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_estimateFromTheBoundOfEachDof</span></div>
 </div>
 
 
@@ -539,6 +687,7 @@
         <span class="n">lumpedInertia</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">lumpedDamping</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">criticalTimeStepInUse</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Whether the entities are to be estimated anew after the increment ``increment``.</span>
 
@@ -554,13 +703,19 @@
 <span class="sd">            Their lumped damping now.</span>
 <span class="sd">        criticalTimeStepInUse</span>
 <span class="sd">            The critical time step the time increment in use is the ``courant-number`` fraction of.</span>
+<span class="sd">        rowSumsOfThePenaltyConstraints</span>
+<span class="sd">            The row sums of the penalty constraints in this increment</span>
+<span class="sd">            (:class:`CriticalTimeStepWithThePenaltyConstraints`), if the model has penalty constraints.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        bool</span>
 <span class="sd">            True in the first evaluation of a step, after a new numbering, when a degree of freedom has an inertia (or a</span>
 <span class="sd">            damping alone) it did not have at the last estimate, and when the critical time step at worst</span>
-<span class="sd">            (:meth:`criticalTimeStepAtWorst`) has fallen below the one in use.</span>
+<span class="sd">            (:meth:`criticalTimeStepAtWorst`) has fallen below the one in use -- alone, or with the penalty constraints</span>
+<span class="sd">            that couple the entities' degrees of freedom: their row sums are those of now, the entities' stiffness may</span>
+<span class="sd">            have grown by the square of the same factor as in :meth:`criticalTimeStepAtWorst`. The penalty constraints</span>
+<span class="sd">            make nothing due where the last estimate is none (a discrete system whose entities give no estimate).</span>
 <span class="sd">        """</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbering</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">system</span><span class="o">.</span><span class="n">numbering</span><span class="p">:</span>
@@ -572,7 +727,130 @@
         <span class="n">hasDampingAlone</span> <span class="o">=</span> <span class="o">~</span><span class="n">hasInertia</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">damping</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">hasInertia</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">hadInertia</span><span class="p">)</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">hasDampingAlone</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">hadDampingAlone</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">True</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">criticalTimeStepAtWorst</span><span class="p">(</span><span class="n">increment</span><span class="p">,</span> <span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">criticalTimeStepInUse</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">criticalTimeStepAtWorst</span><span class="p">(</span><span class="n">increment</span><span class="p">,</span> <span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">criticalTimeStepInUse</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">rowSumsOfThePenaltyConstraints</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span><span class="o">.</span><span class="n">dofs</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="c1"># With the entities' stiffness grown by 1/fall^2, their critical time step with the constraints is fall times</span>
+        <span class="c1"># the one with the constraints' row sums scaled by fall^2.</span>
+        <span class="n">massFactor</span><span class="p">,</span> <span class="n">stiffnessFactor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fallSinceTheEstimate</span><span class="p">(</span><span class="n">increment</span><span class="p">,</span> <span class="n">lumpedInertia</span><span class="p">,</span> <span class="n">lumpedDamping</span><span class="p">)</span>
+        <span class="n">fall</span> <span class="o">=</span> <span class="n">massFactor</span> <span class="o">*</span> <span class="n">stiffnessFactor</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">fall</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">(</span><span class="n">fall</span><span class="o">**</span><span class="mi">2</span> <span class="o">*</span> <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">criticalTimeStepInUse</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">withThePenaltyConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The critical time step of the entities with the penalty constraints that couple their degrees of freedom,</span>
+<span class="sd">        from the last estimate (:meth:`CriticalTimeStepEstimateOfTheDofs.criticalTimeStep`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rowSumsOfThePenaltyConstraints</span>
+<span class="sd">            The row sums of the penalty constraints, one per degree of freedom.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The critical time step; infinite in a model without such entities.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">inf</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">(</span><span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">)</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="CriticalTimeStepWithThePenaltyConstraints">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepWithThePenaltyConstraints</span><span class="p">(</span><span class="n">CriticalTimeStepOfAPart</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The critical time step of the parts with the penalty constraints -- contacts, supports and ties held by a</span>
+<span class="sd">    penalty: the estimate of each part (:class:`CriticalTimeStepEstimateOfTheDofs`) with the row sums of the</span>
+<span class="sd">    constraints added at the degrees of freedom they couple,</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \\omega_\\mathrm{max}^2 \\le \\max_i \\left(\\omega_i^2 + r_i\\right), \\qquad</span>
+<span class="sd">        r_i = \\frac{1}{\\sqrt{M_i}} \\sum_j |K^\\mathrm{c}_{ij}| \\frac{1}{\\sqrt{M_j}} ,</span>
+
+<span class="sd">    with :math:`\\omega_i^2` the part's bound of the squared frequency at the degree of freedom :math:`i` and</span>
+<span class="sd">    :math:`\\boldsymbol{K}^\\mathrm{c}` the stiffness of the constraints</span>
+<span class="sd">    (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). A constraint</span>
+<span class="sd">    has no critical time step of its own: it raises the frequencies of the degrees of freedom it couples, so it lowers</span>
+<span class="sd">    the critical time step only where it acts, and only by what it adds there.</span>
+
+<span class="sd">    **The value is not the constraints' own.** It is the critical time step of the parts *with* the constraints' rows</span>
+<span class="sd">    added at the degrees of freedom they couple, so it is never above the parts' own estimates as they were when it was</span>
+<span class="sd">    taken; and a part estimated anew is estimated before it (the elements of a new mesh, the entities right before it),</span>
+<span class="sd">    so it is never above their current ones either. The model's critical time step is nevertheless the minimum of all</span>
+<span class="sd">    three (``NED._criticalTimeStepOfTheModel``), so that it needs no knowledge of which part has constraints: without</span>
+<span class="sd">    constraints this value is infinite -- before their first estimate in a step, and from the estimate that finds the</span>
+<span class="sd">    discrete system without any (:meth:`~CriticalTimeStepOfAPart.forget`), e.g. once the last particle has left a wall,</span>
+<span class="sd">    so that the time increment it lowered can follow the parts again.</span>
+
+<span class="sd">    **Policy: after every evaluation of the net force.** Increment :math:`n+1` integrates the net force</span>
+<span class="sd">    :math:`\\boldsymbol{f}_n`, evaluated at the end of increment :math:`n`, over the average of its own time</span>
+<span class="sd">    increment and the one before, :math:`\\tfrac{1}{2}(\\Delta t_n + \\Delta t_{n+1})`. :math:`\\Delta t_{n+1}` is set</span>
+<span class="sd">    right after :math:`\\boldsymbol{f}_n`, so it has to be within the critical time step of the stiffness that force</span>
+<span class="sd">    was evaluated with. The stiffness of a constraint follows the state of the contact -- which of its points are</span>
+<span class="sd">    closed, and how deep --, which changes from increment to increment, and bounding it costs about as much as</span>
+<span class="sd">    evaluating its force. So it is estimated right after the net force is, at the same state and on the same</span>
+<span class="sd">    connectivity: at the start of a step and after every increment; and after a refinement, at the state on the new</span>
+<span class="sd">    mesh, before the first increment on it. :math:`\\Delta t_n` was set with :math:`\\boldsymbol{f}_{n-1}`: stiffness</span>
+<span class="sd">    that is new in :math:`\\boldsymbol{f}_n` -- a point that closed in increment :math:`n`, a point a contact search</span>
+<span class="sd">    paired at its start -- is half an increment late, since the average still holds an increment taken without it</span>
+<span class="sd">    (:doc:`/theory/criticaltimestep`, "What the estimate does not see").</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="s2">"the parts with the penalty constraints"</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CriticalTimeStepWithThePenaltyConstraints.estimate">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints.estimate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">estimate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">,</span>
+        <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">elements</span><span class="p">:</span> <span class="n">CriticalTimeStepOfTheElements</span><span class="p">,</span>
+        <span class="n">entities</span><span class="p">:</span> <span class="n">CriticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">,</span>
+        <span class="n">mpcTransformation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Estimate the critical time step of the parts with the penalty constraints, from the last estimates of the</span>
+<span class="sd">        parts.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The discrete system.</span>
+<span class="sd">        rowSumsOfThePenaltyConstraints</span>
+<span class="sd">            The row sums :math:`r_i` of the penalty constraints, one per degree of freedom of the numbering, folded onto</span>
+<span class="sd">            the masters of multi-point constraints.</span>
+<span class="sd">        elements</span>
+<span class="sd">            The critical time step of the finite elements, as last estimated.</span>
+<span class="sd">        entities</span>
+<span class="sd">            The critical time step of the entities that carry their own inertia, as last estimated.</span>
+<span class="sd">        mpcTransformation</span>
+<span class="sd">            The condensation of the multi-point constraints of the discrete system; None if it has none</span>
+<span class="sd">            (:meth:`CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof`).</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_take</span><span class="p">(</span>
+            <span class="n">CriticalTimeStepEstimate</span><span class="p">(</span>
+                <span class="nb">min</span><span class="p">(</span>
+                    <span class="n">elements</span><span class="o">.</span><span class="n">estimateFromTheBoundOfEachDof</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">mpcTransformation</span><span class="p">)</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">(</span>
+                        <span class="n">rowSumsOfThePenaltyConstraints</span>
+                    <span class="p">),</span>
+                    <span class="n">entities</span><span class="o">.</span><span class="n">withThePenaltyConstraints</span><span class="p">(</span><span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span></div>
 </div>
 
 </pre></div>

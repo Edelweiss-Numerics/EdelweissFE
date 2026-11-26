@@ -178,8 +178,11 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.checkDirichletConflicts"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.checkDirichletConflicts()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.condensedPatternFillIn()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldExplicitForce"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.foldExplicitForce()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.foldLargestOntoMasters()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.foldLumpedMass()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.recoverSlaveSolution"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.recoverSlaveSolution()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformResidual"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.transformResidual()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformSystemMatrix"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.transformSystemMatrix()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.withCondensedPattern"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintTransformation.withCondensedPattern()</span></code></a></li>
@@ -1643,19 +1646,28 @@ from a copy if <code class="docutils literal notranslate"><span class="pre">prun
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldExplicitForce" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldExplicitForce"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foldExplicitForce</span></code></a>(P)</p></td>
 <td><p>Fold the nodal forces acting on slave DOFs onto their masters: <span class="math notranslate nohighlight">\(\tilde{P} = T^T P\)</span> (slave rows zero) -- the action-reaction transfer through the rigid interpolation link.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foldLumpedMass</span></code></a>(M)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foldLargestOntoMasters</span></code></a>(values)</p></td>
+<td><p>Fold values per DOF from the slave DOFs onto their masters by the largest: a master takes the largest of its own value and those of the slaves that move with it (a nonzero coefficient), <span class="math notranslate nohighlight">\(v_m \leftarrow \max(v_m, \max_{s:\, N_{sm} \ne 0} v_s)\)</span>; every other entry stays as it is.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foldLumpedMass</span></code></a>(M)</p></td>
 <td><p>Fold the slave masses onto their masters (in place): <span class="math notranslate nohighlight">\(M_{m_a} \mathrel{+}= N_a M_s\)</span>, then <span class="math notranslate nohighlight">\(M_s = 0\)</span> -- the row-sum lumping of <span class="math notranslate nohighlight">\(T^T M T\)</span>, which keeps the mass vector diagonal and conserves total mass for interpolation-type constraints (<span class="math notranslate nohighlight">\(\sum_a N_a = 1\)</span>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foldRowSumsOfAbsoluteCoefficients</span></code></a>(rowSums)</p></td>
+<td><p>Fold row sums of the absolute value of a stiffness from the slave DOFs onto their masters, by the absolute value of the coefficients: <span class="math notranslate nohighlight">\(|T|^T b\)</span> (slave rows zero); see <a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">slaveWeightsOfAbsoluteCoefficients()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.recoverSlaveSolution" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.recoverSlaveSolution"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recoverSlaveSolution</span></code></a>(x)</p></td>
 <td><p>Complete the solution of the condensed system (in place): add the master-interpolated part to the slave DOFs, <span class="math notranslate nohighlight">\(x_s \mathrel{+}= \sum_a N_a \, x_{m_a}\)</span>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformResidual" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformResidual"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transformResidual</span></code></a>(R, dU)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slaveWeightsOfAbsoluteCoefficients</span></code></a>(weights)</p></td>
+<td><p>The column weights of a bound of the row sums of a stiffness on the slave DOFs: <span class="math notranslate nohighlight">\(|T|\, w\)</span>, i.e. <span class="math notranslate nohighlight">\(w_s = \sum_a |N_a| \, w_{m_a}\)</span> on a slave, unchanged elsewhere.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformResidual" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformResidual"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transformResidual</span></code></a>(R, dU)</p></td>
 <td><p>Condense the residual: <span class="math notranslate nohighlight">\(\tilde{R} = T^T R\)</span>, with the slave rows replaced by the current constraint violation <span class="math notranslate nohighlight">\(-(dU_s - \sum_a N_a \, dU_{m_a})\)</span> (exactly zero for any consistently accumulated increment; written explicitly as a drift correction).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformSystemMatrix" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformSystemMatrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transformSystemMatrix</span></code></a>(K)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformSystemMatrix" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformSystemMatrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">transformSystemMatrix</span></code></a>(K)</p></td>
 <td><p>Condense the system matrix: <span class="math notranslate nohighlight">\(\tilde{K} = T^T K \, T + C\)</span>, with <span class="math notranslate nohighlight">\(C\)</span> the identity on the slave DOFs.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.withCondensedPattern" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.withCondensedPattern"><code class="xref py py-obj docutils literal notranslate"><span class="pre">withCondensedPattern</span></code></a>(K)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.withCondensedPattern" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.withCondensedPattern"><code class="xref py py-obj docutils literal notranslate"><span class="pre">withCondensedPattern</span></code></a>(K)</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">K</span></code> with the entries of <a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">condensedPatternFillIn()</span></code></a> added as stored zeros, for a matrix that does not come from a CSR generator that holds them already.</p></td>
 </tr>
 </tbody>
@@ -1725,6 +1737,28 @@ rigid interpolation link.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters">
+<span class="sig-name descname"><span class="pre">foldLargestOntoMasters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/mpctransformation.html#MultiPointConstraintTransformation.foldLargestOntoMasters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters" title="Link to this definition"></a></dt>
+<dd><p>Fold values per DOF from the slave DOFs onto their masters by the largest: a master takes the largest of its
+own value and those of the slaves that move with it (a nonzero coefficient),
+<span class="math notranslate nohighlight">\(v_m \leftarrow \max(v_m, \max_{s:\, N_{sm} \ne 0} v_s)\)</span>; every other entry stays as it is.</p>
+<p>The explicit dynamic solver folds the elements’ bounds of the squared frequencies with it
+(<a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof"><code class="xref py py-meth docutils literal notranslate"><span class="pre">estimateFromTheBoundOfEachDof()</span></code></a>):
+an element at a slave acts on the masters of the slave, through <span class="math notranslate nohighlight">\(T^T K T\)</span>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>values</strong> (<em>ndarray</em>) – The values on all DOFs.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The folded values.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass">
 <span class="sig-name descname"><span class="pre">foldLumpedMass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">M</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/mpctransformation.html#MultiPointConstraintTransformation.foldLumpedMass"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass" title="Link to this definition"></a></dt>
 <dd><p>Fold the slave masses onto their masters (in place): <span class="math notranslate nohighlight">\(M_{m_a} \mathrel{+}= N_a
@@ -1734,6 +1768,24 @@ vector diagonal and conserves total mass for interpolation-type constraints
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>M</strong> (<em>ndarray</em>) – The lumped (diagonal) mass vector, modified in place.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients">
+<span class="sig-name descname"><span class="pre">foldRowSumsOfAbsoluteCoefficients</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rowSums</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/mpctransformation.html#MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients" title="Link to this definition"></a></dt>
+<dd><p>Fold row sums of the absolute value of a stiffness from the slave DOFs onto their masters, by the absolute
+value of the coefficients: <span class="math notranslate nohighlight">\(|T|^T b\)</span> (slave rows zero); see <a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">slaveWeightsOfAbsoluteCoefficients()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>rowSums</strong> (<em>ndarray</em>) – The row sums on all DOFs.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The folded row sums.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
 </dd>
 </dl>
 </dd></dl>
@@ -1757,6 +1809,26 @@ in place.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The completed solution (the same object as <code class="docutils literal notranslate"><span class="pre">x</span></code>).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients">
+<span class="sig-name descname"><span class="pre">slaveWeightsOfAbsoluteCoefficients</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/mpctransformation.html#MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients" title="Link to this definition"></a></dt>
+<dd><p>The column weights of a bound of the row sums of a stiffness on the slave DOFs:
+<span class="math notranslate nohighlight">\(|T|\, w\)</span>, i.e. <span class="math notranslate nohighlight">\(w_s = \sum_a |N_a| \, w_{m_a}\)</span> on a slave, unchanged elsewhere. With
+<a class="reference internal" href="#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients" title="edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">foldRowSumsOfAbsoluteCoefficients()</span></code></a>, <span class="math notranslate nohighlight">\(|T|^T |K| \, |T| w\)</span> bounds the row sums of the absolute value
+of the folded stiffness <span class="math notranslate nohighlight">\(T^T K T\)</span> the masters see.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>weights</strong> (<em>ndarray</em>) – The weights of the independent DOFs; the entries of the slaves are not read.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The weights with those of the slaves.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>np.ndarray</p>

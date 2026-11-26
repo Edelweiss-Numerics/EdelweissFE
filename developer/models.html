@@ -1127,14 +1127,18 @@ otherwise projects their velocity from the entities’ momentum.</p>
 (<a class="reference internal" href="#edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia" title="edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia"><code class="xref py py-attr docutils literal notranslate"><span class="pre">entitiesWithOwnInertia</span></code></a>) at their current configuration, a lower bound of it. A property of their
 assembled system, not of one entity: an entity’s stiffness may couple nodes at which its own lumped mass
 vanishes. <code class="docutils literal notranslate"><span class="pre">NED</span></code> takes the smaller of it and the elements’ critical time step, and decides when it is estimated
-anew (<a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepOfEntitiesWithOwnInertia</span></code></a>).</p>
+anew (<a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepOfEntitiesWithOwnInertia</span></code></a>). It is
+given in the form the penalty constraints that couple the entities’ degrees of freedom add to
+(<a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepEstimateOfTheDofs</span></code></a>).</p>
 <p>A bound of the largest eigenvalue of a nonnegative matrix <span class="math notranslate nohighlight">\(\boldsymbol{A}\)</span> – here the absolute value of
 the mass-scaled stiffness – is the Collatz-Wielandt bound <span class="math notranslate nohighlight">\(\rho(\boldsymbol{A}) \le \max_i
 (\boldsymbol{A}\boldsymbol{w})_i / w_i\)</span>, which holds for every positive weight vector <span class="math notranslate nohighlight">\(\boldsymbol{w}\)</span>
 and is exact for the Perron vector. <code class="docutils literal notranslate"><span class="pre">NED</span></code> may carry the weights from one estimate to the next
 (<code class="docutils literal notranslate"><span class="pre">carry-critical-time-step-weights</span></code>): each estimate then takes the weights the last one left, and leaves
 <span class="math notranslate nohighlight">\(\boldsymbol{A}\boldsymbol{w}\)</span> for the next, one step of the power iteration per estimate. Weights of
-zero start the iteration anew, from the estimate’s own start weights.</p>
+zero start the iteration anew, from the estimate’s own start weights. Whatever its weights, the estimate takes
+the row sums of the penalty constraints as they are
+(<a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">criticalTimeStep()</span></code></a>).</p>
 <p>A finite element model has no such entity: None.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1153,7 +1157,7 @@ alone.</p></li>
 no such entity.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate">CriticalTimeStepEstimate</a> | None</p>
+<dd class="field-odd"><p><a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs">CriticalTimeStepEstimateOfTheDofs</a> | None</p>
 </dd>
 </dl>
 </dd></dl>

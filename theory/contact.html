@@ -1094,15 +1094,25 @@ which is node-ordered like the accessors above.</p>
 <span id="contact-explicit-dynamics"></span><h4>Explicit dynamics<a class="headerlink" href="#explicit-dynamics" title="Link to this heading"></a></h4>
 <p>Under <code class="docutils literal notranslate"><span class="pre">NED</span></code> (<a class="reference internal" href="../analysis/solvers.html"><span class="doc">Solvers</span></a>) the same formulation is used, with two differences that follow from
 what an explicit increment is.</p>
-<p><strong>No tangent is assembled.</strong> An explicit increment solves no linear system, so a constraint
-stiffness enters nothing. The solver calls
-<a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>
-instead of <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>, and this constraint overrides it to evaluate the contact forces
-without building a tangent at all. The base-class default forwards to <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> with a
-discarded tangent contribution, so a constraint that has not been ported still works – correctly,
-but paying for a stiffness nobody reads. Constraints for which the tangent is a material part of
-the cost should override the method; for this one it is, at a per-slave outer product and four
-block writes.</p>
+<p><strong>No tangent is assembled for the forces.</strong> An explicit increment solves no linear system, so a constraint’s stiffness
+enters only the critical time step (<a class="reference internal" href="criticaltimestep.html"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>, “Penalty constraints”). For the forces, the
+solver calls <a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a> instead of
+<code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>, and this constraint overrides it to evaluate the contact forces without building a tangent. The
+base-class default forwards to <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> with a scratch tangent that the forces do not need, so a constraint
+that has not been ported still works – correctly, but paying for the tangent in every evaluation of its forces.
+Constraints for which the tangent is a material part of the cost should override the method; for this one it is, at a
+per-slave outer product and four block writes.</p>
+<p><code class="docutils literal notranslate"><span class="pre">NED</span></code> still asks for the tangent once per increment, for the bound of its critical time step
+(<a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addBoundOfAbsoluteStiffnessTimes()</span></code></a>): the contact
+adds the row sums of its stiffness, scaled by the lumped mass, to the frequencies of the nodes it couples. It asks
+right after the force, with the same arguments, so that the trial state of the friction, which <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>
+writes for the next increment, is written again as the force wrote it. While a point slips, the friction makes the
+tangent unsymmetric (<a class="reference internal" href="#friction-tangent"><span class="std std-ref">Consistent tangent</span></a>); the bound takes the rows of its symmetric part there as well.
+Until the follow-up contact changes bound the three force-only contacts (node-to-surface, surface-to-surface,
+surface-to-rigid-body) from the springs of their force, <code class="docutils literal notranslate"><span class="pre">NED</span></code> builds their tangent once per increment for this bound,
+in a scratch kept per location of the constraint: <span class="math notranslate nohighlight">\(8\,(d\,(n_s + n_m))^2\)</span> bytes per surface point of the
+surface-to-surface contact, with <span class="math notranslate nohighlight">\(d\)</span> the dimension and <span class="math notranslate nohighlight">\(n_s\)</span>, <span class="math notranslate nohighlight">\(n_m\)</span> the nodes of the slave and the
+master facet, and an index list of its entries of the same size. The forces are still evaluated without it.</p>
 <p><strong>The connectivity search is throttled.</strong> The closest-facet search is
 <span class="math notranslate nohighlight">\(\mathcal{O}(n_\text{slave} \times n_\text{facet})\)</span> work in Python, affordable once per
 increment of an implicit analysis – where it is amortised over a Newton loop and a linear
@@ -1116,7 +1126,7 @@ magnitude below a facet dimension. This is reported rather than assumed – on e
 changes the connectivity the solver prints the largest nodal motion accumulated since the previous
 one, so the configured frequency can be checked against a given model’s facet size instead of
 trusted. A connectivity change gives new locations on the same numbering, and reuses the lumped
-operators and the critical time step: the mesh is unchanged, so they are unchanged, and
+operators and the critical time step of the elements: the mesh is unchanged, so they are unchanged, and
 recomputing them would cost a full element pass.</p>
 <p>A candidate-facet pre-filter (a centroid k-d tree with a triangle-inequality radius bound) reduces
 the search cost without changing which facet is selected; it is a superset of the exhaustive sweep

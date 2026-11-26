@@ -186,10 +186,13 @@
 <div class="viewcode-block" id="ConstraintBase">
 <a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">BaseNodeCouplingEntity</span><span class="p">,</span> <span class="n">SystemMatrixContributorBase</span><span class="p">):</span>
-    <span class="c1">#: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block</span>
-    <span class="c1">#: the constraint has in the discrete system it is evaluated in; None until its first evaluation there (see</span>
-    <span class="c1">#: :meth:`prepareExplicitEvaluation`).</span>
-    <span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1">#: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, and that</span>
+    <span class="c1">#: :meth:`addBoundOfAbsoluteStiffnessTimes` bounds, sized for the block the constraint has in the discrete system it</span>
+    <span class="c1">#: is evaluated in; None until its first evaluation there (see :meth:`prepareExplicitEvaluation`).</span>
+    <span class="n">_tangentScratch</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1">#: The local rows and columns of the entries of that scratch, for a constraint that lists them; None until</span>
+    <span class="c1">#: :meth:`addBoundOfAbsoluteStiffnessTimes` first needs them in the discrete system.</span>
+    <span class="n">_localEntriesOfTheTangentScratch</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="c1">#: The state this constraint carries from one increment to the next, by attribute name and type;</span>
     <span class="c1">#: see :mod:`~edelweissfe.utils.checkpointedstate`. Every constraint declares it (empty if it carries</span>
@@ -197,7 +200,7 @@
     <span class="n">checkpointedState</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="c1">#: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:</span>
-    <span class="c1">#: e.g. a contact constraint whose partner is far away is not, and takes no part in the discrete system then (see</span>
+    <span class="c1">#: e.g. a constraint whose partner is out of reach is not, and takes no part in the discrete system then (see</span>
     <span class="c1">#: :attr:`active`). A constraint sets it there; the model sees the change of :attr:`active` itself (see</span>
     <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`). A constraint that does not check stays within</span>
     <span class="c1">#: reach.</span>
@@ -359,12 +362,11 @@
 <div class="viewcode-block" id="ConstraintBase.updateConnectivity">
 <a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">updateConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Called once at the start of every increment, before the global discrete system is</span>
-<span class="sd">        (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based</span>
-<span class="sd">        contact pairs) and declare whether the nodes it couples (``nodes``/``fields``/``nDof``) have</span>
-<span class="sd">        changed since the last call. A constraint that is not always within reach also sets</span>
-<span class="sd">        :attr:`withinReach` here; it does not report the change of :attr:`active` itself, the model compares it (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`).</span>
+<span class="w">        </span><span class="sd">"""Called once at the start of every increment, before the global discrete system is (re)created, so a</span>
+<span class="sd">        constraint can refresh a dynamic candidate set and declare whether the nodes it couples</span>
+<span class="sd">        (``nodes``/``fields``/``nDof``) have changed since the last call. A constraint that is not always within reach</span>
+<span class="sd">        also sets :attr:`withinReach` here; it does not report the change of :attr:`active` itself, the model compares</span>
+<span class="sd">        it (see :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`).</span>
 
 <span class="sd">        The default implementation does nothing and reports no change, which is correct for every</span>
 <span class="sd">        constraint whose nodes are fixed at construction (i.e. every constraint that does</span>
@@ -388,8 +390,8 @@
 <a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">acceptLastState</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment</span>
-<span class="sd">        is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of</span>
-<span class="sd">        the last (converged) Newton iterate to its history. Only an :attr:`active` constraint is called: one that took</span>
+<span class="sd">        is accepted, so a stateful constraint can promote the state of the last (converged) Newton</span>
+<span class="sd">        iterate to its history. Only an :attr:`active` constraint is called: one that took</span>
 <span class="sd">        no part in the increment keeps its history.</span>
 
 <span class="sd">        The default implementation does nothing, which is correct for every stateless constraint</span>
@@ -465,19 +467,23 @@
 <span class="sd">        one, or one whose constraints are re-located), before it evaluates the constraint there with</span>
 <span class="sd">        :meth:`computeKernelsExplicit`.</span>
 
-<span class="sd">        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation</span>
-<span class="sd">        sizes it, once, for the block the constraint has now. The size is the number of entries of the block</span>
+<span class="sd">        This default forgets the scratch of the tangent that :meth:`computeKernelsExplicit` throws away and</span>
+<span class="sd">        :meth:`addBoundOfAbsoluteStiffnessTimes` bounds, so that the next evaluation sizes it, once, for the block</span>
+<span class="sd">        the constraint has now. The size is the number of entries of the block</span>
 <span class="sd">        (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists</span>
-<span class="sd">        its entries means building the list: once per discrete system, not in every increment. A constraint that</span>
-<span class="sd">        evaluates its forces without a tangent needs nothing here.</span>
+<span class="sd">        its entries means building the list: once per discrete system, not in every increment. A constraint that neither</span>
+<span class="sd">        evaluates nor bounds through the tangent -- that overrides both :meth:`computeKernelsExplicit` and</span>
+<span class="sd">        :meth:`addBoundOfAbsoluteStiffnessTimes` -- needs nothing here.</span>
 
 <span class="sd">        A solver that evaluates constraints itself, rather than through</span>
 <span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`, calls this</span>
 <span class="sd">        whenever the constraint is located anew: the default :meth:`computeKernelsExplicit` does not size its tangent</span>
-<span class="sd">        again on its own, and a block whose size has changed (a contact with other slave nodes) would not fit it.</span>
+<span class="sd">        again on its own, and a block whose size has changed, e.g. after a connectivity update</span>
+<span class="sd">        (:meth:`updateConnectivity`), would not fit it.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tangentScratch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_localEntriesOfTheTangentScratch</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="ConstraintBase.computeKernelsExplicit">
@@ -511,16 +517,91 @@
 <span class="sd">            The current time step.</span>
 <span class="sd">        """</span>
 
-        <span class="c1"># The discarded tangent buffer is sized once per discrete system, and re-zeroed in every increment.</span>
-        <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span>
-        <span class="k">if</span> <span class="n">scratch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">countEntriesOfBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_zeroedTangentScratch</span><span class="p">()),</span> <span class="n">timeStep</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ConstraintBase.addBoundOfAbsoluteStiffnessTimes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">addBoundOfAbsoluteStiffnessTimes</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">U_np</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">bound</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Add an upper bound of the row sums of the absolute value of this constraint's stiffness, weighted by column,</span>
+<span class="sd">        :math:`b_i \\mathrel{+}= \\sum_j |K_{ij}|\\, w_j`, at the state given; for a stiffness that is not symmetric, of</span>
+<span class="sd">        both :math:`\\boldsymbol{K}` and its symmetric part :math:`\\tfrac{1}{2}(\\boldsymbol{K} + \\boldsymbol{K}^T)`.</span>
+<span class="sd">        An explicit solver needs it for its critical time step: the stiffness of a constraint adds to the squared</span>
+<span class="sd">        frequencies of the degrees of freedom it couples (:doc:`/theory/criticaltimestep`). The explicit dynamic solver</span>
+<span class="sd">        ``NED`` takes the weights :math:`w_j = 1/\\sqrt{M_j}` and scales the rows by :math:`1/\\sqrt{M_i}`. It calls</span>
+<span class="sd">        this right after the constraint's force, with the same arguments, so that the state :meth:`computeKernels`</span>
+<span class="sd">        writes for the next increment is written again as the force wrote it.</span>
+
+<span class="sd">        This default bounds the tangent :meth:`computeKernels` gives at the state, in the scratch</span>
+<span class="sd">        :meth:`computeKernelsExplicit` uses: the stiffness itself, not a decomposition of it. Two arguments use the</span>
+<span class="sd">        bound. The one for the finite elements is the Rayleigh quotient's, which sees the symmetric part only,</span>
+<span class="sd">        :math:`\\boldsymbol{x}^T \\boldsymbol{K} \\boldsymbol{x} = \\boldsymbol{x}^T \\tfrac{1}{2}(\\boldsymbol{K} +</span>
+<span class="sd">        \\boldsymbol{K}^T) \\boldsymbol{x}`, bounded entry by entry by :math:`\\tfrac{1}{2}(|\\boldsymbol{K}| +</span>
+<span class="sd">        |\\boldsymbol{K}|^T)`; the one for the entities that carry their own inertia holds for any matrix and needs</span>
+<span class="sd">        :math:`|\\boldsymbol{K}|` itself. So the default adds, in every row, the larger of the two row sums; for a</span>
+<span class="sd">        symmetric tangent they are equal. It holds for every constraint whose forces are those of</span>
+<span class="sd">        that tangent, whether it evaluates them with the tangent or without it</span>
+<span class="sd">        (:class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`). A</span>
+<span class="sd">        constraint whose :meth:`computeKernels` gives no tangent must override it; one that has its stiffness in a</span>
+<span class="sd">        cheaper form may.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U_np</span>
+<span class="sd">            The current solution, restricted to this constraint's degrees of freedom.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current solution increment, likewise restricted.</span>
+<span class="sd">        weights</span>
+<span class="sd">            The weight of each column, likewise restricted.</span>
+<span class="sd">        bound</span>
+<span class="sd">            The row sums to augment, one per degree of freedom of this constraint.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step of the state: the increment that ended at it, or one of zero length where the state ends</span>
+<span class="sd">            none, e.g. at the start of a step.</span>
+<span class="sd">        """</span>
+
+        <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zeroedTangentScratch</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="n">scratch</span><span class="p">),</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="n">absoluteStiffness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">scratch</span><span class="p">)</span>
+
+        <span class="c1"># The rows of |K| and of |K|^T; in each row the larger of |K|'s and of their mean.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">couplesAllItsDofs</span><span class="p">:</span>
+            <span class="n">absoluteStiffness</span> <span class="o">=</span> <span class="n">absoluteStiffness</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="n">order</span><span class="o">=</span><span class="s2">"F"</span><span class="p">)</span>
+            <span class="n">rowsOfK</span> <span class="o">=</span> <span class="n">absoluteStiffness</span> <span class="o">@</span> <span class="n">weights</span>
+            <span class="n">rowsOfKTransposed</span> <span class="o">=</span> <span class="n">absoluteStiffness</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">weights</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">scratch</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_localEntriesOfTheTangentScratch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_localEntriesOfTheTangentScratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">localEntriesOfBlock</span><span class="p">()</span>
+            <span class="n">rows</span><span class="p">,</span> <span class="n">columns</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_localEntriesOfTheTangentScratch</span>
+            <span class="n">rowsOfK</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+            <span class="n">rowsOfKTransposed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">rowsOfK</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">absoluteStiffness</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[</span><span class="n">columns</span><span class="p">])</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">rowsOfKTransposed</span><span class="p">,</span> <span class="n">columns</span><span class="p">,</span> <span class="n">absoluteStiffness</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[</span><span class="n">rows</span><span class="p">])</span>
+        <span class="n">bound</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">rowsOfK</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">rowsOfK</span> <span class="o">+</span> <span class="n">rowsOfKTransposed</span><span class="p">))</span></div>
 
-        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="n">scratch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_zeroedTangentScratch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The scratch of the tangent (:attr:`_tangentScratch`), zeroed: sized once per discrete system, and re-zeroed</span>
+<span class="sd">        in every evaluation.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The scratch, one entry per entry of the block.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tangentScratch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_tangentScratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">countEntriesOfBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_tangentScratch</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tangentScratch</span>
 
 <div class="viewcode-block" id="ConstraintBase.computeKernels">
 <a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels">[docs]</a>
@@ -538,8 +619,8 @@
 <span class="sd">        A constraint follows the rule every element and every load follows (see</span>
 <span class="sd">        :ref:`residual-and-tangent-convention`): ``P`` is the force the constraint needs at its</span>
 <span class="sd">        degrees of freedom, i.e. the *negative* of the force it exerts on the nodes, exactly as an</span>
-<span class="sd">        element of the same mechanics would add its internal force. A penalty spring of stiffness</span>
-<span class="sd">        :math:`k` that pulls a degree of freedom :math:`u` towards :math:`\\bar{u}`, for example, adds</span>
+<span class="sd">        element of the same mechanics would add its internal force. A constraint that holds a degree</span>
+<span class="sd">        of freedom :math:`u` at :math:`\\bar{u}` with the stiffness :math:`k`, for example, adds</span>
 
 <span class="sd">        .. math::</span>
 

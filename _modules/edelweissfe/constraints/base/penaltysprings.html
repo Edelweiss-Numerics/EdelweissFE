@@ -1,0 +1,320 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.constraints.base.penaltysprings &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.constraints.base.penaltysprings</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.constraints.base.penaltysprings</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""Penalty springs, and the bound of their stiffness that the explicit solver adds to the squared frequencies of the</span>
+<span class="sd">degrees of freedom they couple, which lowers the critical time step.</span>
+
+<span class="sd">A penalty constraint acts through springs. A spring :math:`p` measures a stretch :math:`g_p` -- the gap of a contact</span>
+<span class="sd">point, the displacement of a held point from its prescribed value along one axis --; the vector with which it acts on</span>
+<span class="sd">the degrees of freedom of the constraint is the gradient of the stretch, :math:`\\boldsymbol{a}_p =</span>
+<span class="sd">\\partial g_p/\\partial \\boldsymbol{u}`, and its law gives it a force :math:`f_p` and a stiffness :math:`k_p =</span>
+<span class="sd">\\mathrm{d}f_p/\\mathrm{d}g_p`. The residual contribution of the springs is :math:`\\sum_p f_p \\boldsymbol{a}_p`,</span>
+<span class="sd">their stiffness :math:`\\sum_p k_p\\, \\boldsymbol{a}_p \\otimes \\boldsymbol{a}_p`.</span>
+
+<span class="sd">The explicit dynamic solver ``NED`` needs the row sums of the absolute value of that stiffness, weighted by column</span>
+<span class="sd">(:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). The absolute</span>
+<span class="sd">value of a sum is at most the sum of the absolute values, so, with the weights :math:`\\boldsymbol{w}` of the columns,</span>
+
+<span class="sd">.. math::</span>
+
+<span class="sd">    b_i \\mathrel{+}= \\sum_p |k_p|\\, |a_{p,i}| \\, \\big(|\\boldsymbol{a}_p| \\cdot \\boldsymbol{w}\\big) :</span>
+
+<span class="sd">one product of the absolute gradients with the weights per spring, and one distribution back, as the force is</span>
+<span class="sd">distributed. The stiffness of a spring is symmetric, so this bounds the rows of its symmetric part as well, as the</span>
+<span class="sd">contract asks. :func:`addBoundOfAbsoluteStiffnessOfSprings` is that formula, written once for every penalty constraint</span>
+<span class="sd">of EdelweissFE and EdelweissMeshfree that bounds its springs instead of its tangent: one that has no tangent, or whose</span>
+<span class="sd">tangent is costly, overrides ``addBoundOfAbsoluteStiffnessTimes`` with it. A constraint takes its springs for the bound</span>
+<span class="sd">from the same code it takes them for its force, so that the force and the bound cannot drift apart.</span>
+
+<span class="sd">The gradient of a spring moves nodes along the direction of the spring, :math:`a_{p,(n,j)} = C_{pn}\\, d_{pj}`: the</span>
+<span class="sd">coefficient :math:`C_{pn}` with which the spring moves node :math:`n` -- e.g. the interpolation vector of a point of a</span>
+<span class="sd">particle -- times the component :math:`j` of its direction (:class:`SpringGradientOnSharedNodes`).</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.facetcontactgeometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">rowDot</span>
+
+
+<div class="viewcode-block" id="SpringGradientOnSharedNodes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnSharedNodes">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SpringGradientOnSharedNodes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The part of the gradients of springs on nodes they share: :math:`a_{p,(n,j)} = C_{pn}\\, d_{pj}`, with a matrix</span>
+<span class="sd">    :math:`C` of coefficients over the nodes. Only the absolute values enter the bound; they are kept.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    interpolation</span>
+<span class="sd">        :math:`C`, one row per spring, one column per node: a dense array or a SciPy sparse matrix.</span>
+<span class="sd">    directions</span>
+<span class="sd">        The direction of each spring, (nSprings, nComponents).</span>
+<span class="sd">    dofsOfNodes</span>
+<span class="sd">        Where the components of each node sit in the block of the constraint, (nNodes, nComponents): distinct</span>
+<span class="sd">        degrees of freedom, each node once, so that the fancy indexing of :meth:`addAbsoluteTransposeTimes` drops no</span>
+<span class="sd">        contribution (it keeps one of repeated indices). Not checked, since it is built anew in every increment.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">interpolation</span><span class="p">,</span> <span class="n">directions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dofsOfNodes</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absoluteInterpolation</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">interpolation</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absoluteDirections</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">directions</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofsOfNodes</span> <span class="o">=</span> <span class="n">dofsOfNodes</span>
+
+<div class="viewcode-block" id="SpringGradientOnSharedNodes.absoluteTimes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnSharedNodes.absoluteTimes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">absoluteTimes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`|\\boldsymbol{a}_p| \\cdot \\boldsymbol{w}` of this part, per spring.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        weights</span>
+<span class="sd">            The weight of each degree of freedom of the block.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            One value per spring.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">rowDot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">absoluteDirections</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">absoluteInterpolation</span> <span class="o">@</span> <span class="n">weights</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dofsOfNodes</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="SpringGradientOnSharedNodes.addAbsoluteTransposeTimes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnSharedNodes.addAbsoluteTransposeTimes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">addAbsoluteTransposeTimes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">bound</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Distribute values of the springs with the absolute gradients of this part: :math:`b_i \\mathrel{+}= \\sum_p</span>
+<span class="sd">        |a_{p,i}|\\, v_p`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values</span>
+<span class="sd">            One value per spring.</span>
+<span class="sd">        bound</span>
+<span class="sd">            The bound, one entry per degree of freedom of the block; augmented.</span>
+<span class="sd">        """</span>
+
+        <span class="n">bound</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dofsOfNodes</span><span class="p">]</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">absoluteInterpolation</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="p">(</span><span class="n">values</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">absoluteDirections</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="addBoundOfAbsoluteStiffnessOfSprings">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">addBoundOfAbsoluteStiffnessOfSprings</span><span class="p">(</span>
+    <span class="n">bound</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">stiffness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">gradient</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">SpringGradientOnSharedNodes</span><span class="p">],</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Add the row sums of the absolute value of the stiffness of penalty springs, weighted by column,</span>
+<span class="sd">    :math:`b_i \\mathrel{+}= \\sum_p |k_p|\\, |a_{p,i}| \\, (|\\boldsymbol{a}_p| \\cdot \\boldsymbol{w})` (see the</span>
+<span class="sd">    module documentation).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    bound</span>
+<span class="sd">        The row sums, one per degree of freedom of the block of the constraint; augmented.</span>
+<span class="sd">    weights</span>
+<span class="sd">        The weight of each column, one per degree of freedom of the block.</span>
+<span class="sd">    stiffness</span>
+<span class="sd">        The stiffness :math:`k_p` of each spring.</span>
+<span class="sd">    gradient</span>
+<span class="sd">        The parts of the gradients of the springs, each over all springs.</span>
+<span class="sd">    """</span>
+
+    <span class="n">weighted</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">part</span><span class="o">.</span><span class="n">absoluteTimes</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span> <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">gradient</span><span class="p">)</span>
+    <span class="n">stiffnessTimesWeighted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">stiffness</span><span class="p">)</span> <span class="o">*</span> <span class="n">weighted</span>
+    <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">gradient</span><span class="p">:</span>
+        <span class="n">part</span><span class="o">.</span><span class="n">addAbsoluteTransposeTimes</span><span class="p">(</span><span class="n">stiffnessTimesWeighted</span><span class="p">,</span> <span class="n">bound</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

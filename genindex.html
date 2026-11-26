@@ -182,6 +182,8 @@
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.absoluteDiagonal">absoluteDiagonal() (edelweissfe.linsolve.composition.systemmatrix.SystemMatrix method)</a>
 </li>
+      <li><a href="model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnSharedNodes.absoluteTimes">absoluteTimes() (edelweissfe.constraints.base.penaltysprings.SpringGradientOnSharedNodes method)</a>
+</li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.accelerationAtTheEndOfTheIncrement">accelerationAtTheEndOfTheIncrement() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.acceptIncrement">acceptIncrement() (edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion method)</a>
@@ -258,6 +260,12 @@
         <li><a href="analysis/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable.add_root">(edelweissfe.adaptivity.rootentities.RootEntityTable method)</a>
 </li>
       </ul></li>
+      <li><a href="model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnSharedNodes.addAbsoluteTransposeTimes">addAbsoluteTransposeTimes() (edelweissfe.constraints.base.penaltysprings.SpringGradientOnSharedNodes method)</a>
+</li>
+      <li><a href="model/constraints.html#edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings">addBoundOfAbsoluteStiffnessOfSprings() (in module edelweissfe.constraints.base.penaltysprings)</a>
+</li>
+      <li><a href="model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes">addBoundOfAbsoluteStiffnessTimes() (edelweissfe.constraints.base.constraintbase.ConstraintBase method)</a>
+</li>
       <li><a href="developer/fields.html#edelweissfe.fields.nodefield.NodeField.addEntriesFromOther">addEntriesFromOther() (edelweissfe.fields.nodefield.NodeField method)</a>
 </li>
       <li><a href="output/fieldoutput.html#edelweissfe.utils.fieldoutput.FieldOutputController.addExpressionFieldOutput">addExpressionFieldOutput() (edelweissfe.utils.fieldoutput.FieldOutputController method)</a>
@@ -316,10 +324,10 @@
         <li><a href="analysis/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepEnd">(edelweissfe.stepactions.base.stepactionbase.StepActionBase method)</a>
 </li>
       </ul></li>
-      <li><a href="analysis/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepStart">applyAtStepStart() (edelweissfe.stepactions.base.stepactionbase.StepActionBase method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="analysis/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepStart">applyAtStepStart() (edelweissfe.stepactions.base.stepactionbase.StepActionBase method)</a>
+</li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyCorrection">applyCorrection() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 
       <ul>
@@ -834,8 +842,6 @@
         <li><a href="model/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeInternalEnergy">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels">computeKernels() (edelweissfe.constraints.base.constraintbase.ConstraintBase method)</a>
 
       <ul>
@@ -850,6 +856,8 @@
         <li><a href="model/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeKernels">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit">computeKernelsExplicit() (edelweissfe.constraints.base.constraintbase.ConstraintBase method)</a>
 
       <ul>
@@ -1056,9 +1064,19 @@
 </li>
       <li><a href="analysis/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly">createSystemMatrixAssembly() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof.criticalTimeStep">criticalTimeStep() (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof method)</a>
+
+      <ul>
+        <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs.criticalTimeStep">(edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs method)</a>
+</li>
+      </ul></li>
       <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.criticalTimeStepAtWorst">criticalTimeStepAtWorst() (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia method)</a>
 </li>
       <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimate">CriticalTimeStepEstimate (class in edelweissfe.solvers.base.criticaltimestep)</a>
+</li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateFromTheBoundOfEachDof">CriticalTimeStepEstimateFromTheBoundOfEachDof (class in edelweissfe.solvers.base.criticaltimestep)</a>
+</li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepEstimateOfTheDofs">CriticalTimeStepEstimateOfTheDofs (class in edelweissfe.solvers.base.criticaltimestep)</a>
 </li>
       <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart">CriticalTimeStepOfAPart (class in edelweissfe.solvers.base.criticaltimestep)</a>
 </li>
@@ -1067,6 +1085,8 @@
       <li><a href="developer/models.html#edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia">criticalTimeStepOfEntitiesWithOwnInertia() (edelweissfe.models.discretesystem.DiscreteSystem method)</a>
 </li>
       <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements">CriticalTimeStepOfTheElements (class in edelweissfe.solvers.base.criticaltimestep)</a>
+</li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints">CriticalTimeStepWithThePenaltyConstraints (class in edelweissfe.solvers.base.criticaltimestep)</a>
 </li>
       <li><a href="developer/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator">CSRGenerator (class in edelweissfe.numerics.csrgeneratorv2)</a>
 </li>
@@ -1408,6 +1428,13 @@
 
       <ul>
         <li><a href="model/constraints.html#module-edelweissfe.constraints.base.multipointconstraintbase">module</a>
+</li>
+      </ul></li>
+      <li>
+    edelweissfe.constraints.base.penaltysprings
+
+      <ul>
+        <li><a href="model/constraints.html#module-edelweissfe.constraints.base.penaltysprings">module</a>
 </li>
       </ul></li>
       <li>
@@ -2486,7 +2513,11 @@
       <ul>
         <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimate">(edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements method)</a>
 </li>
+        <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints.estimate">(edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints method)</a>
+</li>
       </ul></li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements.estimateFromTheBoundOfEachDof">estimateFromTheBoundOfEachDof() (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements method)</a>
+</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.SolveRecord.eta">eta (edelweissfe.linsolve.composition.krylov.SolveRecord attribute)</a>
 </li>
       <li><a href="model/analyticalfields.html#edelweissfe.analyticalfields.base.analyticalfieldbase.AnalyticalField.evaluateAtCoordinates">evaluateAtCoordinates() (edelweissfe.analyticalfields.base.analyticalfieldbase.AnalyticalField method)</a>
@@ -2625,14 +2656,14 @@
 </li>
       <li><a href="developer/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint">fingerprint() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="developer/utils.html#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.finishedStepProgress">finishedStepProgress (edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper attribute)</a>
 
       <ul>
         <li><a href="developer/utils.html#edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper.finishedStepProgress">(edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper attribute)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="analysis/solvers.html#edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.finishIncrement">finishIncrement() (edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase method)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.finishSolve">finishSolve() (edelweissfe.linsolve.composition.base.Preconditioner method)</a>
@@ -2673,7 +2704,11 @@
 </li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldExplicitForce">foldExplicitForce() (edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation method)</a>
 </li>
+      <li><a href="developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLargestOntoMasters">foldLargestOntoMasters() (edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation method)</a>
+</li>
       <li><a href="developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldLumpedMass">foldLumpedMass() (edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation method)</a>
+</li>
+      <li><a href="developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.foldRowSumsOfAbsoluteCoefficients">foldRowSumsOfAbsoluteCoefficients() (edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation method)</a>
 </li>
       <li><a href="model/sets.html#edelweissfe.sets.orderedset.OrderedSet.forceIter">forceIter() (edelweissfe.sets.orderedset.OrderedSet method)</a>
 </li>
@@ -2685,6 +2720,8 @@
 
       <ul>
         <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.forget">(edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation method)</a>
+</li>
+        <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart.forget">(edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfAPart method)</a>
 </li>
       </ul></li>
       <li><a href="developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.forgetDiscreteSystem">forgetDiscreteSystem() (edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase method)</a>
@@ -3452,6 +3489,8 @@
         <li><a href="model/constraints.html#module-edelweissfe.constraints.base.constraintbase">edelweissfe.constraints.base.constraintbase</a>
 </li>
         <li><a href="model/constraints.html#module-edelweissfe.constraints.base.multipointconstraintbase">edelweissfe.constraints.base.multipointconstraintbase</a>
+</li>
+        <li><a href="model/constraints.html#module-edelweissfe.constraints.base.penaltysprings">edelweissfe.constraints.base.penaltysprings</a>
 </li>
         <li><a href="model/constraints.html#module-edelweissfe.constraints.directionalspringpenalty">edelweissfe.constraints.directionalspringpenalty</a>
 </li>
@@ -4654,6 +4693,8 @@
         <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate.sizesOf">(edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate method)</a>
 </li>
       </ul></li>
+      <li><a href="developer/assembly.html#edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.slaveWeightsOfAbsoluteCoefficients">slaveWeightsOfAbsoluteCoefficients() (edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation method)</a>
+</li>
       <li><a href="analysis/steps.html#edelweissfe.steps.base.stepbase.StepBase.solve">solve() (edelweissfe.steps.base.stepbase.StepBase method)</a>
 </li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.solvedumps.SolveDumps">SolveDumps (class in edelweissfe.linsolve.composition.solvedumps)</a>
@@ -4690,6 +4731,8 @@
         <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.KrylovSolver.solveRecord">(edelweissfe.linsolve.composition.krylov.KrylovSolver method)</a>
 </li>
       </ul></li>
+      <li><a href="model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnSharedNodes">SpringGradientOnSharedNodes (class in edelweissfe.constraints.base.penaltysprings)</a>
+</li>
       <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.views.spy">spy() (in module edelweissfe.linsolve.composition.views)</a>
 </li>
       <li><a href="developer/journal.html#edelweissfe.journal.journal.Journal.squelch">squelch() (edelweissfe.journal.journal.Journal method)</a>
@@ -5032,6 +5075,8 @@
         <li><a href="developer/linsolveapi.html#edelweissfe.linsolve.composition.krylov.KrylovSolver.withRebuildReasons">(edelweissfe.linsolve.composition.krylov.KrylovSolver method)</a>
 </li>
       </ul></li>
+      <li><a href="theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.withThePenaltyConstraints">withThePenaltyConstraints() (edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia method)</a>
+</li>
       <li><a href="output/outputmanagers.html#edelweissfe.utils.checkpoint.writeCheckpoint">writeCheckpoint() (in module edelweissfe.utils.checkpoint)</a>
 </li>
       <li><a href="developer/dofnumbering.html#edelweissfe.numerics.dofnumbering.DofNumbering.writeDofVectorToNodeField">writeDofVectorToNodeField() (edelweissfe.numerics.dofnumbering.DofNumbering method)</a>

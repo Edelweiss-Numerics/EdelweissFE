@@ -7378,24 +7378,34 @@ and deleting those lines is the whole of the migration.</p>
 <p><strong>The critical time step.</strong> The time increment is the fraction <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> of the critical time step of the
 model, the smallest of the critical time steps of its parts, each estimated by its own policy
 (<a class="reference internal" href="../theory/criticaltimestep.html#module-edelweissfe.solvers.base.criticaltimestep" title="edelweissfe.solvers.base.criticaltimestep"><code class="xref py py-mod docutils literal notranslate"><span class="pre">criticaltimestep</span></code></a>, and <a class="reference internal" href="../theory/criticaltimestep.html"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>): the finite elements – the
-smallest of the elements’ own estimates (<code class="docutils literal notranslate"><span class="pre">computeCriticalTimeStepForExplicitDynamics</span></code>; for a Marmot continuum
-element, two over the square root of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped
-mass) – once per mesh and at the start of every step, and deliberately <em>not</em> for a new numbering of the same mesh:
-an estimate costs a full element pass, and the policy assumes that within a step neither the geometry nor the wave
-speed of an element changes enough to use up the margin of the courant number (see
-<a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements</span></code></a> for where that fails); the
-entities that carry their own inertia (below) when the margin of their last estimate may be used up. It is enforced
-where it is below the largest increment the step allows, and a step that asks for smaller increments keeps them.</p>
+smallest of the elements’ own estimates (<code class="docutils literal notranslate"><span class="pre">computeCriticalTimeStepForExplicitDynamics</span></code>; for a Marmot continuum element,
+two over the square root of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) – once
+per mesh and at the start of every step, and deliberately <em>not</em> for a new numbering of the same mesh: an estimate costs
+a full element pass, and the policy assumes that within a step neither the geometry nor the wave speed of an element
+changes enough to use up the margin of the courant number (see
+<a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepOfTheElements</span></code></a> for where that fails); the entities
+that carry their own inertia (below) when the margin of their last estimate may be used up. A penalty constraint (a
+contact, a support or a tie held by a penalty) owns no degrees of freedom; it adds its stiffness to the frequencies of
+the degrees of freedom it couples: right after every evaluation of the net force, and after a refinement, the row sums
+of its stiffness, scaled by the lumped mass, are added to the parts’ estimates there, from the stiffness it had in that
+force, since the next increment integrates that force; stiffness that is new in a force is half an increment late
+(<a class="reference internal" href="../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints" title="edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints"><code class="xref py py-class docutils literal notranslate"><span class="pre">CriticalTimeStepWithThePenaltyConstraints</span></code></a>). It is enforced where it
+is below the largest increment the step allows, and a step that asks for smaller increments keeps them.</p>
 <p>When the critical time step is estimated, and where <code class="docutils literal notranslate"><span class="pre">NED</span></code> does it:</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.beginStep" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.beginStep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED.beginStep()</span></code></a>: both parts forget their estimates (<code class="docutils literal notranslate"><span class="pre">reset</span></code>), since a material property may have changed
-with the step;</p></li>
+<li><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.beginStep" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.beginStep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED.beginStep()</span></code></a>: both parts and the penalty constraints forget their estimates (<code class="docutils literal notranslate"><span class="pre">reset</span></code>), since a material
+property may have changed with the step;</p></li>
 <li><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED.onNewNumbering()</span></code></a>: the elements are estimated, when the mesh is not the one of their last estimate (the
 first numbering of a step, a refinement);</p></li>
-<li><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED.prepareIncrement()</span></code></a>: the critical time step is enforced at the start of a step (not in a resumed step,
-which keeps the time increment of its checkpoint), and after a refinement;</p></li>
+<li><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED.prepareIncrement()</span></code></a>: in a model without entities that carry their own inertia, the penalty constraints at
+the state the step starts from, and after a refinement at the state on the new mesh; the critical time step is
+enforced at the start of a step (not in a resumed step, which keeps the time increment of its checkpoint), and after
+a refinement;</p></li>
+<li><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.attemptIncrement" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.attemptIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED.attemptIncrement()</span></code></a>: in a model without entities that carry their own inertia, the penalty constraints after
+every increment, right after its net force, and the critical time step is enforced at once;</p></li>
 <li><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED._evaluateTheNetForceOnTheNewConnectivity()</span></code>: the entities, after every increment, when their estimate is
-due, and the critical time step is enforced at once;</p></li>
+due, and the penalty constraints, right after the net force on the new connectivity; the critical time step is
+enforced at once;</p></li>
 <li><p><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED._enforceTheCriticalTimeStep()</span></code>: the one place where the parts are combined
 (<code class="xref py py-meth docutils literal notranslate"><span class="pre">NED._criticalTimeStepOfTheModel()</span></code>) and the time increment is set from them;</p></li>
 <li><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.endStep" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.endStep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NED.endStep()</span></code></a>: the report, how often each part was estimated in the step, and its last estimate.</p></li>
@@ -7413,10 +7423,12 @@ whose connectivity is the outcome of a search re-run it; <code class="docutils l
 the latter two, and what they cost in accuracy, is documented under
 <a class="reference internal" href="../theory/adaptivity.html"><span class="doc">Adaptive refinement: error estimation and marking</span></a> and <a class="reference internal" href="../theory/contact.html"><span class="doc">Contact mechanics: theory</span></a> respectively.</p>
 <p><strong>Constraints.</strong> Multi-point constraints are enforced by folding a slave’s mass and force onto its
-masters (row-sum, mass-conserving) and slaving it kinematically, which leaves the critical time step
-untouched. Other constraints – contact above all – are evaluated through
+masters (row-sum, mass-conserving) and slaving it kinematically, which adds no stiffness. Other
+constraints – contact above all – are evaluated through
 <a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>, which
-asks for forces and no tangent, since a tangent assembled here would enter nothing. A constraint
+asks for forces and no tangent, since a tangent assembled here would enter no system of equations; their stiffness
+enters the critical time step only, through the bound of its row sums
+(<a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">addBoundOfAbsoluteStiffnessTimes()</span></code></a>). A constraint
 that can act <em>only</em> through its tangent contributes nothing to an explicit increment and is
 refused at validation rather than silently ignored.</p>
 <p><strong>The lumped mass is the mass of the start of the step.</strong> The lumped operators are assembled once for the numbering,
@@ -7519,9 +7531,9 @@ since, the kinetic energy, the internal (strain) energy, and what remains unacco
 one check that nothing else performs: the kinetic energy cannot exceed the energy at the start of the
 step plus the external work, because the terms omitted from the balance are all non-negative, so a
 violation means energy is appearing from nowhere and the time step is above the true stability limit
-– which the critical time step does not see in full, as it never sees contact penalty stiffness
-(<a class="reference internal" href="../theory/criticaltimestep.html"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>, “What the estimate does not see”), and sees the nonlocal field only where that
-field carries a non-mechanical inertia. Such a field’s
+– which the critical time step does not see in full: it may see a penalty contact late, or not at all
+(<a class="reference internal" href="../theory/criticaltimestep.html"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>, “What the estimate does not see”), and the nonlocal field only where that field
+carries a non-mechanical inertia. Such a field’s
 own <code class="docutils literal notranslate"><span class="pre">0.5</span> <span class="pre">m_k</span> <span class="pre">rate^2</span></code> is reported on a separate line and kept out of the balance: with a
 coefficient in seconds squared it has the units of a volume, not of an energy. <code class="docutils literal notranslate"><span class="pre">E_0</span></code> is read off
 the model’s state, nothing evaluated: zero for a step from rest in a model without strain energy,
@@ -8470,12 +8482,18 @@ Omitted – as in every deck that predates them – they assert nothing at all.<
 <p>An explicit analysis with contact searches while it runs, every <code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code> increments. A search
 re-assigns which nodes a contact constraint couples, and touches no node, no field, no scalar variable and no element:
 the change is <code class="docutils literal notranslate"><span class="pre">LOCATIONS</span></code>, <code class="docutils literal notranslate"><span class="pre">NED</span></code> only wraps its vectors with the new locations, and the lumped inertia, the
-mass-proportional damping rate, the multi-point-constraint condensation and the critical time step are kept
-(<a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewLocations()</span></code></a>, and <a class="reference internal" href="../developer/architecture.html#how-a-change-selects-the-path"><span class="std std-ref">When the ID and the LM array change</span></a>).</p>
+mass-proportional damping rate, the multi-point-constraint condensation and the critical time step of the elements are
+kept (<a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewLocations()</span></code></a>, and
+<a class="reference internal" href="../developer/architecture.html#how-a-change-selects-the-path"><span class="std std-ref">When the ID and the LM array change</span></a>). The search runs at the start of the increment it is due in, before its net force
+is evaluated, and the stiffness of the contact enters the critical time step right after every net force, added to the
+frequencies of the nodes it couples: a point paired anew by the search is in the critical time step of the next
+increment, and the first increment that integrates its force does so over the average of its own time increment and
+the one taken without it (<a class="reference internal" href="../theory/criticaltimestep.html"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>, “Penalty constraints”).</p>
 <p>A change of the mesh – a refinement – gives a new numbering
 (<a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering"><code class="xref py py-meth docutils literal notranslate"><span class="pre">onNewNumbering()</span></code></a>): the operators are assembled anew over the
 elements of the new discrete system, the solution, the velocity and the acceleration are read from the model, which
-interpolated them onto the new nodes, and the critical time step is computed again.</p>
+interpolated them onto the new nodes, and the critical time step is computed again: the elements’ on the new mesh, and
+the penalty constraints’ at the state on it, before the first increment on the new mesh.</p>
 </section>
 <section id="finite-elements-and-particles">
 <h3>Finite elements and particles<a class="headerlink" href="#finite-elements-and-particles" title="Link to this heading"></a></h3>
@@ -8488,36 +8506,42 @@ nodes, a body of particles from the velocity of its particles. The particles’ 
 so a nonlocal field of gradient-enhanced particles is integrated by its own scheme. Their critical time step enters the
 critical time step with the elements’; it is estimated in the zero increment, and anew whenever the margin of its last
 estimate over the time increment in use may be used up (option <code class="docutils literal notranslate"><span class="pre">critical-time-step-decrease-per-increment</span></code>, see
-<a class="reference internal" href="../theory/criticaltimestep.html"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>). With <code class="docutils literal notranslate"><span class="pre">carry-critical-time-step-weights</span></code>, every estimate starts from the weights the
-last one left and refines them by one step of the power iteration, which tightens it over a few estimates at no extra
-cost; an estimate below the one the weights started from starts them anew, so an increment that is lowered only never
-falls below the smallest estimate without them (see “Entities that carry their own inertia” above). With
-<code class="docutils literal notranslate"><span class="pre">project-velocity-every-increment</span></code>, the velocity of the particles’ nodes is projected from their momentum in every
-increment.</p>
+<a class="reference internal" href="../theory/criticaltimestep.html"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>). A penalty constraint on the particles – a support, the contact with a projectile –
+adds its stiffness to their rows in every increment. With <code class="docutils literal notranslate"><span class="pre">carry-critical-time-step-weights</span></code>, every estimate starts
+from the weights the last one left and refines them by one step of the power iteration, which tightens it over a few
+estimates at no extra cost; an estimate below the one the weights started from starts them anew, so an increment that
+is lowered only never falls below the smallest estimate without them (see “Entities that carry their own inertia”
+above). With <code class="docutils literal notranslate"><span class="pre">project-velocity-every-increment</span></code>, the velocity of the particles’ nodes is projected from their momentum
+in every increment.</p>
 </section>
 <section id="the-time-increment-lowered-only-or-followed">
 <span id="ned-time-increment-lowered-or-followed"></span><h3>The time increment: lowered only, or followed<a class="headerlink" href="#the-time-increment-lowered-only-or-followed" title="Link to this heading"></a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">NED</span></code> takes the critical time step – the smaller of the elements’ and the entities’ that carry their own inertia
-(e.g. particles), scaled by <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> – each time one of them is estimated: the elements at the start of the
-step and after a change of the mesh, the entities whenever the margin of their last estimate may be used up. Only at
-these points is it known; in between, the time increment is trusted.</p>
+<p><code class="docutils literal notranslate"><span class="pre">NED</span></code> takes the critical time step – the smallest of the elements’, the entities’ that carry their own inertia (e.g.
+particles) and the one of the parts with the penalty constraints, scaled by <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> – each time one of them
+is estimated: the elements at the start of the step and after a change of the mesh, the entities whenever the margin of
+their last estimate may be used up, the penalty constraints after every increment and after a change of the mesh. Only
+at these points is it known; in between, the time increment is trusted.</p>
 <p><strong>Lowered only (the default).</strong> Whenever the critical time step is taken and falls below the time increment in use,
 the increment becomes the critical time step; it is never raised within a step. A step that asks for smaller increments
 (<code class="docutils literal notranslate"><span class="pre">startInc</span></code>, at most <code class="docutils literal notranslate"><span class="pre">maxInc</span></code>) keeps them. A brief stiff state – an entity that is briefly compressed, a node that
-the kernel functions of the entities reach only at the edge – thus sets the increment for the rest of the step.</p>
+the kernel functions of the entities reach only at the edge, a contact that closed and opened again – thus sets the
+increment for the rest of the step.</p>
 <p><strong>Followed</strong> (<code class="docutils literal notranslate"><span class="pre">follow-critical-time-step</span></code>). Each time the critical time step is taken, the time increment becomes
 the critical time step, at most the step’s <code class="docutils literal notranslate"><span class="pre">maxInc</span></code>, up as well as down; the step’s <code class="docutils literal notranslate"><span class="pre">startInc</span></code> is not kept, and a
 step that wants smaller increments sets <code class="docutils literal notranslate"><span class="pre">maxInc</span></code>. Once a stiff state has passed, the increment comes back with the
-next critical time step taken. As long as no estimate is known – no element reports one, and the entities have not been
-estimated yet or report none – there is nothing to follow, and the step keeps its own increment.</p>
+next critical time step taken. As long as no estimate is known – no element reports one, the entities have not been
+estimated yet or report none, and no penalty constraint couples a degree of freedom – there is nothing to follow, and
+the step keeps its own increment.</p>
 <p><strong>What following gives up.</strong> Between two critical time steps taken, the increment is trusted: the courant number covers
 the gradual change of the model in between. Lowered only, the increment of a run that has met a stiff state once stays
 low, and is ready for the next time that state returns. The states this option is meant for are brief, but they tend to
-recur: an entity compressed again, a node reached at the edge again. Followed, the increment is raised after the first
-one and meets the next with nothing but the courant margin until the next estimate sees it – for the entities, once
-the margin of their last estimate may be used up. Use the option with a <code class="docutils literal notranslate"><span class="pre">critical-time-step-decrease-per-increment</span></code> large enough
-to estimate the entities as often as such a state may recur, or with a lower <code class="docutils literal notranslate"><span class="pre">courant-number</span></code>; at a
-<code class="docutils literal notranslate"><span class="pre">courant-number</span></code> close to 1, repeated raising and lowering can also pump energy into a mode near the stability limit.</p>
+recur: an entity compressed again, a node reached at the edge again, a contact closing again. Followed, the increment is
+raised after the first one and meets the next with nothing but the courant margin until the next estimate sees it – for
+the entities, once the margin of their last estimate may be used up; for a contact point that closes, at the end of the
+increment in which it closes (<a class="reference internal" href="../theory/criticaltimestep.html"><span class="doc">Theory: the critical time step of an explicit analysis</span></a>, “What the estimate does not see”). Use the option with a
+<code class="docutils literal notranslate"><span class="pre">critical-time-step-decrease-per-increment</span></code> large enough to estimate the entities as often as such a state may recur,
+or with a lower <code class="docutils literal notranslate"><span class="pre">courant-number</span></code>; at a <code class="docutils literal notranslate"><span class="pre">courant-number</span></code> close to 1, repeated raising and lowering can also pump
+energy into a mode near the stability limit.</p>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NED</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">explicit</span>
 <span class="nv">follow-critical-time-step</span><span class="ow">=</span><span class="m">True</span>
 </pre></div>

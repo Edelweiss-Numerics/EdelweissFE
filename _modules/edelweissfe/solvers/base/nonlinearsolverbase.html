@@ -658,23 +658,10 @@
 <span class="sd">            The augmented residual contribution vector.</span>
 <span class="sd">        """</span>
 
-        <span class="c1"># Per-constraint buffers and index plans, made once per discrete system.</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="n">PPlain</span> <span class="o">=</span> <span class="n">P</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="p">:</span>
-            <span class="c1"># A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.</span>
-            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
-            <span class="n">plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">plan</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">indices</span><span class="p">:</span>
-                <span class="c1"># np.add.at only if a DOF appears more than once (e.g. a slave node in its own master</span>
-                <span class="c1"># facet), since fancy-indexed += would drop repeated contributions.</span>
-                <span class="n">plan</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="n">indices</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span> <span class="o">=</span> <span class="n">plan</span>
-                <span class="n">constraint</span><span class="o">.</span><span class="n">prepareExplicitEvaluation</span><span class="p">()</span>
-
-            <span class="n">Pc</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">namesDofMoreThanOnce</span> <span class="o">=</span> <span class="n">plan</span>
+            <span class="n">Pc</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">namesDofMoreThanOnce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_explicitEvaluationPlanOf</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span>
 
             <span class="c1"># Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.</span>
             <span class="n">Pc</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
@@ -688,6 +675,37 @@
 
         <span class="k">return</span> <span class="n">P</span></div>
 
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_explicitEvaluationPlanOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">constraint</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The plan of a constraint for its evaluation without a tangent (:meth:`assembleConstraintForces`): a buffer</span>
+<span class="sd">        of its size, its DOF indices, and whether a DOF appears more than once among them. Made once per location of the</span>
+<span class="sd">        constraint: whenever the locations locate it anew, the plan is made anew and the constraint is told so</span>
+<span class="sd">        (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        constraint</span>
+<span class="sd">            A constraint of the discrete system.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray, bool]</span>
+<span class="sd">            The buffer, the DOF indices, and whether a DOF appears more than once.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">locations</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
+        <span class="n">plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">plan</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">indices</span><span class="p">:</span>
+            <span class="c1"># np.add.at only if a DOF appears more than once (e.g. a slave node in its own master</span>
+            <span class="c1"># facet), since fancy-indexed += would drop repeated contributions.</span>
+            <span class="n">plan</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="n">indices</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span> <span class="o">=</span> <span class="n">plan</span>
+            <span class="n">constraint</span><span class="o">.</span><span class="n">prepareExplicitEvaluation</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">plan</span>
 
 <div class="viewcode-block" id="NonlinearSolverBase.getRestartData">
 <a class="viewcode-back" href="../../../../developer/solverbase.html#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.getRestartData">[docs]</a>
