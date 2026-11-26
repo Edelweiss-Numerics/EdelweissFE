@@ -647,3 +647,117 @@ def test_a_multi_point_constraint_with_a_slave_among_the_degrees_of_freedom_of_t
         r"inertia",
     ):
         _run(10 * CRITICAL_TIME_STEP, model=model)
+
+
+@pytest.mark.parametrize("changeNumbering", [False, True], ids=["same-numbering", "new-numbering"])
+def test_a_constraint_on_finite_elements_in_a_hybrid_model_receives_their_displacement_increment(changeNumbering):
+    """In a hybrid model (finite elements and entities that carry their own inertia), a constraint evaluated in
+    ``_evaluateTheNetForceOnTheNewConnectivity`` receives the displacement increment ``dU`` just taken on the finite
+    elements' degrees of freedom (and zero on the entities' degrees of freedom), both when the numbering stays the same
+    and when a reconnection builds a new numbering."""
+
+    from edelweissfe.constraints.base.constraintbase import ConstraintBase
+    from edelweissfe.models.change import Change
+
+    class _RecordingConstraint(ConstraintBase):
+        def __init__(self, nodes):
+            self._name = "recording"
+            self._nodes = nodes
+            self._fields = [["displacement"]] * len(nodes)
+            self._nDof = 2 * len(nodes)
+            self.recorded = []
+
+        @property
+        def name(self):
+            return self._name
+
+        @property
+        def nodes(self):
+            return self._nodes
+
+        @property
+        def fields(self):
+            return self._fields
+
+        @property
+        def nDof(self):
+            return self._nDof
+
+        def computeKernels(self, U_np, dU, P, K, timeStep):
+            self.recorded.append((timeStep.timeIncrement, U_np.copy(), dU.copy()))
+
+    class _HybridSystem(SystemOfMassesOnSprings):
+        @property
+        def elementsWithNodalInertia(self) -> list:
+            return [self.elements[1]]
+
+        @property
+        def entitiesWithOwnInertia(self) -> list:
+            return [self.elements[0]]
+
+        def dofsWithNodalInertia(self, fieldNames: list) -> np.ndarray:
+            return np.asarray(self.locations[self.elements[1]], dtype=int)
+
+    class _HybridModel(ModelOfMassesOnSprings):
+        def __init__(self):
+            FEModel.__init__(self, 2)
+            self.calls = []
+            self.weightsOfTheEstimates = []
+            self.newmarkParametersOfEntities = (0.25, 0.5)
+            entityNode = Node(1, np.array([0.0, 0.0]))
+            feNode = Node(2, np.array([1.0, 0.0]))
+            self.nodes[1] = entityNode
+            self.nodes[2] = feNode
+            self.elements[1] = MassOnASpring(1, entityNode, self, VELOCITIES[0], MASS, 0.0)
+            self.elements[2] = PointMass(2, [feNode], self, MASS)
+            self.elementSets["all"] = ElementSet("all", list(self.elements.values()))
+            self.nodeSets["all"] = NodeSet("all", list(self.nodes.values()))
+            self.constraint = _RecordingConstraint([entityNode, feNode])
+            self.constraints["recording"] = self.constraint
+
+        def buildDiscreteSystem(self) -> _HybridSystem:
+            return _HybridSystem(self, FEModel.buildDiscreteSystem(self).locations)
+
+        def updateConnectivity(self):
+            self.calls.append("reconnect")
+            FEModel.updateConnectivity(self)
+            return Change.NUMBERING if changeNumbering else Change.NONE
+
+    model = _HybridModel()
+    journal = Journal(verbose=False)
+    model.prepareYourself(journal)
+    # Give the finite-element node an initial velocity so it moves on every increment.
+    disp = model.nodeFields["displacement"]
+    disp["V"][disp._indicesOfNodesInArray[model.nodes[2]]] = np.array([0.5, -0.25])
+
+    jobInfo = {"name": "hybridIncrement", "domain": "2d"}
+    solver = NED(jobInfo, journal, **{"output-frequency": 100000})
+    fieldOutputController = FieldOutputController(model, journal)
+    AdaptiveStepForExplicitSimulations(
+        0,
+        model,
+        fieldOutputController,
+        journal,
+        jobInfo,
+        solver,
+        [],
+        StepActionCollection(),
+        stepLength=5 * CRITICAL_TIME_STEP,
+        maxNumInc=1000,
+    ).solve()
+    fieldOutputController.finalizeJob()
+
+    records = model.constraint.recorded
+    assert len(records) > 3
+    # Zero increment: zero displacement increment everywhere.
+    assert records[0][0] == 0.0
+    np.testing.assert_array_equal(records[0][2], np.zeros(4))
+    # Subsequent increments: entity DOFs [:2] receive zero increment, finite-element DOFs [2:] receive U_n - U_{n-1}.
+    for prev, curr in zip(records[:-1], records[1:]):
+        dt, U_curr, dU_curr = curr
+        _, U_prev, _ = prev
+        assert dt > 0.0
+        np.testing.assert_array_equal(dU_curr[:2], np.zeros(2))
+        expectedFeIncrement = U_curr[2:] - U_prev[2:]
+        assert np.linalg.norm(expectedFeIncrement) > 0.0
+        np.testing.assert_allclose(dU_curr[2:], expectedFeIncrement, rtol=1e-13, atol=1e-15)

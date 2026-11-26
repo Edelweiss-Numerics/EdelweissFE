@@ -1045,31 +1045,42 @@ class NED(NonlinearSolverBase):
         self.writeResultsToModel(self._U, self._dU, None, self._V, None)
         self._acceptTheStateOfTheModel(model, timeStep)
 
-        numberingOfTheIncrement, internalForceOfTheElements = self.system.numbering, self._internalForce
+        numberingOfTheIncrement, internalForceOfTheElements, incrementOfTheElements = (
+            self.system.numbering,
+            self._internalForce,
+            self._dU,
+        )
         with performancetiming.timeit("reconnect"):
             change = model.updateConnectivity()
         self.updateDiscreteSystem(model, change)
+        increment = self.system.locations.constructDofVector()
         if self.system.numbering is not numberingOfTheIncrement:
             # The elements were computed on the numbering of the increment. Their nodes keep their degrees of freedom
-            # in the new one, only with other indices: their force is carried over element by element.
+            # in the new one, only with other indices: their force and increment are carried over element by element.
             for element in self.system.elementsWithNodalInertia:
                 self._internalForce[element] = internalForceOfTheElements[element]
+                increment[element] = incrementOfTheElements[element]
+        else:
+            increment[:] = incrementOfTheElements
+            increment[self.ids_inertiaOfEntities] = 0.0
 
-        self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep)
+        self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep, increment)
 
         P, A = self._forceAndAccelerationToPublish(step, timeStep)
         self.writeResultsToModel(self._U, None, P, self._V, A)
 
     @performancetiming.timeit("entities with own inertia")
-    def _evaluateTheNetForceOnTheNewConnectivity(self, step, timeStep: TimeStep):
+    def _evaluateTheNetForceOnTheNewConnectivity(self, step, timeStep: TimeStep, increment: DofVector):
         """Evaluate, at the configuration just accepted and on the connectivity the entities that carry their own
         inertia reach now, what the next increment starts from: their internal force, their lumped momentum and their
         lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), their critical time step
         when its estimate is due
         (:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue`), and, with the internal force of the
-        elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The configuration is
-        accepted: no increment is left, so the loads and the constraints are evaluated with a zero increment, and the
-        nodes of the entities carry no total solution.
+        elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The nodes
+        of the entities carry no total solution or carried increment across reconnections (their entries in
+        ``increment`` are zero), while finite-element degrees of freedom keep the increment just taken so that
+        increment-dependent constraints (e.g. frictional contact on finite elements) see the true displacement
+        increment.
 
         In the zero increment, the motion of the entities starts (:meth:`_startTheMotionOfEntitiesWithOwnInertia`);
         with ``project-velocity-every-increment``, the velocity of their nodes is projected from their momentum in every
@@ -1083,6 +1094,9 @@ class NED(NonlinearSolverBase):
             The step being solved.
         timeStep
             The increment just accepted.
+        increment
+            The displacement increment on the current numbering: the increment just taken on the finite elements'
+            degrees of freedom, and zero on those of the entities that carry their own inertia.
         """
 
         system = self.system
@@ -1097,9 +1111,8 @@ class NED(NonlinearSolverBase):
             system.assembleLumpedDampingOfEntitiesWithOwnInertia(self.forEachChunk),
         )
         self._internalForce += internalForceOfEntities
-        noIncrement = system.locations.constructDofVector()
         self._netForce = self.assembleNetForce(
-            self._netForce, self._internalForce, self.collectLoads(step.actions), self._U, noIncrement, timeStep
+            self._netForce, self._internalForce, self.collectLoads(step.actions), self._U, increment, timeStep
         )
 
         if timeStep.timeIncrement == 0.0:
