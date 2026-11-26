@@ -2227,23 +2227,17 @@ class NED(NonlinearSolverBase):
             M[ids] = self._inertiaOfEntities[ids]
             damping[ids] = self._dampingOfEntities[ids]
 
-        # The damping of the elements and of the entities, checked on its own: at second-order DOFs it enters only as
-        # the rate C/M, which the check of the divisor below never sees, and a negative rate amplifies instead of
-        # damping.
-        if not np.all(np.isfinite(damping)) or np.any(damping < 0.0):
+        # Finiteness before field classification: NaN passes every != 0 and < 0 comparison below.
+        if not np.all(np.isfinite(damping)):
             raise ValueError(
                 "The assembled lumped damping is not a valid dissipation: {:} of {:} entries are "
-                "negative and {:} are not finite (smallest: {:e}). A damping coefficient enters the "
-                "second-order update as the rate C/M, where a negative value amplifies instead of "
-                "damping, and a first-order field divides by it directly.".format(
-                    int(np.count_nonzero(damping < 0.0)),
-                    damping.shape[0],
+                "not finite. A damping coefficient enters the second-order update as the rate C/M, "
+                "and a first-order field divides by it directly.".format(
                     int(np.count_nonzero(~np.isfinite(damping))),
-                    np.nanmin(damping),
+                    damping.shape[0],
                 )
             )
 
-        # A lumped inertia that is not a number passes every comparison below, and would reach every increment.
         if not np.all(np.isfinite(M)):
             raise ValueError(
                 "The assembled lumped inertia is not finite at {:} of {:} degrees of freedom.".format(
@@ -2267,30 +2261,7 @@ class NED(NonlinearSolverBase):
         # Kept before folding, so the kinetic energy diagnostic accounts for the true velocities of
         # all nodes (including tied slaves) rather than master-placed folded mass.
         self._rawLumpedMass = M.copy()
-
-        # compute inverses; the entities that carry their own inertia give theirs in every increment
-        withoutCoefficient = M == 0.0
-        withoutCoefficient[self.ids_inertiaOfEntities] = False
-        if np.any(withoutCoefficient):
-            raise ValueError(
-                "Zero found in the vector the increment divides by, at {:} of {:} degrees of freedom. "
-                "Every FIELD is covered by the classification above, which refuses a field carrying "
-                "neither coefficient, so what is left here are degrees of freedom belonging to no field "
-                "-- scalar variables, which this solver has no equation of motion for.".format(
-                    int(np.count_nonzero(withoutCoefficient)), M.shape[0]
-                )
-            )
-
-        # A negative lumped mass (e.g. row-summed quadratic elements) would integrate backwards in time.
-        if np.any(M < 0.0):
-            raise ValueError(
-                "Negative coefficient found in {:} of {:} entries of the vector the increment "
-                "divides by (smallest: {:e}). It is a lumped inertia at a second-order degree of "
-                "freedom and a damping at a first-order one; either way a negative value makes the "
-                "explicit update integrate backwards in time there.".format(
-                    int(np.count_nonzero(M < 0.0)), M.shape[0], M.min()
-                )
-            )
+        rawDamping = damping.copy() if self.mpcTransformation is not None else damping
 
         # Slave DOFs of multi-point constraints carry no own inertia: their mass is folded onto
         # their masters (row-sum lumping of T^T M T, mass-conserving), their Minv stays zero, and
@@ -2300,28 +2271,53 @@ class NED(NonlinearSolverBase):
             # Folded like the inertia, so the ratio below is the damping rate of the folded system.
             self.mpcTransformation.foldLumpedMass(damping)
 
-            # Signed multi-point-constraint coefficients (e.g. HEX20/QUAD8 hanging nodes) subtract
-            # slave mass or damping from a master and can make a master's folded coefficient
-            # non-positive even when every raw element contribution was positive.
-            nonPositiveFolded = M <= 0.0
-            nonPositiveFolded[self.mpcTransformation.slaveDofIndices] = False
-            nonPositiveFolded[self.ids_inertiaOfEntities] = False
-            if np.any(nonPositiveFolded):
-                raise ValueError(
-                    "Non-positive coefficient found after folding multi-point constraints in {:} of {:} "
-                    "independent degrees of freedom (smallest: {:e}). Signed constraint weights subtracted "
-                    "more mass or damping from a master than its elements supplied.".format(
-                        int(np.count_nonzero(nonPositiveFolded)), M.shape[0], M[nonPositiveFolded].min()
-                    )
+        # The damping of the elements and of the entities, checked on its own (both raw and folded, since signed MPC
+        # coefficients can subtract damping from a master): at second-order DOFs it enters only as the rate C/M, which
+        # the check of the divisor below never sees, and a negative rate amplifies instead of damping.
+        negativeDamping = (rawDamping < 0.0) | (damping < 0.0)
+        if np.any(negativeDamping):
+            raise ValueError(
+                "The assembled lumped damping is not a valid dissipation: {:} of {:} entries are "
+                "negative (smallest: {:e}). A damping coefficient enters the "
+                "second-order update as the rate C/M, where a negative value amplifies instead of "
+                "damping, and a first-order field divides by it directly.".format(
+                    int(np.count_nonzero(negativeDamping)),
+                    damping.shape[0],
+                    min(rawDamping.min(), damping.min()),
                 )
+            )
 
-            if np.any(damping < 0.0):
-                raise ValueError(
-                    "Negative lumped damping found after folding multi-point constraints in {:} of {:} "
-                    "entries (smallest: {:e}). A negative damping rate amplifies instead of damping.".format(
-                        int(np.count_nonzero(damping < 0.0)), damping.shape[0], damping.min()
-                    )
+        # Compute inverses; the entities that carry their own inertia give theirs in every increment, and MPC slaves
+        # have zero folded mass by construction.
+        withoutCoefficient = M == 0.0
+        withoutCoefficient[self.ids_inertiaOfEntities] = False
+        if self.mpcTransformation is not None:
+            withoutCoefficient[self.mpcTransformation.slaveDofIndices] = False
+        if np.any(withoutCoefficient):
+            raise ValueError(
+                "Zero found in the vector the increment divides by, at {:} of {:} degrees of freedom. "
+                "Every FIELD is covered by the classification above, which refuses a field carrying "
+                "neither coefficient, so this is either a degree of freedom belonging to no field "
+                "-- a scalar variable, which this solver has no equation of motion for -- or a master "
+                "whose folded mass or damping cancelled to zero under signed multi-point-constraint weights.".format(
+                    int(np.count_nonzero(withoutCoefficient)), M.shape[0]
                 )
+            )
+
+        # A negative lumped mass or damping (e.g. row-summed quadratic elements, or signed MPC weights subtracting
+        # more slave mass/damping from a master than its elements supply) would integrate backwards in time.
+        negativeDivisor = (self._rawLumpedMass < 0.0) | (M < 0.0)
+        if np.any(negativeDivisor):
+            raise ValueError(
+                "Negative coefficient found in {:} of {:} entries of the vector the increment "
+                "divides by (smallest: {:e}). It is a lumped inertia at a second-order degree of "
+                "freedom and a damping at a first-order one; either way a negative value makes the "
+                "explicit update integrate backwards in time there.".format(
+                    int(np.count_nonzero(negativeDivisor)),
+                    M.shape[0],
+                    min(self._rawLumpedMass.min(), M.min()),
+                )
+            )
 
         Minv = np.zeros(nDof)
         Minv[M != 0.0] = 1.0 / M[M != 0.0]

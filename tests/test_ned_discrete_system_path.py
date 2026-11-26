@@ -50,13 +50,26 @@ import numpy as np
 import pytest
 
 from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.constraints.base.multipointconstraintbase import (
+    MultiPointConstraintBase,
+)
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.elements.pointmass import PointMass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.change import Change
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.points.node import Node
+from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.solvers.base.criticaltimestep import CriticalTimeStepEstimate
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
+from edelweissfe.steps.adaptivestepforexplicitsimulations import (
+    AdaptiveStepForExplicitSimulations,
+)
+from edelweissfe.steps.stepmanager import StepActionCollection
 from edelweissfe.utils.exceptions import RestartError
+from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 #: Two blocks pressed into each other, with a penalty contact between them whose connectivity is
@@ -486,9 +499,9 @@ def test_a_checkpoint_without_the_numbering_of_its_net_force_is_refused(tmp_path
 @pytest.mark.parametrize(
     "masses, dampings, refusal",
     [
-        ((0.1, 1.0, 1.0), (0.0, 0.0, 0.0), "Non-positive coefficient found after folding multi-point constraints"),
-        ((0.25, 1.0, 1.0), (0.0, 0.0, 0.0), "Non-positive coefficient found after folding multi-point constraints"),
-        ((1.0, 1.0, 1.0), (0.1, 1.0, 1.0), "Negative lumped damping found after folding multi-point constraints"),
+        ((0.1, 1.0, 1.0), (0.0, 0.0, 0.0), "Negative coefficient found"),
+        ((0.25, 1.0, 1.0), (0.0, 0.0, 0.0), "Zero found in the vector the increment divides by"),
+        ((1.0, 1.0, 1.0), (0.1, 1.0, 1.0), "lumped damping is not a valid dissipation"),
     ],
     ids=["negative-folded-mass", "zero-folded-mass", "negative-folded-damping"],
 )
@@ -496,20 +509,6 @@ def test_non_positive_folded_mass_or_negative_folded_damping_is_refused(masses, 
     """When signed multi-point-constraint weights (as on HEX20/QUAD8 hanging nodes) subtract more slave mass or
     damping from a master than its elements supply, NED refuses the non-positive folded master mass or negative
     folded damping rather than integrating backwards in time or amplifying."""
-
-    from edelweissfe.constraints.base.multipointconstraintbase import (
-        MultiPointConstraintBase,
-    )
-    from edelweissfe.elements.pointmass import PointMass
-    from edelweissfe.models.femodel import FEModel
-    from edelweissfe.points.node import Node
-    from edelweissfe.sets.elementset import ElementSet
-    from edelweissfe.sets.nodeset import NodeSet
-    from edelweissfe.steps.adaptivestepforexplicitsimulations import (
-        AdaptiveStepForExplicitSimulations,
-    )
-    from edelweissfe.steps.stepmanager import StepActionCollection
-    from edelweissfe.utils.fieldoutput import FieldOutputController
 
     class _DampedPointMass(PointMass):
         def __init__(self, number, node, model, mass, damping):
