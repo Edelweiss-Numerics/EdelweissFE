@@ -48,8 +48,9 @@ part (:class:`CriticalTimeStepOfAPart`) comes with its own policy of when its es
   meshfree model), estimated anew **when the margin of the last estimate over the time increment in use may be used
   up**;
 * :class:`CriticalTimeStepWithThePenaltyConstraints`: the parts with the penalty constraints, estimated **after every
-  evaluation of the net force**, from the stiffness the constraints had in it. This third value is not the constraints'
-  own critical time step (see the class).
+  evaluation of the net force**, from the stiffness the constraints had in it, and, where the time increment follows
+  the critical time step, also over the states the next increment can reach (:class:`NextIncrement`). This third value
+  is not the constraints' own critical time step (see the class).
 
 The theory, and what the estimates do not see, are explained in :doc:`/theory/criticaltimestep`.
 """
@@ -60,6 +61,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.numerics.dofvector import DofVector
+from edelweissfe.timesteppers.timestep import TimeStep
 
 
 @dataclass
@@ -575,6 +577,85 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
         )
 
 
+@dataclass(frozen=True)
+class NextIncrement:
+    """The states the next increment of an explicit solver can reach, over which a constraint bounds its stiffness
+    (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`) when the
+    time increment is set before that increment has evaluated its force: ``NED`` with ``follow-critical-time-step``
+    (:class:`CriticalTimeStepWithThePenaltyConstraints`, "Over the next increment").
+
+    The central difference method takes the next increment, of a length :math:`s` up to the largest time increment
+    the solver could take next, :math:`\\Delta t_\\mathrm{max}`, from the state now as
+
+    .. math::
+
+        \\Delta\\boldsymbol{U}(s) = s\\, \\dot{\\boldsymbol{U}} + \\tfrac{1}{2} s (\\Delta t_\\mathrm{last} + s)\\,
+        \\ddot{\\boldsymbol{U}} = \\alpha\\, \\Delta\\boldsymbol{U}_v + \\beta\\, \\Delta\\boldsymbol{U}_a ,
+
+    with the velocity :math:`\\dot{\\boldsymbol{U}}` of the last increment, its length :math:`\\Delta
+    t_\\mathrm{last}`, and the acceleration :math:`\\ddot{\\boldsymbol{U}}` at its end. The two parts at
+    :math:`\\Delta t_\\mathrm{max}`, :math:`\\Delta\\boldsymbol{U}_v` and :math:`\\Delta\\boldsymbol{U}_a`, are taken
+    with the coefficients :math:`\\alpha = s / \\Delta t_\\mathrm{max}` and :math:`\\beta = s (\\Delta t_\\mathrm{last}
+    + s) / (\\Delta t_\\mathrm{max} (\\Delta t_\\mathrm{last} + \\Delta t_\\mathrm{max}))`, both between 0 and 1. So
+    every state the increment can reach, whatever its length, lies in the parallelogram spanned by the two parts, whose
+    corners are the states :meth:`statesWithin` gives. The time grows with :math:`s` as the velocity part does, so the
+    corners moved by the velocity part are at the time at the end of the increment (:attr:`timeStep`).
+    """
+
+    #: The part from the velocity, :math:`\\Delta\\boldsymbol{U}_v = \\Delta t_\\mathrm{max}\\, \\dot{\\boldsymbol{U}}`,
+    #: a vector of the discrete system or restricted to an entity (:meth:`restrictedTo`).
+    byTheVelocity: np.ndarray
+    #: The part from the acceleration, :math:`\\Delta\\boldsymbol{U}_a = \\tfrac{1}{2} \\Delta t_\\mathrm{max}
+    #: (\\Delta t_\\mathrm{last} + \\Delta t_\\mathrm{max})\\, \\ddot{\\boldsymbol{U}}`, likewise.
+    byTheAcceleration: np.ndarray
+    #: The time step at the end of the increment, of length :math:`\\Delta t_\\mathrm{max}`.
+    timeStep: TimeStep
+
+    def restrictedTo(self, entity) -> "NextIncrement":
+        """The next increment at the degrees of freedom of an entity.
+
+        Parameters
+        ----------
+        entity
+            The entity, e.g. a constraint, by which the vectors of the discrete system are indexed.
+
+        Returns
+        -------
+        NextIncrement
+            The next increment, restricted.
+        """
+
+        return NextIncrement(self.byTheVelocity[entity], self.byTheAcceleration[entity], self.timeStep)
+
+    def statesWithin(self, U_np: np.ndarray, dU: np.ndarray, timeStep: TimeStep) -> list[tuple]:
+        """The corners of the parallelogram of the states the next increment can reach: the state now, and moved on by
+        either part of the increment or by both, those moved by the velocity part at the time step at the end of the
+        increment. A quantity affine in the solution and the time takes its smallest and its largest value within the
+        increment at one of them, and so does a monotone function of such a quantity.
+
+        Parameters
+        ----------
+        U_np
+            The solution now, restricted as the parts are.
+        dU
+            The increment now, likewise.
+        timeStep
+            The time step now.
+
+        Returns
+        -------
+        list[tuple]
+            The four states, each the solution, the increment and the time step; the state now first.
+        """
+
+        states = []
+        for byTheVelocity, timeStepOfTheState in ((0.0, timeStep), (self.byTheVelocity, self.timeStep)):
+            for byTheAcceleration in (0.0, self.byTheAcceleration):
+                move = byTheVelocity + byTheAcceleration
+                states.append((U_np + move, dU + move, timeStepOfTheState))
+        return states
+
+
 class CriticalTimeStepWithThePenaltyConstraints(CriticalTimeStepOfAPart):
     """The critical time step of the parts with the penalty constraints -- contacts, supports and ties held by a
     penalty: the estimate of each part (:class:`CriticalTimeStepEstimateOfTheDofs`) with the row sums of the
@@ -612,6 +693,17 @@ class CriticalTimeStepWithThePenaltyConstraints(CriticalTimeStepOfAPart):
     that is new in :math:`\\boldsymbol{f}_n` -- a point that closed in increment :math:`n`, a point a contact search
     paired at its start -- is half an increment late, since the average still holds an increment taken without it
     (:doc:`/theory/criticaltimestep`, "What the estimate does not see").
+
+    **Over the next increment, where the time increment follows the critical time step.** Lowered only, the time
+    increment keeps the margin of a stiff state once met. Followed (``NED``'s ``follow-critical-time-step``), it is
+    raised as soon as the stiffness falls, and stiffness that is new in :math:`\\boldsymbol{f}_{n+1}` would meet the
+    raised increment. So the estimate at the state is followed by one over the states the next increment can reach
+    (:class:`NextIncrement`, up to the largest time increment the estimate at the state allows), and the smaller of the
+    two is kept (:meth:`estimateOverTheNextIncrement`): :math:`\\Delta t_{n+1}` is then within the critical time step of
+    both forces it is averaged in, :math:`\\boldsymbol{f}_n` and :math:`\\boldsymbol{f}_{n+1}`, as far as the bound over
+    the states holds (:doc:`/theory/criticaltimestep`, "Over the next increment"). Where the connectivity changes
+    between the force and the next increment -- after a contact search --, the bound over the next increment is taken
+    again on the new one.
     """
 
     def __init__(self):
@@ -646,11 +738,64 @@ class CriticalTimeStepWithThePenaltyConstraints(CriticalTimeStepOfAPart):
 
         self._take(
             CriticalTimeStepEstimate(
-                min(
-                    elements.estimateFromTheBoundOfEachDof(system, mpcTransformation).criticalTimeStep(
-                        rowSumsOfThePenaltyConstraints
-                    ),
-                    entities.withThePenaltyConstraints(rowSumsOfThePenaltyConstraints),
-                )
+                self._withTheRowSums(system, rowSumsOfThePenaltyConstraints, elements, entities, mpcTransformation)
             )
+        )
+
+    def estimateOverTheNextIncrement(
+        self,
+        system,
+        rowSumsOverTheNextIncrement: np.ndarray,
+        elements: CriticalTimeStepOfTheElements,
+        entities: CriticalTimeStepOfEntitiesWithOwnInertia,
+        mpcTransformation=None,
+    ):
+        """Lower the last estimate to the critical time step of the parts with the row sums of the penalty constraints
+        over the states the next increment can reach, if that is smaller: the next increment is averaged with the force
+        of the state as well (see "Over the next increment"). It refines the last estimate, and is not counted as one
+        of its own.
+
+        Parameters
+        ----------
+        system
+            The discrete system.
+        rowSumsOverTheNextIncrement
+            The row sums :math:`r_i` of the penalty constraints over the states the next increment can reach
+            (:class:`NextIncrement`), as for :meth:`estimate`.
+        elements
+            The critical time step of the finite elements, as last estimated.
+        entities
+            The critical time step of the entities that carry their own inertia, as last estimated.
+        mpcTransformation
+            The condensation of the multi-point constraints of the discrete system; None if it has none.
+        """
+
+        overTheNextIncrement = self._withTheRowSums(
+            system, rowSumsOverTheNextIncrement, elements, entities, mpcTransformation
+        )
+        if overTheNextIncrement < self.value:
+            self.lastEstimate = CriticalTimeStepEstimate(overTheNextIncrement)
+
+    @staticmethod
+    def _withTheRowSums(
+        system,
+        rowSumsOfThePenaltyConstraints: np.ndarray,
+        elements: CriticalTimeStepOfTheElements,
+        entities: CriticalTimeStepOfEntitiesWithOwnInertia,
+        mpcTransformation,
+    ) -> float:
+        """The critical time step of the parts, as last estimated, with the row sums of the penalty constraints added
+        (see :meth:`estimate`).
+
+        Returns
+        -------
+        float
+            The critical time step.
+        """
+
+        return min(
+            elements.estimateFromTheBoundOfEachDof(system, mpcTransformation).criticalTimeStep(
+                rowSumsOfThePenaltyConstraints
+            ),
+            entities.withThePenaltyConstraints(rowSumsOfThePenaltyConstraints),
         )

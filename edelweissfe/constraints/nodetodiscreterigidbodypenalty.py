@@ -31,10 +31,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.constraints.base.penaltylaw import (
-    normalPenaltyForce,
-    validatedContactType,
-)
+from edelweissfe.constraints.base.penaltylaw import penaltyLaw
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
     rigidBodyContactLocalEntries,
@@ -213,7 +210,7 @@ class Constraint(ConstraintBase, MeshDependent):
             )
 
         self.penalty = configuration.penalty
-        self.type = validatedContactType(configuration.contactType)
+        self.law = penaltyLaw(configuration.contactType)
         self.searchDistance = configuration.searchDistance
 
         self.nDim = model.domainSize
@@ -339,7 +336,7 @@ class Constraint(ConstraintBase, MeshDependent):
             r_s = coords[s] - rpCurrent
 
             # dists[s] is the gap, negative in contact; f_n is the magnitude of the compressive force
-            normalForce, stiffness = normalPenaltyForce(self.type, self.penalty, dists[s])
+            normalForce, stiffness = self.law.normalForce(self.penalty, dists[s])
             f_n = -normalForce
 
             w_p = -n_s

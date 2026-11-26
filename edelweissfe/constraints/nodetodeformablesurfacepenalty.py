@@ -44,10 +44,7 @@ from edelweissfe.constraints.base.frozencontactsearch import (
     unpackAssignment,
     unpackPerPointArrays,
 )
-from edelweissfe.constraints.base.penaltylaw import (
-    normalPenaltyForce,
-    validatedContactType,
-)
+from edelweissfe.constraints.base.penaltylaw import penaltyLaw
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -362,7 +359,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.penalty = configuration.penalty
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
-        self.type = validatedContactType(configuration.contactType)
+        self.law = penaltyLaw(configuration.contactType)
         self.searchDistance = configuration.searchDistance
 
         self.sliding = configuration.sliding.lower()
@@ -425,7 +422,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         self.journal.message(
             f"{self.nSlaves} slave nodes, {len(self.facetElements)} master facets, "
-            f"sliding={self.sliding}, type={self.type}, friction={'on' if self.mu > 0.0 else 'off'}, "
+            f"sliding={self.sliding}, type={self.law.name}, friction={'on' if self.mu > 0.0 else 'off'}, "
             f"augmentedLagrange={self.augmentedLagrange}",
             name,
         )
@@ -758,7 +755,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             else:
                 # f_n carries the sign of g (negative in contact), so that the contact force on the nodes,
                 # -f_n * w, pushes the slave outward; see edelweissfe.constraints.base.penaltylaw.
-                penaltyForce, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
+                penaltyForce, stiffness = self.law.normalForce(penaltyTimesArea, g)
                 f_n = lambdaForce + penaltyForce
 
             # the residual contribution is the negative of the contact force on the nodes
@@ -909,7 +906,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 if g >= 0.0:
                     penaltyForcePart = penaltyTimesArea * g
                 else:
-                    penaltyForcePart, _ = normalPenaltyForce(self.type, penaltyTimesArea, g)
+                    penaltyForcePart, _ = self.law.normalForce(penaltyTimesArea, g)
 
                 self._lambdaN[s] = min(0.0, self._lambdaN[s] + penaltyForcePart)
 

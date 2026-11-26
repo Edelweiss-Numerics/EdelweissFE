@@ -50,16 +50,17 @@ the increment, and the origin the point at the start of the increment. A constra
 kind takes the one it moves with. The split also lets a constraint that measures a small distance between two points
 -- the stretch of a stiff penalty spring -- take the difference of the origins once and the difference of the
 displacements in every evaluation, rather than the difference of the coordinates, whose round-off scales with the
-coordinates.
+coordinates (see :class:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty.Constraint`, *Measured from the
+origins*).
 
 :class:`ContactPoints` is what a constraint needs from its contact points; a constraint written against it -- the
 pairing with the master, the gap, the law -- is written once for every kind of point. Two kinds are here: the nodes of
 a slave surface (:mod:`~edelweissfe.constraints.base.contactpointsatslavenodes`) and the quadrature points of its faces
-(:mod:`~edelweissfe.constraints.base.contactpointsonslavesurface`). The integrated surface contacts,
-:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` and
-:mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`, take their slave side from the quadrature points: the
-points, their coordinates for the contact search, their areas, and the forces of the points at the slave nodes for the
-output.
+(:mod:`~edelweissfe.constraints.base.contactpointsonslavesurface`). The contact with a deformable master surface,
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`, is written against it, once for both kinds. The
+contact with a discrete rigid body, :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`, takes its slave
+side from the quadrature points: the points, their coordinates for the contact search, their areas, and the forces of
+the points at the slave nodes for the output.
 """
 
 from abc import ABC, abstractmethod
@@ -95,6 +96,13 @@ class ContactPoints(ABC):
 
     nPoints: int
     areas: np.ndarray
+
+    #: Whether the points can be located only once the model has connected the entities they belong to, at an update
+    #: of the connectivity: points whose nodes follow from where they are (the kernel functions of updated-Lagrangian
+    #: particles). A checkpoint does not hold that connectivity, so a constraint restored from one keeps their
+    #: projection and locates them at the next update of the connectivity, which the resumed run makes before its
+    #: first increment. False for the points of finite elements, which act on nodes of their own.
+    locatedOnlyWhenConnected: bool = False
 
     @abstractmethod
     def currentPointCoordinates(self, model: FEModel) -> np.ndarray:

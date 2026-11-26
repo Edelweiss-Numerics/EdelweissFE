@@ -40,6 +40,11 @@ holds that estimate when the next increment starts, and that the next increment 
 * after a refinement in the middle of a step, the constraints are bounded at once at the state on the refined mesh,
   with its smaller masses: the first increment on it, which integrates no force, and the one after it, which integrates
   the first force on it, are both within the critical time step of the springs on the new masses.
+
+With ``follow-critical-time-step``, the constraints are bounded over the states the next increment can reach as well,
+and once more after a contact search, on the new pairing (theory page, "Over the next increment"): a point paired anew
+by the search, already in the master, is in the time increment of the first increment that evaluates its force, not
+half an increment late; every increment is still within the critical time step of the force it integrates.
 """
 
 from typing import NamedTuple
@@ -251,6 +256,55 @@ def test_a_point_paired_anew_by_the_search_is_in_the_critical_time_step_of_the_f
     assert searched.locations is not increments[drops[0] - 2].locations, "the first drop is not after a search"
     assert first.timeIncrement == pytest.approx(first.courantNumber * first.ofTheForceItIntegrates, rel=1e-14)
     assert first.timeIncrement < 0.9 * searched.timeIncrement
+
+
+#: The search deck, with the time increment following the critical time step.
+_FOLLOWED_SEARCH_DECK = _SEARCH_DECK.replace(
+    "contact-update-frequency=20", "contact-update-frequency=20\nfollow-critical-time-step=True"
+)
+
+
+def _firstIncrementThatEvaluatesTheForceOfANewPairing(increments: list[Increment]) -> tuple[int, np.ndarray]:
+    """The first increment whose net force, evaluated at its end, is far stiffer than the one before: the first on the
+    connectivity of a search that paired points already in the master. Returns its index, and the critical time step of
+    the force each increment evaluates (the one the next increment integrates; the last increment has none)."""
+
+    ofTheForceItEvaluates = np.array([increment.ofTheForceItIntegrates for increment in increments[1:]])
+    drops = np.flatnonzero(ofTheForceItEvaluates[1:] < 0.9 * ofTheForceItEvaluates[:-1]) + 1
+    assert drops.size, "no search paired a point that was already in the master"
+    first = drops[0]
+    assert increments[first].locations is not increments[first - 1].locations, "the first drop is not after a search"
+    return first, ofTheForceItEvaluates
+
+
+def test_followed_a_point_paired_anew_by_the_search_is_in_the_time_increment_of_the_first_increment_on_it(
+    tmp_path, monkeypatch
+):
+    increments = _run(tmp_path, monkeypatch, _FOLLOWED_SEARCH_DECK)
+
+    _assertEveryIncrementIsWithinTheConstraintsOfTheForceItIntegrates(increments)
+    first, ofTheForceItEvaluates = _firstIncrementThatEvaluatesTheForceOfANewPairing(increments)
+    increment = increments[first]
+    assert increment.timeIncrement <= increment.courantNumber * ofTheForceItEvaluates[first] * (1.0 + 1e-14)
+    assert increment.timeIncrement < 0.9 * increments[first - 1].timeIncrement
+
+
+def test_followed_without_the_bound_after_the_search_the_first_increment_on_the_new_pairing_is_the_long_one(
+    tmp_path, monkeypatch
+):
+    """The control: the search before the increment as without ``follow-critical-time-step``, with no bound over the
+    next increment on the new pairing; the bound over the next increment taken with the force before it has the old
+    pairing."""
+
+    def searchAlone(self, step, model):
+        self.updateDiscreteSystem(model, model.updateConnectivity())
+
+    monkeypatch.setattr(NED, "_searchTheContactsAnew", searchAlone)
+    increments = _run(tmp_path, monkeypatch, _FOLLOWED_SEARCH_DECK)
+
+    first, ofTheForceItEvaluates = _firstIncrementThatEvaluatesTheForceOfANewPairing(increments)
+    increment = increments[first]
+    assert increment.timeIncrement > 1.1 * increment.courantNumber * ofTheForceItEvaluates[first]
 
 
 def test_after_a_refinement_the_constraints_are_bounded_with_the_masses_of_the_refined_mesh_at_once(

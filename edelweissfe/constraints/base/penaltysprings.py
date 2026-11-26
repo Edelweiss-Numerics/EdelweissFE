@@ -48,16 +48,58 @@ distributed. The stiffness of a spring is symmetric, so this bounds the rows of 
 contract asks. :func:`addBoundOfAbsoluteStiffnessOfSprings` is that formula, written once for every penalty constraint
 of EdelweissFE and EdelweissMeshfree that bounds its springs instead of its tangent: one that has no tangent, or whose
 tangent is costly, overrides ``addBoundOfAbsoluteStiffnessTimes`` with it. A constraint takes its springs for the bound
-from the same code it takes them for its force, so that the force and the bound cannot drift apart.
+from the same code it takes them for its force, so that the force and the bound cannot drift apart. A contact law gives
+its springs at the paired contact points as :class:`PenaltySprings` (:mod:`~edelweissfe.constraints.base.penaltylaw`).
 
 The gradient of a spring moves nodes along the direction of the spring, :math:`a_{p,(n,j)} = C_{pn}\\, d_{pj}`: the
-coefficient :math:`C_{pn}` with which the spring moves node :math:`n` -- e.g. the interpolation vector of a point of a
-particle -- times the component :math:`j` of its direction (:class:`SpringGradientOnSharedNodes`).
+coefficient :math:`C_{pn}` with which the spring moves node :math:`n` (an interpolation vector, or the negative shape
+functions of a master face) times the component :math:`j` of its direction. It comes in parts, of two kinds:
+
+* :class:`SpringGradientOnSharedNodes`: the springs share their nodes, and the coefficients are a matrix over them --
+  the interpolation matrix of contact points
+  (:meth:`~edelweissfe.constraints.base.contactpoints.ContactPoints.interpolationMatrixOfLocatedPoints`), the
+  interpolation vectors of the points of a particle;
+* :class:`SpringGradientOnOwnNodes`: every spring has nodes of its own in the block -- the parent face nodes of the
+  master facet of a contact point, a slave node and its facet, the reference point of a rigid body.
+
+**Over the next increment.** With ``follow-critical-time-step``, ``NED`` asks for the bound over the states the next
+increment can reach (:class:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement`). A spring that switches on
+where its stretch turns negative -- a contact point that closes -- is in that bound if it is closed at its smallest
+stretch within the increment. With the pairing and the normals held, as within an increment, the gap of a point is
+affine in the solution, and so its smallest value within the increment is at a corner of the states the increment can
+reach, :math:`g + \\min(0, \\Delta g_v) + \\min(0, \\Delta g_a)`, with the changes of the gap by the part of the
+increment from the velocity and by the one from the acceleration (:func:`smallestGapsWithin`). A constraint that bounds
+its springs takes them at these gaps, and sums over its springs: a point that could close within the increment has its
+spring in the bound before it closes, whichever degrees of freedom the springs share, and a law whose stiffness grows
+with the depth is stiffest there.
 """
+
+from dataclasses import dataclass
 
 import numpy as np
 
+from edelweissfe.solvers.base.criticaltimestep import NextIncrement
+from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import rowDot
+
+
+@dataclass(frozen=True)
+class PenaltySprings:
+    """Penalty springs at located contact points, at most one per point, each along a unit direction: the spring of a
+    contact along the normal at a closed point. A law makes them
+    (:meth:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.springs`); the constraint takes from them its force,
+    its tangent, the bound of its stiffness and its outputs."""
+
+    #: The located points with a spring (indices into the located points).
+    points: np.ndarray
+    #: The direction of each spring, (len(points), nDim).
+    directions: np.ndarray
+    #: The force of each spring along its direction, :math:`f`.
+    forces: np.ndarray
+    #: The stiffness of each spring, :math:`k = \mathrm{d}f/\mathrm{d}g`.
+    stiffness: np.ndarray
+    #: The energy stored in each spring, :math:`\Pi` with :math:`\mathrm{d}\Pi/\mathrm{d}g = f`.
+    energies: np.ndarray
 
 
 class SpringGradientOnSharedNodes:
@@ -112,11 +154,49 @@ class SpringGradientOnSharedNodes:
         bound[self.dofsOfNodes] += self.absoluteInterpolation.T @ (values[:, None] * self.absoluteDirections)
 
 
+class SpringGradientOnOwnNodes:
+    """The part of the gradients of springs on nodes of their own: spring :math:`p` moves its nodes :math:`n` with
+    :math:`a_{p,(n,j)} = N_{pn}\\, d_{pj}`, at the degrees of freedom ``dofs[p, n, j]`` of the block. Springs may name
+    the same degrees of freedom (the reference point of a rigid body). Only the absolute values enter the bound; they
+    are kept.
+
+    Parameters
+    ----------
+    coefficients
+        :math:`N`, (nSprings, nNodes).
+    directions
+        The direction of each spring, (nSprings, nComponents).
+    dofs
+        Where the components of the nodes of each spring sit in the block, (nSprings, nNodes, nComponents).
+    """
+
+    def __init__(self, coefficients: np.ndarray, directions: np.ndarray, dofs: np.ndarray):
+        self.absoluteCoefficients = np.abs(coefficients)
+        self.absoluteDirections = np.abs(directions)
+        self.dofs = dofs
+
+    def absoluteTimes(self, weights: np.ndarray) -> np.ndarray:
+        """:math:`|\\boldsymbol{a}_p| \\cdot \\boldsymbol{w}` of this part, per spring; see
+        :meth:`SpringGradientOnSharedNodes.absoluteTimes`."""
+
+        return np.einsum("ai,aij,aj->a", self.absoluteCoefficients, weights[self.dofs], self.absoluteDirections)
+
+    def addAbsoluteTransposeTimes(self, values: np.ndarray, bound: np.ndarray):
+        """Distribute values of the springs with the absolute gradients of this part; see
+        :meth:`SpringGradientOnSharedNodes.addAbsoluteTransposeTimes`."""
+
+        np.add.at(
+            bound,
+            self.dofs,
+            values[:, None, None] * self.absoluteCoefficients[:, :, None] * self.absoluteDirections[:, None, :],
+        )
+
+
 def addBoundOfAbsoluteStiffnessOfSprings(
     bound: np.ndarray,
     weights: np.ndarray,
     stiffness: np.ndarray,
-    gradient: list[SpringGradientOnSharedNodes],
+    gradient: list[SpringGradientOnSharedNodes | SpringGradientOnOwnNodes],
 ):
     """Add the row sums of the absolute value of the stiffness of penalty springs, weighted by column,
     :math:`b_i \\mathrel{+}= \\sum_p |k_p|\\, |a_{p,i}| \\, (|\\boldsymbol{a}_p| \\cdot \\boldsymbol{w})` (see the
@@ -138,3 +218,42 @@ def addBoundOfAbsoluteStiffnessOfSprings(
     stiffnessTimesWeighted = np.abs(stiffness) * weighted
     for part in gradient:
         part.addAbsoluteTransposeTimes(stiffnessTimesWeighted, bound)
+
+
+def smallestGapsWithin(
+    nextIncrement: NextIncrement, gapsAt, U_np: np.ndarray, dU: np.ndarray, timeStep: TimeStep
+) -> np.ndarray:
+    """The smallest gap each contact point may have within the next increment, at which a contact takes its springs
+    for the bound over it (see the module documentation, "Over the next increment"). With the pairing and the normals
+    held, a gap is affine in the solution, and changes over an increment of length :math:`s` by :math:`\\alpha\\,
+    \\Delta g_v + \\beta\\, \\Delta g_a`, :math:`\\alpha, \\beta \\in [0, 1]`
+    (:class:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement`), with the changes :math:`\\Delta g_v` and
+    :math:`\\Delta g_a` of the gap by the two parts of the increment at its largest length. Each part, where it closes the gap, closes it
+    most at its full length, so within the increment, whatever its length and wherever the point closes in it, the gap
+    is at least :math:`g + \\min(0, \\Delta g_v) + \\min(0, \\Delta g_a)`.
+
+    Parameters
+    ----------
+    nextIncrement
+        The next increment, restricted to the constraint.
+    gapsAt
+        The gaps of the contact points at a state, ``gapsAt(U_np, dU, timeStep)``.
+    U_np
+        The solution now, restricted to the constraint.
+    dU
+        The increment now, likewise.
+    timeStep
+        The time step now.
+
+    Returns
+    -------
+    numpy.ndarray
+        The smallest gaps, one per contact point.
+    """
+
+    gaps = gapsAt(U_np, dU, timeStep)
+    move = nextIncrement.byTheVelocity
+    byTheVelocity = gapsAt(U_np + move, dU + move, nextIncrement.timeStep) - gaps
+    move = nextIncrement.byTheAcceleration
+    byTheAcceleration = gapsAt(U_np + move, dU + move, timeStep) - gaps
+    return gaps + np.minimum(byTheVelocity, 0.0) + np.minimum(byTheAcceleration, 0.0)

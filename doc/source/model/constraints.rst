@@ -318,10 +318,25 @@ basis, so the two constraints agree to 13 digits and there is nothing to gain --
 **non-matching** meshes the integrated formulation is a substantial improvement at any element
 order, linear included, as the figure in :ref:`integrated-contact` shows.
 
-Scope: normal penalty contact under ``sliding=small``, on both the implicit and the explicit solver
+The constraint is one contact for every kind of contact point (:ref:`contact-one-constraint`): the
+quadrature points of the slave facets (``contactPoints=quadraturePoints``, the default) and the slave
+nodes, each standing for its tributary area (``contactPoints=nodes``). Points that approach the master within
+``searchDistance`` are paired with it; a point found inside without having been seen approaching gets no force, is
+reported, and counts as found inside until it is seen outside again. A point in contact slides from facet to facet,
+but not across a convex crease; in every update it walks over the master until its facet no longer changes, so that
+an update repeated at the same configuration, as a resumed run repeats one, pairs it the same. The master may have
+corners: at its creases -- a crest, a re-entrant root -- the gap is the distance to the crease, signed by its
+pseudonormal (:ref:`contact-corners`). A new mesh of the master keeps what the pairing learnt about the points;
+regenerated contact points are paired as at the first update. An overlap at the start within ``searchDistance`` (a
+deeper one is found inside, and reported) is either an interference fit, pushed apart at once or
+over ``initialOverlapRampTime`` (``initialOverlap=pushApart``, the default), or an error of the geometry, such as flat
+faces in a curved hole, kept as the stress-free state (``initialOverlap=adjust``; :ref:`contact-initial-overlap`).
+
+Scope: frictionless normal penalty contact under ``sliding=small``, on both the implicit and the explicit solver
 path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
-constraint has both), and ``sliding=finite`` is rejected rather than approximated. The slave
-surface must consist of a single element type.
+constraint has both), and ``sliding=finite`` is rejected rather than approximated. The master
+surface must consist of a single element type, and so must a slave surface whose contact points are its quadrature
+points.
 
 Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
 
@@ -352,7 +367,9 @@ closed surface of a :doc:`discrete rigid body </model/rigidbodies>`. The theory 
 in particular with quadratic slave faces.
 
 Scope: normal penalty contact under ``sliding=small``, 3D, implicit and explicit solver paths, live
-AMR of the slave side. The slave surface must consist of a single element type.
+AMR of the slave side. The slave surface must consist of a single element type. Its contact points are the
+quadrature points of the slave facets (``contactPoints=quadraturePoints``); for the nodes of a surface against a
+rigid body, use ``nodetodiscreterigidbodypenalty`` above.
 
 Module ``edelweissfe.constraints.surfacetodiscreterigidbodypenalty``
 
@@ -608,17 +625,22 @@ were. A solver that cannot handle a constraint, e.g. ``NEST`` a contact, refuses
 In an explicit analysis, a penalty constraint adds the stiffness it has to the squared frequencies of the degrees of
 freedom it couples, and so lowers the critical time step (``addBoundOfAbsoluteStiffnessTimes``,
 :doc:`/theory/criticaltimestep`, "Penalty constraints"): by default from its tangent, also where it evaluates its
-explicit forces without one. A constraint that has no tangent, or whose tangent is costly, gives its springs instead,
-with one formula for the bound; a worked example from the tangent is ``directionalSpringPenalty``
+explicit forces without one. A constraint that has no tangent, or whose tangent is costly, or that needs the bound over
+the next increment (``follow-critical-time-step``) while springs of it that close in different states share a degree
+of freedom within its block, gives its springs instead, with one formula for the bound and one for the smallest gaps
+within the next increment; a worked example from the tangent is ``directionalSpringPenalty``
 (``tests/test_ned_penalty_constraints.py``), from the springs EdelweissMeshfree's
 ``ParticlePenaltyCartesianBoundaryConstraintExplicit``:
 
 .. automodule:: edelweissfe.constraints.base.penaltysprings
     :members:
 
-A contact constraint takes its slave side as contact points (:ref:`contact-points`): points that move with an
-interpolation vector over the nodes they act on and stand for an area. The interface says what a constraint needs from
-them; the two kinds are the nodes of a slave surface and the quadrature points of its faces:
+The penalty contacts are assembled from two pieces of their own: the *contact points* of the slave side
+(:ref:`contact-points`) and the *law* that puts penalty springs at the paired points (:ref:`contact-law`). A contact
+constraint takes its slave side as contact points: points that move with an interpolation vector over the nodes they
+act on and stand for an area. The interface says what a constraint needs from them; the two kinds are the nodes of a
+slave surface and the quadrature points of its faces. A new kind of contact point implements
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`:
 
 .. automodule:: edelweissfe.constraints.base.contactpoints
     :members:
@@ -627,6 +649,12 @@ them; the two kinds are the nodes of a slave surface and the quadrature points o
     :members:
 
 .. automodule:: edelweissfe.constraints.base.contactpointsonslavesurface
+    :members:
+
+A new law derives from :class:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw` (its springs), a new normal
+contact law from :class:`~edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw` (its normal force and energy):
+
+.. automodule:: edelweissfe.constraints.base.penaltylaw
     :members:
 
 Multi-point (DOF-elimination) constraints subclass from

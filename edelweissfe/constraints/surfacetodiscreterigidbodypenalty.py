@@ -38,10 +38,7 @@ from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
     ForcesOnlyExplicitEvaluation,
 )
 from edelweissfe.constraints.base.frozencontactsearch import FrozenContactSearch
-from edelweissfe.constraints.base.penaltylaw import (
-    normalPenaltyForce,
-    validatedContactType,
-)
+from edelweissfe.constraints.base.penaltylaw import penaltyLaw
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
     rigidBodyContactLocalEntries,
@@ -159,7 +156,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     Forces and tangent
     ------------------
     With the normal force :math:`f_n` and :math:`\\mathrm{d}f_n/\\mathrm{d}g` from
-    :func:`~edelweissfe.constraints.base.penaltylaw.normalPenaltyForce`, evaluated for
+    :meth:`~edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw.normalForce`, evaluated for
     :math:`p\\,J_q`, each closed point exerts the force
     :math:`-f_n \\, \\partial g_q / \\partial \\boldsymbol{q}` on the nodes, so it adds the residual
     contribution and its tangent
@@ -235,7 +232,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.penalty = configuration.penalty
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
-        self.type = validatedContactType(configuration.contactType)
+        self.law = penaltyLaw(configuration.contactType)
+        if configuration.contactPoints.lower() != "quadraturepoints":
+            raise ValueError(
+                f"Constraint '{name}': surfaceToDiscreteRigidBodyPenalty takes the quadrature points of the slave "
+                f"facets as its contact points, not contactPoints={configuration.contactPoints}; for the nodes of a "
+                "surface against a rigid body, use nodeToDiscreteRigidBodyPenalty."
+            )
         if configuration.sliding.lower() != "small":
             raise ValueError(
                 f"Constraint sliding '{configuration.sliding}' is not supported by "
@@ -251,7 +254,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         self.journal.message(
             f"contact '{self.name}': {self.slave.describe()} against rigid body '{rigidBody.name}' "
-            f"({len(self._rigidTriangles)} triangles), type={self.type}",
+            f"({len(self._rigidTriangles)} triangles), type={self.law.name}",
             self.identification,
         )
 
@@ -494,8 +497,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         if not closed.any():
             return
 
-        normalForces, dNormalForce_dGap = normalPenaltyForce(
-            self.type, self.penalty * self._integrationWeights[closed], gaps[closed]
+        normalForces, dNormalForce_dGap = self.law.normalForce(
+            self.penalty * self._integrationWeights[closed], gaps[closed]
         )
         self._normalForceCurrent[closed] = normalForces
         self.totalNormalForce = float(normalForces.sum())

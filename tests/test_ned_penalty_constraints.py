@@ -222,9 +222,9 @@ def test_a_constraint_is_bounded_with_a_time_step_and_at_the_start_of_the_step_w
     timeSteps = []
     addBound = DirectionalSpringPenalty.addBoundOfAbsoluteStiffnessTimes
 
-    def recordingAddBound(self, U, dU, weights, bound, timeStep):
+    def recordingAddBound(self, U, dU, weights, bound, timeStep, nextIncrement=None):
         timeSteps.append(timeStep)
-        addBound(self, U, dU, weights, bound, timeStep)
+        addBound(self, U, dU, weights, bound, timeStep, nextIncrement)
 
     monkeypatch.setattr(DirectionalSpringPenalty, "addBoundOfAbsoluteStiffnessTimes", recordingAddBound)
     masses, ground = (2.0,), 50.0

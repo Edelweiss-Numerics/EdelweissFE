@@ -39,6 +39,7 @@ from edelweissfe.numerics.systemmatrixcontributor import (
     SystemMatrixContributorBase,
     countEntriesOfBlock,
 )
+from edelweissfe.solvers.base.criticaltimestep import NextIncrement
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.schema import OptionSchemaProvider
@@ -360,6 +361,7 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         weights: np.ndarray,
         bound: np.ndarray,
         timeStep: TimeStep,
+        nextIncrement: NextIncrement | None = None,
     ):
         """Add an upper bound of the row sums of the absolute value of this constraint's stiffness, weighted by column,
         :math:`b_i \\mathrel{+}= \\sum_j |K_{ij}|\\, w_j`, at the state given; for a stiffness that is not symmetric, of
@@ -369,6 +371,10 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         ``NED`` takes the weights :math:`w_j = 1/\\sqrt{M_j}` and scales the rows by :math:`1/\\sqrt{M_i}`. It calls
         this right after the constraint's force, with the same arguments, so that the state :meth:`computeKernels`
         writes for the next increment is written again as the force wrote it.
+
+        Given ``nextIncrement``, the bound holds over every state the next increment can reach
+        (:class:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement`), the state given among them: an explicit
+        solver that sets the time increment before the increment has evaluated its force needs it so.
 
         This default bounds the tangent :meth:`computeKernels` gives at the state, in the scratch
         :meth:`computeKernelsExplicit` uses: the stiffness itself, not a decomposition of it. Two arguments use the
@@ -381,7 +387,19 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         that tangent, whether it evaluates them with the tangent or without it
         (:class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`). A
         constraint whose :meth:`computeKernels` gives no tangent must override it; one that has its stiffness in a
-        cheaper form may.
+        cheaper form may. The tangent is evaluated anew here, although ``NED`` asks right after the force, which the
+        default :meth:`computeKernelsExplicit` evaluates with the same scratch: the bound is also taken where no force
+        precedes it, at the start of a step and after a refinement, and reusing the force's scratch would need a flag
+        that says whether it holds the tangent of the state given -- a second path.
+
+        Over the next increment, this default takes the largest absolute value of each entry of the tangent in the
+        corners of the states the increment can reach
+        (:meth:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement.statesWithin`), the state given last, and
+        bounds that as above. It bounds every state the increment can reach where each entry of the block is a
+        monotone function of one quantity affine in the solution and the time, which is largest at a corner. Where an
+        entry sums terms that grow with different such quantities, they may be largest together at a state that no
+        corner is, and the largest value of the entry at the corners misses their sum: a constraint whose stiffness is
+        such a sum, and that needs the bound over the next increment, overrides this.
 
         Parameters
         ----------
@@ -396,11 +414,16 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         timeStep
             The time step of the state: the increment that ended at it, or one of zero length where the state ends
             none, e.g. at the start of a step.
+        nextIncrement
+            The next increment, restricted to this constraint's degrees of freedom; None for the state given alone.
         """
 
-        scratch = self._zeroedTangentScratch()
-        self.computeKernels(U_np, dU, np.zeros(self.nDof), self.shapeBlock(scratch), timeStep)
-        absoluteStiffness = np.abs(scratch)
+        # In the states the next increment can reach first, so that the constraint is evaluated last at the state given.
+        statesWithin = [] if nextIncrement is None else nextIncrement.statesWithin(U_np, dU, timeStep)[1:]
+        absoluteStiffnessWithin = [self._absoluteTangentAt(*state) for state in statesWithin]
+        absoluteStiffness = self._absoluteTangentAt(U_np, dU, timeStep)
+        for withinTheIncrement in absoluteStiffnessWithin:
+            absoluteStiffness = np.maximum(absoluteStiffness, withinTheIncrement)
 
         # The rows of |K| and of |K|^T; in each row the larger of |K|'s and of their mean.
         if self.couplesAllItsDofs:
@@ -416,6 +439,29 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
             np.add.at(rowsOfK, rows, absoluteStiffness * weights[columns])
             np.add.at(rowsOfKTransposed, columns, absoluteStiffness * weights[rows])
         bound += np.maximum(rowsOfK, 0.5 * (rowsOfK + rowsOfKTransposed))
+
+    def _absoluteTangentAt(self, U_np: np.ndarray, dU: np.ndarray, timeStep: TimeStep) -> np.ndarray:
+        """The absolute value of the entries of the tangent :meth:`computeKernels` gives at a state, in the order of the
+        scratch (:meth:`_zeroedTangentScratch`).
+
+        Parameters
+        ----------
+        U_np
+            The solution, restricted to this constraint's degrees of freedom.
+        dU
+            The solution increment, likewise restricted.
+        timeStep
+            The time step of the state.
+
+        Returns
+        -------
+        numpy.ndarray
+            The absolute values of the entries, one per entry of the block.
+        """
+
+        scratch = self._zeroedTangentScratch()
+        self.computeKernels(U_np, dU, np.zeros(self.nDof), self.shapeBlock(scratch), timeStep)
+        return np.abs(scratch)
 
     def _zeroedTangentScratch(self) -> np.ndarray:
         """The scratch of the tangent (:attr:`_tangentScratch`), zeroed: sized once per discrete system, and re-zeroed

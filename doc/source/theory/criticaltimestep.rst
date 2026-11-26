@@ -216,13 +216,13 @@ and above it otherwise, and a direction oblique to the axes spreads the spring o
 the larger of the row sums of :math:`|\boldsymbol{K}^\mathrm{c}|`, which the particles' argument needs, and of
 :math:`\tfrac{1}{2}(|\boldsymbol{K}^\mathrm{c}| + |\boldsymbol{K}^\mathrm{c}|^T)`, which the elements' argument needs
 for an unsymmetric tangent; for a symmetric tangent, the two are equal. A constraint whose tangent is costly, or that
-has none -- one evaluated without a tangent in an explicit analysis --, gives its stiffness as springs instead: a spring
-:math:`p` with the vector :math:`\boldsymbol{a}_p` with which it acts and the stiffness :math:`k_p` of its law -- the
-normal spring of a closed point, a support's spring along the axis it holds. The row sums are then, with the weights
-:math:`\boldsymbol{w}` of the columns, :math:`b_i \mathrel{+}= \sum_p |k_p|\, |a_{p,i}|\, (|\boldsymbol{a}_p| \cdot
-\boldsymbol{w})` (:mod:`edelweissfe.constraints.base.penaltysprings`), one formula for every such constraint, and the
-constraint takes the springs for its bound from the same code it takes them for its force, so that a change of the force
-cannot leave the bound behind.
+has none -- one evaluated without a tangent in an explicit analysis, such as ``surfaceToDeformableSurfacePenalty`` --,
+gives its stiffness as springs instead: a spring :math:`p` with the vector :math:`\boldsymbol{a}_p` with which it acts
+and the stiffness :math:`k_p` of its law -- the normal spring of a closed point, a support's spring along the axis it
+holds. The row sums are then, with the weights :math:`\boldsymbol{w}` of the columns, :math:`b_i \mathrel{+}= \sum_p
+|k_p|\, |a_{p,i}|\, (|\boldsymbol{a}_p| \cdot \boldsymbol{w})` (:mod:`edelweissfe.constraints.base.penaltysprings`),
+one formula for every such constraint, and the constraint takes the springs for its bound from the same code it takes
+them for its force, so that a change of the force cannot leave the bound behind.
 
 **At which state.** The central difference method integrates in each increment the net force evaluated at the end of
 the increment before, :math:`\boldsymbol{v}_{n+1/2} = \boldsymbol{v}_{n-1/2} + \tfrac{1}{2}(\Delta t_n + \Delta
@@ -242,6 +242,72 @@ increment is set at the refinement; with the constraints as last bounded, on the
 would be half an increment late in the same way. So ``NED`` bounds the constraints also right after a refinement, at
 the state on the new mesh, as at the start of a step, and both increments are taken with the masses of the new mesh.
 
+**Over the next increment.** Lowered only, a time increment that met a stiff state once keeps its margin for the rest of
+the step, and stiffness that is new in a force is half an increment late within that margin (below). With
+``follow-critical-time-step``, the time increment is raised as soon as the critical time step allows it -- when a
+contact has opened, for one --, and a point that closes would meet the full raised increment. So the constraints are
+then bounded, right after the bound at the state, over the states the next increment can reach as well
+(:class:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement`), and the critical time step is the smaller of the
+two: :math:`\Delta t_{n+1}` is then within the critical time step of both forces it is averaged in,
+:math:`\boldsymbol{f}_n` and :math:`\boldsymbol{f}_{n+1}`, and nothing is half an increment late, as far as the
+bound over the states holds. The leapfrog takes the next increment, of length :math:`s`, as
+
+.. math::
+
+   \Delta \boldsymbol{u}(s) = s\, \dot{\boldsymbol{u}}
+   + \tfrac{1}{2} s (\Delta t_\mathrm{last} + s)\, \ddot{\boldsymbol{u}}
+   = \alpha\, \Delta\boldsymbol{u}_v + \beta\, \Delta\boldsymbol{u}_a ,
+   \qquad \alpha, \beta \in [0, 1] ,
+
+with the velocity :math:`\dot{\boldsymbol{u}}` of the last increment, its length, and the acceleration
+:math:`\ddot{\boldsymbol{u}}` at its end; :math:`\Delta\boldsymbol{u}_v` and :math:`\Delta\boldsymbol{u}_a` are the
+two parts at :math:`\Delta t_\mathrm{max}`, the largest time increment the critical time step with the constraints at
+the state allows -- ``courant-number`` times it --, at most ``maxInc``: the bound over the increment can only lower it,
+so the increment then taken is within the states bounded. Every state the increment can reach lies in the parallelogram
+spanned by the two parts. With the pairing and the normals held, as within an increment, the gap of a contact point is
+affine in the displacements, and its smallest value within the increment is at a corner of the parallelogram,
+
+.. math::
+
+   g + \min(0, \Delta g_v) + \min(0, \Delta g_a) ,
+
+with the changes :math:`\Delta g_v, \Delta g_a` of the gap by the two parts. A contact that bounds its springs gives
+them this smallest gap (:func:`~edelweissfe.constraints.base.penaltysprings.smallestGapsWithin`), and sums over its
+springs: a point that could close within the next increment has its spring in the estimate before it closes, and a law
+whose stiffness grows with the depth is stiffest there. A constraint bounded from its tangent is evaluated in the four
+corners and takes the largest absolute value of each entry of its block
+(:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). That is a
+bound where each spring that can switch acts on degrees of freedom of its own in the constraint's block: each spring is
+closed deepest at a corner of its own, and the solver adds the row sums of the block to the rows of the model only
+afterwards, where the springs that meet at a node are summed. The contacts with a deformable master are of that kind:
+``nodeToDeformableSurfacePenalty`` gives each slave node, and ``surfaceToDeformableSurfacePenalty`` each contact point,
+a copy of its own of the nodes it couples -- of its master facet, and of its slave face -- in the block. Where springs
+that close at different corners share a degree of freedom within the block, the entry misses their sum: at the
+reference point of a rigid body, on which every spring of a contact with a discrete rigid body acts, and, in
+``surfaceToDiscreteRigidBodyPenalty``, at the nodes of a slave facet, which its contact points share. A constraint that
+needs the bound over the next increment there gives its springs; the node-to-surface contact and the contacts with a
+discrete rigid body are bounded from their tangent, and ``surfaceToDeformableSurfacePenalty`` gives its springs, from
+the same code as its force.
+
+Taking the velocity alone would not do: near the critical time step of the open state, the acceleration can turn a
+receding point around within one increment. The prediction is exact for the leapfrog without damping; damping only
+slows a point down. After a refinement, whose net force starts at zero
+(:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering`), the first increment is bounded by the
+velocity part alone -- the acceleration then holds the damping only --; the forces enter from the next increment on.
+
+The pairing that the next increment evaluates its force with must be the one bounded. A periodic contact search
+therefore runs before the time increment of the increment it is due for is set, after the force the increment
+integrates was evaluated (:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement`), and, followed,
+the constraints are bounded over the next increment once more, on the new pairing; the bound at the state, of the
+pairing that force was evaluated with, is kept, and the smaller critical time step of the two holds. A search run
+inside the increment, after the motion and before the force, would pair the points where the force is evaluated, but
+after the time increment was set: the new pairing would again be half an increment late.
+
+Raising and lowering the increment is not free: each change of the increment changes the energy the central difference
+holds in a mode by a fraction of the order of :math:`(\omega \Delta t)^2`, small for the motion that carries the
+energy, which lies far below the highest frequencies of a mesh, but not for a mode near the critical time step that
+carries much of it; the energy balance remains the check.
+
 What the estimate does not see
 ------------------------------
 
@@ -256,13 +322,20 @@ The parts' estimates cover the stiffness of the parts themselves, and the penalt
   oscillation of the new stiffness is integrated with too large a time increment, and grows once, by a factor of the
   order of :math:`\Delta t_n / \Delta t_{n+1}`, the ratio of the time increments before and after the new stiffness.
   Lowered only, the time increment is never raised again within the step, so every later increment is within the limit
-  of that stiffness, and the growth does not compound: this is not an instability. Why it is accepted: avoiding it would
-  need the stiffness of a force before the force is evaluated, a bound over the states the next increment can reach. The
-  energy balance of ``NED`` (the kinetic energy may not exceed the energy at the start of the step plus the external
-  work) remains the check. A stiffness that lowers the time increment by more than the margin of the
-  ``courant-number`` in one increment -- a penalty law whose stiffness grows with the penetration -- exceeds the limit
-  in that increment. With ``follow-critical-time-step``, the time increment is raised again as soon as a contact
-  has opened, and the next point that closes meets the full raised increment: there, take a lower ``courant-number``.
+  of that stiffness, and the growth does not compound: this is not an instability. Why it is accepted: avoiding it
+  needs the stiffness of a force before the force is evaluated, a bound over the states the next increment can reach,
+  which costs up to four evaluations of the tangent of a constraint per increment; lowered only, the energy balance of
+  ``NED`` (the kinetic energy may not exceed the energy at the start of the step plus the external work) remains the
+  check. A stiffness that lowers the time increment by more than the margin of the ``courant-number`` in one increment
+  -- a penalty law whose stiffness grows with the penetration -- exceeds the limit in that increment. With
+  ``follow-critical-time-step``, the time increment is raised again as soon as a contact has opened, and the
+  constraints are bounded over the next increment as well ("Over the next increment"): the stiffness of the next force
+  is then in the time increment before that force is evaluated, as far as the bound over the states holds (next item).
+* **With follow-critical-time-step, a constraint bounded from its tangent whose springs that close at different corners
+  of the next increment share a degree of freedom within its block** -- a contact with a discrete rigid body, at its
+  reference point, and ``surfaceToDiscreteRigidBodyPenalty`` at the nodes of a slave facet as well: over the next
+  increment, it is seen only as far as one corner closes its springs together ("Over the next increment"); beyond
+  that, it is half an increment late as above.
 * **The skew part of an unsymmetric tangent** (a frictional contact while it slips): it does no work in
   :math:`\boldsymbol{x}^T\boldsymbol{K}\boldsymbol{x}` and is outside the argument above. Where it makes an eigenvalue
   of :math:`\boldsymbol{M}^{-1}\boldsymbol{K}` complex, the central difference method grows at every time increment,
@@ -280,8 +353,8 @@ The parts' estimates cover the stiffness of the parts themselves, and the penalt
   which is not proven (see "The particles").
 * **A penalty on a field integrated by forward Euler** (a field with a damping and no inertia): its rows are added to
   no estimate.
-* **A constraint that bounds nothing**: EdelweissMeshfree's ``ParticlePenaltyFacetContactExplicit`` gives neither a
-  tangent nor its springs; its stiffness stays outside the estimate.
+* **A constraint that bounds nothing**: one that gives neither a tangent nor its springs, and says so; its stiffness
+  stays outside the estimate.
 * **The tangent of a rate-dependent material.** The stiffness the particles are estimated with is that of a zero
   increment over a unit time; for a material with a viscosity, e.g. Duvaut-Lions, it is relaxed over that time, softer
   than the response within an explicit increment, and the estimate may be too large.
@@ -363,8 +436,10 @@ nodes leaves is smaller than their own.
 the state of the contact -- which points are closed, and how deep, for a law whose stiffness grows with the
 penetration --, and changes from increment to increment; their row sums cost about as much as their force. So they are
 formed right after the net force, at the state it was evaluated at (see "At which state"): at the start of a step,
-after every increment, and after a refinement, at the state on the new mesh. They are added to the parts' last
-estimates; only this addition is renewed, and the parts keep their own policies.
+after every increment, and after a refinement, at the state on the new mesh; with ``follow-critical-time-step``, each
+time also over the next increment, and once more after a contact search, on the new pairing (see "Over the next
+increment"). They are added to the parts' last estimates; only this addition is renewed, and the parts keep their own
+policies.
 
 The code
 --------

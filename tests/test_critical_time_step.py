@@ -45,6 +45,7 @@ from edelweissfe.solvers.base.criticaltimestep import (
     CriticalTimeStepOfEntitiesWithOwnInertia,
     CriticalTimeStepOfTheElements,
     CriticalTimeStepWithThePenaltyConstraints,
+    NextIncrement,
 )
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.residualtangentcheck import residualContributionAndTangent
@@ -507,6 +508,53 @@ def test_the_default_bound_of_an_unsymmetric_tangent_bounds_its_symmetric_part(t
     assert np.all(bound >= rowsOfTheSymmetricPart * (1 - 1e-14))
     assert np.all(bound >= rowsOfK * (1 - 1e-14))
     np.testing.assert_allclose(bound, np.maximum(rowsOfK, 0.5 * (rowsOfK + np.abs(K).T @ weights)), rtol=1e-14)
+
+
+def test_the_default_bound_over_the_next_increment_takes_the_largest_entries_of_the_corners_the_state_given_last(
+    tmp_path, monkeypatch
+):
+    """Over the next increment, the default bound takes the largest absolute value of each entry of the tangent in the
+    four corners of the states the increment can reach (:meth:`NextIncrement.statesWithin`), and bounds that as at a
+    state: in every row the larger of the rows of :math:`|K|` and of their mean with :math:`|K|^T`, so that it bounds
+    both in every corner. The constraint is evaluated last at the state given, so that the state its tangent writes for
+    the next increment -- here the trial state of a frictional contact -- is the one of its force."""
+
+    constraint, U = _nodeToDeformableSurfaceCase(
+        tmp_path, _TWO_PLANE_BLOCKS, 2, "type=linear, sliding=small, mu=0.3, tangentPenalty=1e3", 5e-2
+    )
+    timeStep = TimeStep(1, 1.0, 1.0, 1.0, 1.0, 1.0)
+    rng = np.random.default_rng(5)
+    nextIncrement = NextIncrement(
+        rng.normal(scale=0.05, size=constraint.nDof),
+        rng.normal(scale=0.05, size=constraint.nDof),
+        TimeStep(2, 1.0, 2.0, 1.0, 2.0, 2.0),
+    )
+    corners = nextIncrement.statesWithin(U, U, timeStep)
+    absoluteTangents = [np.abs(residualContributionAndTangent(constraint, *corner)[1]) for corner in corners]
+    largest = np.max(absoluteTangents, axis=0)
+    assert all(np.any(largest > absoluteTangent) for absoluteTangent in absoluteTangents), "a corner holds them all"
+
+    evaluatedAt = []
+    computeKernels = type(constraint).computeKernels
+
+    def recordingComputeKernels(self, U_np, dU, P, K, timeStep):
+        evaluatedAt.append((U_np, timeStep))
+        computeKernels(self, U_np, dU, P, K, timeStep)
+
+    monkeypatch.setattr(type(constraint), "computeKernels", recordingComputeKernels)
+    weights = rng.uniform(0.5, 2.0, constraint.nDof)
+    bound = np.zeros(constraint.nDof)
+    constraint.addBoundOfAbsoluteStiffnessTimes(U, U, weights, bound, timeStep, nextIncrement)
+
+    rowsOfK = largest @ weights
+    np.testing.assert_allclose(bound, np.maximum(rowsOfK, 0.5 * (rowsOfK + largest.T @ weights)), rtol=1e-14)
+    for absoluteTangent in absoluteTangents:
+        rowsInTheCorner = absoluteTangent @ weights
+        rowsOfTheMean = 0.5 * (rowsInTheCorner + absoluteTangent.T @ weights)
+        assert np.all(bound >= np.maximum(rowsInTheCorner, rowsOfTheMean) * (1 - 1e-14))
+    assert len(evaluatedAt) == 4
+    lastU, lastTimeStep = evaluatedAt[-1]
+    assert lastU is U and lastTimeStep is timeStep
 
 
 def test_the_entities_with_the_penalty_constraints_are_estimated_anew_when_their_combined_margin_may_be_used_up():

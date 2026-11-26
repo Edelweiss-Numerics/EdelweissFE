@@ -282,7 +282,7 @@ def test_the_entries_of_a_rigid_body():
 
 def test_the_entries_of_a_surface_to_deformable_surface_contact():
     """Two active contact points, on two and on three degrees of freedom: one dense block each, row by row."""
-    contact = SimpleNamespace(_activeBlockSizes=lambda: [2, 3])
+    contact = SimpleNamespace(_dofsOfLocatedPoints=lambda: [np.arange(2), np.arange(2, 5)])
     localRows, localColumns = SurfaceToDeformableSurfacePenalty.localEntriesOfBlock(contact)
     expected = np.array([(a, b) for a in (0, 1) for b in (0, 1)] + [(a, b) for a in (2, 3, 4) for b in (2, 3, 4)])
     np.testing.assert_array_equal(localRows, expected[:, 0])
@@ -290,7 +290,7 @@ def test_the_entries_of_a_surface_to_deformable_surface_contact():
 
 
 def test_a_contact_without_active_points_has_no_entries():
-    contact = SimpleNamespace(_activeBlockSizes=lambda: [])
+    contact = SimpleNamespace(_dofsOfLocatedPoints=lambda: [])
     localRows, localColumns = SurfaceToDeformableSurfacePenalty.localEntriesOfBlock(contact)
     assert localRows.shape == (0,) and localColumns.shape == (0,)
 
