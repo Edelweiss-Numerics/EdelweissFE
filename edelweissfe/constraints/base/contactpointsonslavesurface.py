@@ -38,7 +38,7 @@ distributed with the *parent* face's shape functions.
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from edelweissfe.constraints.base.contactpoints import ContactPoints
+from edelweissfe.constraints.base.contactpoints import ContactPoints, outOfPlaneExtentAt
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.modelchange import ModelChange
 from edelweissfe.sets.elementset import ElementSet
@@ -97,7 +97,10 @@ class ContactPointsOnSlaveSurface(ContactPoints):
     (with :math:`\\Xi` the facet vertices' own parametric coordinates in the parent face, stamped by
     the surface element generator), and carries the constant weight
     :math:`J_q = A_{\\text{facet}}^{\\text{ref}} w_q`. Its position follows the *curved* parent
-    surface, :math:`x_q = N^s(\\xi_q) \\cdot x^s`.
+    surface, :math:`x_q = N^s(\\xi_q) \\cdot x^s`. The area it stands for is :math:`J_q` times the out-of-plane
+    extent of the body at its origin (:func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`),
+    measured from the model when the points are made: times the thickness of the section of its facet's element in a
+    plane model, :math:`2 \\pi r_q J_q`, the area of its ring, in an axisymmetric model.
 
     The contact points are numbered by slave facet and, within a facet, by quadrature point. The faces of the slave
     surface must be of one type (one number of parent face nodes), so that the located points are evaluated as one
@@ -111,6 +114,8 @@ class ContactPointsOnSlaveSurface(ContactPoints):
         The element set of contact facet elements forming the slave surface.
     nQuadraturePoints
         The number of quadrature points per slave facet.
+    model
+        The model, whose elements the areas are measured as.
     constraintName
         The name of the owning constraint, for error messages.
 
@@ -128,16 +133,17 @@ class ContactPointsOnSlaveSurface(ContactPoints):
     integrationWeights : list[numpy.ndarray]
         Per slave facet, the integration weight of each of its quadrature points in the reference
         configuration (consistent with the small-deformation setting, as the node-based
-        constraint's tributary areas are).
+        constraint's tributary areas are), in the model's own space: a length in 2D.
     pointFacet : numpy.ndarray
         The slave facet index of each contact point.
     pointQuadraturePoint : numpy.ndarray
         The quadrature point index of each contact point within its facet.
     areas : numpy.ndarray
-        The integration weight of each contact point, see :attr:`integrationWeights`.
+        The area each contact point stands for: its integration weight (:attr:`integrationWeights`) times the
+        out-of-plane extent of the body at its origin.
     """
 
-    def __init__(self, slaveSurface: ElementSet, nQuadraturePoints: int, constraintName: str):
+    def __init__(self, slaveSurface: ElementSet, nQuadraturePoints: int, model: FEModel, constraintName: str):
         self.setName = slaveSurface.name
         self._constraintName = constraintName
         self.nQuadraturePoints = nQuadraturePoints
@@ -167,8 +173,6 @@ class ContactPointsOnSlaveSurface(ContactPoints):
 
         self._surfaceNodes = list(dict.fromkeys(node for facet in self.facets for node in facet.nodes))
 
-        self.areas = np.concatenate(self.integrationWeights) if self.nPoints else np.zeros(0)
-
         nodeCounts = {len(nodes) for nodes in self.parentNodes}
         if len(nodeCounts) > 1:
             raise ValueError(
@@ -178,6 +182,12 @@ class ContactPointsOnSlaveSurface(ContactPoints):
             )
         self.nDim = self.parentReferenceCoordinates[0].shape[1] if self.facets else 0
         self.nParentNodes = nodeCounts.pop() if nodeCounts else 0
+
+        self.areas = (np.concatenate(self.integrationWeights) if self.nPoints else np.zeros(0)) * outOfPlaneExtentAt(
+            self.referenceCoordinates(), [self.facets[f].parentElement for f in self.pointFacet], model
+        )
+        self.axisymmetric = model.axisymmetric
+
         self.locatePoints(np.zeros(0, dtype=int))
 
     @property
@@ -303,7 +313,7 @@ class ContactPointsOnSlaveSurface(ContactPoints):
         """
 
         return ContactPointsOnSlaveSurface(
-            model.elementSets[self.setName], self.nQuadraturePoints, self._constraintName
+            model.elementSets[self.setName], self.nQuadraturePoints, model, self._constraintName
         )
 
     def referenceCoordinates(self) -> np.ndarray:

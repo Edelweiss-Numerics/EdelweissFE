@@ -60,7 +60,19 @@
 
     job    definition of an analysis job
         domain                string              define spatial domain: 1d, 2d,
-                                                  3d
+                                                  3d, or axisymmetric (2d: the
+                                                  section r-z of a body of
+                                                  revolution, r the first
+                                                  coordinate; what the model
+                                                  integrates is integrated over
+                                                  the rings about the axis). The
+                                                  elements must match:
+                                                  axisymmetric ones (CAX*,
+                                                  GCAX*, CX8UL, CX8RUL) in an
+                                                  axisymmetric job, plane ones
+                                                  in a 2d job; nothing checks
+                                                  it, and contact is off by the
+                                                  factor 2 pi r / t otherwise
         startTime             float               (optional) start time of job
         name                  string              Name of job.
         solver                string              (deprecated) define the solver

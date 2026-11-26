@@ -53,6 +53,34 @@ displacements in every evaluation, rather than the difference of the coordinates
 coordinates (see :class:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty.Constraint`, *Measured from the
 origins*).
 
+Every contact point stands for an area :math:`A_p`, its share of the surface of the body: the penalty per unit area
+times it is the stiffness of its spring. The area is the one the elements integrate over. They integrate over the body
+with :math:`\\mathrm{d}V = b\\, \\mathrm{d}A`, with the out-of-plane extent :math:`b` of the body at a point
+(:func:`outOfPlaneExtentAt`): :math:`b = 1` in a 3D model, the thickness :math:`t` of the plane section in a **plane
+model**, the circumference :math:`2 \\pi r` at the radius :math:`r` in an **axisymmetric model**, the section r-z of
+a body of revolution. So the surface of the body is :math:`\\mathrm{d}S = b\\, \\mathrm{d}L`, and a contact point
+stands for its measure :math:`L_p` in the model's own space -- an area in 3D, a length in 2D: its quadrature weight
+times the Jacobian of its face, or the tributary measure of a node -- times :math:`b` at the point,
+
+.. math::
+    A_p = b(\\boldsymbol{X}_p) \\, L_p .
+
+A node sums this over its faces, :math:`A_s = \\sum_f b_f(\\boldsymbol{X}_s)\\, s_{s,f}` with its shares
+:math:`s_{s,f}` of their measures: a node between faces of two thicknesses stands for its share of the area of each.
+The springs then act on the same body as the elements -- in an axisymmetric model on the full rings -- and the two
+balance at the nodes. A point on the axis of an axisymmetric model stands for a ring of radius 0, no area: the axis is
+a line, not a surface of the body. The pressure and the traction of a point are its force per :math:`A_p`, the area in
+the reference configuration: the nominal pressure, not per radian, not per unit thickness. The axial forces of the
+points of an axisymmetric model add up to the total axial force; the radial forces of a ring cancel about the axis, so
+a sum of radial components is no resultant.
+
+Every kind of point measures its areas when its points are made. The two kinds of finite element points take the model
+and measure with :func:`outOfPlaneExtentAt`. A kind of point of another library measures them as its own bodies
+integrate -- in an axisymmetric model with :func:`circumferenceAt`, the same rule of the axis --, and says with
+:attr:`ContactPoints.axisymmetric` whether it was made for an axisymmetric model; a constraint refuses points made for a
+model of another kind (:func:`refusePointsMadeForAnotherKindOfModel`). Whether the bodies of such a kind are slices of
+the same thickness as the finite elements they meet in a plane model is not checked: that is for the model to ensure.
+
 :class:`ContactPoints` is what a constraint needs from its contact points; a constraint written against it -- the
 pairing with the master, the gap, the law -- is written once for every kind of point. Two kinds are here: the nodes of
 a slave surface (:mod:`~edelweissfe.constraints.base.contactpointsatslavenodes`) and the quadrature points of its faces
@@ -62,12 +90,154 @@ a slave surface (:mod:`~edelweissfe.constraints.base.contactpointsatslavenodes`)
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 import numpy as np
 from scipy.sparse import csr_matrix
 
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.modelchange import ModelChange
+
+#: How far below the axis of an axisymmetric model a point may lie, relative to the size :math:`h` of its element, and
+#: still be on the axis: :math:`r \\geq -\\epsilon\\, h` is the round-off of a mesher and counts as :math:`r = 0`,
+#: :math:`r < -\\epsilon\\, h` is a mesh drawn across the axis and is refused. It is the rule of Marmot's axisymmetric
+#: elements for their nodes (``Spatial2D::Axisymmetric::axisTolerance``, with :math:`h` the diagonal of the bounding box
+#: of the element), so that a contact point accepts the nodes its element accepts.
+axisTolerance = 1e-12
+
+
+def outOfPlaneExtentAt(coordinates: np.ndarray, elements: list, model: FEModel) -> np.ndarray:
+    """The out-of-plane extent :math:`b` of the body at points on the boundaries of elements: the factor of
+    :math:`\\mathrm{d}V = b\\, \\mathrm{d}A` the elements integrate with, and so the factor of the area of a contact
+    point, :math:`A_p = b(\\boldsymbol{X}_p)\\, L_p` (see the module documentation):
+
+    ========================  =================================================  ======================
+    model                     the elements integrate                             :math:`b`
+    ========================  =================================================  ======================
+    3D                        over the volume                                    1
+    plane                     over the slice of the thickness of their section   :math:`t`
+    axisymmetric              over the rings about the axis                      :math:`2 \\pi r`
+    ========================  =================================================  ======================
+
+    In a plane model, :math:`t` is the thickness of the section of the element
+    (:meth:`~edelweissfe.models.femodel.FEModel.thicknessOf`). In an axisymmetric model, :math:`b` is the
+    circumference at the radius of the point (:func:`circumferenceAt`), with the size of the element for the round-off
+    of the axis.
+
+    Parameters
+    ----------
+    coordinates
+        The points, (nPoints, nDim), in the reference configuration.
+    elements
+        For each point, the element on whose boundary it lies (the parent element of its contact facet): its section
+        gives the thickness in a plane model, its size the round-off of the axis in an axisymmetric model.
+    model
+        The model.
+
+    Returns
+    -------
+    numpy.ndarray
+        :math:`b` at each point.
+
+    Raises
+    ------
+    ValueError
+        If a point of a 2D model lies on no element (a contact facet not made by the surface element generator), or a
+        point of an axisymmetric model lies below the axis by more than the round-off.
+    """
+
+    if model.domainSize != 2 or not len(elements):
+        return np.ones(len(elements))
+    if any(element is None for element in elements):
+        raise ValueError(
+            "A contact point of a 2D model lies on a contact facet that knows no element (one not made by the surface "
+            "element generator); the element tells the thickness, or the round-off of the axis."
+        )
+
+    if not model.axisymmetric:
+        thicknessOf = {element: model.thicknessOf(element) for element in dict.fromkeys(elements)}
+        return np.array([thicknessOf[element] for element in elements], dtype=float)
+
+    sizeOf = {element: _sizeOf(element) for element in dict.fromkeys(elements)}
+    return circumferenceAt(
+        coordinates[:, 0],
+        np.array([sizeOf[element] for element in elements]),
+        lambda p: f"element {elements[p].elNumber}",
+    )
+
+
+def circumferenceAt(radii: np.ndarray, sizes: np.ndarray, bodyOf: Callable[[int], str]) -> np.ndarray:
+    """The circumference :math:`2 \\pi r` of the ring about the axis of an axisymmetric model at each point: the
+    out-of-plane extent :math:`b` of an axisymmetric body (:func:`outOfPlaneExtentAt`). The round-off of the axis
+    scales with the size :math:`h` of the body a point lies on: :math:`r \\geq -\\epsilon\\, h` is on the axis,
+    :math:`b = 0`, and a point further below is refused (:data:`axisTolerance`). Every kind of contact point of an
+    axisymmetric model takes :math:`b` from here: the kinds of finite elements through :func:`outOfPlaneExtentAt`,
+    with the sizes of their elements, a kind of another library with the sizes of its own bodies.
+
+    Parameters
+    ----------
+    radii
+        The radius :math:`r` of each point, its first coordinate in the reference configuration, (nPoints,).
+    sizes
+        The size :math:`h` of the body each point lies on, the diagonal of the bounding box of its nodes or vertices,
+        (nPoints,).
+    bodyOf
+        What point ``p`` lies on, for the message of a refusal: ``bodyOf(p)`` reads, for example, ``"element 7"``.
+
+    Returns
+    -------
+    numpy.ndarray
+        :math:`2 \\pi r` at each point, 0 on the axis.
+
+    Raises
+    ------
+    ValueError
+        If a point lies below the axis by more than the round-off.
+    """
+
+    belowTheAxis = radii < -axisTolerance * sizes
+    if belowTheAxis.any():
+        p = np.flatnonzero(belowTheAxis)[0]
+        raise ValueError(
+            f"A contact point of an axisymmetric model lies at the radius r = {radii[p]:.3e} < 0, on {bodyOf(p)}; the "
+            "section r-z of a body of revolution lies in r >= 0."
+        )
+    return 2.0 * np.pi * np.maximum(radii, 0.0)
+
+
+def _sizeOf(element) -> float:
+    """The size of an element: the diagonal of the bounding box of its nodes, as Marmot's axisymmetric elements measure
+    it for :data:`axisTolerance`."""
+
+    coordinates = np.array([node.coordinates for node in element.nodes])
+    return float(np.linalg.norm(coordinates.max(axis=0) - coordinates.min(axis=0)))
+
+
+def refusePointsMadeForAnotherKindOfModel(contactPoints: "ContactPoints", model: FEModel, constraintName: str):
+    """Refuse contact points made for a model of another kind than the constraint's: their areas would be those of
+    rings in a plane model, or of slices in an axisymmetric one (:attr:`ContactPoints.axisymmetric`).
+
+    Parameters
+    ----------
+    contactPoints
+        The contact points the constraint takes.
+    model
+        The model of the constraint.
+    constraintName
+        The name of the constraint, for the error message.
+
+    Raises
+    ------
+    ValueError
+        If the points were made for a model of another kind.
+    """
+
+    if contactPoints.axisymmetric != model.axisymmetric:
+        kind = "axisymmetric" if model.axisymmetric else "not axisymmetric"
+        raise ValueError(
+            f"Constraint '{constraintName}': its model is {kind}, but the contact points were made with "
+            f"axisymmetric={contactPoints.axisymmetric}; their areas are those of another body."
+        )
 
 
 class ContactPoints(ABC):
@@ -88,12 +258,18 @@ class ContactPoints(ABC):
     nPoints : int
         The number of contact points.
     areas : numpy.ndarray
-        The area each contact point stands for, in the reference configuration; the penalty modulus per unit area times
-        this area is the stiffness of the point's spring.
+        The area each contact point stands for, in the reference configuration, measured when the points are made: its
+        measure times the out-of-plane extent of the body at it (:func:`outOfPlaneExtentAt`); the penalty modulus per
+        unit area times this area is the stiffness of the point's spring.
     """
 
     nPoints: int
     areas: np.ndarray
+
+    #: True if the points were made for an axisymmetric model, the section r-z of a body of revolution, where each
+    #: stands for the ring it sweeps about the axis; a constraint refuses points made for a model of another kind
+    #: (:func:`refusePointsMadeForAnotherKindOfModel`).
+    axisymmetric: bool = False
 
     #: Whether the points can be located only once the model has connected the entities they belong to, at an update
     #: of the connectivity: points whose nodes follow from where they are (the kernel functions of updated-Lagrangian
@@ -290,7 +466,8 @@ class ContactPoints(ABC):
         raise NotImplementedError(f"{type(self).__name__} is never touched by a change of the mesh.")
 
     def normalPressures(self, normalForces: np.ndarray) -> np.ndarray:
-        """Convert the normal forces of the contact points into pressures (positive in compression).
+        """Convert the normal forces of the contact points into pressures (positive in compression), per the areas of
+        the points (:meth:`perArea`).
 
         Parameters
         ----------
@@ -303,7 +480,25 @@ class ContactPoints(ABC):
             The normal pressure of each contact point.
         """
 
-        return np.divide(-normalForces, self.areas, out=np.zeros_like(normalForces), where=self.areas > 0)
+        return self.perArea(-normalForces)
+
+    def perArea(self, forces: np.ndarray) -> np.ndarray:
+        """Forces on the contact points per the areas they stand for: nominal pressures or tractions. A point that
+        stands for no area, on the axis of an axisymmetric model, carries no force and reports zero.
+
+        Parameters
+        ----------
+        forces
+            The force on each contact point, (nPoints,) or (nPoints, nDim).
+
+        Returns
+        -------
+        numpy.ndarray
+            The forces per area, of the shape of ``forces``.
+        """
+
+        areas = self.areas.reshape((-1,) + (1,) * (forces.ndim - 1))
+        return np.divide(forces, areas, out=np.zeros_like(forces), where=areas > 0)
 
     def describe(self) -> str:
         """What the contact points are, for the journal.

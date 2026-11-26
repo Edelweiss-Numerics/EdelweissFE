@@ -33,7 +33,10 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.constraints.base.contactpoints import ContactPoints
+from edelweissfe.constraints.base.contactpoints import (
+    ContactPoints,
+    refusePointsMadeForAnotherKindOfModel,
+)
 from edelweissfe.constraints.base.contactpointsonslavesurface import (
     checkFacetsCarryParentFaces,
 )
@@ -526,6 +529,21 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     The methods follow the order of a first reading: after the construction, (1) the gap and the springs at the paired
     points, (2) the pairing, (3) an initial overlap, and (4) the bound of the stiffness for the critical time step.
 
+    Plane and axisymmetric models
+    -----------------------------
+    Every contact point stands for its measure times the out-of-plane extent of the body at it, as the elements
+    integrate (:func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`). In a plane model, a slice of the
+    thickness of its sections, that is the length of its share of the surface line times the thickness of the section
+    of the element whose face it lies on. In an axisymmetric model, the section r-z of a body of revolution
+    (:attr:`~edelweissfe.models.femodel.FEModel.axisymmetric`), it is the area of the ring the point sweeps about the
+    axis, :math:`A_p = 2 \\pi r_p L_p` with the length :math:`L_p` of its share of the surface line. The forces of the
+    springs, their tangent, the bound of their stiffness for the critical time step and the energy are then those of
+    the full rings, as the axisymmetric elements integrate their forces and masses over the full rings; the pressures
+    and tractions are per the area of the ring in the reference configuration. The geometry -- the search, the pairing,
+    the gap, the could-close rule of the bound -- is the plane one. The points measure their areas when they are made;
+    the constraint refuses points made for a model of another kind, when it takes them and when a new mesh regenerates
+    them. See the :ref:`contact theory <contact-axisymmetric>`.
+
     Parameters
     ----------
     name
@@ -618,6 +636,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         # without an offset (an overlap pushed apart at once).
         self._initialOverlapTime = None
 
+        refusePointsMadeForAnotherKindOfModel(contactPoints, model, name)
         self.slave = contactPoints
         self._buildMaster(masterSurface)
         self._resetContactPoints()
@@ -1237,7 +1256,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         """The traction on each contact point at the last evaluation: the force of its springs on it per unit of the
         area it stands for, :math:`-\\sum f\\, \\boldsymbol{n} / A_p` -- :math:`-f_n \\bar{n} / A_p` in contact,
         :math:`-k \\boldsymbol{d}` in a tie --, with its normal and its tangential part; zero where a point has no
-        spring. Ordered like :meth:`getNormalPressures`.
+        spring or no area. Ordered like :meth:`getNormalPressures`.
 
         Returns
         -------
@@ -1245,10 +1264,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             The tractions, (nPoints, nDim).
         """
 
-        located = self._locatedPoints
-        tractions = np.zeros((self.nPoints, self.nDim))
-        tractions[located] = -self._springForcesOfLocatedPoints() / self.slave.areas[located][:, None]
-        return tractions
+        forces = np.zeros((self.nPoints, self.nDim))
+        forces[self._locatedPoints] = -self._springForcesOfLocatedPoints()
+        return self.slave.perArea(forces)
 
     def getGaps(self) -> np.ndarray:
         """The current gap at each contact point (negative when penetrating) as the law sees it: along the normal
@@ -1898,6 +1916,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             initialOverlap = self._initialOverlap
             originsOfTheOldPoints = self.slave.referenceCoordinates() if tieOfThePoints is not None else None
             self.slave = self.slave.regenerated(model)
+            refusePointsMadeForAnotherKindOfModel(self.slave, model, self.name)
             lost = (
                 f"; the offsets of their initial overlap (deepest {-initialOverlap.min():.3e}) are lost, and an "
                 "overlap they still have is pushed apart at once"

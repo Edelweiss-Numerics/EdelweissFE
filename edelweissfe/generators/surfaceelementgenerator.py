@@ -224,7 +224,9 @@ def _stampParentFace(facet, sourceElement, faceType: str, canonicalIndices: tupl
             "face tables and the canonical parent-face derivation disagree."
         ) from exception
 
-    facet.setParentFace(faceType, [sourceElement.nodes[i] for i in canonicalIndices], vertexParametricCoords)
+    facet.setParentFace(
+        faceType, sourceElement, [sourceElement.nodes[i] for i in canonicalIndices], vertexParametricCoords
+    )
 
 
 def _assignQuadConsistentShares(quadFacets: list):

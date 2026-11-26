@@ -33,21 +33,27 @@ area.
 import numpy as np
 from scipy.sparse import csr_matrix, identity
 
-from edelweissfe.constraints.base.contactpoints import ContactPoints
+from edelweissfe.constraints.base.contactpoints import ContactPoints, outOfPlaneExtentAt
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.modelchange import ModelChange
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.utils.meshtools import currentNodeCoordinates
 
 
-def tributaryAreasOfSlaveNodes(slaveFacets: list) -> tuple[list, np.ndarray]:
-    """The unique nodes of slave contact facets and the area each stands for: the sum of its area shares over its
-    incident facets (``nodalAreaShares``, set by the surface element generator), in the reference configuration.
+def tributaryAreasOfSlaveNodes(slaveFacets: list, model: FEModel) -> tuple[list, np.ndarray]:
+    """The unique nodes of slave contact facets and the area each stands for, in the reference configuration, as the
+    elements integrate: the sum over its incident facets of its share :math:`s_{s,f}` of the measure of each facet
+    (``nodalAreaShares``, set by the surface element generator) times the out-of-plane extent of the body at the node
+    on that facet's element, :math:`A_s = \\sum_f b_f(\\boldsymbol{X}_s)\\, s_{s,f}`
+    (:func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`): a node between elements of two
+    thicknesses stands for its share of the area of each, a node of an axisymmetric model for its share of the rings.
 
     Parameters
     ----------
     slaveFacets
         The slave contact facet elements.
+    model
+        The model, with the sections of the elements the facets bound.
 
     Returns
     -------
@@ -57,10 +63,18 @@ def tributaryAreasOfSlaveNodes(slaveFacets: list) -> tuple[list, np.ndarray]:
         order is unaffected.
     """
 
+    nodesOnFacets = [
+        (facet, node, share) for facet in slaveFacets for node, share in zip(facet.nodes, facet.nodalAreaShares)
+    ]
+    extents = outOfPlaneExtentAt(
+        np.array([node.coordinates for _, node, _ in nodesOnFacets]).reshape(len(nodesOnFacets), model.domainSize),
+        [facet.parentElement for facet, _, _ in nodesOnFacets],
+        model,
+    )
+
     tributaryAreaOfSlaveNode = {}
-    for slaveFacet in slaveFacets:
-        for node, share in zip(slaveFacet.nodes, slaveFacet.nodalAreaShares):
-            tributaryAreaOfSlaveNode[node] = tributaryAreaOfSlaveNode.get(node, 0.0) + share
+    for (_, node, share), extent in zip(nodesOnFacets, extents):
+        tributaryAreaOfSlaveNode[node] = tributaryAreaOfSlaveNode.get(node, 0.0) + share * extent
     return list(tributaryAreaOfSlaveNode.keys()), np.array(list(tributaryAreaOfSlaveNode.values()))
 
 
@@ -69,21 +83,25 @@ class ContactPointsAtSlaveNodes(ContactPoints):
 
     A node is its own contact point: its interpolation vector is :math:`c = [1]`, it sits at
     :math:`\\boldsymbol{X} + \\boldsymbol{U}` (its origin :math:`\\boldsymbol{X}`, its total displacement
-    :math:`\\boldsymbol{U}`), and it stands for its tributary area (:func:`tributaryAreasOfSlaveNodes`).
-    A located node takes itself into the block of the constraint, once.
+    :math:`\\boldsymbol{U}`), and it stands for its tributary area (:func:`tributaryAreasOfSlaveNodes`), measured
+    from the model when the nodes are taken: times the thickness in a plane model, the area of its share of the rings
+    in an axisymmetric model. A located node takes itself into the block of the constraint, once.
 
     Parameters
     ----------
     slaveSurface
         The element set of contact facet elements forming the slave surface.
+    model
+        The model, whose elements the areas are measured as.
     constraintName
         The name of the owning constraint, for error messages.
     """
 
-    def __init__(self, slaveSurface: ElementSet, constraintName: str):
+    def __init__(self, slaveSurface: ElementSet, model: FEModel, constraintName: str):
         self.setName = slaveSurface.name
         self._constraintName = constraintName
-        self.slaveNodes, self.areas = tributaryAreasOfSlaveNodes(list(slaveSurface))
+        self.slaveNodes, self.areas = tributaryAreasOfSlaveNodes(list(slaveSurface), model)
+        self.axisymmetric = model.axisymmetric
         self.nPoints = len(self.slaveNodes)
         self._referenceCoordinates = np.array([node.coordinates for node in self.slaveNodes])
         self.locatePoints(np.zeros(0, dtype=int))
@@ -290,7 +308,7 @@ class ContactPointsAtSlaveNodes(ContactPoints):
             The new contact points.
         """
 
-        return ContactPointsAtSlaveNodes(model.elementSets[self.setName], self._constraintName)
+        return ContactPointsAtSlaveNodes(model.elementSets[self.setName], model, self._constraintName)
 
     def referenceCoordinates(self) -> np.ndarray:
         """:math:`\\boldsymbol{X}`, the reference coordinates of all slave nodes.

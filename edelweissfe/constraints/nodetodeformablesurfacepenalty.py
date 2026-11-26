@@ -76,8 +76,10 @@ master surface, both represented by flat contact facet elements (:mod:`~edelweis
 contactsurfaceelement`, typically created via :mod:`~edelweissfe.generators.surfaceelementgenerator`).
 The slave surface's nodes act as the contact points; each slave node's penalty force is weighted by
 its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets, evaluated
-in the reference configuration), so ``penalty`` has the meaning of an interface stiffness modulus
-per unit area, and the contact response converges under slave surface refinement.
+in the reference configuration, times the thickness of their sections in a plane model), so ``penalty`` has the
+meaning of an interface stiffness modulus per unit area, and the contact response converges under slave surface
+refinement. An axisymmetric model is refused: use
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` with ``contactPoints=nodes`` there.
 
 This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
 source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.
@@ -306,9 +308,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     The slave side is itself a contact facet surface: the constraint's contact points are the
     unique nodes of the ``slaveSurface`` element set, and each node's penalty force is weighted by
     its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets,
-    evaluated in the reference configuration). ``penalty`` is thus an interface stiffness modulus
-    per unit area, the assembled forces approximate a contact *pressure* distribution, and the
-    contact response is insensitive to slave surface refinement.
+    evaluated in the reference configuration, times the thickness of their sections in a plane model, see
+    :func:`~edelweissfe.constraints.base.contactpointsatslavenodes.tributaryAreasOfSlaveNodes`). ``penalty`` is thus
+    an interface stiffness modulus per unit area, the assembled forces approximate a contact *pressure* distribution,
+    and the contact response is insensitive to slave surface refinement.
 
     Both the slave-side area shares and the master-side distribution of the transferred force are
     set by the surface element generator, whose ``nodalWeights`` option selects between them. Under
@@ -386,6 +389,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     ):
         super().__init__(name, model)
 
+        if model.axisymmetric:
+            raise NotImplementedError(
+                f"Constraint '{name}': nodeToDeformableSurfacePenalty is not verified in an axisymmetric model; use "
+                "surfaceToDeformableSurfacePenalty (contactPoints=nodes for node-based contact), whose contact points "
+                "stand for the areas of their rings."
+            )
+
         self.name = name
         self.journal = journal
         self._lastSeenTopologyVersion = model.topology.version
@@ -396,8 +406,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self.slaveFacetElements = list(slaveSurface)
         self.facetElements = list(masterSurface)
 
-        # The contact points are the unique slave surface nodes, each weighted by its tributary area.
-        self.slaveNodes, self.tributaryAreas = tributaryAreasOfSlaveNodes(self.slaveFacetElements)
+        # The contact points are the unique slave surface nodes, each weighted by its tributary area, times the
+        # thickness of the sections in a plane model.
+        self.slaveNodes, self.tributaryAreas = tributaryAreasOfSlaveNodes(self.slaveFacetElements, model)
         self.nSlaves = len(self.slaveNodes)
 
         masterNodes = {node for el in self.facetElements for node in el.nodes}
@@ -669,7 +680,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         oldLambda = dict(zip(self.slaveNodes, self._lambdaN))
 
         self.slaveFacetElements = list(model.elementSets[self._slaveSurfaceSetName])
-        self.slaveNodes, self.tributaryAreas = tributaryAreasOfSlaveNodes(self.slaveFacetElements)
+        self.slaveNodes, self.tributaryAreas = tributaryAreasOfSlaveNodes(self.slaveFacetElements, model)
         self.nSlaves = len(self.slaveNodes)
         self._referenceCoordsSlaves = np.array([n.coordinates for n in self.slaveNodes])
 

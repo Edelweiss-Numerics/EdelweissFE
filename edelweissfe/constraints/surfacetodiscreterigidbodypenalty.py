@@ -31,7 +31,10 @@ from dataclasses import dataclass
 import numpy as np
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.constraints.base.contactpoints import ContactPoints
+from edelweissfe.constraints.base.contactpoints import (
+    ContactPoints,
+    refusePointsMadeForAnotherKindOfModel,
+)
 from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
     ForcesOnlyExplicitEvaluation,
 )
@@ -261,6 +264,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         # Validates the rigid surface (closed, triangles only, no zero-area triangles).
         self._rigidTriangles, self._rigidTriangleNormals = rigidBody.referenceTriangles()
 
+        refusePointsMadeForAnotherKindOfModel(contactPoints, model, name)
         self.slave = contactPoints
         self._nodes = [self.rpNode]
         self._resetContactPoints()
@@ -472,6 +476,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             return False
 
         self.slave = self.slave.regenerated(model)
+        refusePointsMadeForAnotherKindOfModel(self.slave, model, self.name)
         self._resetContactPoints()
         self._searchClosestRigidTriangles(model)
         self._locatePointsWithATriangle()

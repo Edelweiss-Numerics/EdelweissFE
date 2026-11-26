@@ -87,8 +87,8 @@ class TestContactPoints(unittest.TestCase):
 
         model, slaveSurface = _slaveSurfaceOfOneCube()
         return [
-            (model, ContactPointsOnSlaveSurface(slaveSurface, 3, "theContact")),
-            (model, ContactPointsAtSlaveNodes(slaveSurface, "theContact")),
+            (model, ContactPointsOnSlaveSurface(slaveSurface, 3, model, "theContact")),
+            (model, ContactPointsAtSlaveNodes(slaveSurface, model, "theContact")),
         ]
 
     def test_areas_add_up_to_the_area_of_the_face(self):

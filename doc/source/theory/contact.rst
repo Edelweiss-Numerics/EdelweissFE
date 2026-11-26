@@ -846,6 +846,10 @@ spring does no work over a closed cycle. Two kinds of point are written as conta
       - :math:`\boldsymbol{X} + \boldsymbol{U}`
       - tributary area (:ref:`tributary-areas`)
 
+In 2D, :math:`w_q J_q` and the tributary area are lengths :math:`L_p` of the section, and :math:`A_p` is that length
+times the out-of-plane extent of the body at the point, as the elements integrate (:ref:`contact-out-of-plane`): the
+thickness of the section in a plane model, the circumference :math:`2 \pi r` in an axisymmetric model.
+
 What a constraint needs from its slave side is the same for both, and is written down once, as
 :class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`: the current coordinates of all points, for the
 contact search; the *located* points, the paired ones, which name the nodes they act on and so become the slave part
@@ -915,6 +919,142 @@ a point in contact walks on from there and keeps its side of a convex crease. Re
 points: they are paired as at the first update, and an overlap they have is pushed apart at once (reported). A tie
 is handed on across a new mesh of either side: which points are tied, to what, and how far each is displaced from rest
 (:ref:`contact-tie`).
+
+.. _contact-out-of-plane:
+
+Plane and axisymmetric models: one rule for the area of a point
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A contact point stands for the area its spring acts on, and that must be an area of the body the elements integrate
+over, or the springs and the elements would not balance at the nodes. The elements of a 2D model integrate over the
+area :math:`A` of the section, times the out-of-plane extent :math:`b` of the body: :math:`\mathrm{d}V = b \,
+\mathrm{d}A`. The surface of the body is then :math:`\mathrm{d}S = b \, \mathrm{d}L` along a line of the section, and a
+contact point stands for its length :math:`L_p` -- :math:`w_q J_q` of a quadrature point, the tributary length of a
+node -- times :math:`b` at the point:
+
+.. math::
+    A_p = b(\boldsymbol{X}_p) \, L_p .
+
+.. list-table::
+    :header-rows: 1
+
+    * - model
+      - the elements integrate over
+      - :math:`b(\boldsymbol{X})`
+      - :math:`A_p`
+    * - 3D
+      - the volume
+      - 1
+      - :math:`L_p`, an area itself
+    * - plane (``*job, domain=2d``)
+      - a slice of the thickness of their section
+      - :math:`t`
+      - :math:`t_p \, L_p`
+    * - axisymmetric (``*job, domain=axisymmetric``)
+      - the rings about the axis
+      - :math:`2 \pi r`
+      - :math:`2 \pi r_p \, L_p`
+
+The rule is one function, :func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`, with the factor
+:math:`b` the elements use; its axisymmetric part, :func:`~edelweissfe.constraints.base.contactpoints.circumferenceAt`
+on the radii and the sizes of the bodies the points lie on, is also the one a kind of point of another library
+calls. A node sums it over its faces, :math:`A_s = \sum_f b_f(\boldsymbol{X}_s) \, s_{s,f}` with
+its shares :math:`s_{s,f}` of the lengths of the faces. The pressure and the traction of a point are its force per
+:math:`A_p`, the area in the reference configuration: the nominal pressure, not per radian, not per unit thickness.
+
+.. _contact-plane:
+
+Plane models: every point stands for the thickness of its section
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A plane model is a slice of the body, of the thickness :math:`t` its plane sections give
+(``*section, type=plane, thickness=...``); the plane elements integrate their internal forces, masses and loads over
+their areas times that thickness. So :math:`b = t` (:ref:`contact-out-of-plane`), and a contact point on a line of the
+section stands for the length :math:`L_p` of its share of the line times the thickness,
+
+.. math::
+    A_p = t_p \, L_p ,
+
+with :math:`t_p` the thickness of the section of the element whose face the point lies on
+(:meth:`~edelweissfe.models.femodel.FEModel.thicknessOf`): the springs and the elements then act on the same slice. A
+slice twice as thick transmits twice the force at the same pressure. A node between faces of different thicknesses --
+elements of two sections meeting on the slave surface -- stands for its share of the area of each,
+:math:`A_s = \sum_f t_f s_{s,f}`. An element of the slave surface without a plane section is refused.
+
+.. _contact-axisymmetric:
+
+Axisymmetric models: every point stands for a ring
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An axisymmetric model (``*job, domain=axisymmetric``) is the section r-z of a body of revolution about the axis
+:math:`r = 0`: the first coordinate is the radius :math:`r`, the second the axial coordinate :math:`z`, and every point
+of the section stands for the ring it sweeps about the axis
+(:attr:`~edelweissfe.models.femodel.FEModel.axisymmetric`). Its elements are the axisymmetric ones -- ``CAX4``,
+``CAX8``, ``CAX8R``, ``GCAX4``, ``GCAX8``, ``GCAX8R``, ``CX8UL``, ``CX8RUL`` --, whose faces the surface element
+generator tiles into ``Line2ContactFacet`` like the faces of any 2D element. The contact points lie on these lines.
+
+**The job and the elements must agree.** The elements decide by their type how they integrate; the contact points
+decide by the job's ``domain``. Nothing checks yet that the two agree, since an element does not tell whether it
+integrates over rings. Axisymmetric elements in a ``domain=2d`` job make every point stand for :math:`t L_p` instead
+of :math:`2 \pi r L_p`: the contact is too soft by :math:`2 \pi r / t`, without a message. Plane elements in an
+axisymmetric job make it too stiff by the same factor.
+
+The geometry of the contact does not change. A point of the section has no hoop motion; the normal of a line of the
+section is the normal of the surface of revolution it sweeps; the gap of a point is the gap of its whole ring. The
+search, the pairing, the frozen projection, the gap and the springs are those of a plane model. What changes is the
+area a point stands for, :math:`b = 2 \pi r` (:ref:`contact-out-of-plane`). It is the area of its ring, the length
+:math:`L_p` of its share of the line times the circumference at its radius (Pappus' theorem for a surface of
+revolution):
+
+.. math::
+    A_p = 2 \pi r_p \, L_p .
+
+For a quadrature point, :math:`L_p = w_q J_q` and :math:`r_p` is the radius of its origin; for a node, :math:`L_p` is
+its tributary length and :math:`r_p` its radius. On a straight facet the radius is linear along the facet, and the
+quadrature rules -- the rule of the nodes, the trapezoidal rule, as well -- integrate a linear function exactly, so the
+areas of the points of a facet add up to the area of the facet's ring, :math:`2 \pi \bar{r} L` with its mid radius
+:math:`\bar{r}`.
+
+**The axis.** The axis is a line, not a surface of the body: a point on it stands for a ring of radius 0, no area,
+and carries no force; its pressure and traction are zero. A node within the round-off of the axis, :math:`-\epsilon h
+\le r < 0` with :math:`\epsilon = 10^{-12}` and the size :math:`h` of its element, is on the axis, as Marmot's
+axisymmetric elements accept it (:data:`~edelweissfe.constraints.base.contactpoints.axisTolerance`); a point further
+below is refused. On the end face of a solid cylinder the points sum to the disk, :math:`\pi R^2`. The quadrature points
+(``contactPoints=quadraturePoints``, the default) give the consistent load of a ring, with :math:`r` integrated by the
+shape functions; the nodes lump it by the trapezoid in :math:`r`, so the node on the axis gets nothing where the
+consistent load is not zero. Both sum to the same force; near the axis, prefer the quadrature points.
+
+**Why full rings.** The axisymmetric elements integrate their internal forces and their masses over the full ring,
+with :math:`\mathrm{d}V = 2 \pi r \, \mathrm{d}A`, not per radian: their nodal forces and masses are those of
+the rings of the nodes. The springs of the contact, at the stiffness ``penalty`` times the area of the ring, give the
+forces on the same rings, and the two balance at the nodes. A uniform pressure :math:`p` across an annulus
+:math:`r_i \le r \le r_o` then transmits the axial force :math:`\pi (r_o^2 - r_i^2) \, p`, across a cylinder of
+radius :math:`R` and height :math:`H` the radial ring force :math:`2 \pi R H p`. What a point reports is of its ring
+as well: its pressure and traction (``getNormalPressures``, ``getTractions``) are its force per the area of its ring
+in the reference configuration, the nominal pressure; a ring that expands radially by :math:`u_r` has a current area
+larger by :math:`u_r / r`, even with no strain along the line. The energy of its spring is the energy of the ring. The
+axial components of the forces add up to the total axial force; the radial forces of a ring cancel about the axis, so
+the radial component of a sum of forces (``contactForceOnSlave``) is no resultant on the body.
+
+**The critical time step.** The bound of the stiffness of the springs (:ref:`contact-explicit-dynamics`) adds the row
+sums :math:`\sum_j |K^\mathrm{c}_{ij}| / \sqrt{M_i M_j}` to the frequencies of the nodes. The stiffness of the springs
+and the lumped masses of the axisymmetric elements are both those of the full rings, so the row sums are the ones of
+any sector of the body, as if both were taken per radian: the bound is consistent. Whether a point could close within
+the next increment, and is then in the bound with its spring, is told by its gap, which the ring does not touch.
+
+**Every kind of point measures its areas when it is made.** The two kinds of finite element points take the model and
+measure their areas from it, also when a new mesh regenerates them and on a restart, as the areas are geometry; the
+frozen projection is adopted from the checkpoint, as in a plane model. A kind of point of another library measures its
+areas as its own bodies integrate and says whether it was made for an axisymmetric model
+(:attr:`~edelweissfe.constraints.base.contactpoints.ContactPoints.axisymmetric`); the constraint refuses points made for
+a model of another kind. In a plane model, whether such bodies are slices of the thickness of the finite elements they
+meet is not checked.
+
+Axisymmetric models are served by ``surfaceToDeformableSurfacePenalty``, for contact and for the tie, with either kind
+of contact point. The node-based ``nodeToDeformableSurfacePenalty`` refuses them (it is not verified on rings: use
+``surfaceToDeformableSurfacePenalty`` with ``contactPoints=nodes``),
+``surfaceToDiscreteRigidBodyPenalty`` is for 3D models only, and the tie by elimination (``type=tie``) has no areas and
+is the same as in a plane model.
 
 .. _contact-origins:
 

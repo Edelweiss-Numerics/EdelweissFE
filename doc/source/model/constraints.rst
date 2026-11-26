@@ -171,6 +171,10 @@ areas, finite- and small-sliding gap kinematics, penalty and augmented-Lagrange 
 Coulomb friction with consistent tangents, solver integration, and the verification methodology
 -- is documented in :doc:`/theory/contact`.
 
+In a plane model each slave node stands for its tributary length times the ``thickness`` of the sections of its
+elements (:ref:`contact-plane`). An axisymmetric model (``*job, domain=axisymmetric``) is refused: the constraint is not
+verified on rings; use ``surfacetodeformablesurfacepenalty`` with ``contactPoints=nodes`` there.
+
 Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
 
 .. automodule:: edelweissfe.constraints.nodetodeformablesurfacepenalty
@@ -233,10 +237,17 @@ explicit analysis, works for both kinds of contact point on the parent faces, an
 Both keep a gap at rest, the ``tie`` with ``adjust=False``. Which to use when: :ref:`Two ties <contact-two-ties>`.
 
 Scope: frictionless normal penalty contact, or a tie, under ``sliding=small``, on both the implicit and the explicit
-solver path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
-constraint has both), and ``sliding=finite`` is rejected rather than approximated. The master
+solver path, in 3D, plane and axisymmetric models. Coulomb friction and augmented Lagrange are **not** implemented here
+(the node-based constraint has both), and ``sliding=finite`` is rejected rather than approximated. The master
 surface must consist of a single element type, and so must a slave surface whose contact points are its quadrature
 points.
+
+In 2D every contact point stands for its length times the out-of-plane extent of the body, as the elements integrate
+(:ref:`contact-out-of-plane`): in a plane model times the ``thickness`` of the section of its element, in an
+axisymmetric model (``*job, domain=axisymmetric``) for the ring it sweeps about the axis, :math:`2 \pi r` times its
+length (:ref:`contact-axisymmetric`). ``penalty`` stays a modulus per unit area, and the pressures and tractions are
+per that area in the reference configuration. The job's ``domain`` must match the elements -- axisymmetric elements
+in an axisymmetric job, plane ones in a ``2d`` job --, which nothing checks.
 
 Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
 

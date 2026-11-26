@@ -113,10 +113,10 @@ class SurfaceContactPenaltySchema:
 
 #: The kinds of contact points an input file can choose, by the value of the ``contactPoints`` option.
 _contactPointsFromInput = {
-    "quadraturepoints": lambda configuration, slaveSurface, name: ContactPointsOnSlaveSurface(
-        slaveSurface, configuration.nQuadraturePoints, name
+    "quadraturepoints": lambda configuration, slaveSurface, model, name: ContactPointsOnSlaveSurface(
+        slaveSurface, configuration.nQuadraturePoints, model, name
     ),
-    "nodes": lambda configuration, slaveSurface, name: ContactPointsAtSlaveNodes(slaveSurface, name),
+    "nodes": lambda configuration, slaveSurface, model, name: ContactPointsAtSlaveNodes(slaveSurface, model, name),
 }
 
 
@@ -124,15 +124,16 @@ def contactPointsOfTheSlaveSurface(
     configuration: SurfaceContactPenaltySchema, model: FEModel, constraintName: str
 ) -> ContactPoints:
     """The contact points an input file chooses on the slave surface of a contact constraint: its quadrature points or
-    its nodes (option ``contactPoints``). A kind of point of another library is given to a constraint in code, not
-    chosen in an input file.
+    its nodes (option ``contactPoints``), with their areas measured from the model
+    (:func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`). A kind of point of another library is
+    given to a constraint in code, not chosen in an input file.
 
     Parameters
     ----------
     configuration
         The options of the constraint.
     model
-        The model, holding the slave surface's element set.
+        The model, holding the slave surface's element set and the elements the areas are measured as.
     constraintName
         The name of the constraint, for error messages.
 
@@ -148,4 +149,4 @@ def contactPointsOfTheSlaveSurface(
             f"Constraint '{constraintName}': contactPoints '{configuration.contactPoints}' is not supported. Use "
             "'quadraturePoints' or 'nodes'."
         )
-    return contactPointsOfSurface(configuration, model.elementSets[configuration.slaveSurface], constraintName)
+    return contactPointsOfSurface(configuration, model.elementSets[configuration.slaveSurface], model, constraintName)

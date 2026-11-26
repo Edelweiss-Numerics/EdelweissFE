@@ -161,9 +161,11 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
             penalty=options.pop("penalty", 1.0e4), searchDistance=options.pop("searchDistance", 1.0), **options
         )
         if configuration.contactPoints == "nodes":
-            contactPoints = ContactPointsAtSlaveNodes(slaveSurface, "theContact")
+            contactPoints = ContactPointsAtSlaveNodes(slaveSurface, model, "theContact")
         else:
-            contactPoints = ContactPointsOnSlaveSurface(slaveSurface, configuration.nQuadraturePoints, "theContact")
+            contactPoints = ContactPointsOnSlaveSurface(
+                slaveSurface, configuration.nQuadraturePoints, model, "theContact"
+            )
         constraint = RigidSurfaceContact(
             "theContact", model, contactPoints, rigidBody, self.journal, configuration=configuration
         )
@@ -319,7 +321,7 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
             RigidSurfaceContact(
                 "theContact",
                 FEModel(2),
-                ContactPointsOnSlaveSurface(slaveSurface, 3, "theContact"),
+                ContactPointsOnSlaveSurface(slaveSurface, 3, model, "theContact"),
                 rigidBody,
                 self.journal,
             )
