@@ -105,7 +105,10 @@ one-chunk-per-thread split makes the whole loop wait for whichever thread happen
 front.
 
 The element loop therefore cuts substantially more chunks than there are threads
-(:data:`~edelweissfe.solvers.base.parallelelementcomputation._chunksPerThread`) and lets the thread
-pool hand them out on demand: a thread that drew cheap elements comes back for more work rather
-than idling while a neighbour finishes. This costs one plan entry per chunk and nothing per
-element.
+(:data:`~edelweissfe.solvers.base.parallelelementcomputation._chunksPerThread`) and lets the threads
+take them on demand: each thread takes the next chunk that is left, from a queue all threads share
+(:func:`~edelweissfe.numerics.parallelizationutilities.mapTasksInParallel`), so a thread that drew
+cheap elements comes back for more work rather than idling while a neighbour finishes. The pool is
+handed one call per thread, not one per chunk: handing a call to the pool is serial work in the
+calling thread, and with one call per chunk, on many threads, the threads would wait for it. This
+costs one plan entry per chunk and nothing per element.
