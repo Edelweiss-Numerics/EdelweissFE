@@ -172,7 +172,7 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
         return {record[0] for record in self._records}
 
     def acceptLastState(self):
-        """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
+        """Called by :meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints` when an increment
         is accepted, so a stateful multi-point constraint can promote the state of the last
         (converged) iterate to its history.
 

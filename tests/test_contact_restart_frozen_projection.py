@@ -27,6 +27,7 @@
 #  ---------------------------------------------------------------------
 """Bitwise restart equivalence of explicit contact with a throttled contact search."""
 
+import shutil
 from pathlib import Path
 
 import h5py
@@ -34,6 +35,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.utils.checkpoint import CHECKPOINT_FORMAT_VERSION, ResumeCheckpoint
 from edelweissfe.utils.exceptions import RestartError
 from edelweissfe.utils.inputfileparser import parseInputFile
 
@@ -217,6 +219,21 @@ def test_foreign_or_missing_projection_is_refused(resumedContact):
     for data in (foreign, legacy):
         with pytest.raises(RestartError):
             constraint.setRestartData(data)
+
+
+def test_a_checkpoint_of_the_format_before_is_refused_before_its_contact_search_is_read(resumedContact, tmp_path):
+    """A contact checkpoint written in the format before -- that of a contact that kept no resting offsets, say -- is
+    refused by its format version, with the error that says how to resume it, before the restore reads an entry the
+    format lacks."""
+
+    _, _, _, checkpoint = resumedContact
+    older = tmp_path / "older.h5"
+    shutil.copy(checkpoint, older)
+    with h5py.File(older, "r+") as f:
+        f.attrs["formatVersion"] = CHECKPOINT_FORMAT_VERSION - 1
+
+    with pytest.raises(RestartError, match="resume it with the version of EdelweissFE that wrote it"):
+        ResumeCheckpoint(str(older))
 
 
 _LIVE_REFINEMENT = """

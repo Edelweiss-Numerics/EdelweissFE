@@ -29,9 +29,10 @@
 
 An entity that carries its own inertia (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertia`)
 keeps its state in itself -- here, the displacement and the velocity of a point mass on a spring to the ground. ``NED``
-hands it the increment of its node (``advanceEntitiesWithOwnInertia``), the model accepts the state and reconnects the
-entities, and the entity returns, on its node, its internal force and its lumped momentum, its lumped mass and damping
-and, when its estimate is due, its critical time step. The node holds the coefficients of one increment only. The RKPM
+hands it the increment of its node (``advanceEntitiesWithOwnInertia``), the model accepts the state of the entities and
+reconnects them, and the entity returns, on its node, its internal force and its lumped momentum, its lumped mass and
+damping and, when its estimate is due, its critical time step; then the constraints accept the state of that
+evaluation. The node holds the coefficients of one increment only. The RKPM
 particles of EdelweissMeshfree are such entities; :class:`MassOnASpring` and :class:`SystemOfMassesOnSprings` are the
 same contract in a few lines of Python, and the tests check ``NED``'s path for it in EdelweissFE itself:
 
@@ -244,9 +245,13 @@ class ModelOfMassesOnSprings(FEModel):
     def setNewmarkParametersOfEntities(self, beta: float, gamma: float):
         self.newmarkParametersOfEntities = (beta, gamma)
 
-    def advanceToTime(self, time: float):
+    def acceptTheStateOfTheEntities(self, time: float):
         self.calls.append("accept")
-        return super().advanceToTime(time)
+        return super().acceptTheStateOfTheEntities(time)
+
+    def acceptTheStateOfTheConstraints(self):
+        self.calls.append("accept the constraints")
+        return super().acceptTheStateOfTheConstraints()
 
     def updateConnectivity(self):
         self.calls.append("reconnect")
@@ -431,15 +436,25 @@ def _run(
 
 def test_the_calls_of_an_increment_come_in_the_order_of_the_module_documentation():
     """The step starts with a reconnection (the step-start topology update). Then, in every increment: advance the
-    entities on the connectivity of the start of the increment; accept the state and reconnect; then, on the new
+    entities on the connectivity of the start of the increment; accept their state and reconnect; then, on the new
     connectivity, evaluate the force and the momentum, the mass, the damping, and the critical time step when its
     estimate is due: here in every increment, since the entities set the time increment, so that the margin of an
     estimate is used up after one increment
-    (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia`)."""
+    (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia`). The constraints
+    accept their state last, after the evaluation: it is their first at the accepted configuration."""
 
     model, solver = _run(10 * CRITICAL_TIME_STEP)
 
-    oneIncrement = ["advance", "accept", "reconnect", "force and momentum", "mass", "damping", "estimate"]
+    oneIncrement = [
+        "advance",
+        "accept",
+        "reconnect",
+        "force and momentum",
+        "mass",
+        "damping",
+        "estimate",
+        "accept the constraints",
+    ]
     expected = ["reconnect"]
     for _ in range(len(solver.history)):
         expected += oneIncrement

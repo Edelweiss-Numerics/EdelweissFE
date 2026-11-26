@@ -44,7 +44,13 @@ class JobSchema:
     """Options of the ``*job`` keyword. No dataline payload."""
 
     domain: str | None = schemaField(
-        description="define spatial domain: 1d, 2d, 3d", dtype=str, default=None, required=True
+        description="define spatial domain: 1d, 2d, 3d, or axisymmetric (2d: the section r-z of a body of revolution, "
+        "r the first coordinate; what the model integrates is integrated over the rings about the axis). The elements "
+        "must match: axisymmetric ones (CAX*, GCAX*, CX8UL, CX8RUL) in an axisymmetric job, plane ones in a 2d job; "
+        "nothing checks it, and contact is off by the factor 2 pi r / t otherwise",
+        dtype=str,
+        default=None,
+        required=True,
     )
     startTime: float = schemaField(description="(optional) start time of job", dtype=float, default=0.0)
     name: str = schemaField(description="Name of job.", dtype=str, default="defaultJob")

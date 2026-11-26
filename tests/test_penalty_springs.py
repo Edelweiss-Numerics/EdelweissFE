@@ -33,7 +33,10 @@ from scipy.sparse import csr_matrix
 from edelweissfe.constraints.base.penaltysprings import (
     SpringGradientOnSharedNodes,
     addBoundOfAbsoluteStiffnessOfSprings,
+    smallestGapsWithin,
 )
+from edelweissfe.solvers.base.criticaltimestep import NextIncrement
+from edelweissfe.timesteppers.timestep import TimeStep
 
 
 def test_the_bound_is_the_sum_over_the_springs_of_the_absolute_gradients():
@@ -60,3 +63,25 @@ def test_the_bound_is_the_sum_over_the_springs_of_the_absolute_gradients():
         gradient = [SpringGradientOnSharedNodes(interpolation, directions, dofsOfNodes)]
         addBoundOfAbsoluteStiffnessOfSprings(bound, weights, stiffness, gradient)
         np.testing.assert_allclose(bound, expected, rtol=1e-13)
+
+
+def test_the_smallest_gaps_within_the_next_increment_are_closed_by_each_part_that_closes_them():
+    """:func:`smallestGapsWithin`: a gap affine in the solution, at its smallest within the next increment, closed by
+    each part of the increment that closes it, at its full length, and not opened by a part that opens it; the part
+    from the velocity at the time step at the end of the increment, for a gap that moves with time."""
+
+    # four points, gap g_p = U_p - t (an obstacle that approaches with unit speed)
+    def gapsAt(U, dU, timeStep):
+        return U - timeStep.totalTime
+
+    now, atTheEnd = TimeStep(3, 0.1, 0.3, 0.1, 0.3, 0.3), TimeStep(4, 0.2, 0.5, 0.2, 0.5, 0.5)
+    U = np.array([1.0, 1.0, 1.0, 1.0])
+    byTheVelocity = np.array([-0.4, 0.4, 0.0, -0.1])
+    byTheAcceleration = np.array([0.3, -0.5, 0.0, -0.1])
+    smallest = smallestGapsWithin(NextIncrement(byTheVelocity, byTheAcceleration, atTheEnd), gapsAt, U, U, now)
+
+    gapsNow = U - 0.3
+    # the velocity part closes by its motion and by the time, 0.2; the acceleration part at the time now
+    expected = gapsNow + np.minimum(byTheVelocity - 0.2, 0.0) + np.minimum(byTheAcceleration, 0.0)
+    np.testing.assert_allclose(smallest, expected, rtol=1e-14)
+    np.testing.assert_allclose(smallest, [0.1, 0.2, 0.5, 0.3], rtol=1e-12)
