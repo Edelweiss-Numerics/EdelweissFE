@@ -82,3 +82,23 @@ def test_reconciliation_redundant_and_weight_normalization():
     # Slave 11 is not prescribed, so kept
     assert len(kept) == 1
     assert kept[0][0] == 11
+
+
+def test_slaves_yielding_to_dirichlet_are_dropped_quietly():
+    solver = _DummySolver()
+    messages = []
+    solver.journal.message = lambda message, *args, **kwargs: messages.append(message)
+    # slave 10 is prescribed, its master 30 is not: an override, unless the slave yields to the boundary condition
+    bc = _DummyDirichlet("bc", [10], [0.0], active=True)
+    step_actions = {"dirichlet": {"bc": bc}}
+    records = [(10, [(20, 0.5), (30, 0.5)]), (11, [(20, 1.0)])]
+
+    kept = solver._reconcileMPCDirichletConflicts(records, step_actions, slaveDofsYieldingToDirichlet={10})
+
+    assert [record[0] for record in kept] == [11]
+    assert not any("WARNING" in message for message in messages)
+    assert any("yield to Dirichlet" in message for message in messages)
+
+    messages.clear()
+    solver._reconcileMPCDirichletConflicts(records, step_actions)
+    assert any("WARNING" in message for message in messages)

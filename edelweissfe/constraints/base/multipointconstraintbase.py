@@ -69,6 +69,14 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
     #: (its record is then dropped). If False (e.g. hanging nodes), a dropped record is an error.
     mayYieldSlaveToEarlierClaim: bool = True
 
+    #: Whether a slave DOF of this constraint that a Dirichlet boundary condition prescribes is expected, so that the
+    #: solver drops its record (the boundary condition wins, the DOF stays independent) and reports it quietly. True
+    #: for a constraint that stabilizes the free DOFs only, e.g. the aggregation of ill-conditioned DOFs, where
+    #: dropping the record is the intended behaviour, not a sign of an inconsistent model. If False (the default), a
+    #: dropped record that changes the model is reported as a warning, see
+    #: :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase._reconcileMPCDirichletConflicts`.
+    slavesYieldToDirichlet: bool = False
+
     @classmethod
     def fromConstraintDefinition(
         cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
