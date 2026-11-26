@@ -22,7 +22,8 @@
 #  License as published by the Free Software Foundation; either
 #  version 2.1 of the License, or (at your option) any later version.
 #  ---------------------------------------------------------------------
-"""The shape functions of the quadrilaterals and hexahedra, and their node coordinates."""
+"""The shape functions of the quadrilaterals and hexahedra, and their node coordinates; and those of the parent faces
+of the contact facets, at one point or at many at once."""
 
 import numpy as np
 import pytest
@@ -42,6 +43,10 @@ from edelweissfe.elements._quad2dnodeordering import (
     quad8DNdXi,
     quad8N,
     quad8NodeXi,
+)
+from edelweissfe.utils.parentfacegeometry import (
+    PARENT_FACE_PARAMETRIC_COORDS,
+    parentFaceShapeFunctions,
 )
 
 # shape -> (natural coordinates of the nodes, shape functions, their derivatives)
@@ -68,3 +73,11 @@ def test_derivatives_of_the_shape_functions(shape):
     assert np.allclose(dNdXi(*xi), finiteDifferences, atol=1e-8)
     # a partition of unity
     assert np.isclose(N(*xi).sum(), 1.0)
+
+
+@pytest.mark.parametrize("faceType", PARENT_FACE_PARAMETRIC_COORDS)
+def test_parent_face_shape_functions_of_many_points_are_those_of_each_point(faceType):
+    nParametricCoords = len(PARENT_FACE_PARAMETRIC_COORDS[faceType][0])
+    points = np.random.default_rng(0).uniform(-1.0, 1.0, size=(4, 3, nParametricCoords))
+    ofEachPoint = [[parentFaceShapeFunctions(faceType, point) for point in row] for row in points]
+    np.testing.assert_array_equal(parentFaceShapeFunctions(faceType, points), ofEachPoint)

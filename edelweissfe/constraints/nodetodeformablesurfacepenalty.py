@@ -54,6 +54,7 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
     closestFacetCandidates,
     closestFacets,
+    cosOfSmoothNormalChangeLimit,
     facetNormalAndMeasure,
     line2GapGradientHessian,
     line2Projection,
@@ -80,10 +81,6 @@ tick -- no separate wiring needed. A retained slave node (same across the rebuil
 identity) keeps its frictional history and augmented-Lagrange multiplier; a newly exposed one
 starts at rest.
 """
-
-# Normal change between increments beyond which the master surface is treated as creased, and the
-# frictional history is discarded rather than rotated into the new tangent plane (see updateConnectivity).
-_cosOfSmoothNormalChangeLimit = np.cos(np.deg2rad(30.0))
 
 
 @dataclass(frozen=True)
@@ -293,8 +290,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     ``type=quadratic`` (see the ``mu`` option documentation). Rotating the history is only
     admissible as long as the frozen tangent plane changes continuously between the increments;
     a slave sliding over a genuine crease of the master surface (normal change beyond
-    ``_cosOfSmoothNormalChangeLimit``) restarts its frictional history instead, keeping its normal
-    traction multiplier.
+    :data:`~edelweissfe.utils.facetcontactgeometry.cosOfSmoothNormalChangeLimit`) restarts its
+    frictional history instead, keeping its normal traction multiplier.
 
     With ``augmentedLagrange=True`` (requires ``sliding=small``), a per-slave normal traction
     multiplier augments the penalty force. It is constant within an increment (zero tangent
@@ -499,7 +496,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                     previousNormal = self._frozenNormals[s]
                     self._frozenNormals[s] = normal
 
-                    if previousNormal is None or previousNormal.dot(normal) >= _cosOfSmoothNormalChangeLimit:
+                    if previousNormal is None or previousNormal.dot(normal) >= cosOfSmoothNormalChangeLimit:
                         # Rotate the frictional history into the new frozen tangent plane (nothing to
                         # rotate without a previous normal: the history is zero then).
                         projectorOntoTangentPlane = np.eye(self.nDim) - np.outer(normal, normal)

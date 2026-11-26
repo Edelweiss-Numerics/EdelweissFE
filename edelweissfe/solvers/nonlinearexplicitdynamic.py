@@ -33,8 +33,16 @@ An increment solves no linear system. Second-order fields are advanced by centra
 fields -- a nonlocal damage field, for instance -- by forward Euler, and both divide by a **lumped**
 mass, so the cost of an increment is one element pass plus vector arithmetic. There is no linear
 solver, no Newton loop, and no cutback: the time increment is set by stability, not by convergence,
-so a material that fails to integrate at the stable step is reported as an error rather than
+so a material that fails to integrate at the time increment stability allows is reported as an error rather than
 answered with a smaller step.
+
+**Words, one per quantity.** The *critical time step* is the largest time increment the central difference method is
+stable for, :math:`2/\\omega_\\mathrm{max}` of the assembled system; every part of the model gives an *estimate* of its
+own, a lower bound of it (:doc:`/theory/criticaltimestep`). A *bound* is on the side of the eigenvalue only: an upper
+bound of :math:`\\omega_\\mathrm{max}^2`, from which an estimate is made. The *time increment* is what the step takes:
+at most the fraction ``courant-number`` of the critical time step. The *inertia* of a field is the coefficient of its
+second time derivative -- a mass on the displacement, a micro-inertia on a nonlocal field --, its *damping* the
+coefficient of the first; *lumped* means summed onto the diagonal, node by node.
 
 **Inertia and damping.** An element reports two diagonals: the coefficient of each field's second
 time derivative (its inertia) and of its first (its damping). The integrator divides by the one and
@@ -61,13 +69,31 @@ it out of both balances.
 are removed rather than deprecated: a deck carrying any of them now fails with ``Invalid option``,
 and deleting those lines is the whole of the migration.
 
-The stable increment is computed once per mesh as the smallest of the elements' own bounds
-(``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum element, two over the square root
-of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped mass) and scaled by
-``courant-number``; by default, it is enforced where it is below the largest increment the step allows, and a step
-that asks for smaller increments keeps them (see :ref:`ned-time-increment-lowered-or-followed`). It is recomputed whenever the mesh changes and deliberately *not* recomputed
-when it has not -- neither for a new numbering of the same mesh: as a material softens the true limit
-only grows, so reusing it is the conservative direction, and re-deriving it costs a full element pass.
+**The critical time step.** The time increment is the fraction ``courant-number`` of the critical time step of the
+model, the smallest of the critical time steps of its parts, each estimated by its own policy
+(:mod:`~edelweissfe.solvers.base.criticaltimestep`, and :doc:`/theory/criticaltimestep`): the finite elements -- the
+smallest of the elements' own estimates (``computeCriticalTimeStepForExplicitDynamics``; for a Marmot continuum
+element, two over the square root of an upper bound of the largest eigenvalue of its stiffness scaled by its lumped
+mass) -- once per mesh and at the start of every step, and deliberately *not* for a new numbering of the same mesh:
+an estimate costs a full element pass, and the policy assumes that within a step neither the geometry nor the wave
+speed of an element changes enough to use up the margin of the courant number (see
+:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfTheElements` for where that fails); the
+entities that carry their own inertia (below) when the margin of their last estimate may be used up. It is enforced
+where it is below the largest increment the step allows, and a step that asks for smaller increments keeps them.
+
+When the critical time step is estimated, and where ``NED`` does it:
+
+* :meth:`NED.beginStep`: both parts forget their estimates (``reset``), since a material property may have changed
+  with the step;
+* :meth:`NED.onNewNumbering`: the elements are estimated, when the mesh is not the one of their last estimate (the
+  first numbering of a step, a refinement);
+* :meth:`NED.prepareIncrement`: the critical time step is enforced at the start of a step (not in a resumed step,
+  which keeps the time increment of its checkpoint), and after a refinement;
+* :meth:`NED._evaluateTheNetForceOnTheNewConnectivity`: the entities, after every increment, when their estimate is
+  due, and the critical time step is enforced at once;
+* :meth:`NED._enforceTheCriticalTimeStep`: the one place where the parts are combined
+  (:meth:`NED._criticalTimeStepOfTheModel`) and the time increment is set from them;
+* :meth:`NED.endStep`: the report, how often each part was estimated in the step, and its last estimate.
 
 **Lowered only, or followed.** By default, the time increment is lowered only, never raised within a step; with
 ``follow-critical-time-step``, it follows the critical time step up as well as down, at the cost of the safety margin
@@ -95,13 +121,13 @@ refused at validation rather than silently ignored.
 at the first increment of every step, from the elements as they are then, and kept until the next numbering (the
 entities that carry their own inertia excepted, see below). A change of
 a material property during the step (:doc:`/analysis/stepactions`, ``changeMaterialProperty``) takes effect on the
-mass at the next step, as it does on the stable time increment.
+mass at the next step, as it does on the critical time step.
 
 **The discrete system.** It is built, like that of every solver, by
 :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateDiscreteSystem`, from the
 change the model reports (:class:`~edelweissfe.models.change.Change`). A new numbering -- the first one of a step, and
 a refinement of the mesh -- gives the lumped operators, the classification of the fields by time derivative, the
-multi-point-constraint condensation and the vectors of the increments, and the stable time increment of the mesh
+multi-point-constraint condensation and the vectors of the increments, and the critical time step of the mesh
 (:meth:`NED.onNewNumbering`). A contact search that couples other nodes gives new locations on the same numbering: the
 lumped operators are functions of the elements and of the numbering and are kept, the vectors keep their values, and
 only the locations they are wrapped with are new (:meth:`NED.onNewLocations`). The elements the increment evaluates are
@@ -128,11 +154,11 @@ what each may change: Marmot's page "Meshfree Particles", section "The explicit 
    numbering if the nodes of the active domain changed. The internal force of the elements is carried to a new
    numbering element by element; nothing is evaluated again;
 3. **evaluate**: on the new kernel functions, the entities return their internal force, their lumped inertia and
-   damping, their lumped momentum and, when it is due, the bound of their stable time increment
+   damping, their lumped momentum and, when its estimate is due, their critical time step
    (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,
    :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedMassOfEntitiesWithOwnInertia`,
    :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleLumpedDampingOfEntitiesWithOwnInertia`,
-   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`), and with the
+   :meth:`~edelweissfe.models.discretesystem.DiscreteSystem.criticalTimeStepOfEntitiesWithOwnInertia`), and with the
    internal force of the elements and the forces of the loads and the constraints, they give the net force. The
    configuration is accepted, no increment is left: the loads and the constraints are evaluated with a zero
    increment, so only a constraint that measures its condition at the configuration acts here
@@ -155,24 +181,20 @@ rest. With ``project-velocity-every-increment``, the velocity of the nodes of th
 momentum in every increment instead, :math:`\boldsymbol{v} = \boldsymbol{M}^{-1} \boldsymbol{p}`, which dissipates
 more; it is what the material point method does. The nodes of the elements are never projected.
 
-The critical time step is the smaller of the elements' (of the mesh) and the bound of the stable time increment of the
-entities' assembled system, which changes with their configuration: it is bounded anew in the zero increment, whenever
-the entities couple other nodes (not when only a constraint does, e.g. a contact paired anew), and every
-``stable-increment-frequency`` increments, and lowers the time increment whenever it falls below it (or sets it, with
-``follow-critical-time-step``, see :ref:`ned-time-increment-lowered-or-followed`). The bound is a Collatz-Wielandt bound
-of the largest eigenvalue of the absolute value of the entities' mass-scaled stiffness, from weights constant per field;
-with ``carry-stable-increment-weights``, ``NED`` keeps the weights a bound leaves and hands them to the next, so that
-every bound takes one more step of the power iteration towards the Perron vector, where the bound is exact. Any positive
-weights give an upper bound of the eigenvalue, but weights refined at another configuration can bound it less tightly
-than the weights constant per field when the stiffness changed faster than they followed: a bound with carried weights
-below the one they started from starts them anew, and the larger of the two is taken. Every bound taken is thus at least
-the one the weights started from. Lowered only, the increment therefore never falls below the smallest bound with
-weights constant per field of the step; followed, it can fall below the bound without carried weights of the same
-configuration, down to the one the weights started from. The weights start anew -- constant per field -- also with
-every numbering (the nodes they belong to may have changed) and every step (a material property may have changed), and
-after a resume: they are not part of the checkpoint. The first increment of a step must be the zero increment: in it,
-the entities take an increment of zero length, from which they evaluate the force, the inertia, the damping and the
-critical time step of the configuration the step starts from.
+The critical time step is the smaller of the elements' (of the mesh) and the estimate of the critical time step of the
+entities' assembled system, which changes with their configuration: it is estimated anew in the zero increment, and
+whenever the margin of its last estimate over the time increment in use may be used up -- by the fall of their lumped
+inertia since, which is followed in every increment, and by the assumed fall per increment from their stiffness
+(``critical-time-step-decrease-per-increment``) --, and lowers the time increment whenever it falls below it (or sets
+it, with ``follow-critical-time-step``, see :ref:`ned-time-increment-lowered-or-followed`). The estimate is made from
+a Collatz-Wielandt bound of the largest eigenvalue of the absolute value of the entities' mass-scaled stiffness, from
+weights constant per field; with ``carry-critical-time-step-weights``, ``NED`` keeps the weights an estimate leaves and
+hands them to the next, so that every estimate takes one more step of the power iteration towards the Perron vector,
+where the bound is exact. An estimate below the one the weights started from starts them anew, and the larger of the
+two is taken; the weights start anew also with every numbering and every step, and after a resume
+(:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia`, "Carried weights"). The
+first increment of a step must be the zero increment: in it, the entities take an increment of zero length, from which
+they evaluate the force, the inertia, the damping and the critical time step of the configuration the step starts from.
 Where the model holds the motion of their nodes
 (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`) -- after a step of this solver, or of
 ``NID`` integrating the inertia at the nodes --, the step continues it as at the nodes of elements, from their velocity
@@ -199,8 +221,9 @@ since, the kinetic energy, the internal (strain) energy, and what remains unacco
 one check that nothing else performs: the kinetic energy cannot exceed the energy at the start of the
 step plus the external work, because the terms omitted from the balance are all non-negative, so a
 violation means energy is appearing from nowhere and the time step is above the true stability limit
--- which the critical time step does not see in full, as it never sees contact penalty stiffness,
-and sees the nonlocal field only where that field carries a non-mechanical inertia. Such a field's
+-- which the critical time step does not see in full, as it never sees contact penalty stiffness
+(:doc:`/theory/criticaltimestep`, "What the estimate does not see"), and sees the nonlocal field only where that
+field carries a non-mechanical inertia. Such a field's
 own ``0.5 m_k rate^2`` is reported on a separate line and kept out of the balance: with a
 coefficient in seconds squared it has the units of a volume, not of an energy. ``E_0`` is read off
 the model's state, nothing evaluated: zero for a step from rest in a model without strain energy,
@@ -305,6 +328,10 @@ from edelweissfe.solvers.base.conservationchecks import (
     ConservationCheck,
     formatMomentumAndKineticEnergy,
     linearMomentum,
+)
+from edelweissfe.solvers.base.criticaltimestep import (
+    CriticalTimeStepOfEntitiesWithOwnInertia,
+    CriticalTimeStepOfTheElements,
 )
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -433,17 +460,19 @@ class NEDSchema:
         default=False,
         optionName="project-velocity-every-increment",
     )
-    stableIncrementFrequency: int | None = schemaField(
+    criticalTimeStepDecreasePerIncrement: float | None = schemaField(
         description=(
-            "The increment interval at which the stable time increment of the entities that carry their own inertia "
-            "(the particles of a meshfree model) is bounded anew from their assembled tangent, besides the zero "
-            "increment and every increment after which the entities couple other nodes (a change of the constraints' "
-            "connectivity alone does not count). 1 bounds it in every increment; 0 never, so that the increments of the "
-            "step are taken unchecked for the entities."
+            "The largest relative decrease per increment that the critical time step of the entities that carry their "
+            "own inertia (the particles of a meshfree model) is assumed to have from their stiffness between two "
+            "estimates; the decrease from their lumped inertia and damping is followed exactly in every increment. It "
+            "sets how long an estimate is trusted while another part sets the time increment: an estimate is taken "
+            "anew once its margin over the time increment in use may be used up at this rate. An assumption, measured "
+            "on gradient-enhanced particles (see the theory page on the critical time step); 1 estimates in every "
+            "increment."
         ),
-        dtype=int,
-        default=100,
-        optionName="stable-increment-frequency",
+        dtype=float,
+        default=0.1,
+        optionName="critical-time-step-decrease-per-increment",
     )
     followCriticalTimeStep: bool = schemaField(
         description=(
@@ -455,17 +484,18 @@ class NEDSchema:
         default=False,
         optionName="follow-critical-time-step",
     )
-    carryStableIncrementWeights: bool = schemaField(
+    carryCriticalTimeStepWeights: bool = schemaField(
         description=(
-            "Carry the weights of the bound of the stable time increment of the entities that carry their own inertia "
-            "(the particles of a meshfree model) from one bound to the next, and refine them by one Collatz-Wielandt "
-            "step each time: the bound tightens towards the spectral radius it bounds over a few bounds, in the pass "
-            "the bound takes anyway. A bound below the one the weights started from (with weights constant per field) "
-            "starts them anew, and so do every numbering and every step, and a resume."
+            "Carry the weights of the estimate of the critical time step of the entities that carry their own inertia "
+            "(the particles of a meshfree model) from one estimate to the next, and refine them by one "
+            "Collatz-Wielandt step each time: the estimate tightens towards the spectral radius it bounds over a few "
+            "estimates, in the pass the estimate takes anyway. An estimate below the one the weights started from "
+            "(with weights constant per field) starts them anew, and so do every numbering and every step, and a "
+            "resume."
         ),
         dtype=bool,
         default=False,
-        optionName="carry-stable-increment-weights",
+        optionName="carry-critical-time-step-weights",
     )
 
 
@@ -498,9 +528,9 @@ class NED(NonlinearSolverBase):
         "report-performance": False,
         "lumped-quantity-conservation-tolerance": CONSERVATION_TOLERANCE,
         "project-velocity-every-increment": False,
-        "stable-increment-frequency": 100,
+        "critical-time-step-decrease-per-increment": 0.1,
         "follow-critical-time-step": False,
-        "carry-stable-increment-weights": False,
+        "carry-critical-time-step-weights": False,
         # Lists, so _updateOptions appends the comma-separated items. Empty means "assert nothing".
         "expect-second-order-fields": [],
         "expect-first-order-fields": [],
@@ -558,26 +588,18 @@ class NED(NonlinearSolverBase):
         #: element model.
         self._inertiaOfEntities = None
         self._dampingOfEntities = None
-        #: The versions of the model's topology
-        #: (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`) the classification of the fields and
-        #: the critical time step of the elements are derived for: both are properties of the mesh, derived again when
-        #: it changed, and at the start of every step, not for a new numbering of the same mesh. None until they are
-        #: first derived in a step.
+        #: The version of the model's topology
+        #: (:attr:`~edelweissfe.models.topologypipeline.TopologyPipeline.version`) the classification of the fields is
+        #: derived for: a property of the mesh, derived again when it changed, and at the start of every step, not for a
+        #: new numbering of the same mesh. None until it is first derived in a step.
         self._meshOfTheClassification = None
-        self._meshOfTheCriticalTimeStep = None
-        #: The critical time steps of the elements (of the mesh) and of the entities that carry their own inertia (of
-        #: their configuration when it was last bounded: in the zero increment, when they couple other nodes and every
-        #: ``stable-increment-frequency`` increments), unscaled; infinite where there is none.
-        self._criticalTimeStepOfTheElements = np.inf
-        self._stableTimeIncrementOfEntities = np.inf
-        #: With ``carry-stable-increment-weights``, the weights of the bound of the stable time increment of the
-        #: entities, a vector of the numbering, refined by every bound and handed to the next
-        #: (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`):
-        #: zero, i.e. not yet weighted, for a new numbering and at the start of every step; None without the option.
-        self._weightsOfTheStableIncrementBound = None
-        #: With ``carry-stable-increment-weights``, the stable time increment of the bound the weights started from, the
-        #: first after they were set to zero, with weights constant per field.
-        self._stableTimeIncrementTheWeightsStartedFrom = np.inf
+        #: The critical time steps of the two parts of a model, each estimated by its own policy (see
+        #: :mod:`~edelweissfe.solvers.base.criticaltimestep`): the finite elements once per mesh, the entities that
+        #: carry their own inertia when the margin of their last estimate may be used up.
+        self._criticalTimeStepOfTheElements = CriticalTimeStepOfTheElements()
+        self._criticalTimeStepOfTheEntities = CriticalTimeStepOfEntitiesWithOwnInertia(
+            self.options["critical-time-step-decrease-per-increment"], self.options["carry-critical-time-step-weights"]
+        )
         #: The internal (strain) energy the elements publish at the end of the last increment, for the energy balance.
         self._internalEnergy = 0.0
         #: The operators of the explicit update, arrays of the length of the numbering, assembled by
@@ -624,9 +646,6 @@ class NED(NonlinearSolverBase):
         #: :meth:`_assembleLumpedOperators`.
         self._inertia = None
         self._damping = None
-        #: The stable time increment, the smaller of the elements' and the entities', scaled by the courant number;
-        #: infinite if neither reports one.
-        self._criticalTimeStep = None
         #: The vectors the increments work on, of the current discrete system, wrapped with its locations. They are the
         #: solution, its increment, the velocity (staggered half an increment behind the solution) and the
         #: acceleration at the end of the last increment, which the model receives with the velocity (see
@@ -676,12 +695,11 @@ class NED(NonlinearSolverBase):
         self._externalWork = 0.0
         self._energyAtStepStart = 0.0
         self.prevTimeStep = None
-        # The stable time increment and the classification of the fields are derived anew for every step: a change of a
+        # The critical time steps and the classification of the fields are derived anew for every step: a change of a
         # material property takes effect at the next step.
-        self._meshOfTheClassification = self._meshOfTheCriticalTimeStep = None
-        self._stableTimeIncrementOfEntities = np.inf
-        if self._weightsOfTheStableIncrementBound is not None:
-            self._weightsOfTheStableIncrementBound[:] = 0.0
+        self._meshOfTheClassification = None
+        self._criticalTimeStepOfTheElements.reset()
+        self._criticalTimeStepOfTheEntities.reset()
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
@@ -717,8 +735,8 @@ class NED(NonlinearSolverBase):
         ``topology-check-frequency``-th increment. At the start of the step it runs before anything
         sized by the discrete system exists, so the mesh is final before the lumped mass, the
         multi-point-constraint condensation and the critical time step are derived from it. It runs
-        here, before the next increment is proposed, because a refinement may lower the stable time
-        increment that increment has to use.
+        here, before the next increment is proposed, because a refinement may lower the critical time
+        step, and with it the time increment that increment has to use.
 
         Parameters
         ----------
@@ -762,7 +780,7 @@ class NED(NonlinearSolverBase):
                 # damping are evaluated (see _startTheMotionOfEntitiesWithOwnInertia).
                 self.formNetForceOfTheModelsState(step.actions["dirichlet"].values())
                 self._energyAtStepStart = self.energyOfTheModelsState()
-            # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.
+            # The time stepper carries (and checkpoints) the time increment; a resumed step keeps its own.
             if step.timeStepper.enforcedTimeIncrement is None:
                 self._enforceTheCriticalTimeStep(step, "The critical time step", 1)
 
@@ -792,7 +810,7 @@ class NED(NonlinearSolverBase):
             self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, self._V, model)
 
             # Only a model without entities that carry their own inertia gets here (live modifiers are refused with
-            # them, see onNewNumbering), so the critical time step is that of the elements alone.
+            # them, see onNewNumbering), so the entities' critical time step never enters it.
             self._enforceTheCriticalTimeStep(step, "Refinement", 1)
 
     def isOutputIncrement(self, timeStep: TimeStep) -> bool:
@@ -921,7 +939,7 @@ class NED(NonlinearSolverBase):
             raise StepFailed(
                 "A material requested a cutback in increment {:}: {:}. The explicit time "
                 "step is set by stability, not by convergence, so it cannot be reduced in "
-                "response -- either the material cannot integrate at the stable step, or "
+                "response -- either the material cannot integrate at the time increment stability allows, or "
                 "the state reaching it is already wrong. Both need the material or the "
                 "model looked at, not a smaller step.".format(timeStep.number, e)
             ) from e
@@ -1046,8 +1064,9 @@ class NED(NonlinearSolverBase):
     def _evaluateTheNetForceOnTheNewConnectivity(self, step, timeStep: TimeStep):
         """Evaluate, at the configuration just accepted and on the connectivity the entities that carry their own
         inertia reach now, what the next increment starts from: their internal force, their lumped momentum and their
-        lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), the bound of their
-        stable time increment when it is due (:meth:`_stableTimeIncrementIsDue`), and, with the internal force of the
+        lumped inertia and damping (see :meth:`_takeLumpedOperatorsOfEntitiesWithOwnInertia`), their critical time step
+        when its estimate is due
+        (:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue`), and, with the internal force of the
         elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The configuration is
         accepted: no increment is left, so the loads and the constraints are evaluated with a zero increment, and the
         nodes of the entities carry no total solution.
@@ -1077,11 +1096,6 @@ class NED(NonlinearSolverBase):
             system.assembleLumpedMassOfEntitiesWithOwnInertia(self.forEachChunk),
             system.assembleLumpedDampingOfEntitiesWithOwnInertia(self.forEachChunk),
         )
-        if self._stableTimeIncrementIsDue(timeStep):
-            with performancetiming.timeit("stable time increment of entities"):
-                self._stableTimeIncrementOfEntities = self._boundTheStableTimeIncrementOfEntities()
-            self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia", 2)
-
         self._internalForce += internalForceOfEntities
         noIncrement = system.locations.constructDofVector()
         self._netForce = self.assembleNetForce(
@@ -1095,6 +1109,23 @@ class NED(NonlinearSolverBase):
 
         ids = self.ids_inertiaOfEntities
         self._V[ids[self._Minv[ids] == 0.0]] = 0.0
+
+        # The entities are estimated after the net force, though the order is not required: the estimate needs only
+        # their lumped inertia and damping, just assembled, and nothing in the net force depends on it. What it decides
+        # is the time increment of the next increment.
+        criticalTimeStep = self._criticalTimeStepOfTheEntities
+        if criticalTimeStep.isDue(
+            system,
+            timeStep.number,
+            self._inertiaOfEntities,
+            self._dampingOfEntities,
+            self._timeIncrementInUse(step) / self.options["courant-number"],
+        ):
+            with performancetiming.timeit("critical time step of entities"):
+                criticalTimeStep.estimate(
+                    system, self._inertiaOfEntities, self._dampingOfEntities, self.forEachChunk, timeStep.number
+                )
+            self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia", 2)
 
         if timeStep.timeIncrement > 0.0 and timeStep.number % self.options["output-frequency"] == 0:
             self.reportEnergyBalance(self._V, timeStep)
@@ -1184,85 +1215,52 @@ class NED(NonlinearSolverBase):
         self._dampingOfEntities = dampingOfEntities
         self._deriveLumpedOperators()
 
-    def _boundTheStableTimeIncrementOfEntities(self) -> float | None:
-        """The bound of the stable time increment of the entities that carry their own inertia
-        (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.stableTimeIncrementOfEntitiesWithOwnInertia`), from
-        the lumped inertia and damping just assembled.
-
-        With ``carry-stable-increment-weights``, the bound takes the weights the last one left, and leaves the weights
-        for the next. Any positive weights bound the stable time increment, but weights refined at another
-        configuration can bound it less tightly than the weights constant per field they started from when the
-        stiffness changed faster than the weights followed, e.g. where entities reach nodes whose weights the power
-        iteration has made small. So a bound with carried weights below the bound the weights started from starts them
-        anew: the bound is taken again from the weights constant per field, and the larger of the two is the bound.
-        Every bound is thus at least the one the weights started from: lowered only, the increment never falls below
-        the smallest bound with weights constant per field of the step; followed (``follow-critical-time-step``), it can
-        fall below the bound without carried weights of the same configuration, down to the one the weights started
-        from.
-
-        Returns
-        -------
-        float | None
-            The stable time increment; None in a model without such entities.
-        """
-
-        weights = self._weightsOfTheStableIncrementBound
-
-        def bound() -> float | None:
-            return self.system.stableTimeIncrementOfEntitiesWithOwnInertia(
-                self._inertiaOfEntities, self._dampingOfEntities, self.forEachChunk, weights
-            )
-
-        startsTheWeights = weights is not None and not weights.any()
-        stable = bound()
-        if weights is None or stable is None:
-            return stable
-        if startsTheWeights:
-            self._stableTimeIncrementTheWeightsStartedFrom = stable
-        elif stable < self._stableTimeIncrementTheWeightsStartedFrom:
-            weights[:] = 0.0
-            self._stableTimeIncrementTheWeightsStartedFrom = bound()
-            stable = max(stable, self._stableTimeIncrementTheWeightsStartedFrom)
-        return stable
-
-    def _stableTimeIncrementIsDue(self, timeStep: TimeStep) -> bool:
-        """Whether the stable time increment of the entities that carry their own inertia is bounded anew after this
-        increment, unless ``stable-increment-frequency`` is 0: in the zero increment; whenever the entities couple
-        other nodes (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.entitiesWithOwnInertiaCoupleOtherNodes`),
-        since a node their kernel functions reach only at the edge of a support carries a small mass and may lower the
-        bound a lot; and after every ``stable-increment-frequency``-th increment, for the gradual change of the
-        entities' size and stiffness in between, which the courant number covers. A change of the connectivity of the
-        constraints alone, e.g. a contact paired anew, leaves the entities' system, and with it the bound, as it is.
+    def _timeIncrementInUse(self, step) -> float:
+        """The time increment the step takes next: the one enforced last, or else the step's own (``startInc``, at most
+        ``maxInc``).
 
         Parameters
         ----------
-        timeStep
-            The increment just accepted.
+        step
+            The step being solved.
 
         Returns
         -------
-        bool
-            True if it is due.
+        float
+            The time increment.
         """
 
-        frequency = self.options["stable-increment-frequency"]
-        if not frequency:
-            return False
-        return (
-            timeStep.timeIncrement == 0.0
-            or self.system.entitiesWithOwnInertiaCoupleOtherNodes()
-            or timeStep.number % frequency == 0
-        )
+        timeStepper = step.timeStepper
+        enforced = timeStepper.enforcedTimeIncrement
+        return enforced if enforced is not None else timeStepper.increment * step.length
+
+    def _criticalTimeStepOfTheModel(self) -> float:
+        """The critical time step of the model as last estimated: the smallest of its parts', the elements' and the
+        entities'.
+
+        Returns
+        -------
+        float
+            The critical time step, not scaled by the courant number; infinite if no part has one.
+        """
+
+        return min(self._criticalTimeStepOfTheElements.value, self._criticalTimeStepOfTheEntities.value)
+
+    @property
+    def _largestTimeIncrement(self) -> float:
+        """The largest time increment the critical time step of the model allows: ``courant-number`` times it
+        (:meth:`_criticalTimeStepOfTheModel`); infinite if no part has one."""
+
+        return self.options["courant-number"] * self._criticalTimeStepOfTheModel()
 
     def _enforceTheCriticalTimeStep(self, step, cause: str, journalLevel: int):
-        """Set the time increment of the step from the critical time step, the smaller of the elements' and the
-        entities' scaled by the courant number, each time it is taken: at the start of the step, after a change of the
-        mesh, and whenever the bound of the entities is taken (:meth:`_stableTimeIncrementIsDue`). By default the
-        increment is lowered only, to the critical time step if it is below the increment the step would take now (the
-        one enforced before, or else the step's own); with ``follow-critical-time-step`` it becomes the critical time
-        step, at most the step's ``maxInc``. As long as neither the elements nor the entities have reported a bound
-        (the critical time step is infinite, e.g. at the start of a step of entities alone), the increment stays as it
-        is, whether it follows or not. See :ref:`ned-time-increment-lowered-or-followed`.
+        """Set the time increment of the step from the critical time step of the model: the largest time increment it
+        allows (:attr:`_largestTimeIncrement`). Called each time a part is estimated. By default the increment is
+        lowered only, to the largest one if it is below the increment the step would take now
+        (:meth:`_timeIncrementInUse`); with ``follow-critical-time-step`` it becomes the largest one, at most the
+        step's ``maxInc``. As long as no part has an estimate (the critical time step is infinite, e.g. at the start of
+        a step of entities alone), the increment stays as it is, whether it follows or not. See
+        :ref:`ned-time-increment-lowered-or-followed`.
 
         Parameters
         ----------
@@ -1276,37 +1274,35 @@ class NED(NonlinearSolverBase):
         Raises
         ------
         ValueError
-            If the critical time step of the elements or of the entities is not a number.
+            If the critical time step of a part of the model is not a number.
         """
 
-        # Python's min() keeps its first argument when the comparison with NaN is false, so each bound is checked;
-        # infinity is legal: no element or no entity reports a bound.
-        if np.isnan(self._criticalTimeStepOfTheElements) or np.isnan(self._stableTimeIncrementOfEntities):
+        # Python's min() keeps its first argument when the comparison with NaN is false, so each part is checked;
+        # infinity is legal: a part without an estimate.
+        parts = (self._criticalTimeStepOfTheElements, self._criticalTimeStepOfTheEntities)
+        notANumber = [part for part in parts if np.isnan(part.value)]
+        if notANumber:
             raise ValueError(
-                "{:}: the critical time step is not a number (of the elements {:e}, of the entities that carry their "
-                "own inertia {:e}): the stiffness or the mass of the model is not finite.".format(
-                    cause, self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
-                )
+                "{:}: the critical time step is not a number ({:}): the stiffness or the mass of the model is not "
+                "finite.".format(cause, ", ".join("of {:} {:e}".format(part.part, part.value) for part in notANumber))
             )
-        self._criticalTimeStep = self.options["courant-number"] * min(
-            self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
-        )
-        # No bound reported yet: nothing to follow. Lowered only, this changes nothing anyway (no increment is above an
+        largestTimeIncrement = self._largestTimeIncrement
+        # No estimate yet: nothing to follow. Lowered only, this changes nothing anyway (no increment is above an
         # infinite one); followed, it keeps the step's own increment instead of jumping to maxInc.
-        if np.isinf(self._criticalTimeStep):
+        if np.isinf(largestTimeIncrement):
             return
         timeStepper = step.timeStepper
         enforced = timeStepper.enforcedTimeIncrement
         if self.options["follow-critical-time-step"]:
-            timeIncrement = min(self._criticalTimeStep, timeStepper.maxIncrement * step.length)
+            timeIncrement = min(largestTimeIncrement, timeStepper.maxIncrement * step.length)
         else:
-            current = enforced if enforced is not None else timeStepper.increment * step.length
-            timeIncrement = self._criticalTimeStep if self._criticalTimeStep < current else enforced
+            inUse = self._timeIncrementInUse(step)
+            timeIncrement = largestTimeIncrement if largestTimeIncrement < inUse else enforced
         if timeIncrement is None or timeIncrement == enforced:
             return
         if enforced is not None:
             self.journal.message(
-                "{:} {:} the stable time increment from {:e} to {:e}".format(
+                "{:} {:} the time increment from {:e} to {:e}".format(
                     cause, "lowered" if timeIncrement < enforced else "raised", enforced, timeIncrement
                 ),
                 self.identification,
@@ -1334,6 +1330,16 @@ class NED(NonlinearSolverBase):
 
         if self.prevTimeStep is not None:
             model.advanceVelocity(0.5 * self.prevTimeStep.timeIncrement)
+
+        for criticalTimeStep in (self._criticalTimeStepOfTheElements, self._criticalTimeStepOfTheEntities):
+            if criticalTimeStep.numberOfEstimates:
+                self.journal.message(
+                    "The critical time step of {:} was estimated {:} times in the step, last {:e}".format(
+                        criticalTimeStep.part, criticalTimeStep.numberOfEstimates, criticalTimeStep.value
+                    ),
+                    self.identification,
+                    1,
+                )
 
         prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - self._stepWallClockTic)
         self.journal.printPrettyTable(prettyTable, self.identification)
@@ -1991,7 +1997,7 @@ class NED(NonlinearSolverBase):
         :meth:`onNewNumbering` builds is gone, so that no array of the previous numbering is left to be mistaken for
         one of the next. The net force and the mass and the damping of the entities that carry their own inertia, which
         a resumed step finds from its checkpoint, are dropped as well: whoever needs them takes them before the build (see
-        :meth:`prepareIncrement`). What is derived from the mesh, the stable time increment and the classification of
+        :meth:`prepareIncrement`). What is derived from the mesh, the critical time step and the classification of
         the fields by time derivative, is no array of the numbering: it is derived again when the mesh changed (see
         :meth:`onNewNumbering`)."""
 
@@ -2012,10 +2018,10 @@ class NED(NonlinearSolverBase):
         them (see :meth:`_assembleLumpedOperators`), the vectors of the increments (the solution, the velocity and the
         acceleration read from the model, which holds the state a mesh change interpolated onto its new nodes; the net
         force and the internal force zero, see the module documentation, "The net force is solver state, and a step
-        starts from the model's state"), and the stable time increment of the new mesh.
+        starts from the model's state"), and the critical time step of the new mesh.
 
         The lumped operators are functions of the elements and of the numbering: new locations on the same numbering
-        keep them. What is derived from the mesh -- the stable time increment, an element pass that evaluates the
+        keep them. What is derived from the mesh -- the critical time step, an element pass that evaluates the
         materials, and the classification of the fields -- is derived for the first numbering of a step and for a new
         mesh, not for a new numbering of the same mesh, e.g. when the particles of a meshfree model reach other nodes.
 
@@ -2064,27 +2070,20 @@ class NED(NonlinearSolverBase):
         self._netForce = locations.constructDofVector()
         self._internalForce = locations.constructDofVector()
         self._numberingOfNetForce = system.numbering.digest
-        self._weightsOfTheStableIncrementBound = (
-            np.zeros(system.numbering.nDof) if self.options["carry-stable-increment-weights"] else None
-        )
 
         # After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new
         # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
         system.readStateFromModel(self._U, self._V, self._A)
 
-        if self._meshOfTheCriticalTimeStep != system.model.topology.version:
-            self._criticalTimeStepOfTheElements = self.getCriticalTimeStepForExplicitDynamics(self._U)
-            self._criticalTimeStep = self.options["courant-number"] * min(
-                self._criticalTimeStepOfTheElements, self._stableTimeIncrementOfEntities
-            )
+        # Estimated only; the callers enforce it (see the module documentation, "The critical time step").
+        criticalTimeStep = self._criticalTimeStepOfTheElements
+        if criticalTimeStep.isDue(system):
+            criticalTimeStep.estimate(system, self._U)
             self.journal.message(
-                "Critical time step of the elements for explicit dynamics: {:e}".format(
-                    self.options["courant-number"] * self._criticalTimeStepOfTheElements
-                ),
+                "The critical time step of the finite elements: {:e}".format(criticalTimeStep.value),
                 self.identification,
                 1,
             )
-            self._meshOfTheCriticalTimeStep = system.model.topology.version
 
     def _refuseSlavesAmongTheDofsOfEntitiesWithOwnInertia(self):
         """Refuse a multi-point constraint whose slave is a degree of freedom of the entities that carry their own
@@ -2122,8 +2121,8 @@ class NED(NonlinearSolverBase):
 
     def onNewLocations(self):
         """Wrap the vectors of the increments with the new locations, their values kept: the increments continue from
-        the solution, the velocity, the acceleration and the net force they have. The lumped operators and the stable
-        time increment are not touched: no element and no node moved.
+        the solution, the velocity, the acceleration and the net force they have. The lumped operators and the critical
+        time step are not touched: no element and no node moved.
 
         See :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.onNewLocations`.
         """
@@ -2412,8 +2411,8 @@ class NED(NonlinearSolverBase):
         coefficient; it cannot refuse a field that is uniformly FIRST order when second order was
         intended. Such a run completes and reports success with different physics. That is a
         one-token slip: a non-local field is second order only if its material provides a
-        micro-inertia, which for GCDP is optional material property 21 and legitimately defaults to
-        zero, so forgetting it silently returns the field to the parabolic scheme -- whose own
+        micro-inertia, which for some materials is an optional material property that legitimately
+        defaults to zero, so forgetting it silently returns the field to the parabolic scheme -- whose own
         stability limit nothing checks.
 
         Raises
@@ -2450,8 +2449,8 @@ class NED(NonlinearSolverBase):
                             derived[fieldName],
                             (
                                 " A non-local field is second order only if its material provides a "
-                                "micro-inertia; for GCDP that is optional material property 21, and "
-                                "leaving it off legitimately means zero."
+                                "micro-inertia; for some materials that is an optional material "
+                                "property, and leaving it off legitimately means zero."
                                 if expected == "second order"
                                 else ""
                             ),
@@ -2660,26 +2659,3 @@ class NED(NonlinearSolverBase):
             self.identification,
             1,
         )
-
-    def getCriticalTimeStepForExplicitDynamics(self, U: DofVector) -> float:
-        """Compute the critical time step for explicit dynamics, over the entities the discrete system names for it
-        (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`).
-
-        Parameters
-        ----------
-        U
-            The solution vector.
-
-        Returns
-        -------
-        float
-            The critical time step for explicit dynamics.
-        """
-        minTimeStep = np.inf
-
-        for element in self.system.elementsWithNodalInertia:
-            elementTimeStep = element.computeCriticalTimeStepForExplicitDynamics(U[element])
-            if elementTimeStep < minTimeStep:
-                minTimeStep = elementTimeStep
-
-        return minTimeStep

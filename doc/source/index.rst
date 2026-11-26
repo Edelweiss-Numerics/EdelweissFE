@@ -84,6 +84,7 @@ EdelweissFE does not want to ...
    theory/contact
    theory/adaptivity
    theory/blockamg
+   theory/criticaltimestep
 
 .. toctree::
    :maxdepth: 2

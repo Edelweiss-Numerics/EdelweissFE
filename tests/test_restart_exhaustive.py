@@ -71,6 +71,7 @@ resume subset is taken: every checkpoint of every scenario is resumed from. To c
 add a row to ``_SCENARIOS``.
 """
 
+import dataclasses
 import shutil
 from functools import cache
 from pathlib import Path
@@ -500,7 +501,7 @@ _SCENARIOS = {
         steps=[_LOADS_PUSH, _LOADS_HOLD],
         check=lambda model, run: "",
     ),
-    # (k) Explicit dynamics with a von Mises material and live AMR: the stable time increment depends
+    # (k) Explicit dynamics with a von Mises material and live AMR: the critical time step depends
     # on the state (refinement lowers it, mid-run, lower-only).
     "amrPlasticExplicit": dict(
         solvers=["explicit"],
@@ -789,14 +790,17 @@ def _reader(checkpoint: Path) -> str:
 #: separate mutations a replay bundles into one, not on the state they guard -- and the linear solver,
 #: which a nonlinear solver creates afresh at the start of every step: what it learns across solves
 #: (its solve count, the residual history, a preconditioner it reuses) is not checkpointed, so a
-#: resume starts it afresh as a step does. For a direct solver (these scenarios) it changes nothing.
-_NOT_STATE = {"_stepWallClockTic", "_version", "_seenParentVersion", "linSolver"}
+#: resume starts it afresh as a step does. For a direct solver (these scenarios) it changes nothing. How often a part's
+#: critical time step was estimated in the step is a count for the step's report, not state: a resumed step counts from
+#: its resume (the estimate itself, its value, is compared).
+_NOT_STATE = {"_stepWallClockTic", "_version", "_seenParentVersion", "linSolver", "numberOfEstimates"}
 
 
 def _plainValue(value, directory: str, depth: int = 0):
     """A canonical, comparable form of a plain value -- the kind of attribute state is made of --
     or None. Containers of plain values count, and so do the plain attributes of a helper object
-    (one level deep, e.g. a solver's conservation check). Floats compare bitwise; the run's own
+    (one level deep, e.g. a solver's conservation check) and the fields of a dataclass (e.g. the estimate of a
+    part's critical time step that a helper holds). Floats compare bitwise; the run's own
     directory, which differs between two runs by construction, is cut out of strings."""
     if isinstance(value, str):
         return value.replace(directory, "<run>")
@@ -820,6 +824,9 @@ def _plainValue(value, directory: str, depth: int = 0):
         if any(key is None or entry is None for key, entry in entries):
             return None
         return tuple(sorted(entries, key=repr))
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        fields = _plainValue(tuple(vars(value)[field.name] for field in dataclasses.fields(value)), directory, depth)
+        return None if fields is None else (type(value).__qualname__, fields)
     if depth == 0 and type(value).__module__.startswith("edelweissfe"):
         try:
             attributes = {

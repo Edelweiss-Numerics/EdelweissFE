@@ -608,8 +608,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     def prepareIncrement(self, step, model: FEModel, isRetry: bool):
         """Bring the model up to date before an increment is proposed: the topology update, when due,
         and whatever the solver derives from the mesh. Runs before the time stepper proposes the
-        increment, because it may change what is proposed (an explicit solver lowers its stable time
-        increment after a refinement).
+        increment, because it may change what is proposed (an explicit solver lowers its time
+        increment after a refinement, which lowers the critical time step).
 
         Parameters
         ----------
