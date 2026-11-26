@@ -1,0 +1,25 @@
+** Transient heat conduction in a bar (DC3D20T) with an anisotropic, temperature dependent conductivity: initially
+** 20 degC, heated by convection from a hot gas at 800 degC on the left face (film), cooled by radiation to the
+** surroundings at 20 degC on the right face; temperatures in degC, so the absolute zero is -273.15.
+*modelGenerator, generator=boxGen, name=gen
+x0=0, y0=0, z0=0, lX=0.2, lY=0.05, lZ=0.05, nX=6, nY=1, nZ=1, elType=DC3D20T
+
+** rho, c, k11, k22, k33, k12, k13, k23, beta_k, beta_c, T_ref
+*material, name=HeatConduction, id=steel
+7850.0, 460.0, 45.0, 30.0, 30.0, 5.0, 0.0, 0.0, -0.0003, 0.0005, 20.0
+
+*section, name=section1, material=steel, type=solid
+all
+
+*job, name=heatjob, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=temperature, elSet=all, field=temperature, result=U
+>>perElement, name=flux, elSet=all, result=flux, quadraturePoint=0
+
+*step, solver=theSolver
+startInc=0.1, maxInc=0.1, minInc=1e-3, maxNumInc=100, maxIter=25, stepLength=600
+>>setfield, name=initial, fieldOutput=temperature, type=uniform, value=20.0
+>>distributedload, name=gas, surface=gen_left, type=heat film, magnitude='25.0, 800.0', f(t)='1'
+>>distributedload, name=radiation, surface=gen_right, type=heat radiation, magnitude='5.103e-8, 20.0, -273.15', f(t)='1'

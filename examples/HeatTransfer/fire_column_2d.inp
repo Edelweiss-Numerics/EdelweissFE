@@ -1,0 +1,58 @@
+** Fire exposure of a concrete column, 300 x 300 mm, heated from all four sides (DC2D8T, HeatConduction).
+**
+** One quarter of the section is modelled (0 <= x, y <= 150 mm). The faces x = 0 and y = 0 are exposed to hot gas at
+** 600 degC: convection (heat film, 25 W/(m2 K)) plus radiation (emissivity 0.7). The faces x = y = 150 mm are symmetry
+** planes, i.e. insulated (no load = zero heat flux). Initially 20 degC.
+** Units: m, s, kg, degC (J, W). The conductivity falls and the capacity rises with the temperature (beta_k, beta_c).
+** Results at 15 min, 30 min, 1 h and 4 h: one step per output time, with adaptive increments.
+
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DC2D8T
+nX=16
+nY=16
+l=0.15
+h=0.15
+
+** rho [kg/m3], c [J/(kg K)], k11, k22, k33 [W/(m K)], k12, k13, k23, beta_k [1/K], beta_c [1/K], T_ref [degC]
+**   k(T) = k (1 + beta_k (T - T_ref)),   c(T) = c (1 + beta_c (T - T_ref))
+*material, name=HeatConduction, id=concrete
+2400.0, 900.0, 1.6, 1.6, 1.6, 0.0, 0.0, 0.0, -0.0004, 0.0003, 20.0
+
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=firecolumn, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=temperature, elSet=all, field=temperature, result=U
+>>perNode, name=T_core, nSet=gen_rightTop, field=temperature, result=U
+>>perNode, name=T_corner, nSet=gen_leftBottom, field=temperature, result=U
+
+*output, type=monitor, name=monitorT_core
+fieldOutput=T_core, f(x)='mean(x)'
+
+*output, type=monitor, name=monitorT_corner
+fieldOutput=T_corner, f(x)='mean(x)'
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=temperature
+
+** 0 ... 15 min. Heat film: magnitude='h, T_inf'; radiation: magnitude='eps sigma, T_inf, absolute zero'.
+** The amplitude f(t) scales all values of a load: f(t)='1' exposes the faces at once.
+*step, solver=theSolver
+startInc=0.002, maxInc=0.05, minInc=1e-6, maxNumInc=1000, maxIter=20, stepLength=900.0
+>>setfield, name=T0, fieldOutput=temperature, type=uniform, value=20.0
+>>distributedload, name=filmLeft, surface=gen_left, type=heat film, magnitude='25.0, 600.0', f(t)='1'
+>>distributedload, name=filmBottom, surface=gen_bottom, type=heat film, magnitude='25.0, 600.0', f(t)='1'
+>>distributedload, name=radLeft, surface=gen_left, type=heat radiation, magnitude='3.9693e-08, 600.0, -273.15', f(t)='1'
+>>distributedload, name=radBottom, surface=gen_bottom, type=heat radiation, magnitude='3.9693e-08, 600.0, -273.15', f(t)='1'
+
+** ... 30 min, 1 h, 4 h (the loads stay active)
+*step, solver=theSolver
+startInc=0.05, maxInc=0.05, minInc=1e-6, maxNumInc=1000, maxIter=20, stepLength=900.0
+*step, solver=theSolver
+startInc=0.05, maxInc=0.05, minInc=1e-6, maxNumInc=1000, maxIter=20, stepLength=1800.0
+*step, solver=theSolver
+startInc=0.02, maxInc=0.025, minInc=1e-6, maxNumInc=1000, maxIter=20, stepLength=10800.0

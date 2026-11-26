@@ -38,6 +38,7 @@ from edelweissfe.analyticalfields.base.analyticalfieldbase import (
 )
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.fieldoutput import NodeFieldOutput
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
@@ -251,9 +252,15 @@ class StepAction(StepActionBase):
 
         currentResults = np.zeros_like(self.fieldOutput.getLastResult())
 
-        if self.value.type == "scalarExpression" and not currentResults.shape[2] == 1:
+        if self.value.type == "scalarExpression" and not currentResults.shape[-1] == 1:
             self._journal.errorMessage(f"Cannot map scalar value to {currentResults.shape[2]}-dimensional result.")
             raise Exception
+
+        if isinstance(self.fieldOutput, NodeFieldOutput):
+            # a node field output: the field at the nodes, e.g. the initial temperature of a transient analysis
+            values = self.value.evaluateAtCoordinates(self.fieldOutput.getNodeCoordinates())
+            self.fieldOutput.setResults(np.reshape(values, currentResults.shape))
+            return
 
         elementList = self.fieldOutput.associatedSet
 
