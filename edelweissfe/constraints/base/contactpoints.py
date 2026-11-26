@@ -44,14 +44,14 @@ closed cycle.
 A point's position is told in two parts: its *origin* :math:`\\boldsymbol{x}^0`, where it is when the displacement it
 moves with is zero, and its *displacement* :math:`c \\cdot \\boldsymbol{u}` from there. For the points of finite
 elements, :math:`\\boldsymbol{u}` is ``U``, the total displacement of their nodes, and the origin is the point in the
-reference configuration. A kind of point whose nodes carry the increment rather than the total displacement (points
-on the faces of updated-Lagrangian particles) fits the same interface: for it, :math:`\\boldsymbol{u}` would be ``dU``,
-the increment, and the origin the point at the start of the increment. A constraint therefore passes both, and each
+reference configuration. A kind of point whose nodes carry the increment rather than the total displacement fits the
+same interface: for it, :math:`\\boldsymbol{u}` is ``dU``, the increment, and the origin the point at the start of the
+increment. EdelweissMeshfree adds such a kind, the points on the faces of its updated-Lagrangian particles
+(``ContactPointsOnParticleFaces``). A constraint therefore passes both, and each
 kind takes the one it moves with. The split also lets a constraint that measures a small distance between two points
 -- the stretch of a stiff penalty spring -- take the difference of the origins once and the difference of the
 displacements in every evaluation, rather than the difference of the coordinates, whose round-off scales with the
-coordinates (see :class:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty.Constraint`, *Measured from the
-origins*).
+coordinates (see :ref:`contact-origins`).
 
 Every contact point stands for an area :math:`A_p`, its share of the surface of the body: the penalty per unit area
 times it is the stiffness of its spring. The area is the one the elements integrate over. They integrate over the body

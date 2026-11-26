@@ -95,12 +95,12 @@ class ContactPointsOnSlaveSurface(ContactPoints):
     Each slave facet carries an ``nQuadraturePoints``-point rule. A point at facet-barycentric
     coordinates :math:`b` sits at parent-face parametric coordinates :math:`\\xi = b \\cdot \\Xi`
     (with :math:`\\Xi` the facet vertices' own parametric coordinates in the parent face, stamped by
-    the surface element generator), and carries the constant weight
-    :math:`J_q = A_{\\text{facet}}^{\\text{ref}} w_q`. Its position follows the *curved* parent
-    surface, :math:`x_q = N^s(\\xi_q) \\cdot x^s`. The area it stands for is :math:`J_q` times the out-of-plane
+    the surface element generator), and carries the constant weight :math:`L_p = w_q J_q`, the quadrature weight
+    times the reference measure :math:`J_q` of the facet. Its position follows the *curved* parent
+    surface, :math:`x_q = N^s(\\xi_q) \\cdot x^s`. The area it stands for is :math:`L_p` times the out-of-plane
     extent of the body at its origin (:func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`),
     measured from the model when the points are made: times the thickness of the section of its facet's element in a
-    plane model, :math:`2 \\pi r_q J_q`, the area of its ring, in an axisymmetric model.
+    plane model, :math:`2 \\pi r_q L_p`, the area of its ring, in an axisymmetric model.
 
     The contact points are numbered by slave facet and, within a facet, by quadrature point. The faces of the slave
     surface must be of one type (one number of parent face nodes), so that the located points are evaluated as one

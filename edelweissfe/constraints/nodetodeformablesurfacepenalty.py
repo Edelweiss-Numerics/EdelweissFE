@@ -26,6 +26,26 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+"""
+A penalty based unilateral contact constraint between a deformable slave surface and a deformable
+master surface, both represented by flat contact facet elements (:mod:`~edelweissfe.elements.
+contactsurfaceelement`, typically created via :mod:`~edelweissfe.generators.surfaceelementgenerator`).
+The slave surface's nodes act as the contact points; each slave node's penalty force is weighted by
+its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets, evaluated
+in the reference configuration, times the thickness of their sections in a plane model), so ``penalty`` has the
+meaning of an interface stiffness modulus per unit area, and the contact response converges under slave surface
+refinement. An axisymmetric model is refused: use
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` with ``contactPoints=nodes`` there.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
+source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.
+hadaptivity`), it regenerates that side's facets from the current (refined) ``*surface`` definition
+and rebinds its cached facet list/reference coordinates at its own next :meth:`updateConnectivity`
+tick -- no separate wiring needed. A retained slave node (same across the rebuild, by ``Node``
+identity) keeps its frictional history and augmented-Lagrange multiplier; a newly exposed one
+starts at rest.
+"""
+
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -70,26 +90,6 @@ from edelweissfe.utils.facetcontactgeometry import (
 from edelweissfe.utils.meshtools import currentNodeCoordinates
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
-"""
-A penalty based unilateral contact constraint between a deformable slave surface and a deformable
-master surface, both represented by flat contact facet elements (:mod:`~edelweissfe.elements.
-contactsurfaceelement`, typically created via :mod:`~edelweissfe.generators.surfaceelementgenerator`).
-The slave surface's nodes act as the contact points; each slave node's penalty force is weighted by
-its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets, evaluated
-in the reference configuration, times the thickness of their sections in a plane model), so ``penalty`` has the
-meaning of an interface stiffness modulus per unit area, and the contact response converges under slave surface
-refinement. An axisymmetric model is refused: use
-:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` with ``contactPoints=nodes`` there.
-
-This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
-source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.
-hadaptivity`), it regenerates that side's facets from the current (refined) ``*surface`` definition
-and rebinds its cached facet list/reference coordinates at its own next :meth:`updateConnectivity`
-tick -- no separate wiring needed. A retained slave node (same across the rebuild, by ``Node``
-identity) keeps its frictional history and augmented-Lagrange multiplier; a newly exposed one
-starts at rest.
-"""
-
 
 @dataclass(frozen=True)
 class _ContactOfSlave:
@@ -97,13 +97,13 @@ class _ContactOfSlave:
 
     #: The gap, negative when penetrating.
     gap: float
-    #: Its gradient :math:`\boldsymbol{a}_p = [c, -N^m] \otimes \bar{n}` over the slave node and the nodes of its
+    #: Its gradient :math:`\boldsymbol{a}_p = \bar{c} \otimes \bar{n}` over the slave node and the nodes of its
     #: facet.
     gradient: np.ndarray
     #: Its Hessian with finite sliding; None with small sliding, where it vanishes.
     hessian: np.ndarray | None
-    #: :math:`[c, -N^m] = [1, -N_1, \ldots, -N_k]`: how the gap moves with the slave node (:math:`c = [1]`) and with
-    #: the nodes of its facet (their shape functions at the projection).
+    #: :math:`\bar{c} = [1, -\bar{N}_1, \ldots, -\bar{N}_k]`: how the gap moves with the slave node and with the nodes
+    #: of its facet (the flat facet's weights :math:`\bar{N}` at the projection; see the theory, *Contact points*).
     nodeCoefficients: np.ndarray
     #: :math:`\bar{n}`, the unit normal of the facet.
     normal: np.ndarray
@@ -928,7 +928,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         """The contact of a slave node at its smallest gap within the next increment
         (:func:`~edelweissfe.constraints.base.penaltysprings.smallestGapsWithin`), for the bound of the
         stiffness over it: the normal force and the stiffness the law gives that gap, the gradient and the Hessian of
-        now. With finite sliding, a part of the increment that moves the projection off the facet is not counted (a
+        now. With finite sliding, a node whose projection is off its facet now is skipped (also over the next
+        increment), a part of the increment that moves the projection off the facet is not counted (a
         neighbouring facet is not seen), and the normal turns within the increment, so the gap is affine in it, as
         ``smallestGapsWithin`` takes it, only to first order.
 
@@ -981,10 +982,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`.
 
         Every slave node in contact (:meth:`_contactOfSlave`, as for the force) has a spring along the normal: it acts
-        with the vector :math:`\\boldsymbol{a}_p = [c, -N^m] \\otimes \\bar{n}`, the gradient of its gap over the slave
+        with the vector :math:`\\boldsymbol{a}_p = \bar{c} \\otimes \\bar{n}`, the gradient of its gap over the slave
         node and the nodes of its facet, with the stiffness :math:`k_p = \\mathrm{d}f/\\mathrm{d}g` the law gives it.
         With friction, it has a spring of the tangential penalty :math:`k_T` along every direction :math:`t` of the
-        tangent plane, :math:`\\boldsymbol{a}_p = [c, -N^m] \\otimes t`: together, the tangent of sticking. The bound
+        tangent plane, :math:`\\boldsymbol{a}_p = \bar{c} \\otimes t`: together, the tangent of sticking. The bound
         of the springs is the one of every penalty spring
         (:func:`~edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings`). Two parts of the
         tangent are not springs; they are added by their absolute row sums, from what the force computes:
@@ -992,12 +993,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         * the geometric stiffness of finite sliding, :math:`f_n \\boldsymbol{H}`, the normal force times the second
           derivative of the gap (against the spring, of the order of the penetration over the size of a facet);
         * while the node slips in the direction :math:`\\boldsymbol{e}_s`, the coupling of the tangential to the normal
-          force, :math:`\\mu k_p\\, ([c, -N^m] \\otimes \\boldsymbol{e}_s) \\otimes \\boldsymbol{a}_p`, which is not
+          force, :math:`\\mu k_p\\, (\bar{c} \\otimes \\boldsymbol{e}_s) \\otimes \\boldsymbol{a}_p`, which is not
           symmetric: in every row the larger of its absolute row sums and of their mean with its absolute column sums,
-          as the default bound of a tangent (the elements' argument needs the symmetric part). The rest of the
-          tangent of slipping is a spring along the direction :math:`q` of the tangent plane normal to
-          :math:`\\boldsymbol{e}_s`, softer than :math:`k_T`: the directions :math:`t` start with
-          :math:`\\boldsymbol{e}_s` then, so that it lies under the spring along :math:`q`.
+          as the default bound of a tangent (the elements' argument needs the symmetric part). While the node slips,
+          its tangential springs are taken along :math:`\\boldsymbol{e}_s` and along the direction :math:`q` of the
+          tangent plane normal to it. The slip tangent's own spring along :math:`q`, :math:`\\mu |f_n| k_T /
+          |\\boldsymbol{t}^\\mathrm{trial}| \\le k_T`, lies under the :math:`k_T` spring along :math:`q`, and the
+          :math:`k_T` spring along :math:`\\boldsymbol{e}_s` is a surplus that keeps the bound safe.
 
         At the state, the bound holds what the default bound of the tangent gives, since the absolute value of a sum is
         at most the sum of the absolute values: it is at least that, and above it where

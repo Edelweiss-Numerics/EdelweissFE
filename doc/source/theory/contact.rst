@@ -1,15 +1,17 @@
 Contact mechanics: theory
 =========================
 
-This page documents the theory of the node-to-deformable-surface contact stack implemented in
-EdelweissFE: the discretization of contact surfaces into flat facets
-(:mod:`~edelweissfe.elements.contactsurfaceelement`,
-:mod:`~edelweissfe.generators.surfaceelementgenerator`), the gap kinematics in their finite-sliding
-and small-sliding variants (:mod:`~edelweissfe.utils.facetcontactgeometry`,
-:mod:`~edelweissfe.constraints.nodetodeformablesurfacepenalty`), the penalty and augmented-Lagrange
-normal contact laws, Coulomb friction, and the integration into the implicit solver. Every formula
-stated here is implemented literally in the referenced modules and has been verified against
-independent finite differences, symbolic differentiation, or analytic benchmark solutions; the
+This page documents the theory of penalty contact and the penalty tie in EdelweissFE. *Formulation* covers the gap,
+the contact laws and Coulomb friction, measured from a slave node against flat master facets
+(:mod:`~edelweissfe.elements.contactsurfaceelement`, :mod:`~edelweissfe.generators.surfaceelementgenerator`,
+:mod:`~edelweissfe.utils.facetcontactgeometry`, :mod:`~edelweissfe.constraints.nodetodeformablesurfacepenalty`);
+*Surface discretization and load transfer* how the force reaches the nodes; then the integrated formulation: the slave
+side as contact points (nodes, quadrature points of faces, and kinds other libraries add), one contact for every kind
+of point, plane and axisymmetric models, the corners of the master, an initial overlap, the tie, and the contact with a
+discrete rigid body; last, the integration into the implicit and explicit solvers and the verification. To learn the
+integrated contact, start with *Formulation*, then *Contact points: the slave side as points*, then *The integrated
+formulation, step by step*. Every formula stated here is implemented literally in the referenced modules and has been
+verified against independent finite differences, symbolic differentiation, or analytic benchmark solutions; the
 verification methodology is summarized at the end.
 
 The stack targets *small-deformation* applications with possibly *large relative sliding* along the
@@ -826,7 +828,9 @@ node-to-surface gap (:ref:`small-sliding-kinematics`): its vector
 flat facet's weights :math:`\bar{N}` in place of the master's parent-face shape functions :math:`N^m` (the two agree on
 straight-edged linear faces). The force of a point is distributed with the same :math:`\boldsymbol{c}`
 with which the point moves, the transpose of its motion: so the stiffness of its penalty spring is symmetric, and the
-spring does no work over a closed cycle. Two kinds of point are written as contact points:
+spring does no work over a closed cycle. EdelweissFE writes two kinds of point as contact points; another library
+may add a kind, as EdelweissMeshfree adds the quadrature points on the faces of its particles
+(``ContactPointsOnParticleFaces``, in its documentation of the contact of particles with finite elements):
 
 .. list-table::
     :header-rows: 1
@@ -865,9 +869,10 @@ where it is when the displacement it moves with is zero, and its *displacement*
 :math:`\boldsymbol{c} \cdot \boldsymbol{u}` from there. For the points of finite elements, :math:`\boldsymbol{u}`
 is the total displacement :math:`\boldsymbol{U}` of their nodes, so the origin is the point in the reference
 configuration (:math:`N^s(\xi_q) \cdot \boldsymbol{X}^s` and :math:`\boldsymbol{X}` in the table). A kind of point
-whose nodes carry the increment rather than the total displacement (points on the faces of updated-Lagrangian
-particles) fits the same interface: for it, :math:`\boldsymbol{u}` would be the increment
-:math:`\Delta\boldsymbol{U}`, and the origin the point at the start of the increment. A constraint therefore passes
+whose nodes carry the increment rather than the total displacement fits the same interface: for it,
+:math:`\boldsymbol{u}` is the increment :math:`\Delta\boldsymbol{U}`, and the origin the point at the start of the
+increment. The points on the faces of EdelweissMeshfree's updated-Lagrangian particles are of that kind. A constraint
+therefore passes
 both, and each kind takes the one it moves with. The split also keeps a small distance accurate: the stretch of a
 stiff penalty spring is a tiny difference of two large positions, and the contact with a deformable master takes it
 as the difference of the origins once plus the difference of the displacements in every evaluation, which rounds it
@@ -1246,7 +1251,9 @@ A tie: contact that never opens and never slides
 To join two bodies that are meshed independently -- a fine mesh around a detail and a coarse mesh of the body around
 it -- along a surface whose two sides do not match, the faces of the one must be held to the faces of the other. That
 is a **tie**, and it is the same constraint with another law, ``type=tied``
-(:class:`~edelweissfe.constraints.base.penaltylaw.TiedPenaltyLaw`). The contact points, the parent faces of the master
+(:class:`~edelweissfe.constraints.base.penaltylaw.TiedPenaltyLaw`) -- the law option of the contact, not the constraint
+``*constraint, type=tie``, which ties by elimination (**Two ties**, below). The contact points, the parent faces of the
+master
 and the frozen projection are those of contact; what differs is the law: it pairs once (the first point below), and
 its springs (the other two).
 
@@ -1479,8 +1486,8 @@ is shared with the rigid-body variant (:ref:`integrated-contact-rigid-body`).
 
 Open points are skipped entirely rather than contributing a zero, and the whole evaluation is
 batched over the assigned points: a fixed handful of array operations, gathered once per update of
-the connectivity. That is why each surface must consist of faces of one type (one number of parent
-face nodes).
+the connectivity. That is why the master surface, and a slave surface of quadrature points, must consist of faces of
+one type (one number of parent face nodes).
 
 
 .. _integrated-contact-rigid-body:
@@ -1529,7 +1536,8 @@ defined; both are checked when the constraint is created.
     \frac{\partial g_p}{\partial \boldsymbol{\theta}} = -\boldsymbol{S}^T(\boldsymbol{r}_p \times \boldsymbol{n}_p) ,
 
 with :math:`c_a` the interpolation vector of the point at a node :math:`a` it acts on (:math:`N^s_a` for a
-quadrature point, :math:`1` for a slave node) and :math:`\boldsymbol{S} = \boldsymbol{R}\,\boldsymbol{J}_r(\boldsymbol{\theta})`
+quadrature point, :math:`1` for a slave node) and :math:`\boldsymbol{S} =
+\boldsymbol{R}\,\boldsymbol{J}_r(\boldsymbol{\theta})`
 (see :doc:`/model/rigidbodies`). Unlike the deformable case, the gap is not linear in the degrees of freedom: the
 normal rotates with the body, :math:`\partial\boldsymbol{n}_p/\partial\boldsymbol{\theta} =
 -\mathrm{skew}(\boldsymbol{n}_p)\boldsymbol{S}`, which gives the geometric tangent terms coupling
@@ -1619,14 +1627,14 @@ ordered like the generator's ``<prefix>_nodes`` node set, and are typically requ
 
 The integrated constraint (:ref:`integrated-contact-algorithm`) presents the same
 ``updateConnectivity`` / ``computeKernels`` pair, with three differences worth knowing at the
-solver boundary. It carries no history, so it has no ``acceptLastState`` to promote -- every
-quantity derives from the converged state and :math:`d\boldsymbol{U}`. The nodes it couples are those
-of the *assigned* contact points, and do not respond to gap activation, so the sparsity pattern
-changes only on a genuine reassignment, not when a point opens or closes mid-Newton. And its
-results are ordered **by contact point**, not by node: ``getGaps()`` and ``getNormalPressures()``
-run over slave facets and, within a facet, over quadrature points, so a ``fromExpression`` output
-reading them cannot be tied to a node set -- use a reduction, or ``getSlaveNodalNormalForces()``,
-which is node-ordered like the accessors above.
+solver boundary. A contact law carries no history: every quantity derives from the converged state and
+:math:`d\boldsymbol{U}`. With a law that pairs once (the tie) it promotes the displacements from rest of the last
+evaluation in ``acceptLastState`` (:ref:`contact-tie`). The nodes it couples are those of the *assigned* contact
+points, and do not respond to gap activation, so the sparsity pattern changes only on a genuine reassignment, not when
+a point opens or closes mid-Newton. And its results are ordered **by contact point**: ``getGaps()`` and
+``getNormalPressures()`` run over the slave nodes with ``contactPoints=nodes``, otherwise over the slave facets and,
+within a facet, over its quadrature points, so a ``fromExpression`` output reading them cannot in general be tied to a
+node set -- use a reduction, or ``getSlaveNodalNormalForces()``, which is node-ordered like the accessors above.
 
 .. _contact-explicit-dynamics:
 
@@ -1645,12 +1653,13 @@ that has not been ported still works -- correctly, but paying for the tangent in
 Constraints for which the tangent is a material part of the cost should override the method; for this one it is, at a
 per-slave outer product and four block writes.
 
-``NED`` bounds the contact once per increment for its critical time step
-(:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`): the contact
-adds the row sums of its stiffness, scaled by the lumped mass, to the frequencies of the nodes it couples. It asks
-right after the force, with the same arguments, so that the trial state of the friction, which ``computeKernels``
-writes for the next increment, is written again as the force wrote it. Every contact bounds the springs its law puts at the closed points, the same springs as its force
-(:mod:`~edelweissfe.constraints.base.penaltysprings`), and builds no tangent for it.
+``NED`` bounds the contact for its critical time step
+(:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`) right after
+every net force, at the state of that force, and with ``follow-critical-time-step`` also over the next increment
+(:doc:`/theory/criticaltimestep`, "Over the next increment"): the contact adds the row sums of its stiffness, scaled by
+the lumped mass, to the frequencies of the nodes it couples. Every contact bounds the springs of its force -- at the
+closed points, and over the next increment at the points that could close within it -- from the same code as its
+force (:mod:`~edelweissfe.constraints.base.penaltysprings`); it builds no tangent for it.
 
 **The connectivity search is throttled.** The closest-facet search is
 :math:`\mathcal{O}(n_\text{slave} \times n_\text{facet})` work in Python, affordable once per

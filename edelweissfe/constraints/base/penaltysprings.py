@@ -229,7 +229,8 @@ def smallestGapsWithin(
     held, a gap is affine in the solution, and changes over an increment of length :math:`s` by :math:`\\alpha\\,
     \\Delta g_v + \\beta\\, \\Delta g_a`, :math:`\\alpha, \\beta \\in [0, 1]`
     (:class:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement`), with the changes :math:`\\Delta g_v` and
-    :math:`\\Delta g_a` of the gap by the two parts of the increment at its largest length. Each part, where it closes the gap, closes it
+    :math:`\\Delta g_a` of the gap by the two parts of the increment at its largest length. Each part, where it closes
+    the gap, closes it
     most at its full length, so within the increment, whatever its length and wherever the point closes in it, the gap
     is at least :math:`g + \\min(0, \\Delta g_v) + \\min(0, \\Delta g_a)`.
 

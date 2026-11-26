@@ -57,7 +57,7 @@ explicit dynamics untouched.
 Not to be confused with the *penalty* tie, :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`
 with ``type=tied``, which holds contact points (nodes or quadrature points) to the curved parent faces of
 the master by springs, compliant by the penalty, and keeps the gap at rest; with ``adjust=False`` this tie
-keeps the gap too. The theory of contact compares the two (*Two ties*).
+keeps the gap too. The theory of contact compares the two (:ref:`contact-two-ties`).
 
 This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
 source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.

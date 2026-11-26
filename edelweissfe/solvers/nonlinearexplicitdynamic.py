@@ -1180,10 +1180,8 @@ class NED(NonlinearSolverBase):
         when its estimate is due
         (:meth:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepOfEntitiesWithOwnInertia.isDue`), and, with the internal force of the
         elements of the increment, the loads and the constraints, the net force (:meth:`assembleNetForce`). The
-        entities' DOFs get a zero increment; the finite elements' DOFs get the increment just taken. Limitations: a
-        constraint spanning finite elements and entities still sees zero on the entity side (EdelweissFE#364), and
-        because ``advanceToTime`` runs before this evaluation, stateful constraints accept their trial state one
-        increment late (EdelweissFE#365).
+        entities' DOFs get a zero increment; the finite elements' DOFs get the increment just taken. Limitation: a
+        constraint spanning finite elements and entities still sees zero on the entity side (EdelweissFE#364).
 
         In the zero increment, the motion of the entities starts (:meth:`_startTheMotionOfEntitiesWithOwnInertia`);
         with ``project-velocity-every-increment``, the velocity of their nodes is projected from their momentum in every

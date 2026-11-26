@@ -516,8 +516,9 @@ the gradual change of the model in between. Lowered only, the increment of a run
 low, and is ready for the next time that state returns. The states this option is meant for are brief, but they tend to
 recur: an entity compressed again, a node reached at the edge again, a contact closing again. Followed, the increment is
 raised after the first one and meets the next with nothing but the courant margin until the next estimate sees it -- for
-the entities, once the margin of their last estimate may be used up; for a contact bounded from its tangent whose
-points that close share the degrees of freedom of a rigid body or of a slave facet, only as far as one state of the
+the entities, once the margin of their last estimate may be used up. A contact point that closes is not left to the
+courant margin: it enters before it closes, as far as the bound over the states holds; a constraint bounded from its
+tangent whose closing springs share a degree of freedom in its block is seen only as far as one corner of the
 increment closes them together (:doc:`/theory/criticaltimestep`, "What the estimate does not see"). Use the option
 with a ``critical-time-step-decrease-per-increment`` large enough to estimate the entities as often as such a state may
 recur, or with a lower ``courant-number``; at a ``courant-number`` close to 1, repeated raising and lowering can also

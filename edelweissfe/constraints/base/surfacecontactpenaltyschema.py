@@ -51,11 +51,11 @@ class SurfaceContactPenaltySchema:
     is a :class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`, built from these options by
     :func:`contactPointsOfTheSlaveSurface`.
 
-    The update-type option is spelled ``type`` in the input file but the field is named
+    The law option is spelled ``type`` in the input file but the field is named
     ``contactType`` here -- a dataclass field literally called ``type`` would shadow the builtin,
     which this project's conventions avoid. ``penalty`` is an interface stiffness modulus per unit
-    area, multiplied by the area each contact point stands for (its quadrature weight, or the tributary area of a
-    node).
+    area, multiplied by the area each contact point stands for (its quadrature weight times the facet measure, or the
+    tributary area of a node, each times the out-of-plane extent: :ref:`contact-out-of-plane`).
     """
 
     slaveSurface: str | None = schemaField(

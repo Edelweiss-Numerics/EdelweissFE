@@ -224,7 +224,9 @@ deeper one is found inside, and reported) is either an interference fit, pushed 
 over ``initialOverlapRampTime`` (``initialOverlap=pushApart``, the default), or an error of the geometry, such as flat
 faces in a curved hole, kept as the stress-free state (``initialOverlap=adjust``; :ref:`contact-initial-overlap`).
 
-With ``type=tied`` the constraint ties its points to the master surface instead (:ref:`contact-tie`): each point within
+With ``type=tied`` the constraint ties its points to the master surface instead (:ref:`contact-tie`). Mind the two
+``type=``: here it is the law of ``surfaceToDeformableSurfacePenalty`` (``linear``, ``quadratic`` or ``tied``), while
+``*constraint, type=tie`` is a different constraint, the tie by elimination below. With ``type=tied``, each point within
 ``searchDistance`` at the first update is paired once, with the closest point of its closest facet, mapped onto the
 facet's parent face, and held there in every direction, in tension and compression, by penalty springs; a gap or an
 overlap at the pairing is part of the state at rest. It joins independently meshed bodies in implicit and explicit

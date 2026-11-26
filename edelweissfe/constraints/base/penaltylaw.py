@@ -52,23 +52,15 @@ Two kinds of law exist:
   (one gap per slave node) ask of it. :class:`LinearPenaltyLaw` and :class:`QuadraticPenaltyLaw`.
 - :class:`TiedPenaltyLaw`: a *tie*, paired once and held in every direction by a linear spring along every axis.
 
-What a friction law would implement (not implemented): a :class:`PenaltyLaw` with :attr:`~PenaltyLaw.pairsOnce` False
-whose :meth:`~PenaltyLaw.springs` returns the normal spring of a contact law (from ``gaps``, as
-:class:`ContactPenaltyLaw` does) and, at the closed points, the tangential springs: along the tangential part
-:math:`(\\boldsymbol{I} - \\bar{\\boldsymbol{n}} \\otimes \\bar{\\boldsymbol{n}})\\, \\boldsymbol{d}` of the
-displacement of the point from where it rests :math:`\\boldsymbol{d}`, of the tangential penalty, their force limited
-to :math:`\\mu |f_n|` by a radial return. A contact point rests on its master point, a tied point where it was paired,
-a sticking point where it stuck: its *stick point*, the resting offset from its master point that the constraint keeps
-per point, is its history, and a slip moves it. Two things then join the constraint, both independent of the law: the
-resting offsets the law returns for the converged increment are promoted in
-:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState` (not in every iteration), and a
-point paired anew with another master point keeps its stick point where it is in space (its resting offset shifted by
-the move of its master point), so that the history follows the point.
+A friction law (not implemented) would be a :class:`PenaltyLaw` that pairs anew and adds tangential springs whose
+resting offsets, the stick points, are its history; its design is in the theory, :ref:`contact-law`.
 
 Sign convention: the gap :math:`g` is negative when the surfaces penetrate, and the force :math:`f` of a spring
 carries the sign of its stretch, i.e. :math:`f_n \\le 0` in contact. The stiffness :math:`\\mathrm{d}f/\\mathrm{d}g` is
 then positive for :math:`g < 0`. ``penaltyTimesArea`` is the penalty modulus times the area the contact point
-represents: a nodal tributary area in node-based formulations, a quadrature weight in integrated ones.
+represents: a nodal tributary area in node-based formulations, a quadrature weight times the facet measure in integrated
+ones, each times the out-of-plane extent :math:`b` (1 in 3D, the thickness of a plane model, :math:`2 \\pi r` in an
+axisymmetric one; :ref:`contact-out-of-plane`).
 """
 
 from abc import ABC, abstractmethod
@@ -228,9 +220,8 @@ class TiedPenaltyLaw(PenaltyLaw):
     """A tie: each point is paired once, and held where it rests by a linear spring along every axis, in tension and
     in compression.
 
-    The constraint pairs each point once with the closest point of its closest facet of the master, mapped onto the
-    facet's parent face, and the vector from that master point to it at the pairing is where it rests: a gap or an
-    overlap the two surfaces have then is part of the state at rest. Along every axis :math:`\\boldsymbol{e}_i`, the
+    The constraint pairs each point once, and the vector from its master point to it at the pairing is where it rests
+    (:ref:`contact-tie`). Along every axis :math:`\\boldsymbol{e}_i`, the
     stretch of the spring is the displacement of the point from rest in that direction, :math:`d_i`, its force
     :math:`f_i = k A\\, d_i`, its stiffness :math:`k A`, its energy :math:`\\tfrac{1}{2} k A\\, d_i^2`. Together the
     springs pull the point back along its whole displacement from rest with the stiffness :math:`k A`, whichever way it

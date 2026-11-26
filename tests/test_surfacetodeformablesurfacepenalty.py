@@ -781,7 +781,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
 
     def test_a_contact_far_from_the_origin_follows_a_penetration_below_the_round_off_of_its_coordinates(self):
         """The gap is measured from the origins of the points, not as a difference of their coordinates (see the class
-        documentation of the constraint, *Measured from the origins*). A contact a thousand lengths from the origin of
+        theory, contact.rst, *Measured from the origins*). A contact a thousand lengths from the origin of
         the coordinates, whose coordinates are rounded to about 1e-13, with an initial overlap far above that
         round-off adjusted, rests exactly where it was found, and its force follows a penetration of a fraction of the
         round-off linearly: it is a smooth function of the displacements, not a staircase of the bits of the
@@ -864,7 +864,8 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
 
     def test_a_new_master_keeps_the_states_of_the_points(self):
         """A rebuild of the master mid-contact (the retiling itself: the crest test) keeps what the pairing has learnt
-        about the points (the class documentation, *A new mesh*): a point in contact deeper than the search distance
+        about the points (the theory, contact.rst, *One contact for every kind of contact point*): a point in contact
+        deeper than the search distance
         is still searched at any depth and carries the same force, and a point found inside stays found inside,
         without a force."""
 
@@ -1291,7 +1292,7 @@ class TestTie(unittest.TestCase):
 
     def test_a_tie_far_from_the_origin_follows_a_displacement_below_the_round_off_of_its_coordinates(self):
         """The displacement from rest is measured from the origins of the points, not as a difference of their
-        coordinates (see the class documentation of the constraint, *Measured from the origins*). A tie a thousand
+        coordinates (see the theory, contact.rst, *Measured from the origins*). A tie a thousand
         lengths from the origin of the coordinates, whose coordinates are rounded to about 1e-13, is exactly at rest
         where it was paired, and its force follows a displacement of a fraction of that round-off linearly: it is a
         smooth function of the displacements, not a staircase of the bits of the coordinates, on which a Newton

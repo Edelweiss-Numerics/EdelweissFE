@@ -26,6 +26,22 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+"""
+A penalty based unilateral contact constraint between the contact points of a slave body and a
+:class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody` -- for every kind of contact point: the quadrature
+points of the faces of finite elements and the nodes of finite elements. What a kind of point contributes -- how it
+moves, which nodes its force goes to, the area it stands for -- is its
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`, as in the contact with a deformable master
+(:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`); only the master side differs.
+
+This is the rigid-body counterpart of :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`. Its default
+contact points are quadrature points for the same reason: nodes cannot transmit a correct pressure across a serendipity
+(quad8/hexa20) face, whose consistent corner loads are tensile. Integrating the pressure at quadrature points and
+distributing it with the parent-face shape functions lets a corner node carry a tensile force from a non-negative
+pressure field. With ``contactPoints=nodes`` it is the contact of nodes against a rigid body, with a penalty per unit
+area (times the tributary area of a node) and a small-sliding gap.
+"""
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -70,22 +86,6 @@ from edelweissfe.utils.facetcontactgeometry import (
 from edelweissfe.utils.rotations import skewMatrix
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
-"""
-A penalty based unilateral contact constraint between the contact points of a slave body and a
-:class:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody` -- for every kind of contact point: the quadrature
-points of the faces of finite elements and the nodes of finite elements. What a kind of point contributes -- how it
-moves, which nodes its force goes to, the area it stands for -- is its
-:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`, as in the contact with a deformable master
-(:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`); only the master side differs.
-
-This is the rigid-body counterpart of :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`. Its default
-contact points are quadrature points for the same reason: nodes cannot transmit a correct pressure across a serendipity
-(quad8/hexa20) face, whose consistent corner loads are tensile. Integrating the pressure at quadrature points and
-distributing it with the parent-face shape functions lets a corner node carry a tensile force from a non-negative
-pressure field. With ``contactPoints=nodes`` it is the contact of nodes against a rigid body, with a penalty per unit
-area (times the tributary area of a node) and a small-sliding gap.
-"""
-
 
 @dataclass(frozen=True)
 class SurfaceToDiscreteRigidBodyPenaltySchema(SurfaceContactPenaltySchema):
@@ -116,7 +116,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     slave facet, positioned on the curved slave parent face, :math:`\\boldsymbol{x}_p = N^s(\\xi_q) \\cdot
     \\boldsymbol{x}^s` (:math:`\\boldsymbol{c} = N^s(\\xi_q)`, :math:`A_p = w_q J_q`), or a slave node
     (:math:`\\boldsymbol{c} = [1]`, its tributary area). Each acts on nodes of its own in the block of the constraint: a
-    quadrature point on a copy of its own of the nodes of its slave face, a slave node on itself; only the RP of the
+    quadrature point on a copy of its own of the nodes of its slave face, a slave node on itself; a kind of point of
+    another library may share nodes (the faces of particles share the nodes of their kernel functions). The RP of the
     rigid body is shared by all. An input file chooses the quadrature points or the nodes of a slave surface (option
     ``contactPoints``); a kind of point of another library is given to the constructor in code.
 
@@ -385,8 +386,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         currentPoints = self.slave.currentPointCoordinates(model)
 
-        # Pull the contact points back into the body frame: X = X_RP + R^T (x - c). For row vectors,
-        # (x - c) @ R computes R^T (x - c).
+        # Pull the contact points back into the body frame: X = X_RP + R^T (x - x_RP), with the current position x_RP
+        # of the reference point. For row vectors, (x - x_RP) @ R computes R^T (x - x_RP).
         rpDisplacement, rotationMatrix, rpReferencePosition = self.rigidBody.getCurrentKinematics()
         rpCurrentPosition = rpReferencePosition + rpDisplacement
         bodyFramePoints = rpReferencePosition + (currentPoints - rpCurrentPosition) @ rotationMatrix
@@ -562,7 +563,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             rpDisplacement, rpRotation
         )
 
-        # n = R N, for row vectors N @ R^T; the lever arm r = x - c; the gap g = n.r - d.
+        # n = R N, for row vectors N @ R^T; the lever arm r = x - x_RP; the gap g = n.r - d.
         normals = self._bodyNormalsOfLocated @ rotationMatrix.T
         leverArms = pointCoordinates - rpCurrentPosition
         gaps = np.einsum("pj,pj->p", normals, leverArms) - self._planeOffsetsOfLocated

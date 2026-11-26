@@ -787,6 +787,19 @@ class CriticalTimeStepWithThePenaltyConstraints(CriticalTimeStepOfAPart):
         """The critical time step of the parts, as last estimated, with the row sums of the penalty constraints added
         (see :meth:`estimate`).
 
+        Parameters
+        ----------
+        system
+            The discrete system.
+        rowSumsOfThePenaltyConstraints
+            The row sums of the constraints, scaled by the lumped mass, one per degree of freedom.
+        elements
+            The critical time step of the elements, as last estimated.
+        entities
+            The critical time step of the entities that carry their own inertia, as last estimated.
+        mpcTransformation
+            The condensation of the multi-point constraints; None without.
+
         Returns
         -------
         float

@@ -108,8 +108,8 @@ A penalty constraint -- a contact, a support held by a penalty, a spring between
 spring :math:`p` measures a stretch :math:`g_p`, e.g. the gap of a contact point; the vector with which it acts on the
 degrees of freedom is the gradient of the stretch, :math:`\boldsymbol{a}_p = \partial g_p / \partial \boldsymbol{u}`,
 and a spring of stiffness :math:`k_p` adds :math:`k_p\,\boldsymbol{a}_p\boldsymbol{a}_p^T` to the stiffness of the
-nodes it couples. For a contact point, :math:`k_p` is what the contact law gives the point at its gap: the penalty for
-the linear law, zero while the gap is open.
+nodes it couples. For a contact point, :math:`k_p` is what the contact law gives the point at its gap: the penalty
+times the area :math:`A_p` of the point for the linear law, zero while the gap is open.
 
 Such a constraint owns no degrees of freedom: it couples those of the parts, and has no critical time step of its own
 to take the minimum with -- the spring *adds* to the frequencies of the nodes it couples. A mass :math:`m` on a spring
@@ -280,21 +280,34 @@ affine in the displacements, and its smallest value within the increment is at a
 
    g + \min(0, \Delta g_v) + \min(0, \Delta g_a) ,
 
-with the changes :math:`\Delta g_v, \Delta g_a` of the gap by the two parts. A contact that bounds its springs gives
-them this smallest gap (:func:`~edelweissfe.constraints.base.penaltysprings.smallestGapsWithin`), and sums over its
-springs: a point that could close within the next increment has its spring in the estimate before it closes, and a law
-whose stiffness grows with the depth is stiffest there. A constraint bounded from its tangent is evaluated in the four
-corners and takes the largest absolute value of each entry of its block
+with the changes :math:`\Delta g_v, \Delta g_a` of the gap by the two parts. Every contact of EdelweissFE bounds its
+springs: it gives them this smallest gap (:func:`~edelweissfe.constraints.base.penaltysprings.smallestGapsWithin`),
+from the same code as its force, and sums over its springs: a point that could close within the next increment has its
+spring in the estimate before it closes, and a law whose stiffness grows with the depth is stiffest there. Another
+penalty constraint is bounded by default from its tangent: it is evaluated in the four corners and takes the largest
+absolute value of each entry of its block
 (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). That is a
 bound where each spring that can switch acts on degrees of freedom of its own in the constraint's block: each spring is
 closed deepest at a corner of its own, and the solver adds the row sums of the block to the rows of the model only
-afterwards, where the springs that meet at a node are summed. The contacts with a deformable master are of that kind:
-``nodeToDeformableSurfacePenalty`` gives each slave node, and ``surfaceToDeformableSurfacePenalty`` each contact point,
-a copy of its own of the nodes it couples -- of its master facet, and of its slave face -- in the block. Where springs
-that close at different corners share a degree of freedom within the block, the entry misses their sum: at the
-reference point of a rigid body, on which every spring of a contact with a discrete rigid body acts (its contact
-points have nodes of their own, as in the contacts with a deformable master). A constraint that needs the bound over the
-next increment there gives its springs. Every contact of EdelweissFE gives its springs, from the same code as its force.
+afterwards, where the springs that meet at a node are summed. Where springs that close at different corners share a
+degree of freedom within the block, the entry misses their sum -- the reference point of a rigid body, on which every
+spring of a contact with a rigid body acts, is the example --; a constraint that needs the bound over the next
+increment there gives its springs.
+
+Taking the velocity alone would not do: near the critical time step of the open state, the acceleration can turn a
+receding point around within one increment. The prediction is exact for the leapfrog without damping; damping only
+slows a point down. After a refinement, whose net force starts at zero
+(:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering`), the first increment is bounded by the
+velocity part alone -- the acceleration then holds the damping only --; the forces enter from the next increment on.
+
+The pairing that the next increment evaluates its force with must be the one bounded. A periodic contact search
+therefore runs before the time increment of the increment it is due for is set, after the force the increment
+integrates was evaluated (:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement`), and, followed,
+the constraints are bounded over the next increment once more, on the new pairing; the bound at the state, of the
+pairing that force was evaluated with, is kept, and the smaller critical time step of the two holds. A search run
+inside the increment, after the motion and before the force, would pair the points where the force is evaluated, but
+after the time increment was set: the new pairing would again be half an increment late.
+
 Raising and lowering the increment is not free: each change of the increment changes the energy the central difference
 holds in a mode by a fraction of the order of :math:`(\omega \Delta t)^2`, small for the motion that carries the
 energy, which lies far below the highest frequencies of a mesh, but not for a mode near the critical time step that
@@ -316,7 +329,8 @@ The parts' estimates cover the stiffness of the parts themselves, and the penalt
   Lowered only, the time increment is never raised again within the step, so every later increment is within the limit
   of that stiffness, and the growth does not compound: this is not an instability. Why it is accepted: avoiding it
   needs the stiffness of a force before the force is evaluated, a bound over the states the next increment can reach,
-  which costs up to four evaluations of the tangent of a constraint per increment; lowered only, the energy balance of
+  which costs up to four evaluations of the tangent of a constraint bounded from it, or three of the gaps of one
+  that bounds its springs, per increment; lowered only, the energy balance of
   ``NED`` (the kinetic energy may not exceed the energy at the start of the step plus the external work) remains the
   check. A stiffness that lowers the time increment by more than the margin of the ``courant-number`` in one increment
   -- a penalty law whose stiffness grows with the penetration -- exceeds the limit in that increment. With
