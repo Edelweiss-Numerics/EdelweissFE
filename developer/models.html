@@ -98,6 +98,8 @@
 <li class="toctree-l2"><a class="reference internal" href="#what-the-solver-takes-from-the-discrete-system">What the solver takes from the discrete system</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#module-edelweissfe.models.femodel"><code class="docutils literal notranslate"><span class="pre">FEModel</span></code> - A classical finite element model</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel"><code class="docutils literal notranslate"><span class="pre">FEModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints"><code class="docutils literal notranslate"><span class="pre">FEModel.acceptTheStateOfTheConstraints()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities"><code class="docutils literal notranslate"><span class="pre">FEModel.acceptTheStateOfTheEntities()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints"><code class="docutils literal notranslate"><span class="pre">FEModel.activeConstraints()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeScalarVariables"><code class="docutils literal notranslate"><span class="pre">FEModel.activeScalarVariables()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceToTime"><code class="docutils literal notranslate"><span class="pre">FEModel.advanceToTime()</span></code></a></li>
@@ -111,10 +113,12 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.readRestart"><code class="docutils literal notranslate"><span class="pre">FEModel.readRestart()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.removeElement"><code class="docutils literal notranslate"><span class="pre">FEModel.removeElement()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities"><code class="docutils literal notranslate"><span class="pre">FEModel.setNewmarkParametersOfEntities()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.thicknessOf"><code class="docutils literal notranslate"><span class="pre">FEModel.thicknessOf()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="docutils literal notranslate"><span class="pre">FEModel.updateConnectivity()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart"><code class="docutils literal notranslate"><span class="pre">FEModel.writeRestart()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.additionalParameters"><code class="docutils literal notranslate"><span class="pre">FEModel.additionalParameters</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.analyticalFields"><code class="docutils literal notranslate"><span class="pre">FEModel.analyticalFields</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.axisymmetric"><code class="docutils literal notranslate"><span class="pre">FEModel.axisymmetric</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.constraintSets"><code class="docutils literal notranslate"><span class="pre">FEModel.constraintSets</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.constraints"><code class="docutils literal notranslate"><span class="pre">FEModel.constraints</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.contactFacetRecipes"><code class="docutils literal notranslate"><span class="pre">FEModel.contactFacetRecipes</span></code></a></li>
@@ -383,18 +387,28 @@ every increment, and updates its discrete system on the kernel functions they re
 <span id="femodel-a-classical-finite-element-model"></span><h2><code class="docutils literal notranslate"><span class="pre">FEModel</span></code> - A classical finite element model<a class="headerlink" href="#module-edelweissfe.models.femodel" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.models.femodel.</span></span><span class="sig-name descname"><span class="pre">FEModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dimension</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.models.femodel.</span></span><span class="sig-name descname"><span class="pre">FEModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dimension</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axisymmetric</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel" title="Link to this definition"></a></dt>
 <dd><p>This is is a standard finite element model tree.
 It takes care of the correct number of variables,
 for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>dimension</strong> (<em>int</em>) – The dimension of the model.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dimension</strong> (<em>int</em>) – The dimension of the model.</p></li>
+<li><p><strong>axisymmetric</strong> (<em>bool</em>) – True if the model is the section of a body of revolution (<code class="docutils literal notranslate"><span class="pre">*job,</span> <span class="pre">domain=axisymmetric</span></code>), see
+<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.axisymmetric" title="edelweissfe.models.femodel.FEModel.axisymmetric"><code class="xref py py-attr docutils literal notranslate"><span class="pre">axisymmetric</span></code></a>.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints" title="edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acceptTheStateOfTheConstraints</span></code></a>()</p></td>
+<td><p>Let the constraints and the multi-point constraints accept the state of their last evaluation (<code class="docutils literal notranslate"><span class="pre">acceptLastState</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities" title="edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acceptTheStateOfTheEntities</span></code></a>(time)</p></td>
+<td><p>Let every element accept its computed state, and set the new time.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="edelweissfe.models.femodel.FEModel.activeConstraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">activeConstraints</span></code></a>()</p></td>
 <td><p>The constraints that take part in the discrete system: all constraints, in their order, that are active, i.e. switched on and within reach (see <a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>).</p></td>
 </tr>
@@ -402,7 +416,7 @@ for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <td><p>The scalar variables (e.g. Lagrange multipliers) of the active constraints, constraint by constraint: the scalar variables that are numbered in the discrete system (see <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="edelweissfe.models.femodel.FEModel.activeConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">activeConstraints()</span></code></a>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">advanceToTime</span></code></a>(time)</p></td>
-<td><p>Accept the current state of the model and sub instances, and set the new time.</p></td>
+<td><p>Accept the current state of the model at the end of an increment, and set the new time: the state of its entities (<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities" title="edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptTheStateOfTheEntities()</span></code></a>), then that of its constraints (<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints" title="edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptTheStateOfTheConstraints()</span></code></a>).</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceVelocity" title="edelweissfe.models.femodel.FEModel.advanceVelocity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">advanceVelocity</span></code></a>(timeIncrement)</p></td>
 <td><p>Advance the velocity of the model by its acceleration over a time increment, <span class="math notranslate nohighlight">\(\boldsymbol{V} \leftarrow \boldsymbol{V} + \Delta t \, \boldsymbol{A}\)</span>, in every node field, on every node.</p></td>
@@ -434,14 +448,39 @@ for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities" title="edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNewmarkParametersOfEntities</span></code></a>(beta, gamma)</p></td>
 <td><p>Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by <code class="docutils literal notranslate"><span class="pre">NIST</span></code> and every solver derived from it -- the implicit solvers and <code class="docutils literal notranslate"><span class="pre">NEST</span></code> -- and by <code class="docutils literal notranslate"><span class="pre">NED</span></code> at the start of every step, so that the solver is the one source of the parameters.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConnectivity</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.thicknessOf" title="edelweissfe.models.femodel.FEModel.thicknessOf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">thicknessOf</span></code></a>(element)</p></td>
+<td><p>The thickness of a plane model at one of its elements: the thickness of the plane section the element belongs to (<code class="docutils literal notranslate"><span class="pre">*section,</span> <span class="pre">type=plane,</span> <span class="pre">thickness=...</span></code>), by which the element multiplies what it integrates over its area.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConnectivity</span></code></a>()</p></td>
 <td><p>Bring the connectivity up to date with the converged state, before an increment, and say what that changed in the discrete system: which nodes the entities couple, and which entities take part.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
 <td><p>Write the current (converged) state of the model to a restart checkpoint.</p></td>
 </tr>
 </tbody>
 </table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints">
+<span class="sig-name descname"><span class="pre">acceptTheStateOfTheConstraints</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.acceptTheStateOfTheConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints" title="Link to this definition"></a></dt>
+<dd><p>Let the constraints and the multi-point constraints accept the state of their last evaluation
+(<code class="docutils literal notranslate"><span class="pre">acceptLastState</span></code>).</p>
+<p>Of the constraints, only the active ones accept their state (see <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="edelweissfe.models.femodel.FEModel.activeConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">activeConstraints()</span></code></a>): a constraint that
+took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
+frictional history of a contact switched off for a step.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities">
+<span class="sig-name descname"><span class="pre">acceptTheStateOfTheEntities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">time</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.acceptTheStateOfTheEntities"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities" title="Link to this definition"></a></dt>
+<dd><p>Let every element accept its computed state, and set the new time. A model with other entities that carry a
+state accepts theirs here as well.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>time</strong> (<em>float</em>) – The new time.</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.activeConstraints">
 <span class="sig-name descname"><span class="pre">activeConstraints</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.activeConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="Link to this definition"></a></dt>
@@ -476,11 +515,14 @@ scalar variables that are numbered in the discrete system (see <a class="referen
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.advanceToTime">
 <span class="sig-name descname"><span class="pre">advanceToTime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">time</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.advanceToTime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.advanceToTime" title="Link to this definition"></a></dt>
-<dd><p>Accept the current state of the model and sub instances, and
-set the new time.</p>
-<p>Of the constraints, only the active ones accept their state (see <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="edelweissfe.models.femodel.FEModel.activeConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">activeConstraints()</span></code></a>): a constraint that
-took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
-frictional history of a contact switched off for a step.</p>
+<dd><p>Accept the current state of the model at the end of an increment, and set the new time: the state of its
+entities (<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities" title="edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptTheStateOfTheEntities()</span></code></a>), then that of its constraints
+(<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints" title="edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptTheStateOfTheConstraints()</span></code></a>).</p>
+<p>Both accept the state of their last evaluation, which must be the one at the configuration accepted. That is
+what every solver evaluates last, except <code class="docutils literal notranslate"><span class="pre">NED</span></code> in a model with entities that carry their own inertia: there
+the constraints are evaluated at the accepted configuration only after the entities are reconnected, so <code class="docutils literal notranslate"><span class="pre">NED</span></code>
+calls the two parts itself, with the reconnection and the evaluation between them (see
+<a class="reference internal" href="../analysis/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.acceptIncrement" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.acceptIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptIncrement()</span></code></a>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>time</strong> (<em>float</em>) – The new time.</p>
@@ -665,6 +707,30 @@ parameters on to them.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.thicknessOf">
+<span class="sig-name descname"><span class="pre">thicknessOf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">element</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.thicknessOf"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.thicknessOf" title="Link to this definition"></a></dt>
+<dd><p>The thickness of a plane model at one of its elements: the thickness of the plane section the element
+belongs to (<code class="docutils literal notranslate"><span class="pre">*section,</span> <span class="pre">type=plane,</span> <span class="pre">thickness=...</span></code>), by which the element multiplies what it integrates over
+its area. What else integrates over the area of the slice – e.g. the contact points, see
+<a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt" title="edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt"><code class="xref py py-func docutils literal notranslate"><span class="pre">outOfPlaneExtentAt()</span></code></a> – takes it from here, so that the
+forces balance at the nodes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>element</strong> – The element.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The thickness.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If no section with a thickness holds the element.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.updateConnectivity">
 <span class="sig-name descname"><span class="pre">updateConnectivity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.updateConnectivity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.updateConnectivity" title="Link to this definition"></a></dt>
 <dd><p>Bring the connectivity up to date with the converged state, before an increment, and say what that changed
@@ -735,6 +801,27 @@ constraints’ internal history (e.g. frictional contact), and the additional pa
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.analyticalFields">
 <span class="sig-name descname"><span class="pre">analyticalFields</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.analyticalFields" title="Link to this definition"></a></dt>
 <dd><p>AnalyticalFields in the model.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.axisymmetric">
+<span class="sig-name descname"><span class="pre">axisymmetric</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.axisymmetric" title="Link to this definition"></a></dt>
+<dd><p>the first coordinate
+is the radius r, the second the axial coordinate z, and every point of the section stands for the ring it
+sweeps about the axis. What the model integrates is then integrated over the rings, with the circumference
+<span class="math notranslate nohighlight">\(2 \pi r\)</span> – the axisymmetric elements their volumes, the contact points their areas (see
+<a class="reference internal" href="../model/constraints.html#edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt" title="edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt"><code class="xref py py-func docutils literal notranslate"><span class="pre">outOfPlaneExtentAt()</span></code></a>) –, so that the forces and the
+masses at the nodes are those of the full rings. Set by <code class="docutils literal notranslate"><span class="pre">*job,</span> <span class="pre">domain=axisymmetric</span></code>. The elements must
+then be axisymmetric ones (<code class="docutils literal notranslate"><span class="pre">CAX4</span></code>, <code class="docutils literal notranslate"><span class="pre">CAX8</span></code>, <code class="docutils literal notranslate"><span class="pre">CAX8R</span></code>, <code class="docutils literal notranslate"><span class="pre">GCAX4</span></code>, <code class="docutils literal notranslate"><span class="pre">GCAX8</span></code>, <code class="docutils literal notranslate"><span class="pre">GCAX8R</span></code>, <code class="docutils literal notranslate"><span class="pre">CX8UL</span></code>,
+<code class="docutils literal notranslate"><span class="pre">CX8RUL</span></code>), and a model of plane elements a <code class="docutils literal notranslate"><span class="pre">2d</span></code> job: nothing checks this yet, since an element does not
+tell whether it integrates over rings. Axisymmetric elements in a <code class="docutils literal notranslate"><span class="pre">2d</span></code> job make every contact point stand
+for <span class="math notranslate nohighlight">\(t L_p\)</span> instead of <span class="math notranslate nohighlight">\(2 \pi r L_p\)</span>, the contact too soft by <span class="math notranslate nohighlight">\(2 \pi r / t\)</span>; plane
+elements in an axisymmetric job make it too stiff by the same factor.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if the model is the section r-z of a body of revolution about the axis r = 0</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py attribute">

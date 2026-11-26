@@ -1,0 +1,785 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.constraints.base.contactpoints &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.constraints.base.contactpoints</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.constraints.base.contactpoints</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""</span>
+<span class="sd">The contact points of a contact constraint: the points of the slave side at which contact is enforced.</span>
+
+<span class="sd">A contact constraint pairs points of a slave body with a master surface, measures the gap of each point along the</span>
+<span class="sd">master's normal, and turns the gap into a force (see :mod:`~edelweissfe.constraints.base.penaltylaw`). How the points</span>
+<span class="sd">move, which nodes their force goes to, and the area each of them stands for depends on the kind of point, and on</span>
+<span class="sd">nothing else:</span>
+
+<span class="sd">- a node of a finite element: :math:`c = [1]`, at :math:`\\boldsymbol{x} = \\boldsymbol{X} + \\boldsymbol{U}`;</span>
+<span class="sd">- a quadrature point :math:`\\xi_q` of a finite element face: :math:`c = N^s(\\xi_q)`, the shape functions of the</span>
+<span class="sd">  face, at :math:`\\boldsymbol{x} = N^s(\\xi_q) \\cdot (\\boldsymbol{X}^s + \\boldsymbol{U}^s)`.</span>
+
+<span class="sd">A point moves with its interpolation vector :math:`c` and its force is distributed to the nodes with the same vector,</span>
+<span class="sd">the transpose of its motion: then the penalty spring at the point has a symmetric stiffness and does no work over a</span>
+<span class="sd">closed cycle.</span>
+
+<span class="sd">A point's position is told in two parts: its *origin* :math:`\\boldsymbol{x}^0`, where it is when the displacement it</span>
+<span class="sd">moves with is zero, and its *displacement* :math:`c \\cdot \\boldsymbol{u}` from there. For the points of finite</span>
+<span class="sd">elements, :math:`\\boldsymbol{u}` is ``U``, the total displacement of their nodes, and the origin is the point in the</span>
+<span class="sd">reference configuration. A kind of point whose nodes carry the increment rather than the total displacement fits the</span>
+<span class="sd">same interface: for it, :math:`\\boldsymbol{u}` is ``dU``, the increment, and the origin the point at the start of the</span>
+<span class="sd">increment. EdelweissMeshfree adds such a kind, the points on the faces of its updated-Lagrangian particles</span>
+<span class="sd">(``ContactPointsOnParticleFaces``). A constraint therefore passes both, and each</span>
+<span class="sd">kind takes the one it moves with. The split also lets a constraint that measures a small distance between two points</span>
+<span class="sd">-- the stretch of a stiff penalty spring -- take the difference of the origins once and the difference of the</span>
+<span class="sd">displacements in every evaluation, rather than the difference of the coordinates, whose round-off scales with the</span>
+<span class="sd">coordinates (see :ref:`contact-origins`).</span>
+
+<span class="sd">Every contact point stands for an area :math:`A_p`, its share of the surface of the body: the penalty per unit area</span>
+<span class="sd">times it is the stiffness of its spring. The area is the one the elements integrate over. They integrate over the body</span>
+<span class="sd">with :math:`\\mathrm{d}V = b\\, \\mathrm{d}A`, with the out-of-plane extent :math:`b` of the body at a point</span>
+<span class="sd">(:func:`outOfPlaneExtentAt`): :math:`b = 1` in a 3D model, the thickness :math:`t` of the plane section in a **plane</span>
+<span class="sd">model**, the circumference :math:`2 \\pi r` at the radius :math:`r` in an **axisymmetric model**, the section r-z of</span>
+<span class="sd">a body of revolution. So the surface of the body is :math:`\\mathrm{d}S = b\\, \\mathrm{d}L`, and a contact point</span>
+<span class="sd">stands for its measure :math:`L_p` in the model's own space -- an area in 3D, a length in 2D: its quadrature weight</span>
+<span class="sd">times the Jacobian of its face, or the tributary measure of a node -- times :math:`b` at the point,</span>
+
+<span class="sd">.. math::</span>
+<span class="sd">    A_p = b(\\boldsymbol{X}_p) \\, L_p .</span>
+
+<span class="sd">A node sums this over its faces, :math:`A_s = \\sum_f b_f(\\boldsymbol{X}_s)\\, s_{s,f}` with its shares</span>
+<span class="sd">:math:`s_{s,f}` of their measures: a node between faces of two thicknesses stands for its share of the area of each.</span>
+<span class="sd">The springs then act on the same body as the elements -- in an axisymmetric model on the full rings -- and the two</span>
+<span class="sd">balance at the nodes. A point on the axis of an axisymmetric model stands for a ring of radius 0, no area: the axis is</span>
+<span class="sd">a line, not a surface of the body. The pressure and the traction of a point are its force per :math:`A_p`, the area in</span>
+<span class="sd">the reference configuration: the nominal pressure, not per radian, not per unit thickness. The axial forces of the</span>
+<span class="sd">points of an axisymmetric model add up to the total axial force; the radial forces of a ring cancel about the axis, so</span>
+<span class="sd">a sum of radial components is no resultant.</span>
+
+<span class="sd">Every kind of point measures its areas when its points are made. The two kinds of finite element points take the model</span>
+<span class="sd">and measure with :func:`outOfPlaneExtentAt`. A kind of point of another library measures them as its own bodies</span>
+<span class="sd">integrate -- in an axisymmetric model with :func:`circumferenceAt`, the same rule of the axis --, and says with</span>
+<span class="sd">:attr:`ContactPoints.axisymmetric` whether it was made for an axisymmetric model; a constraint refuses points made for a</span>
+<span class="sd">model of another kind (:func:`refusePointsMadeForAnotherKindOfModel`). Whether the bodies of such a kind are slices of</span>
+<span class="sd">the same thickness as the finite elements they meet in a plane model is not checked: that is for the model to ensure.</span>
+
+<span class="sd">:class:`ContactPoints` is what a constraint needs from its contact points; a constraint written against it -- the</span>
+<span class="sd">pairing with the master, the gap, the law -- is written once for every kind of point. Two kinds are here: the nodes of</span>
+<span class="sd">a slave surface (:mod:`~edelweissfe.constraints.base.contactpointsatslavenodes`) and the quadrature points of its faces</span>
+<span class="sd">(:mod:`~edelweissfe.constraints.base.contactpointsonslavesurface`). The contact with a deformable master surface,</span>
+<span class="sd">:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`, and the contact with a discrete rigid body,</span>
+<span class="sd">:mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`, are written against it, each once for both kinds.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csr_matrix</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.modelchange</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelChange</span>
+
+<span class="c1">#: How far below the axis of an axisymmetric model a point may lie, relative to the size :math:`h` of its element, and</span>
+<span class="c1">#: still be on the axis: :math:`r \\geq -\\epsilon\\, h` is the round-off of a mesher and counts as :math:`r = 0`,</span>
+<span class="c1">#: :math:`r &lt; -\\epsilon\\, h` is a mesh drawn across the axis and is refused. It is the rule of Marmot's axisymmetric</span>
+<span class="c1">#: elements for their nodes (``Spatial2D::Axisymmetric::axisTolerance``, with :math:`h` the diagonal of the bounding box</span>
+<span class="c1">#: of the element), so that a contact point accepts the nodes its element accepts.</span>
+<span class="n">axisTolerance</span> <span class="o">=</span> <span class="mf">1e-12</span>
+
+
+<div class="viewcode-block" id="outOfPlaneExtentAt">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">outOfPlaneExtentAt</span><span class="p">(</span><span class="n">coordinates</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">elements</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The out-of-plane extent :math:`b` of the body at points on the boundaries of elements: the factor of</span>
+<span class="sd">    :math:`\\mathrm{d}V = b\\, \\mathrm{d}A` the elements integrate with, and so the factor of the area of a contact</span>
+<span class="sd">    point, :math:`A_p = b(\\boldsymbol{X}_p)\\, L_p` (see the module documentation):</span>
+
+<span class="sd">    ========================  =================================================  ======================</span>
+<span class="sd">    model                     the elements integrate                             :math:`b`</span>
+<span class="sd">    ========================  =================================================  ======================</span>
+<span class="sd">    3D                        over the volume                                    1</span>
+<span class="sd">    plane                     over the slice of the thickness of their section   :math:`t`</span>
+<span class="sd">    axisymmetric              over the rings about the axis                      :math:`2 \\pi r`</span>
+<span class="sd">    ========================  =================================================  ======================</span>
+
+<span class="sd">    In a plane model, :math:`t` is the thickness of the section of the element</span>
+<span class="sd">    (:meth:`~edelweissfe.models.femodel.FEModel.thicknessOf`). In an axisymmetric model, :math:`b` is the</span>
+<span class="sd">    circumference at the radius of the point (:func:`circumferenceAt`), with the size of the element for the round-off</span>
+<span class="sd">    of the axis.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coordinates</span>
+<span class="sd">        The points, (nPoints, nDim), in the reference configuration.</span>
+<span class="sd">    elements</span>
+<span class="sd">        For each point, the element on whose boundary it lies (the parent element of its contact facet): its section</span>
+<span class="sd">        gives the thickness in a plane model, its size the round-off of the axis in an axisymmetric model.</span>
+<span class="sd">    model</span>
+<span class="sd">        The model.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.ndarray</span>
+<span class="sd">        :math:`b` at each point.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a point of a 2D model lies on no element (a contact facet not made by the surface element generator), or a</span>
+<span class="sd">        point of an axisymmetric model lies below the axis by more than the round-off.</span>
+<span class="sd">    """</span>
+
+    <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">domainSize</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">elements</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">elements</span><span class="p">))</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">element</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"A contact point of a 2D model lies on a contact facet that knows no element (one not made by the surface "</span>
+            <span class="s2">"element generator); the element tells the thickness, or the round-off of the axis."</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">model</span><span class="o">.</span><span class="n">axisymmetric</span><span class="p">:</span>
+        <span class="n">thicknessOf</span> <span class="o">=</span> <span class="p">{</span><span class="n">element</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">thicknessOf</span><span class="p">(</span><span class="n">element</span><span class="p">)</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">elements</span><span class="p">)}</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">thicknessOf</span><span class="p">[</span><span class="n">element</span><span class="p">]</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="n">sizeOf</span> <span class="o">=</span> <span class="p">{</span><span class="n">element</span><span class="p">:</span> <span class="n">_sizeOf</span><span class="p">(</span><span class="n">element</span><span class="p">)</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">elements</span><span class="p">)}</span>
+    <span class="k">return</span> <span class="n">circumferenceAt</span><span class="p">(</span>
+        <span class="n">coordinates</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">sizeOf</span><span class="p">[</span><span class="n">element</span><span class="p">]</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">]),</span>
+        <span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"element </span><span class="si">{</span><span class="n">elements</span><span class="p">[</span><span class="n">p</span><span class="p">]</span><span class="o">.</span><span class="n">elNumber</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="circumferenceAt">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.circumferenceAt">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">circumferenceAt</span><span class="p">(</span><span class="n">radii</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">sizes</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">bodyOf</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">],</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The circumference :math:`2 \\pi r` of the ring about the axis of an axisymmetric model at each point: the</span>
+<span class="sd">    out-of-plane extent :math:`b` of an axisymmetric body (:func:`outOfPlaneExtentAt`). The round-off of the axis</span>
+<span class="sd">    scales with the size :math:`h` of the body a point lies on: :math:`r \\geq -\\epsilon\\, h` is on the axis,</span>
+<span class="sd">    :math:`b = 0`, and a point further below is refused (:data:`axisTolerance`). Every kind of contact point of an</span>
+<span class="sd">    axisymmetric model takes :math:`b` from here: the kinds of finite elements through :func:`outOfPlaneExtentAt`,</span>
+<span class="sd">    with the sizes of their elements, a kind of another library with the sizes of its own bodies.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    radii</span>
+<span class="sd">        The radius :math:`r` of each point, its first coordinate in the reference configuration, (nPoints,).</span>
+<span class="sd">    sizes</span>
+<span class="sd">        The size :math:`h` of the body each point lies on, the diagonal of the bounding box of its nodes or vertices,</span>
+<span class="sd">        (nPoints,).</span>
+<span class="sd">    bodyOf</span>
+<span class="sd">        What point ``p`` lies on, for the message of a refusal: ``bodyOf(p)`` reads, for example, ``"element 7"``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.ndarray</span>
+<span class="sd">        :math:`2 \\pi r` at each point, 0 on the axis.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a point lies below the axis by more than the round-off.</span>
+<span class="sd">    """</span>
+
+    <span class="n">belowTheAxis</span> <span class="o">=</span> <span class="n">radii</span> <span class="o">&lt;</span> <span class="o">-</span><span class="n">axisTolerance</span> <span class="o">*</span> <span class="n">sizes</span>
+    <span class="k">if</span> <span class="n">belowTheAxis</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">belowTheAxis</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"A contact point of an axisymmetric model lies at the radius r = </span><span class="si">{</span><span class="n">radii</span><span class="p">[</span><span class="n">p</span><span class="p">]</span><span class="si">:</span><span class="s2">.3e</span><span class="si">}</span><span class="s2"> &lt; 0, on </span><span class="si">{</span><span class="n">bodyOf</span><span class="p">(</span><span class="n">p</span><span class="p">)</span><span class="si">}</span><span class="s2">; the "</span>
+            <span class="s2">"section r-z of a body of revolution lies in r &gt;= 0."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">radii</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sizeOf</span><span class="p">(</span><span class="n">element</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The size of an element: the diagonal of the bounding box of its nodes, as Marmot's axisymmetric elements measure</span>
+<span class="sd">    it for :data:`axisTolerance`."""</span>
+
+    <span class="n">coordinates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">])</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">coordinates</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">coordinates</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)))</span>
+
+
+<div class="viewcode-block" id="refusePointsMadeForAnotherKindOfModel">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.refusePointsMadeForAnotherKindOfModel">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">refusePointsMadeForAnotherKindOfModel</span><span class="p">(</span><span class="n">contactPoints</span><span class="p">:</span> <span class="s2">"ContactPoints"</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">constraintName</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Refuse contact points made for a model of another kind than the constraint's: their areas would be those of</span>
+<span class="sd">    rings in a plane model, or of slices in an axisymmetric one (:attr:`ContactPoints.axisymmetric`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    contactPoints</span>
+<span class="sd">        The contact points the constraint takes.</span>
+<span class="sd">    model</span>
+<span class="sd">        The model of the constraint.</span>
+<span class="sd">    constraintName</span>
+<span class="sd">        The name of the constraint, for the error message.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the points were made for a model of another kind.</span>
+<span class="sd">    """</span>
+
+    <span class="k">if</span> <span class="n">contactPoints</span><span class="o">.</span><span class="n">axisymmetric</span> <span class="o">!=</span> <span class="n">model</span><span class="o">.</span><span class="n">axisymmetric</span><span class="p">:</span>
+        <span class="n">kind</span> <span class="o">=</span> <span class="s2">"axisymmetric"</span> <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">axisymmetric</span> <span class="k">else</span> <span class="s2">"not axisymmetric"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Constraint '</span><span class="si">{</span><span class="n">constraintName</span><span class="si">}</span><span class="s2">': its model is </span><span class="si">{</span><span class="n">kind</span><span class="si">}</span><span class="s2">, but the contact points were made with "</span>
+            <span class="sa">f</span><span class="s2">"axisymmetric=</span><span class="si">{</span><span class="n">contactPoints</span><span class="o">.</span><span class="n">axisymmetric</span><span class="si">}</span><span class="s2">; their areas are those of another body."</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ContactPoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ContactPoints</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The contact points of the slave side of a contact constraint.</span>
+
+<span class="sd">    A constraint uses them so. In every update of the connectivity, it asks for the current coordinates of all points</span>
+<span class="sd">    (:meth:`currentPointCoordinates`), pairs those within reach with the master surface, and then *locates* the paired</span>
+<span class="sd">    ones (:meth:`locatePoints`): they name the nodes they act on, which become the slave part of the constraint's</span>
+<span class="sd">    block. Within the increment the constraint evaluates the located points only: where they are, from their origins</span>
+<span class="sd">    (:meth:`originsOfLocatedPoints`) and their displacements (:meth:`displacementsOfLocatedPoints`), the residual</span>
+<span class="sd">    contribution of the forces on them</span>
+<span class="sd">    (:meth:`addForceResidual`) and, for the tangent, their interpolation vectors</span>
+<span class="sd">    (:meth:`interpolationOfLocatedPoint`), all at once for the bound of the stiffness</span>
+<span class="sd">    (:meth:`interpolationMatrixOfLocatedPoints`).</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nPoints : int</span>
+<span class="sd">        The number of contact points.</span>
+<span class="sd">    areas : numpy.ndarray</span>
+<span class="sd">        The area each contact point stands for, in the reference configuration, measured when the points are made: its</span>
+<span class="sd">        measure times the out-of-plane extent of the body at it (:func:`outOfPlaneExtentAt`); the penalty modulus per</span>
+<span class="sd">        unit area times this area is the stiffness of the point's spring.</span>
+<span class="sd">    """</span>
+
+    <span class="n">nPoints</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">areas</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+
+    <span class="c1">#: True if the points were made for an axisymmetric model, the section r-z of a body of revolution, where each</span>
+    <span class="c1">#: stands for the ring it sweeps about the axis; a constraint refuses points made for a model of another kind</span>
+    <span class="c1">#: (:func:`refusePointsMadeForAnotherKindOfModel`).</span>
+    <span class="n">axisymmetric</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1">#: Whether the points can be located only once the model has connected the entities they belong to, at an update</span>
+    <span class="c1">#: of the connectivity: points whose nodes follow from where they are (the kernel functions of updated-Lagrangian</span>
+    <span class="c1">#: particles). A checkpoint does not hold that connectivity, so a constraint restored from one keeps their</span>
+    <span class="c1">#: projection and locates them at the next update of the connectivity, which the resumed run makes before its</span>
+    <span class="c1">#: first increment. False for the points of finite elements, which act on nodes of their own.</span>
+    <span class="n">locatedOnlyWhenConnected</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="ContactPoints.currentPointCoordinates">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.currentPointCoordinates">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">currentPointCoordinates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The coordinates of all contact points in the configuration of the model, for the contact search.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The coordinates, of shape (nPoints, nDim).</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.locatePoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.locatePoints">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">locatePoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Locate the given contact points in the block of the constraint: the nodes their interpolation vectors act</span>
+<span class="sd">        on, in the order they take in the block. The located points are the ones the evaluation methods below refer</span>
+<span class="sd">        to, in the order given here.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        points</span>
+<span class="sd">            The indices of the contact points to locate, ascending.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The nodes, the slave part of the constraint's block; a node may appear more than once.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.originsOfLocatedPoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.originsOfLocatedPoints">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">originsOfLocatedPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The origins of the located points: where they are when the displacement they move with is zero -- in the</span>
+<span class="sd">        reference configuration for the points of finite elements, which move with the total displacement ``U``; at</span>
+<span class="sd">        the start of the increment for points whose nodes carry the increment ``dU``. Constant from one location to</span>
+<span class="sd">        the next.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The coordinates, of shape (nLocated, nDim).</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.displacementsOfLocatedPoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.displacementsOfLocatedPoints">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">displacementsOfLocatedPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The displacements of the located points from their origins (:meth:`originsOfLocatedPoints`):</span>
+<span class="sd">        :math:`C \\boldsymbol{u}`, the interpolation vectors of the points times the displacement</span>
+<span class="sd">        :math:`\\boldsymbol{u}` they move with -- ``U`` for the points of finite elements, ``dU`` for points whose</span>
+<span class="sd">        nodes carry the increment. Both are passed; each kind takes the one it moves with.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The total displacement of the slave part of the constraint's block.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The increment of the slave part of the constraint's block.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The displacements, of shape (nLocated, nDim).</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.coordinatesOfLocatedPoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.coordinatesOfLocatedPoints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coordinatesOfLocatedPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The current coordinates of the located points: their origins plus their displacements.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The total displacement of the slave part of the constraint's block.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The increment of the slave part of the constraint's block.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The coordinates, of shape (nLocated, nDim).</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">originsOfLocatedPoints</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">displacementsOfLocatedPoints</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.addForceResidual">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.addForceResidual">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">addForceResidual</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">forces</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">directions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Add the residual contribution of the forces of penalty springs at located points, :math:`f\\, c \\otimes n`</span>
+<span class="sd">        per point: the negative of the force :math:`-f\\, n` on the point, distributed with its interpolation vector.</span>
+<span class="sd">        A spring acts along a unit direction :math:`n`: the normal of a contact, an axis of a tie.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        P</span>
+<span class="sd">            The slave part of the constraint's residual contribution; augmented.</span>
+<span class="sd">        points</span>
+<span class="sd">            The located points that carry a force (indices into the located points).</span>
+<span class="sd">        forces</span>
+<span class="sd">            The forces :math:`f` of their springs, the normal forces of a contact (negative in contact).</span>
+<span class="sd">        directions</span>
+<span class="sd">            The unit directions of their springs, of shape (len(points), nDim).</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.interpolationOfLocatedPoint">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.interpolationOfLocatedPoint">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">interpolationOfLocatedPoint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Where a located point sits in the slave part of the block, and how it moves with it.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        k</span>
+<span class="sd">            The index of the located point.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">            Its degrees of freedom in the slave part of the block, node by node, and its interpolation vector :math:`c`</span>
+<span class="sd">            over these nodes.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.interpolationMatrixOfLocatedPoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.interpolationMatrixOfLocatedPoints">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">interpolationMatrixOfLocatedPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The interpolation vectors :math:`c` of all located points, one row per point, over the nodes of the slave</span>
+<span class="sd">        part of the block: the matrix :math:`C` with :math:`\\boldsymbol{x}_p = (C \\boldsymbol{x})_p`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        scipy.sparse.csr_matrix</span>
+<span class="sd">            The matrix, of shape (nLocated, number of nodes of the slave part of the block).</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.searchLayout">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.searchLayout">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">searchLayout</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""What identifies the contact points in a checkpoint, see</span>
+<span class="sd">        :class:`~edelweissfe.constraints.base.frozencontactsearch.FrozenContactSearch`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, numpy.ndarray]</span>
+<span class="sd">            The identifying arrays.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.isTouchedBy">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.isTouchedBy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isTouchedBy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">ModelChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether a change of the mesh touched the contact points, so that they must be regenerated</span>
+<span class="sd">        (:meth:`regenerated`). By default no change does.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model.</span>
+<span class="sd">        change</span>
+<span class="sd">            The change of the mesh.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if the contact points must be regenerated.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.regenerated">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.regenerated">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">regenerated</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"ContactPoints"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The contact points after a change of the mesh that touched them (:meth:`isTouchedBy`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ContactPoints</span>
+<span class="sd">            The new contact points.</span>
+<span class="sd">        """</span>
+
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> is never touched by a change of the mesh."</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.referenceCoordinates">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.referenceCoordinates">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">referenceCoordinates</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Where all the contact points are in the reference configuration, for a kind of contact points that a change</span>
+<span class="sd">        of the mesh regenerates (:meth:`regenerated`): what a constraint carries the state of the old points over to</span>
+<span class="sd">        the new ones by (a tie, see :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The coordinates, of shape (nPoints, nDim).</span>
+<span class="sd">        """</span>
+
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> is never touched by a change of the mesh."</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.normalPressures">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.normalPressures">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">normalPressures</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalForces</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Convert the normal forces of the contact points into pressures (positive in compression), per the areas of</span>
+<span class="sd">        the points (:meth:`perArea`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        normalForces</span>
+<span class="sd">            The normal force of each contact point (negative in compression).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The normal pressure of each contact point.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">perArea</span><span class="p">(</span><span class="o">-</span><span class="n">normalForces</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.perArea">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.perArea">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">perArea</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">forces</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Forces on the contact points per the areas they stand for: nominal pressures or tractions. A point that</span>
+<span class="sd">        stands for no area, on the axis of an axisymmetric model, carries no force and reports zero.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        forces</span>
+<span class="sd">            The force on each contact point, (nPoints,) or (nPoints, nDim).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The forces per area, of the shape of ``forces``.</span>
+<span class="sd">        """</span>
+
+        <span class="n">areas</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">areas</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="p">(</span><span class="n">forces</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">divide</span><span class="p">(</span><span class="n">forces</span><span class="p">,</span> <span class="n">areas</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">forces</span><span class="p">),</span> <span class="n">where</span><span class="o">=</span><span class="n">areas</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.describe">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""What the contact points are, for the journal.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            A short description.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">nPoints</span><span class="si">}</span><span class="s2"> contact points"</span></div>
+
+
+<div class="viewcode-block" id="ContactPoints.finiteElementNodes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.finiteElementNodes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finiteElementNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The nodes of finite elements the contact points can act on, so that a constraint can refuse a master</span>
+<span class="sd">        surface on the same nodes (self-contact). The empty set for points that act on no finite element nodes.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set</span>
+<span class="sd">            The nodes.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="nb">set</span><span class="p">()</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">surfaceNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The nodes of the slave surface, in the order of :meth:`nodalNormalForces`. Points that act on no finite</span>
+<span class="sd">        element nodes have none.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The nodes.</span>
+<span class="sd">        """</span>
+
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has no surface nodes."</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ContactPoints.nodalNormalForces">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpoints.ContactPoints.nodalNormalForces">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nodalNormalForces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalForces</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The normal forces of the contact points, distributed to the nodes of the slave surface. Points that act on</span>
+<span class="sd">        no finite element nodes have no surface nodes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        normalForces</span>
+<span class="sd">            The normal force of each contact point.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The normal force at each slave surface node.</span>
+<span class="sd">        """</span>
+
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has no surface nodes to distribute the normal forces to."</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

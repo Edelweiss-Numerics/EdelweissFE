@@ -245,6 +245,11 @@ all
 <h2><code class="docutils literal notranslate"><span class="pre">plane</span></code> - Plane (2D) elements<a class="headerlink" href="#plane-plane-2d-elements" title="Link to this heading"></a></h2>
 <p>Assigns the material and the out-of-plane <code class="docutils literal notranslate"><span class="pre">thickness</span></code> to two-dimensional continuum elements. The data lines list
 the element sets.</p>
+<p>In a plane model (<code class="docutils literal notranslate"><span class="pre">*job,</span> <span class="pre">domain=2d</span></code>) the elements integrate over the slice of this thickness, and so do the contact
+points on their faces, each standing for its length times the thickness (<a class="reference internal" href="../theory/contact.html#contact-plane"><span class="std std-ref">Plane models: every point stands for the thickness of its section</span></a>). In an axisymmetric
+model (<code class="docutils literal notranslate"><span class="pre">*job,</span> <span class="pre">domain=axisymmetric</span></code>) <code class="docutils literal notranslate"><span class="pre">type=plane</span></code> still requires a <code class="docutils literal notranslate"><span class="pre">thickness</span></code>, but neither the axisymmetric
+elements (<code class="docutils literal notranslate"><span class="pre">CAX4</span></code>, <code class="docutils literal notranslate"><span class="pre">CAX8</span></code>, <code class="docutils literal notranslate"><span class="pre">CAX8R</span></code>, <code class="docutils literal notranslate"><span class="pre">GCAX4</span></code>, <code class="docutils literal notranslate"><span class="pre">GCAX8</span></code>, <code class="docutils literal notranslate"><span class="pre">GCAX8R</span></code>, <code class="docutils literal notranslate"><span class="pre">CX8UL</span></code>, <code class="docutils literal notranslate"><span class="pre">CX8RUL</span></code>) nor their contact
+points use it: they integrate over the rings about the axis (<a class="reference internal" href="../theory/contact.html#contact-axisymmetric"><span class="std std-ref">Axisymmetric models: every point stands for a ring</span></a>).</p>
 <table class="docutils align-default" id="id5">
 <caption><span class="caption-text">Options:</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
 <thead>

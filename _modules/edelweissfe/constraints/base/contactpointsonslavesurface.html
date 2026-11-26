@@ -1,0 +1,678 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.constraints.base.contactpointsonslavesurface &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.constraints.base.contactpointsonslavesurface</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.constraints.base.contactpointsonslavesurface</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""</span>
+<span class="sd">The contact points of an integrated (Gauss-point-to-segment) contact formulation: quadrature points</span>
+<span class="sd">on the curved parent faces of a slave surface.</span>
+
+<span class="sd">Shared by every constraint that integrates contact over a slave surface, whatever the master side</span>
+<span class="sd">is -- a deformable surface or a rigid body. See</span>
+<span class="sd">:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` for why the pressure must be</span>
+<span class="sd">distributed with the *parent* face's shape functions.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csr_matrix</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.contactpoints</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContactPoints</span><span class="p">,</span> <span class="n">outOfPlaneExtentAt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.modelchange</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelChange</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.sets.elementset</span><span class="w"> </span><span class="kn">import</span> <span class="n">ElementSet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.facetcontactgeometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">facetNormalAndMeasure</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.meshtools</span><span class="w"> </span><span class="kn">import</span> <span class="n">currentNodeCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.parentfacegeometry</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">facetQuadratureRule</span><span class="p">,</span>
+    <span class="n">parentFaceShapeFunctions</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="checkFacetsCarryParentFaces">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.checkFacetsCarryParentFaces">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">checkFacetsCarryParentFaces</span><span class="p">(</span><span class="n">facets</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">side</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">setName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">constraintName</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Reject contact facets that cannot be used with parent-face shape functions.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    facets</span>
+<span class="sd">        The contact facet elements.</span>
+<span class="sd">    side</span>
+<span class="sd">        'slave' or 'master', for the error message.</span>
+<span class="sd">    setName</span>
+<span class="sd">        The name of the facet element set, for the error message.</span>
+<span class="sd">    constraintName</span>
+<span class="sd">        The name of the constraint, for the error message.</span>
+<span class="sd">    """</span>
+
+    <span class="n">unstamped</span> <span class="o">=</span> <span class="p">[</span><span class="n">facet</span><span class="o">.</span><span class="n">elNumber</span> <span class="k">for</span> <span class="n">facet</span> <span class="ow">in</span> <span class="n">facets</span> <span class="k">if</span> <span class="n">facet</span><span class="o">.</span><span class="n">parentFaceType</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">unstamped</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Constraint '</span><span class="si">{</span><span class="n">constraintName</span><span class="si">}</span><span class="s2">': </span><span class="si">{</span><span class="n">side</span><span class="si">}</span><span class="s2"> facet </span><span class="si">{</span><span class="n">unstamped</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> carries no parent face. "</span>
+            <span class="s2">"The integrated contact formulation distributes the contact pressure with the "</span>
+            <span class="s2">"parent element face's shape functions, so the facets must come from the "</span>
+            <span class="s2">"surface element generator, which stamps them."</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Per-node weights cannot be applied here (the pressure is distributed with the parent face's</span>
+    <span class="c1"># shape functions); accepting them would silently differ from the node-based constraint.</span>
+    <span class="n">weighted</span> <span class="o">=</span> <span class="p">[</span><span class="n">facet</span><span class="o">.</span><span class="n">elNumber</span> <span class="k">for</span> <span class="n">facet</span> <span class="ow">in</span> <span class="n">facets</span> <span class="k">if</span> <span class="n">facet</span><span class="o">.</span><span class="n">weightTransform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">weighted</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Constraint '</span><span class="si">{</span><span class="n">constraintName</span><span class="si">}</span><span class="s2">': </span><span class="si">{</span><span class="n">side</span><span class="si">}</span><span class="s2"> surface '</span><span class="si">{</span><span class="n">setName</span><span class="si">}</span><span class="s2">' was generated with "</span>
+            <span class="sa">f</span><span class="s2">"nodalWeights='serendipityOptimal' (facet </span><span class="si">{</span><span class="n">weighted</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> and "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weighted</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> more carry a weight transform), which this constraint "</span>
+            <span class="s2">"cannot honour -- it distributes the contact pressure with the parent face's "</span>
+            <span class="s2">"shape functions, not with per-node weights, and needs no corner reweighting "</span>
+            <span class="s2">"to begin with. Generate these facets with the default "</span>
+            <span class="s2">"nodalWeights='facetConsistent'."</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ContactPointsOnSlaveSurface</span><span class="p">(</span><span class="n">ContactPoints</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The quadrature points of a slave surface, used as contact points.</span>
+
+<span class="sd">    Each slave facet carries an ``nQuadraturePoints``-point rule. A point at facet-barycentric</span>
+<span class="sd">    coordinates :math:`b` sits at parent-face parametric coordinates :math:`\\xi = b \\cdot \\Xi`</span>
+<span class="sd">    (with :math:`\\Xi` the facet vertices' own parametric coordinates in the parent face, stamped by</span>
+<span class="sd">    the surface element generator), and carries the constant weight :math:`L_p = w_q J_q`, the quadrature weight</span>
+<span class="sd">    times the reference measure :math:`J_q` of the facet. Its position follows the *curved* parent</span>
+<span class="sd">    surface, :math:`x_q = N^s(\\xi_q) \\cdot x^s`. The area it stands for is :math:`L_p` times the out-of-plane</span>
+<span class="sd">    extent of the body at its origin (:func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`),</span>
+<span class="sd">    measured from the model when the points are made: times the thickness of the section of its facet's element in a</span>
+<span class="sd">    plane model, :math:`2 \\pi r_q L_p`, the area of its ring, in an axisymmetric model.</span>
+
+<span class="sd">    The contact points are numbered by slave facet and, within a facet, by quadrature point. The faces of the slave</span>
+<span class="sd">    surface must be of one type (one number of parent face nodes), so that the located points are evaluated as one</span>
+<span class="sd">    array. A located point takes the nodes of its parent face into the block of the constraint, its own copy of them:</span>
+<span class="sd">    its interpolation vector is :math:`N^s(\\xi_q)` over them, and it moves with their total displacement, from its</span>
+<span class="sd">    origin in the reference configuration, :math:`N^s(\\xi_q) \\cdot X^s`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    slaveSurface</span>
+<span class="sd">        The element set of contact facet elements forming the slave surface.</span>
+<span class="sd">    nQuadraturePoints</span>
+<span class="sd">        The number of quadrature points per slave facet.</span>
+<span class="sd">    model</span>
+<span class="sd">        The model, whose elements the areas are measured as.</span>
+<span class="sd">    constraintName</span>
+<span class="sd">        The name of the owning constraint, for error messages.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    facets : list</span>
+<span class="sd">        The slave contact facet elements.</span>
+<span class="sd">    parentNodes : list[list]</span>
+<span class="sd">        Per slave facet, the nodes of its parent element face.</span>
+<span class="sd">    parentReferenceCoordinates : list[numpy.ndarray]</span>
+<span class="sd">        Per slave facet, the reference coordinates of its parent face nodes.</span>
+<span class="sd">    shapeFunctions : list[numpy.ndarray]</span>
+<span class="sd">        Per slave facet, the parent-face shape functions at each of its quadrature points, of shape</span>
+<span class="sd">        (nQuadraturePoints, nParentNodes). Constant, since the parametric locations are fixed.</span>
+<span class="sd">    integrationWeights : list[numpy.ndarray]</span>
+<span class="sd">        Per slave facet, the integration weight of each of its quadrature points in the reference</span>
+<span class="sd">        configuration (consistent with the small-deformation setting, as the node-based</span>
+<span class="sd">        constraint's tributary areas are), in the model's own space: a length in 2D.</span>
+<span class="sd">    pointFacet : numpy.ndarray</span>
+<span class="sd">        The slave facet index of each contact point.</span>
+<span class="sd">    pointQuadraturePoint : numpy.ndarray</span>
+<span class="sd">        The quadrature point index of each contact point within its facet.</span>
+<span class="sd">    areas : numpy.ndarray</span>
+<span class="sd">        The area each contact point stands for: its integration weight (:attr:`integrationWeights`) times the</span>
+<span class="sd">        out-of-plane extent of the body at its origin.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slaveSurface</span><span class="p">:</span> <span class="n">ElementSet</span><span class="p">,</span> <span class="n">nQuadraturePoints</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">constraintName</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setName</span> <span class="o">=</span> <span class="n">slaveSurface</span><span class="o">.</span><span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_constraintName</span> <span class="o">=</span> <span class="n">constraintName</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nQuadraturePoints</span> <span class="o">=</span> <span class="n">nQuadraturePoints</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">facets</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">slaveSurface</span><span class="p">)</span>
+
+        <span class="n">checkFacetsCarryParentFaces</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">facets</span><span class="p">,</span> <span class="s2">"slave"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">setName</span><span class="p">,</span> <span class="n">constraintName</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">parentNodes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parentReferenceCoordinates</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shapeFunctions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">integrationWeights</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">facet</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">facets</span><span class="p">:</span>
+            <span class="n">barycentric</span><span class="p">,</span> <span class="n">weights</span> <span class="o">=</span> <span class="n">facetQuadratureRule</span><span class="p">(</span><span class="n">facet</span><span class="o">.</span><span class="n">nNodes</span><span class="p">,</span> <span class="n">nQuadraturePoints</span><span class="p">)</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">measure</span> <span class="o">=</span> <span class="n">facetNormalAndMeasure</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">facet</span><span class="o">.</span><span class="n">nodes</span><span class="p">]))</span>
+            <span class="n">parametric</span> <span class="o">=</span> <span class="n">barycentric</span> <span class="o">@</span> <span class="n">facet</span><span class="o">.</span><span class="n">vertexParametricCoords</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parentNodes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">facet</span><span class="o">.</span><span class="n">parentFaceNodes</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parentReferenceCoordinates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">facet</span><span class="o">.</span><span class="n">parentFaceNodes</span><span class="p">]))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shapeFunctions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">parentFaceShapeFunctions</span><span class="p">(</span><span class="n">facet</span><span class="o">.</span><span class="n">parentFaceType</span><span class="p">,</span> <span class="n">xi</span><span class="p">)</span> <span class="k">for</span> <span class="n">xi</span> <span class="ow">in</span> <span class="n">parametric</span><span class="p">])</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">integrationWeights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">measure</span> <span class="o">*</span> <span class="n">weights</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pointFacet</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">facets</span><span class="p">)),</span> <span class="n">nQuadraturePoints</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pointQuadraturePoint</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nQuadraturePoints</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">facets</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nPoints</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pointFacet</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_surfaceNodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">node</span> <span class="k">for</span> <span class="n">facet</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">facets</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">facet</span><span class="o">.</span><span class="n">nodes</span><span class="p">))</span>
+
+        <span class="n">nodeCounts</span> <span class="o">=</span> <span class="p">{</span><span class="nb">len</span><span class="p">(</span><span class="n">nodes</span><span class="p">)</span> <span class="k">for</span> <span class="n">nodes</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parentNodes</span><span class="p">}</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodeCounts</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Constraint '</span><span class="si">{</span><span class="n">constraintName</span><span class="si">}</span><span class="s2">': the slave surface '</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">setName</span><span class="si">}</span><span class="s2">' mixes parent faces with "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">nodeCounts</span><span class="p">)</span><span class="si">}</span><span class="s2"> nodes; a single element type is required, since the contact points of a "</span>
+                <span class="s2">"slave surface are evaluated as one array."</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nDim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parentReferenceCoordinates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">facets</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span> <span class="o">=</span> <span class="n">nodeCounts</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span> <span class="k">if</span> <span class="n">nodeCounts</span> <span class="k">else</span> <span class="mi">0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">areas</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">integrationWeights</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nPoints</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span> <span class="o">*</span> <span class="n">outOfPlaneExtentAt</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">referenceCoordinates</span><span class="p">(),</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">facets</span><span class="p">[</span><span class="n">f</span><span class="p">]</span><span class="o">.</span><span class="n">parentElement</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">pointFacet</span><span class="p">],</span> <span class="n">model</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axisymmetric</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">axisymmetric</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">locatePoints</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">surfaceNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The unique nodes of the slave facets, in the same first-encounter order the surface element generator uses</span>
+<span class="sd">        for its '&lt;prefix&gt;_nodes' node set -- so a fromExpression field output over that set lines up with</span>
+<span class="sd">        :meth:`nodalNormalForces`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The nodes.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_surfaceNodes</span>
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.describe">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of points, slave facets and quadrature points per facet, for the journal.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            The description.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">nPoints</span><span class="si">}</span><span class="s2"> points (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">facets</span><span class="p">)</span><span class="si">}</span><span class="s2"> slave facets x </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">nQuadraturePoints</span><span class="si">}</span><span class="s2"> quadrature points)"</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.finiteElementNodes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.finiteElementNodes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finiteElementNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""All parent face nodes of the slave surface.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set</span>
+<span class="sd">            The nodes.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="n">node</span> <span class="k">for</span> <span class="n">nodes</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parentNodes</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.currentPointCoordinates">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.currentPointCoordinates">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">currentPointCoordinates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The current positions of all contact points, on the *curved* slave parent surface.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree, holding the displacement field.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The coordinates, of shape (nPoints, nDim).</span>
+<span class="sd">        """</span>
+
+        <span class="n">nDim</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">domainSize</span>
+        <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nPoints</span><span class="p">,</span> <span class="n">nDim</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">f</span><span class="p">,</span> <span class="n">nodes</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parentNodes</span><span class="p">):</span>
+            <span class="n">currentCoords</span> <span class="o">=</span> <span class="n">currentNodeCoordinates</span><span class="p">(</span><span class="n">nodes</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parentReferenceCoordinates</span><span class="p">[</span><span class="n">f</span><span class="p">])</span>
+            <span class="n">first</span> <span class="o">=</span> <span class="n">f</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">nQuadraturePoints</span>
+            <span class="n">coords</span><span class="p">[</span><span class="n">first</span> <span class="p">:</span> <span class="n">first</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">nQuadraturePoints</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeFunctions</span><span class="p">[</span><span class="n">f</span><span class="p">]</span> <span class="o">@</span> <span class="n">currentCoords</span>
+        <span class="k">return</span> <span class="n">coords</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.nodalNormalForces">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.nodalNormalForces">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nodalNormalForces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">normalForces</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Distribute the normal forces of the contact points to the slave surface nodes.</span>
+
+<span class="sd">        Positive means repelled; **negative means pulled**, which is exactly the tensile corner load</span>
+<span class="sd">        a serendipity face requires and a node-based scheme cannot produce. Ordered like</span>
+<span class="sd">        :attr:`surfaceNodes`. A parent-face node that is not itself a facet node -- possible only</span>
+<span class="sd">        with ``triangulation=corner`` -- receives contact force but has no slot there, and is</span>
+<span class="sd">        omitted.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        normalForces</span>
+<span class="sd">            The normal force of each contact point (negative in compression, zero if inactive).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The normal force at each slave surface node.</span>
+<span class="sd">        """</span>
+
+        <span class="n">forceOfNode</span> <span class="o">=</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_surfaceNodes</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nPoints</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">normalForces</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">f</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pointFacet</span><span class="p">[</span><span class="n">p</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="n">shapeFunction</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parentNodes</span><span class="p">[</span><span class="n">f</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeFunctions</span><span class="p">[</span><span class="n">f</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">pointQuadraturePoint</span><span class="p">[</span><span class="n">p</span><span class="p">]]):</span>
+                <span class="k">if</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">forceOfNode</span><span class="p">:</span>
+                    <span class="n">forceOfNode</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="o">+=</span> <span class="o">-</span><span class="n">normalForces</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">*</span> <span class="n">shapeFunction</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">forceOfNode</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_surfaceNodes</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.isTouchedBy">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.isTouchedBy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isTouchedBy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">ModelChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether a mesh change touched the source elements of the slave surface, so the contact</span>
+<span class="sd">        points must be rebuilt from the regenerated facets.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree, holding the recipes of the generated contact facet sets.</span>
+<span class="sd">        change</span>
+<span class="sd">            The mesh change.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if the slave surface must be rebuilt.</span>
+<span class="sd">        """</span>
+
+        <span class="n">recipe</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">contactFacetRecipes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">setName</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">recipe</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">change</span><span class="o">.</span><span class="n">touchesSurface</span><span class="p">(</span><span class="n">recipe</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.regenerated">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.regenerated">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">regenerated</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"ContactPointsOnSlaveSurface"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The contact points of the regenerated slave facets, after a change of the mesh touched them.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree, holding the regenerated facet set.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ContactPointsOnSlaveSurface</span>
+<span class="sd">            The new contact points.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">ContactPointsOnSlaveSurface</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">elementSets</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">setName</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">nQuadraturePoints</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constraintName</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.referenceCoordinates">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.referenceCoordinates">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">referenceCoordinates</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`N^s(\\xi_q) \\cdot X^s`, all points in the reference configuration, on the *curved* parent faces, in</span>
+<span class="sd">        the order of the points (by facet, then by quadrature point).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The coordinates, of shape (nPoints, nDim).</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">N</span> <span class="o">@</span> <span class="n">X</span> <span class="k">for</span> <span class="n">N</span><span class="p">,</span> <span class="n">X</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shapeFunctions</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">parentReferenceCoordinates</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDim</span><span class="p">))]</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.locatePoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.locatePoints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">locatePoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Locate the given points: each takes the nodes of its parent face into the block, a copy of its own, and its</span>
+<span class="sd">        shape functions and its origin, :math:`N^s(\\xi_q) \\cdot X^s` in the reference configuration, are gathered</span>
+<span class="sd">        into arrays, once per update of the connectivity, so that an evaluation is a fixed handful of array operations</span>
+<span class="sd">        rather than a loop over the points.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        points</span>
+<span class="sd">            The indices of the contact points to locate, ascending.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The nodes of the parent faces of the points, point after point.</span>
+<span class="sd">        """</span>
+
+        <span class="n">facets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pointFacet</span><span class="p">[</span><span class="n">points</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shapeFunctionsOfLocated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">shapeFunctions</span><span class="p">[</span><span class="n">f</span><span class="p">][</span><span class="n">q</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span><span class="p">,</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">facets</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pointQuadraturePoint</span><span class="p">[</span><span class="n">points</span><span class="p">])]</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span><span class="p">))</span>
+        <span class="n">referenceCoordinatesOfLocated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">parentReferenceCoordinates</span><span class="p">[</span><span class="n">f</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">facets</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+            <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDim</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_originsOfLocated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ai,aij-&gt;aj"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shapeFunctionsOfLocated</span><span class="p">,</span> <span class="n">referenceCoordinatesOfLocated</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">node</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">facets</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parentNodes</span><span class="p">[</span><span class="n">f</span><span class="p">]]</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.originsOfLocatedPoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.originsOfLocatedPoints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">originsOfLocatedPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`N^s(\\xi_q) \\cdot X^s`, the points in the reference configuration, on the *curved* parent face.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The coordinates, of shape (nLocated, nDim).</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_originsOfLocated</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.displacementsOfLocatedPoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.displacementsOfLocatedPoints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">displacementsOfLocatedPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`N^s(\\xi_q) \\cdot U^s`, from the total displacement of the parent face nodes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The total displacement of the slave part of the block; the points move with it.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The increment of the slave part of the block; unused.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The displacements, of shape (nLocated, nDim).</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span>
+            <span class="s2">"ai,aij-&gt;aj"</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_shapeFunctionsOfLocated</span><span class="p">,</span>
+            <span class="n">U</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shapeFunctionsOfLocated</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDim</span><span class="p">)),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.addForceResidual">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.addForceResidual">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">addForceResidual</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">forces</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">directions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Add :math:`f\\, N^s \\otimes n` to the parent face nodes of each given point; see</span>
+<span class="sd">        :meth:`ContactPoints.addForceResidual`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        P</span>
+<span class="sd">            The slave part of the residual contribution; augmented.</span>
+<span class="sd">        points</span>
+<span class="sd">            The located points that carry a force.</span>
+<span class="sd">        forces</span>
+<span class="sd">            The forces of their springs.</span>
+<span class="sd">        directions</span>
+<span class="sd">            The unit directions of their springs.</span>
+<span class="sd">        """</span>
+
+        <span class="n">Ns</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shapeFunctionsOfLocated</span><span class="p">[</span><span class="n">points</span><span class="p">]</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="p">(</span><span class="n">Ns</span><span class="p">[:,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">directions</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:])</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">P</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDim</span><span class="p">))[</span><span class="n">points</span><span class="p">]</span> <span class="o">+=</span> <span class="n">forces</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">w</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.interpolationOfLocatedPoint">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.interpolationOfLocatedPoint">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">interpolationOfLocatedPoint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The degrees of freedom of the parent face nodes of a located point, and its shape functions there.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        k</span>
+<span class="sd">            The index of the located point.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">            The degrees of freedom and the interpolation vector.</span>
+<span class="sd">        """</span>
+
+        <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDim</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">k</span> <span class="o">*</span> <span class="n">nDof</span><span class="p">,</span> <span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">nDof</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shapeFunctionsOfLocated</span><span class="p">[</span><span class="n">k</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.interpolationMatrixOfLocatedPoints">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.interpolationMatrixOfLocatedPoints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">interpolationMatrixOfLocatedPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The shape functions :math:`N^s(\\xi_q)` of the located points, each over its own copy of the nodes of its</span>
+<span class="sd">        parent face; see :meth:`ContactPoints.interpolationMatrixOfLocatedPoints`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        scipy.sparse.csr_matrix</span>
+<span class="sd">            The block diagonal matrix of the shape functions.</span>
+<span class="sd">        """</span>
+
+        <span class="n">nLocated</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shapeFunctionsOfLocated</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">csr_matrix</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_shapeFunctionsOfLocated</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nLocated</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span><span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">nLocated</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span><span class="p">),</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nLocated</span><span class="p">,</span> <span class="n">nLocated</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParentNodes</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContactPointsOnSlaveSurface.searchLayout">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface.searchLayout">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">searchLayout</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The slave facets and the quadrature rule identify the contact points in a checkpoint.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, numpy.ndarray]</span>
+<span class="sd">            The element numbers of the slave facets, and the number of quadrature points per facet.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"slaveFacets"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">facet</span><span class="o">.</span><span class="n">elNumber</span> <span class="k">for</span> <span class="n">facet</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">facets</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="s2">"nQuadraturePoints"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">nQuadraturePoints</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+        <span class="p">}</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

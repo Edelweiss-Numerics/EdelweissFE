@@ -163,118 +163,6 @@ Module ``edelweissfe.constraints.nodetorigidsurfacepenalty``
     :language: edelweiss
     :caption: Example: ``testfiles/marmot/NodeToRigidSurfacePenaltyConstraintLinear/test.inp``
 
-``nodetodiscreterigidbodypenalty`` - Contact against a discrete rigid body (deprecated)
------------------------------------------------------------------------------------------------
-
-.. deprecated:: 26.11
-    Use ``surfacetodiscreterigidbodypenalty`` below. On quadratic (hexa20/quad8) slave faces a
-    node-based penalty cannot transmit the tensile corner loads of a uniform pressure, so the corner
-    nodes lift off (see :ref:`serendipity-liftoff`), and its per-node penalty makes the contact
-    stiffness depend on the mesh.
-
-Module ``edelweissfe.constraints.nodetodiscreterigidbodypenalty``
-
-.. automodule:: edelweissfe.constraints.nodetodiscreterigidbodypenalty
-    :members: __doc__
-
-This is a frictionless, penalty-based, unilateral (contact-only) constraint that prevents the nodes
-of a slave node set from penetrating the moving surface of a
-:doc:`discrete rigid body </model/rigidbodies>`. It is the discrete-mesh counterpart of
-``nodetorigidsurfacepenalty`` (which uses an analytical boundary) and reuses the rigid body's
-own closest-point surface query for the geometry evaluation. Currently 3D only, and implicit /
-explicit-static only (see :doc:`/analysis/solvers`).
-
-**Theory**
-
-Let a slave node :math:`s` have reference position :math:`\mathbf{X}_s` and displacement DOF
-:math:`\mathbf{u}_s`, so its current position is :math:`\mathbf{x}_s = \mathbf{X}_s + \mathbf{u}_s`.
-The rigid body carries a reference point (RP) with displacement DOF :math:`\mathbf{u}_{RP}` and a
-rotation pseudo-vector DOF :math:`\boldsymbol{\theta}_{RP}`; its current position is
-:math:`\mathbf{x}_{RP} = \mathbf{X}_{RP} + \mathbf{u}_{RP}` and its orientation is
-:math:`\mathbf{R} = \exp(\mathrm{skew}(\boldsymbol{\theta}_{RP}))` (see
-:doc:`/model/rigidbodies` for the rigid-body kinematics).
-
-For each slave node the rigid body's surface query returns the signed distance :math:`d_s`
-(negative when the node is *inside* the body) and the outward unit normal :math:`\mathbf{n}_s` of
-the closest surface point, evaluated for the body's *current* pose. Contact is active whenever
-:math:`d_s < 0`, with gap (penetration)
-
-.. math::
-    g_s = -d_s \; > 0 .
-
-The penalty normal force is, for the two available ``type`` formulations,
-
-.. math::
-    f_n = k\, g_s \quad(\texttt{linear},\ \text{constant tangent } k),
-    \qquad
-    f_n = \tfrac{1}{2}\, k\, g_s^2 \quad(\texttt{quadratic},\ \text{tangent } k\, g_s),
-
-with :math:`k` the user-supplied ``penalty``.
-
-With the contact-point moment arm :math:`\mathbf{r}_s = \mathbf{x}_s - \mathbf{x}_{RP}` about the
-current RP, the (negative) gap gradient with respect to the involved DOFs
-:math:`(\mathbf{u}_s,\, \mathbf{u}_{RP},\, \boldsymbol{\theta}_{RP})` defines the generalized
-direction vectors
-
-.. math::
-    \mathbf{w}_s = -\mathbf{n}_s , \qquad
-    \mathbf{w}_{RP} =
-    \begin{bmatrix}
-        \mathbf{n}_s \\[2pt]
-        \left(\mathbf{R}\, \mathbf{J}_r(\boldsymbol{\theta}_{RP})\right)^{\!\top}
-        (\mathbf{r}_s \times \mathbf{n}_s)
-    \end{bmatrix},
-
-and, since the contact force on the nodes is :math:`-f_n\, \mathbf{w}`, the residual contribution
--- its negative, see :ref:`residual-and-tangent-convention` -- and its tangent are assembled exactly
-as in the node-to-rigid-surface penalty constraint,
-
-.. math::
-    \mathbf{P} \mathrel{+{=}} f_n\, \mathbf{w} , \qquad
-    \mathbf{K} \mathrel{+{=}} k\, (\mathbf{w} \otimes \mathbf{w}) + f_n\, \nabla \mathbf{w} ,
-
-per slave node, where :math:`\mathbf{w}` collects the slave and RP blocks.
-
-The factor :math:`\mathbf{J}_r(\boldsymbol{\theta}_{RP})` is the **right Jacobian of the SO(3)
-exponential map**,
-
-.. math::
-    \mathbf{J}_r(\boldsymbol{\theta}) = \mathbf{I}
-    - \frac{1-\cos\varphi}{\varphi^2}\,\mathrm{skew}(\boldsymbol{\theta})
-    + \frac{\varphi-\sin\varphi}{\varphi^3}\,\mathrm{skew}(\boldsymbol{\theta})^2 ,
-    \qquad \varphi = \lVert \boldsymbol{\theta} \rVert .
-
-It is required because the stored rotation DOF :math:`\boldsymbol{\theta}_{RP}` is the *raw total*
-pseudo-vector (fed through the exponential map every iteration), and the exponential map does not
-compose additively: incrementing :math:`\boldsymbol{\theta}_{RP}` by
-:math:`\delta\boldsymbol{\theta}` does not produce a physical spin of
-:math:`\delta\boldsymbol{\theta}` unless the body is currently unrotated. The map
-:math:`\mathbf{R}\,\mathbf{J}_r` converts a perturbation of the stored DOF into the physical
-spatial rotation it actually produces; it reduces to the identity at
-:math:`\boldsymbol{\theta}_{RP} = \mathbf{0}`, where :math:`\mathbf{w}_{RP}` collapses to the
-naive :math:`\mathbf{r}_s \times \mathbf{n}_s`. Omitting it makes the RP-moment term a few percent
-off at :math:`\sim 0.1` rad accumulated rotation and :math:`\sim 15\%` off at :math:`\sim 0.4` rad.
-
-Both :math:`\mathbf{n}_s` and :math:`\mathbf{r}_s` are recomputed from the *current, total*
-solution every Newton iteration (no per-increment caching), so the coupling between the RP DOFs and
-the contact residual is exact. Because the rigid surface is a triangulated (piecewise-planar) mesh,
-:math:`\mathbf{n}_s` is exactly constant within a facet — the intra-facet curvature term of the
-tangent vanishes identically — but it still rotates rigidly with the RP. The geometric-stiffness
-term :math:`f_n\, \nabla \mathbf{w}` accounts for that rigid rotation of the normal and for the
-:math:`\mathbf{J}_r` dependence, giving the exact linearization of :math:`\mathbf{w}` in the
-implemented blocks (verified against finite differences for arbitrary accumulated rotation). The
-:math:`\boldsymbol{\theta}_{RP}\boldsymbol{\theta}_{RP}` self-block, which would require the second
-derivative of the exponential map, is omitted; this affects only the convergence rate, not the
-correctness of the converged solution. The per-block breakdown of the tangent is given in the inline
-comments of the ``computeKernels`` method in the module source.
-
-.. pprint:: constraint:nodetodiscreterigidbodypenalty
-    :caption: Options:
-
-.. literalinclude:: ../../../testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp
-    :language: edelweiss
-    :caption: Example: ``testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp``
-
 ``nodetodeformablesurfacepenalty`` - Node-to-deformable-surface contact
 -------------------------------------------------------------------------
 
@@ -282,6 +170,10 @@ The complete theory of this constraint -- surface discretization and triangulati
 areas, finite- and small-sliding gap kinematics, penalty and augmented-Lagrange normal laws,
 Coulomb friction with consistent tangents, solver integration, and the verification methodology
 -- is documented in :doc:`/theory/contact`.
+
+In a plane model each slave node stands for its tributary length times the ``thickness`` of the sections of its
+elements (:ref:`contact-plane`). An axisymmetric model (``*job, domain=axisymmetric``) is refused: the constraint is not
+verified on rings; use ``surfacetodeformablesurfacepenalty`` with ``contactPoints=nodes`` there.
 
 Module ``edelweissfe.constraints.nodetodeformablesurfacepenalty``
 
@@ -318,9 +210,46 @@ basis, so the two constraints agree to 13 digits and there is nothing to gain --
 **non-matching** meshes the integrated formulation is a substantial improvement at any element
 order, linear included, as the figure in :ref:`integrated-contact` shows.
 
-Scope: normal penalty contact under ``sliding=small``, on both the implicit and the explicit solver
-path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
-constraint has both), and ``sliding=finite`` is rejected rather than approximated.
+The constraint is one contact for every kind of contact point (:ref:`contact-one-constraint`): the
+quadrature points of the slave facets (``contactPoints=quadraturePoints``, the default) and the slave
+nodes, each standing for its tributary area (``contactPoints=nodes``). Points that approach the master within
+``searchDistance`` are paired with it; a point found inside without having been seen approaching gets no force, is
+reported, and counts as found inside until it is seen outside again. A point in contact slides from facet to facet,
+but not across a convex crease; in every update it walks over the master until its facet no longer changes, so that
+an update repeated at the same configuration, as a resumed run repeats one, pairs it the same. The master may have
+corners: at its creases -- a crest, a re-entrant root -- the gap is the distance to the crease, signed by its
+pseudonormal (:ref:`contact-corners`). A new mesh of the master keeps what the pairing learnt about the points;
+regenerated contact points are paired as at the first update. An overlap at the start within ``searchDistance`` (a
+deeper one is found inside, and reported) is either an interference fit, pushed apart at once or
+over ``initialOverlapRampTime`` (``initialOverlap=pushApart``, the default), or an error of the geometry, such as flat
+faces in a curved hole, kept as the stress-free state (``initialOverlap=adjust``; :ref:`contact-initial-overlap`).
+
+With ``type=tied`` the constraint ties its points to the master surface instead (:ref:`contact-tie`). Mind the two
+``type=``: here it is the law of ``surfaceToDeformableSurfacePenalty`` (``linear``, ``quadratic`` or ``tied``), while
+``*constraint, type=tie`` is a different constraint, the tie by elimination below. With ``type=tied``, each point within
+``searchDistance`` at the first update is paired once, with the closest point of its closest facet, mapped onto the
+facet's parent face, and held there in every direction, in tension and compression, by penalty springs; a gap or an
+overlap at the pairing is part of the state at rest. It joins independently meshed bodies in implicit and explicit
+analyses. A new mesh of either side hands the tie on: the same points stay tied to the same material points of the
+master (on a curved master, to the nearest points of the new chords, mapped onto the parent face; the resting offset
+takes up the difference, so the forces stay exact), displaced from rest as at the last accepted state (checkpointed),
+interpolated onto the new points of a refined slave side. It is not the ``tie`` constraint below, which eliminates the
+degrees of freedom of slave nodes exactly; the penalty tie is compliant by :math:`t/k`, adds to the frequencies of an
+explicit analysis, works for both kinds of contact point on the parent faces, and does not compete with hanging nodes.
+Both keep a gap at rest, the ``tie`` with ``adjust=False``. Which to use when: :ref:`Two ties <contact-two-ties>`.
+
+Scope: frictionless normal penalty contact, or a tie, under ``sliding=small``, on both the implicit and the explicit
+solver path, in 3D, plane and axisymmetric models. Coulomb friction and augmented Lagrange are **not** implemented here
+(the node-based constraint has both), and ``sliding=finite`` is rejected rather than approximated. The master
+surface must consist of a single element type, and so must a slave surface whose contact points are its quadrature
+points.
+
+In 2D every contact point stands for its length times the out-of-plane extent of the body, as the elements integrate
+(:ref:`contact-out-of-plane`): in a plane model times the ``thickness`` of the section of its element, in an
+axisymmetric model (``*job, domain=axisymmetric``) for the ring it sweeps about the axis, :math:`2 \pi r` times its
+length (:ref:`contact-axisymmetric`). ``penalty`` stays a modulus per unit area, and the pressures and tractions are
+per that area in the reference configuration. The job's ``domain`` must match the elements -- axisymmetric elements
+in an axisymmetric job, plane ones in a ``2d`` job --, which nothing checks.
 
 Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
 
@@ -340,18 +269,52 @@ Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
     :caption: Example (explicit dynamics):
               ``testfiles/edelweiss-only/NEDSurfaceContact/test.inp``
 
+.. literalinclude:: ../../../testfiles/edelweiss-only/SurfaceTieHexa20AMR/test.inp
+    :language: edelweiss
+    :caption: Example (a tie with a gap at rest, across a refinement of its master side):
+              ``testfiles/edelweiss-only/SurfaceTieHexa20AMR/test.inp``
+
 ``surfacetodiscreterigidbodypenalty`` - Integrated contact against a discrete rigid body
 -----------------------------------------------------------------------------------------------
 
-The integrated counterpart of ``nodetodiscreterigidbodypenalty``, and the rigid-body counterpart
-of ``surfacetodeformablesurfacepenalty``: contact is evaluated at quadrature points over a slave
-facet surface and distributed with the slave parent-face shape functions, against the triangulated,
-closed surface of a :doc:`discrete rigid body </model/rigidbodies>`. The theory is documented in
-:ref:`integrated-contact-rigid-body`. Use it for any contact against rigid supports or indenters,
-in particular with quadratic slave faces.
+The rigid-body counterpart of ``surfacetodeformablesurfacepenalty``: contact is evaluated at the contact points of a
+slave surface and distributed with their interpolation vectors -- by default at quadrature points, with the slave
+parent-face shape functions --, against the triangulated, closed surface of a
+:doc:`discrete rigid body </model/rigidbodies>`. The theory is documented in :ref:`integrated-contact-rigid-body`. Use
+it for any contact against rigid supports or indenters, in particular with quadratic slave faces.
 
-Scope: normal penalty contact under ``sliding=small``, 3D, implicit and explicit solver paths, live
+Its slave side is the same as that of ``surfacetodeformablesurfacepenalty`` (:ref:`contact-points`): the
+quadrature points of the slave facets (``contactPoints=quadraturePoints``, the default) and the slave nodes, each
+standing for its tributary area (``contactPoints=nodes``) -- so the nodes and the faces of finite elements hit a rigid
+body through one constraint. Points farther than ``searchDistance`` from the rigid surface take no part until they
+approach.
+
+Scope: frictionless normal penalty contact under ``sliding=small``, 3D, implicit and explicit solver paths, live
 AMR of the slave side. The slave surface must consist of a single element type.
+
+**Moving from** ``nodeToDiscreteRigidBodyPenalty``. That node-based constraint is removed; this one with
+``contactPoints=nodes`` takes the same nodes as contact points. An input moves in four steps:
+
+1. The slave side is a surface, not a node set: generate the facets of the face that touches the body with the
+   ``surfaceElementGenerator`` and give them as ``slaveSurface`` (``nSet=block_back`` becomes the facets of
+   ``surface=block_back``), with ``contactPoints=nodes``. On quadratic (hexa20/quad8) faces, take the default
+   quadrature points instead: nodes cannot carry the tensile corner loads there (:ref:`serendipity-liftoff`).
+2. ``penalty`` is a stiffness per unit area: divide the penalty per node by the tributary area of a node, on a
+   uniform mesh of linear faces of size :math:`h` by :math:`h^2`. A node on the edge of the surface then has half
+   the stiffness of an interior one, at a corner a quarter -- its area -- where the penalty per node gave every
+   node the same; and the stiffness of the interface no longer changes with the mesh
+   (:ref:`integrated-contact-rigid-body`).
+3. The gap is that of small sliding: at every contact search (every increment of an implicit analysis) a node is
+   paired with its closest triangle, and until the next search it sees that triangle's plane, moving with the body.
+   The removed constraint searched the closest point of the surface anew in every iteration (finite sliding). A
+   node that slides over much of a triangle within one increment, past an edge or around a curved body, is
+   therefore followed only from one increment to the next: take increments that are small against the triangles.
+   ``searchDistance`` keeps its meaning: a node farther from the body takes no part.
+4. The surface of the rigid body must be closed and consist of triangles, which is checked when the constraint is
+   created: split the quadrilaterals of a surface mesh in two (for instance with PyVista's ``triangulate()``) and
+   give the body the triangulated file.
+
+The deck below is the former example of the node-based constraint, moved this way.
 
 Module ``edelweissfe.constraints.surfacetodiscreterigidbodypenalty``
 
@@ -371,12 +334,19 @@ Module ``edelweissfe.constraints.surfacetodiscreterigidbodypenalty``
     :caption: Example (explicit dynamics):
               ``testfiles/edelweiss-only/NEDSurfaceToDiscreteRigidBodyContact/test.inp``
 
+.. literalinclude:: ../../../testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactAtNodes/test.inp
+    :language: edelweiss
+    :caption: Example (the nodes of a block against a rotating cylinder, ``contactPoints=nodes``):
+              ``testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactAtNodes/test.inp``
+
 ``tie`` - Surface-to-surface tie (DOF elimination)
 --------------------------------------------------
 
 An Abaqus-style tie constraint bonding a slave surface rigidly to a deformable master surface.
-Unlike the penalty- and Lagrange-multiplier-based constraints above, the tie is enforced by
-master-slave DOF elimination (multi-point constraint condensation): each slave node's
+Unlike the penalty- and Lagrange-multiplier-based constraints above -- among them the penalty tie,
+``surfaceToDeformableSurfacePenalty`` with ``type=tied``, compared with this one in
+:ref:`Two ties <contact-two-ties>` -- the tie is enforced by master-slave DOF elimination (multi-point constraint
+condensation): each slave node's
 displacement is constrained to the frozen facet-linear interpolation of its closest master facet,
 :math:`u_s = \sum_a N_a \, u_{m_a}`, and the slave DOFs are condensed out of the system of equations
 -- exact enforcement, no penalty parameter, no additional DOFs, zero added stiffness. The same
@@ -589,8 +559,9 @@ behind. Two states decide it, and ``active`` is true while both are:
 
 A constraint reports from ``updateConnectivity`` only whether the nodes it couples changed. A constraint that
 searches as the bodies move, e.g. a contact, which searches for the surface it touches, declares it with
-``connectivityChangesWithMotion = True``, whether or not the nodes it couples change with the search (the rigid-body
-surface contact finds its closest triangles anew and keeps its nodes): it has to be updated again and again, so a solver
+``connectivityChangesWithMotion = True``, whether or not the nodes it couples change with the search (the contact
+with a discrete rigid body without ``searchDistance`` locates every point and keeps its nodes, but finds their closest
+triangles anew): it has to be updated again and again, so a solver
 that never updates the connectivity (``NEST``) refuses it, and ``NED`` updates it only every
 ``contact-update-frequency`` increments. A constraint with fixed nodes and nothing to search leaves it False.
 
@@ -607,12 +578,37 @@ were. A solver that cannot handle a constraint, e.g. ``NEST`` a contact, refuses
 In an explicit analysis, a penalty constraint adds the stiffness it has to the squared frequencies of the degrees of
 freedom it couples, and so lowers the critical time step (``addBoundOfAbsoluteStiffnessTimes``,
 :doc:`/theory/criticaltimestep`, "Penalty constraints"): by default from its tangent, also where it evaluates its
-explicit forces without one. A constraint that has no tangent, or whose tangent is costly, gives its springs instead,
-with one formula for the bound; a worked example from the tangent is ``directionalSpringPenalty``
+explicit forces without one. A constraint that has no tangent, or whose tangent is costly, or that needs the bound over
+the next increment (``follow-critical-time-step``) while springs of it that close in different states share a degree
+of freedom within its block, gives its springs instead, with one formula for the bound and one for the smallest gaps
+within the next increment; a worked example from the tangent is ``directionalSpringPenalty``
 (``tests/test_ned_penalty_constraints.py``), from the springs EdelweissMeshfree's
 ``ParticlePenaltyCartesianBoundaryConstraintExplicit``:
 
 .. automodule:: edelweissfe.constraints.base.penaltysprings
+    :members:
+
+The penalty contacts are assembled from two pieces of their own: the *contact points* of the slave side
+(:ref:`contact-points`) and the *law* that puts penalty springs at the paired points (:ref:`contact-law`). A contact
+constraint takes its slave side as contact points: points that move with an interpolation vector over the nodes they
+act on and stand for an area. The interface says what a constraint needs from them; the two kinds are the nodes of a
+slave surface and the quadrature points of its faces. A new kind of contact point implements
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`:
+
+.. automodule:: edelweissfe.constraints.base.contactpoints
+    :members:
+
+.. automodule:: edelweissfe.constraints.base.contactpointsatslavenodes
+    :members:
+
+.. automodule:: edelweissfe.constraints.base.contactpointsonslavesurface
+    :members:
+
+A new law derives from :class:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw` (its springs, and whether it
+pairs once), a new normal contact law from :class:`~edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw` (its
+normal force and energy):
+
+.. automodule:: edelweissfe.constraints.base.penaltylaw
     :members:
 
 Multi-point (DOF-elimination) constraints subclass from

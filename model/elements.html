@@ -2750,6 +2750,8 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt><a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.nodes" title="edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.nodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nodes</span></code></a></dt><dd><p>The list of nodes this entity currently holds.</p>
 </dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">parentElement</span></code></dt><dd><p>The element whose face this facet tiles, or None if this facet was never stamped.</p>
+</dd>
 <dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">parentFaceNodes</span></code></dt><dd><p>The parent face’s nodes in canonical order, or None if this facet was never stamped.</p>
 </dd>
 <dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">parentFaceType</span></code></dt><dd><p>The parent face’s canonical type, or None if this facet was never stamped.</p>
@@ -2845,7 +2847,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
 <td><p>Assign the nodes to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParentFace</span></code>(faceType, parentFaceNodes, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParentFace</span></code>(faceType, parentElement, ...)</p></td>
 <td><p>Record the element face this facet was cut from.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
@@ -2928,6 +2930,8 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt><a class="reference internal" href="../developer/dofnumbering.html#edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.nodes" title="edelweissfe.nodecouplingentity.base.nodecouplingentity.BaseNodeCouplingEntity.nodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nodes</span></code></a></dt><dd><p>The list of nodes this entity currently holds.</p>
 </dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">parentElement</span></code></dt><dd><p>The element whose face this facet tiles, or None if this facet was never stamped.</p>
+</dd>
 <dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">parentFaceNodes</span></code></dt><dd><p>The parent face’s nodes in canonical order, or None if this facet was never stamped.</p>
 </dd>
 <dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">parentFaceType</span></code></dt><dd><p>The parent face’s canonical type, or None if this facet was never stamped.</p>
@@ -3023,7 +3027,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
 <td><p>Assign the nodes to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParentFace</span></code>(faceType, parentFaceNodes, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParentFace</span></code>(faceType, parentElement, ...)</p></td>
 <td><p>Record the element face this facet was cut from.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>

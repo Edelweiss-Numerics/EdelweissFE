@@ -195,6 +195,7 @@
     <span class="c1">#: The parent element face this facet tiles, stamped by the surface element generator; see</span>
     <span class="c1">#: setParentFace. None until stamped, which is what the integrated contact formulation checks.</span>
     <span class="n">_parentFaceType</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">_parentElement</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_parentFaceNodes</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_vertexParametricCoords</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -278,7 +279,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">setNodalAreaShares</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shares</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_nodalAreaShares</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">shares</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">setParentFace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">faceType</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">parentFaceNodes</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">vertexParametricCoords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setParentFace</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">faceType</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">parentElement</span><span class="p">:</span> <span class="n">BaseElement</span><span class="p">,</span> <span class="n">parentFaceNodes</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">vertexParametricCoords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Record the element face this facet was cut from.</span>
 
 <span class="sd">        This is what an integrated (Gauss-point-to-segment) contact formulation needs and a</span>
@@ -292,6 +295,8 @@
 <span class="sd">        faceType</span>
 <span class="sd">            The parent face's canonical type, a key of</span>
 <span class="sd">            :data:`~edelweissfe.utils.parentfacegeometry.PARENT_FACE_PARAMETRIC_COORDS`.</span>
+<span class="sd">        parentElement</span>
+<span class="sd">            The element the face belongs to, whose section says how thick the body is in a plane model.</span>
 <span class="sd">        parentFaceNodes</span>
 <span class="sd">            The parent face's nodes, in that canonical ordering. A superset of this facet's own</span>
 <span class="sd">            nodes.</span>
@@ -301,6 +306,7 @@
 <span class="sd">        """</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_parentFaceType</span> <span class="o">=</span> <span class="n">faceType</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_parentElement</span> <span class="o">=</span> <span class="n">parentElement</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_parentFaceNodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">parentFaceNodes</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_vertexParametricCoords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">vertexParametricCoords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
 
@@ -309,6 +315,12 @@
 <span class="w">        </span><span class="sd">"""The parent face's canonical type, or None if this facet was never stamped."""</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parentFaceType</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">parentElement</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseElement</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The element whose face this facet tiles, or None if this facet was never stamped."""</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parentElement</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">parentFaceNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>

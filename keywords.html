@@ -533,7 +533,7 @@ documented on the page linked below the keyword.</p>
 <tbody>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">domain</span></code></td>
 <td><p>str (required)</p></td>
-<td><p>define spatial domain: 1d, 2d, 3d</p></td>
+<td><p>define spatial domain: 1d, 2d, 3d, or axisymmetric (2d: the section r-z of a body of revolution, r the first coordinate; what the model integrates is integrated over the rings about the axis). The elements must match: axisymmetric ones (CAX*, GCAX*, CX8UL, CX8RUL) in an axisymmetric job, plane ones in a 2d job; nothing checks it, and contact is off by the factor 2 pi r / t otherwise</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">startTime</span></code></td>
 <td><p>float, default=0.0</p></td>

@@ -1,0 +1,503 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.constraints.base.penaltylaw &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../syntax.html">Input file syntax</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Model</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/generators.html">Generators</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sets.html">Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/sections.html">Sections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/elements.html">Elements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/materials.html">Materials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/constraints.html">Constraints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../model/rigidbodies.html">Rigid bodies</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analysis</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/steps.html">Steps</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/stepactions.html">Step actions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/solvers.html">Solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../analysis/parallelization.html">Parallelization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Output</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/outputmanagers.html">Outputmanagers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/fieldoutput.html">Field outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/nodefieldresults.html">Node field results</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../output/plotter.html">Plotting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/contact.html">Contact mechanics: theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/adaptivity.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/blockamg.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../theory/criticaltimestep.html">Theory: the critical time step of an explicit analysis</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Developer guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/architecture.html">How the parts fit together</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/solverbase.html">The solver base class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/residualandtangent.html">The residual and the tangent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/models.html">Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/restart.html">Restart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/dofnumbering.html">Degrees of freedom: numbering and locations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/assembly.html">System matrix assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/fields.html">Fields</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/variables.html">Variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/points.html">Points</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/linsolveapi.html">Linear solvers: Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/journal.html">Journal</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/exceptions.html">Exceptions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../developer/utils.html">Utilities</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../keywords.html">Keyword reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.constraints.base.penaltylaw</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.constraints.base.penaltylaw</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""</span>
+<span class="sd">The laws of the penalty springs of the contact constraints: which springs a contact point gets, and how hard they pull.</span>
+
+<span class="sd">A contact constraint is made of three pieces: its *contact points* (where the slave surface is, see</span>
+<span class="sd">:mod:`~edelweissfe.constraints.base.contactpoints`), the *geometry* that pairs each of them with a point of the master</span>
+<span class="sd">surface and measures where it is relative to that point, and the *law* that turns this into penalty springs</span>
+<span class="sd">(:class:`~edelweissfe.constraints.base.penaltysprings.PenaltySprings`). The law is a separate object, held by the</span>
+<span class="sd">constraint. It owns what differs from one law to the next, and nothing else:</span>
+
+<span class="sd">- **its springs** (:meth:`PenaltyLaw.springs`): given, for the paired points, their gaps along the frozen normals, the</span>
+<span class="sd">  normals, the penalty times the area of each point and the displacement of each point from where it rests, the</span>
+<span class="sd">  springs the law puts there -- their points, directions, forces, stiffnesses and stored energies;</span>
+<span class="sd">- **how it pairs** (:attr:`PenaltyLaw.pairsOnce`): anew in every search of the connectivity, or once, for good.</span>
+
+<span class="sd">The constraint owns what every law shares: the contact points and where they are, the search and the pairing, the</span>
+<span class="sd">relative position and the gap, the force and the tangent of the springs on the nodes, the bound of their stiffness for</span>
+<span class="sd">the critical time step (:mod:`~edelweissfe.constraints.base.penaltysprings`), the state of the points in a checkpoint,</span>
+<span class="sd">and the outputs, which it derives from the springs alone. So a new law takes its place without touching the</span>
+<span class="sd">constraint.</span>
+
+<span class="sd">Two kinds of law exist:</span>
+
+<span class="sd">- :class:`ContactPenaltyLaw`: *contact*, a unilateral normal spring at every point whose gap is closed. Its normal</span>
+<span class="sd">  force follows from the gap alone (:meth:`ContactPenaltyLaw.normalForce`), which is also what the node-based contacts</span>
+<span class="sd">  (one gap per slave node) ask of it. :class:`LinearPenaltyLaw` and :class:`QuadraticPenaltyLaw`.</span>
+<span class="sd">- :class:`TiedPenaltyLaw`: a *tie*, paired once and held in every direction by a linear spring along every axis.</span>
+
+<span class="sd">A friction law (not implemented) would be a :class:`PenaltyLaw` that pairs anew and adds tangential springs whose</span>
+<span class="sd">resting offsets, the stick points, are its history; its design is in the theory, :ref:`contact-law`.</span>
+
+<span class="sd">Sign convention: the gap :math:`g` is negative when the surfaces penetrate, and the force :math:`f` of a spring</span>
+<span class="sd">carries the sign of its stretch, i.e. :math:`f_n \\le 0` in contact. The stiffness :math:`\\mathrm{d}f/\\mathrm{d}g` is</span>
+<span class="sd">then positive for :math:`g &lt; 0`. ``penaltyTimesArea`` is the penalty modulus times the area the contact point</span>
+<span class="sd">represents: a nodal tributary area in node-based formulations, a quadrature weight times the facet measure in integrated</span>
+<span class="sd">ones, each times the out-of-plane extent :math:`b` (1 in 3D, the thickness of a plane model, :math:`2 \\pi r` in an</span>
+<span class="sd">axisymmetric one; :ref:`contact-out-of-plane`).</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.penaltysprings</span><span class="w"> </span><span class="kn">import</span> <span class="n">PenaltySprings</span>
+
+
+<div class="viewcode-block" id="PenaltyLaw">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.PenaltyLaw">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PenaltyLaw</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The law of the penalty springs of a contact constraint: the springs it puts at the paired contact points, and</span>
+<span class="sd">    whether it pairs them once or anew in every search. See the module documentation for what a law owns and what the</span>
+<span class="sd">    constraint owns."""</span>
+
+    <span class="c1">#: The name of the law, as the input file spells it (the ``type`` option of the contact constraints).</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+
+    <span class="c1">#: How the constraint pairs the contact points for this law. False: anew in every search of the connectivity, with</span>
+    <span class="c1">#: the closest point of the closest facet of the master, as the point slides along it (contact, friction). True:</span>
+    <span class="c1">#: once, at the first search, with the closest point of its closest facet, mapped onto the facet's parent face: that</span>
+    <span class="c1">#: *material* point of the master, for good, and the gap or overlap it has then is where it rests (a tie).</span>
+    <span class="n">pairsOnce</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+<div class="viewcode-block" id="PenaltyLaw.springs">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.PenaltyLaw.springs">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">springs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">penaltyTimesArea</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">gaps</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">normals</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">displacementsFromRest</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">PenaltySprings</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The penalty springs at the paired contact points.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        penaltyTimesArea</span>
+<span class="sd">            The penalty modulus times the area of each point.</span>
+<span class="sd">        gaps</span>
+<span class="sd">            The gap of each point along its normal, negative in contact, as the law sees it (beyond an initial overlap</span>
+<span class="sd">            the constraint does not count).</span>
+<span class="sd">        normals</span>
+<span class="sd">            The unit normal of the master at each point, frozen at the pairing, (nPoints, nDim).</span>
+<span class="sd">        displacementsFromRest</span>
+<span class="sd">            The vector from where each point rests to where it is, (nPoints, nDim): from its master point, less the</span>
+<span class="sd">            resting offset of a point paired once. None from a constraint that measures gaps only (the contact with a</span>
+<span class="sd">            rigid body), which takes contact laws only.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[PenaltySprings]</span>
+<span class="sd">            The springs, each set along one direction per point; empty if there is none.</span>
+<span class="sd">        """</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ContactPenaltyLaw">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ContactPenaltyLaw</span><span class="p">(</span><span class="n">PenaltyLaw</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Contact: a unilateral normal spring. A point gets one spring, along its normal, while its gap is closed</span>
+<span class="sd">    (negative); its normal force follows from the gap alone. Every method works element-wise on arrays of points as</span>
+<span class="sd">    well as on single points."""</span>
+
+<div class="viewcode-block" id="ContactPenaltyLaw.isClosed">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw.isClosed">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isClosed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gap</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the contact points with these gaps transmit a force: while they penetrate.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        gap</span>
+<span class="sd">            The gap(s), negative in contact.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool or numpy.ndarray</span>
+<span class="sd">            True where the gap is closed.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">gap</span> <span class="o">&lt;</span> <span class="mf">0.0</span></div>
+
+
+<div class="viewcode-block" id="ContactPenaltyLaw.normalForce">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw.normalForce">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">normalForce</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">penaltyTimesArea</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">gap</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The normal force at closed contact points and its derivative with respect to the gap.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        penaltyTimesArea</span>
+<span class="sd">            The penalty modulus times the area of the contact point(s).</span>
+<span class="sd">        gap</span>
+<span class="sd">            The gap(s), negative in contact.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            The normal force(s) :math:`f_n` and the stiffness :math:`\\mathrm{d}f_n/\\mathrm{d}g`.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPenaltyLaw.storedEnergy">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw.storedEnergy">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">storedEnergy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">penaltyTimesArea</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">gap</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The energy stored in the penalty springs of closed contact points, :math:`\\Pi(g)` with</span>
+<span class="sd">        :math:`\\mathrm{d}\\Pi/\\mathrm{d}g = f_n`: the potential whose gradient is the contact force.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        penaltyTimesArea</span>
+<span class="sd">            The penalty modulus times the area of the contact point(s).</span>
+<span class="sd">        gap</span>
+<span class="sd">            The gap(s), negative in contact.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float or numpy.ndarray</span>
+<span class="sd">            The stored energy, non-negative.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ContactPenaltyLaw.springs">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw.springs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">springs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">penaltyTimesArea</span><span class="p">,</span> <span class="n">gaps</span><span class="p">,</span> <span class="n">normals</span><span class="p">,</span> <span class="n">displacementsFromRest</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""One spring along the normal at every closed point, its force and stiffness :meth:`normalForce`, its</span>
+<span class="sd">        energy :meth:`storedEnergy`; see :meth:`PenaltyLaw.springs`. The displacements from rest are not needed: a</span>
+<span class="sd">        contact point rests on its master point."""</span>
+
+        <span class="n">closed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">isClosed</span><span class="p">(</span><span class="n">gaps</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">closed</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="n">penaltyTimesAreaOfClosed</span><span class="p">,</span> <span class="n">gapsOfClosed</span> <span class="o">=</span> <span class="n">penaltyTimesArea</span><span class="p">[</span><span class="n">closed</span><span class="p">],</span> <span class="n">gaps</span><span class="p">[</span><span class="n">closed</span><span class="p">]</span>
+        <span class="n">forces</span><span class="p">,</span> <span class="n">stiffness</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalForce</span><span class="p">(</span><span class="n">penaltyTimesAreaOfClosed</span><span class="p">,</span> <span class="n">gapsOfClosed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">PenaltySprings</span><span class="p">(</span>
+                <span class="n">closed</span><span class="p">,</span> <span class="n">normals</span><span class="p">[</span><span class="n">closed</span><span class="p">],</span> <span class="n">forces</span><span class="p">,</span> <span class="n">stiffness</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">storedEnergy</span><span class="p">(</span><span class="n">penaltyTimesAreaOfClosed</span><span class="p">,</span> <span class="n">gapsOfClosed</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">]</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LinearPenaltyLaw">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.LinearPenaltyLaw">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LinearPenaltyLaw</span><span class="p">(</span><span class="n">ContactPenaltyLaw</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">""":math:`f_n = k A \\, g`: a linear spring with the constant stiffness :math:`k A`, which jumps from zero when the</span>
+<span class="sd">    gap closes."""</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"linear"</span>
+
+<div class="viewcode-block" id="LinearPenaltyLaw.normalForce">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.LinearPenaltyLaw.normalForce">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">normalForce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">penaltyTimesArea</span><span class="p">,</span> <span class="n">gap</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">penaltyTimesArea</span> <span class="o">*</span> <span class="n">gap</span><span class="p">,</span> <span class="n">penaltyTimesArea</span></div>
+
+
+<div class="viewcode-block" id="LinearPenaltyLaw.storedEnergy">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.LinearPenaltyLaw.storedEnergy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">storedEnergy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">penaltyTimesArea</span><span class="p">,</span> <span class="n">gap</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">penaltyTimesArea</span> <span class="o">*</span> <span class="n">gap</span><span class="o">**</span><span class="mi">2</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="QuadraticPenaltyLaw">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.QuadraticPenaltyLaw">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">QuadraticPenaltyLaw</span><span class="p">(</span><span class="n">ContactPenaltyLaw</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">""":math:`f_n = -\\tfrac{1}{2} k A \\, g^2`: a spring that stiffens with the penetration, its stiffness</span>
+<span class="sd">    :math:`-k A \\, g` rising continuously from zero when the gap closes."""</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"quadratic"</span>
+
+<div class="viewcode-block" id="QuadraticPenaltyLaw.normalForce">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.QuadraticPenaltyLaw.normalForce">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">normalForce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">penaltyTimesArea</span><span class="p">,</span> <span class="n">gap</span><span class="p">):</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">penaltyTimesArea</span> <span class="o">*</span> <span class="n">gap</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="n">penaltyTimesArea</span> <span class="o">*</span> <span class="n">gap</span></div>
+
+
+<div class="viewcode-block" id="QuadraticPenaltyLaw.storedEnergy">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.QuadraticPenaltyLaw.storedEnergy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">storedEnergy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">penaltyTimesArea</span><span class="p">,</span> <span class="n">gap</span><span class="p">):</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">penaltyTimesArea</span> <span class="o">*</span> <span class="n">gap</span><span class="o">**</span><span class="mi">3</span> <span class="o">/</span> <span class="mf">6.0</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TiedPenaltyLaw">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.TiedPenaltyLaw">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TiedPenaltyLaw</span><span class="p">(</span><span class="n">PenaltyLaw</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A tie: each point is paired once, and held where it rests by a linear spring along every axis, in tension and</span>
+<span class="sd">    in compression.</span>
+
+<span class="sd">    The constraint pairs each point once, and the vector from its master point to it at the pairing is where it rests</span>
+<span class="sd">    (:ref:`contact-tie`). Along every axis :math:`\\boldsymbol{e}_i`, the</span>
+<span class="sd">    stretch of the spring is the displacement of the point from rest in that direction, :math:`d_i`, its force</span>
+<span class="sd">    :math:`f_i = k A\\, d_i`, its stiffness :math:`k A`, its energy :math:`\\tfrac{1}{2} k A\\, d_i^2`. Together the</span>
+<span class="sd">    springs pull the point back along its whole displacement from rest with the stiffness :math:`k A`, whichever way it</span>
+<span class="sd">    moves.</span>
+
+<span class="sd">    It is a contact that never opens and never slides, the stick of a friction law that never slips.</span>
+<span class="sd">    """</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"tied"</span>
+
+    <span class="n">pairsOnce</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="TiedPenaltyLaw.springs">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.TiedPenaltyLaw.springs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">springs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">penaltyTimesArea</span><span class="p">,</span> <span class="n">gaps</span><span class="p">,</span> <span class="n">normals</span><span class="p">,</span> <span class="n">displacementsFromRest</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""One spring along every axis at every point; see :meth:`PenaltyLaw.springs`."""</span>
+
+        <span class="n">everyPoint</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">displacementsFromRest</span><span class="p">))</span>
+        <span class="n">springs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">direction</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">displacementsFromRest</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])):</span>
+            <span class="n">stretch</span> <span class="o">=</span> <span class="n">displacementsFromRest</span><span class="p">[:,</span> <span class="n">axis</span><span class="p">]</span>
+            <span class="n">springs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">PenaltySprings</span><span class="p">(</span>
+                    <span class="n">everyPoint</span><span class="p">,</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">direction</span><span class="p">,</span> <span class="n">displacementsFromRest</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span>
+                    <span class="n">penaltyTimesArea</span> <span class="o">*</span> <span class="n">stretch</span><span class="p">,</span>
+                    <span class="n">penaltyTimesArea</span><span class="p">,</span>
+                    <span class="mf">0.5</span> <span class="o">*</span> <span class="n">penaltyTimesArea</span> <span class="o">*</span> <span class="n">stretch</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">springs</span></div>
+</div>
+
+
+
+<span class="c1">#: The penalty laws of contact, by the name the input file gives them.</span>
+<span class="n">penaltyLaws</span> <span class="o">=</span> <span class="p">{</span><span class="n">law</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">law</span> <span class="k">for</span> <span class="n">law</span> <span class="ow">in</span> <span class="p">(</span><span class="n">LinearPenaltyLaw</span><span class="p">,</span> <span class="n">QuadraticPenaltyLaw</span><span class="p">)}</span>
+
+<span class="c1">#: The penalty laws of a constraint that can also tie its points to the master surface</span>
+<span class="c1">#: (:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`): those of contact, and the tie.</span>
+<span class="n">penaltyLawsAndTheTie</span> <span class="o">=</span> <span class="n">penaltyLaws</span> <span class="o">|</span> <span class="p">{</span><span class="n">TiedPenaltyLaw</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">TiedPenaltyLaw</span><span class="p">}</span>
+
+
+<div class="viewcode-block" id="penaltyLaw">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltylaw.penaltyLaw">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">penaltyLaw</span><span class="p">(</span><span class="n">contactType</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">laws</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">penaltyLaws</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PenaltyLaw</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The penalty law an input file names, case-insensitively.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    contactType</span>
+<span class="sd">        The ``type`` option of a contact constraint: 'linear' or 'quadratic', or 'tied' where a constraint can tie.</span>
+<span class="sd">    laws</span>
+<span class="sd">        The laws the constraint accepts, by name: :data:`penaltyLaws`, or :data:`penaltyLawsAndTheTie`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    PenaltyLaw</span>
+<span class="sd">        The law.</span>
+<span class="sd">    """</span>
+
+    <span class="n">law</span> <span class="o">=</span> <span class="n">laws</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">contactType</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">law</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Constraint type '</span><span class="si">{</span><span class="n">contactType</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="si">}</span><span class="s2">' is not supported. Use "</span>
+            <span class="o">+</span> <span class="s2">" or "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">'"</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">laws</span><span class="p">)</span>
+            <span class="o">+</span> <span class="s2">"."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">law</span><span class="p">()</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

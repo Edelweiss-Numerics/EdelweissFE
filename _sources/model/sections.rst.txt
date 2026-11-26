@@ -25,6 +25,12 @@ Assigns the material to three-dimensional continuum elements. The data lines lis
 Assigns the material and the out-of-plane ``thickness`` to two-dimensional continuum elements. The data lines list
 the element sets.
 
+In a plane model (``*job, domain=2d``) the elements integrate over the slice of this thickness, and so do the contact
+points on their faces, each standing for its length times the thickness (:ref:`contact-plane`). In an axisymmetric
+model (``*job, domain=axisymmetric``) ``type=plane`` still requires a ``thickness``, but neither the axisymmetric
+elements (``CAX4``, ``CAX8``, ``CAX8R``, ``GCAX4``, ``GCAX8``, ``GCAX8R``, ``CX8UL``, ``CX8RUL``) nor their contact
+points use it: they integrate over the rings about the axis (:ref:`contact-axisymmetric`).
+
 .. pprint:: section:plane
    :caption: Options:
 

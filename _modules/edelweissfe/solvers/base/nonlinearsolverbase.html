@@ -1163,9 +1163,8 @@
 <span class="sd">        A rigid body's surface (visualization) nodes are not degrees of freedom of their own; they</span>
 <span class="sd">        are fully determined by the rigid body's reference point. This propagates the just-converged</span>
 <span class="sd">        reference-point pose onto those surface nodes so that output managers write the transient</span>
-<span class="sd">        geometry of the moving body and any consumer relying on the surface nodes' ``coordinates``</span>
-<span class="sd">        (e.g. the fast-path AABB of :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB`)</span>
-<span class="sd">        sees the current configuration.</span>
+<span class="sd">        geometry of the moving body and any consumer relying on the surface nodes' ``coordinates`` sees the current</span>
+<span class="sd">        configuration.</span>
 
 <span class="sd">        Every nonlinear solver must call this once per converged increment, in :meth:`acceptIncrement`.</span>
 

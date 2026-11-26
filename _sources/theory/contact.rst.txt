@@ -1,15 +1,17 @@
 Contact mechanics: theory
 =========================
 
-This page documents the theory of the node-to-deformable-surface contact stack implemented in
-EdelweissFE: the discretization of contact surfaces into flat facets
-(:mod:`~edelweissfe.elements.contactsurfaceelement`,
-:mod:`~edelweissfe.generators.surfaceelementgenerator`), the gap kinematics in their finite-sliding
-and small-sliding variants (:mod:`~edelweissfe.utils.facetcontactgeometry`,
-:mod:`~edelweissfe.constraints.nodetodeformablesurfacepenalty`), the penalty and augmented-Lagrange
-normal contact laws, Coulomb friction, and the integration into the implicit solver. Every formula
-stated here is implemented literally in the referenced modules and has been verified against
-independent finite differences, symbolic differentiation, or analytic benchmark solutions; the
+This page documents the theory of penalty contact and the penalty tie in EdelweissFE. *Formulation* covers the gap,
+the contact laws and Coulomb friction, measured from a slave node against flat master facets
+(:mod:`~edelweissfe.elements.contactsurfaceelement`, :mod:`~edelweissfe.generators.surfaceelementgenerator`,
+:mod:`~edelweissfe.utils.facetcontactgeometry`, :mod:`~edelweissfe.constraints.nodetodeformablesurfacepenalty`);
+*Surface discretization and load transfer* how the force reaches the nodes; then the integrated formulation: the slave
+side as contact points (nodes, quadrature points of faces, and kinds other libraries add), one contact for every kind
+of point, plane and axisymmetric models, the corners of the master, an initial overlap, the tie, and the contact with a
+discrete rigid body; last, the integration into the implicit and explicit solvers and the verification. To learn the
+integrated contact, start with *Formulation*, then *Contact points: the slave side as points*, then *The integrated
+formulation, step by step*. Every formula stated here is implemented literally in the referenced modules and has been
+verified against independent finite differences, symbolic differentiation, or analytic benchmark solutions; the
 verification methodology is summarized at the end.
 
 The stack targets *small-deformation* applications with possibly *large relative sliding* along the
@@ -45,9 +47,9 @@ For a Tria3 facet, the unit normal is constructed by cross-product-then-normaliz
 
 .. math::
 
-   \boldsymbol{c} = (\boldsymbol{x}_2 - \boldsymbol{x}_1) \times (\boldsymbol{x}_3 -
-   \boldsymbol{x}_1), \qquad m = \lVert \boldsymbol{c} \rVert, \qquad \boldsymbol{n} =
-   \boldsymbol{c} / m,
+   \boldsymbol{m} = (\boldsymbol{x}_2 - \boldsymbol{x}_1) \times (\boldsymbol{x}_3 -
+   \boldsymbol{x}_1), \qquad m = \lVert \boldsymbol{m} \rVert, \qquad \boldsymbol{n} =
+   \boldsymbol{m} / m,
 
 and the gap is the signed plane distance
 
@@ -65,10 +67,10 @@ rule with
 .. math::
 
    \frac{\partial \boldsymbol{n}}{\partial \boldsymbol{x}_a} = \frac{1}{m} \left( \boldsymbol{I}
-   - \boldsymbol{n} \otimes \boldsymbol{n} \right) \frac{\partial \boldsymbol{c}}{\partial
+   - \boldsymbol{n} \otimes \boldsymbol{n} \right) \frac{\partial \boldsymbol{m}}{\partial
    \boldsymbol{x}_a},
 
-where :math:`\partial \boldsymbol{c} / \partial \boldsymbol{x}_a` are constant skew-symmetric
+where :math:`\partial \boldsymbol{m} / \partial \boldsymbol{x}_a` are constant skew-symmetric
 (cross-product) matrices of the edge vectors. Because the facet is flat, the *only* second-order
 term in the Hessian :math:`\boldsymbol{H} = \partial^2 g / \partial \boldsymbol{q}^2` is the
 pose-dependence of the normal's own construction (the derivative of the
@@ -122,7 +124,7 @@ the master surface is computed once per increment from the last converged config
 
    .. math::
 
-      \boldsymbol{w} = \boldsymbol{c} \otimes \bar{\boldsymbol{n}}, \qquad \boldsymbol{c} = [1,
+      \boldsymbol{w} = \bar{\boldsymbol{c}} \otimes \bar{\boldsymbol{n}}, \qquad \bar{\boldsymbol{c}} = [1,
       -\bar{N}_1, \ldots, -\bar{N}_k],
 
    (Kronecker-product block structure) and the geometric Hessian term vanishes identically.
@@ -139,12 +141,12 @@ matrix
 
 .. math::
 
-   \boldsymbol{G} = \boldsymbol{c} \otimes \boldsymbol{I}, \qquad \boldsymbol{u}_{rel} =
+   \boldsymbol{G} = \bar{\boldsymbol{c}} \otimes \boldsymbol{I}, \qquad \boldsymbol{u}_{rel} =
    \boldsymbol{G}\, \boldsymbol{q} = \boldsymbol{x}_s - \sum_a \bar{N}_a \boldsymbol{x}_a,
 
-with the identities :math:`\boldsymbol{G}^T \boldsymbol{M} \boldsymbol{G} = (\boldsymbol{c}
-\otimes \boldsymbol{c}^T) \otimes \boldsymbol{M}` and :math:`\boldsymbol{G}^T \boldsymbol{v} =
-\boldsymbol{c} \otimes \boldsymbol{v}` used verbatim in the implementation.
+with the identities :math:`\boldsymbol{G}^T \boldsymbol{M} \boldsymbol{G} = (\bar{\boldsymbol{c}}
+\otimes \bar{\boldsymbol{c}}^T) \otimes \boldsymbol{M}` and :math:`\boldsymbol{G}^T \boldsymbol{v} =
+\bar{\boldsymbol{c}} \otimes \boldsymbol{v}` used verbatim in the implementation.
 
 
 Normal contact
@@ -290,8 +292,8 @@ cutbacks automatically state-safe):
 with :math:`N = -f_n \geq 0` the current normal force (multiplier-augmented if AL is active).
 The force on the slave node is :math:`\boldsymbol{t}_T` and the facet nodes receive the reaction
 :math:`-\bar{N}_a \boldsymbol{t}_T`, i.e. the force on the nodes is :math:`\boldsymbol{G}^T
-\boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T`, and the residual contribution is its
-negative, :math:`\boldsymbol{P} \mathrel{-}= \boldsymbol{c} \otimes \boldsymbol{t}_T`.
+\boldsymbol{t}_T = \bar{\boldsymbol{c}} \otimes \boldsymbol{t}_T`, and the residual contribution is its
+negative, :math:`\boldsymbol{P} \mathrel{-}= \bar{\boldsymbol{c}} \otimes \boldsymbol{t}_T`.
 
 Note the continuity at liftoff: as :math:`N \to 0` the slip branch caps the force at :math:`\mu N
 \to 0`, so the frictional force is continuous through gap activation. The *tangent*, however, is
@@ -299,7 +301,7 @@ only continuous there if the normal stiffness vanishes at activation -- the quad
 argument above.
 
 On increment acceptance (the constraint's ``acceptLastState`` lifecycle hook, called by
-:meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` alongside the element state commit),
+:meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints` after the element state commit),
 the tangential force of the converged iterate is promoted to the history:
 :math:`\boldsymbol{t}_T^{(n+1)} \leftarrow \boldsymbol{t}_T`.
 
@@ -309,7 +311,7 @@ Consistent tangent
 ^^^^^^^^^^^^^^^^^^
 
 With :math:`\boldsymbol{K} = \partial \boldsymbol{P} / \partial \boldsymbol{U}`, the derivative of the
-residual contribution :math:`\boldsymbol{P} = -\boldsymbol{c} \otimes \boldsymbol{t}_T`, and the
+residual contribution :math:`\boldsymbol{P} = -\bar{\boldsymbol{c}} \otimes \boldsymbol{t}_T`, and the
 Kronecker identities above:
 
 **Stick** (symmetric, positive semi-definite):
@@ -317,7 +319,7 @@ Kronecker identities above:
 .. math::
 
    \boldsymbol{K}^{stick} = \boldsymbol{G}^T \big( k_T \bar{\boldsymbol{P}} \big) \boldsymbol{G}
-   = (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \big( k_T \bar{\boldsymbol{P}} \big).
+   = (\bar{\boldsymbol{c}} \otimes \bar{\boldsymbol{c}}^T) \otimes \big( k_T \bar{\boldsymbol{P}} \big).
 
 **Slip** (nonsymmetric): differentiating :math:`\boldsymbol{t}_T = \mu N \hat{\boldsymbol{s}}`
 with :math:`\hat{\boldsymbol{s}} = \boldsymbol{t}^{trial} / \lVert \boldsymbol{t}^{trial}
@@ -328,9 +330,9 @@ with :math:`\hat{\boldsymbol{s}} = \boldsymbol{t}^{trial} / \lVert \boldsymbol{t
 
 .. math::
 
-   \boldsymbol{K}^{slip} = \underbrace{\mu \, \frac{\partial f_n}{\partial g} \, (\boldsymbol{c}
+   \boldsymbol{K}^{slip} = \underbrace{\mu \, \frac{\partial f_n}{\partial g} \, (\bar{\boldsymbol{c}}
    \otimes \hat{\boldsymbol{s}}) \otimes \boldsymbol{w}}_{\text{normal--tangential coupling,
-   nonsymmetric}} \; + \; (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \left[ \frac{\mu N
+   nonsymmetric}} \; + \; (\bar{\boldsymbol{c}} \otimes \bar{\boldsymbol{c}}^T) \otimes \left[ \frac{\mu N
    k_T}{\lVert \boldsymbol{t}^{trial} \rVert} \big( \boldsymbol{I} - \hat{\boldsymbol{s}}
    \otimes \hat{\boldsymbol{s}} \big) \bar{\boldsymbol{P}} \right].
 
@@ -540,7 +542,7 @@ variationally harmless under ``sliding=small`` and only there: the facet is flat
 weights remain a partition of unity, and the frozen normal is normal to the facet plane at the
 increment's start, so :math:`g = \bar{\boldsymbol{n}} \cdot (\boldsymbol{x}_s - \sum_a w_a
 \boldsymbol{x}_a)` takes the same value for *any* partition of unity over the -- coplanar -- facet
-nodes. Gap, gradient :math:`\boldsymbol{w} = \bar{\boldsymbol{n}} \otimes \boldsymbol{c}` and
+nodes. Gap, gradient :math:`\boldsymbol{w} = \bar{\boldsymbol{c}} \otimes \bar{\boldsymbol{n}}` and
 the symmetry of the tangent are all preserved; the substitution perturbs the gap only as the facet
 tilts away from the frozen normal within the increment, at exactly the order the small-sliding
 formulation already discards. Under ``sliding=finite`` the same substitution would make the force
@@ -667,8 +669,8 @@ unusually cheap here. The gap
     g = \bar{\boldsymbol{n}} \cdot \left( N^s(\xi_q) \cdot \boldsymbol{x}^s
         - N^m(\xi_m) \cdot \boldsymbol{x}^m \right)
 
-is linear in the displacement DOFs, so the gradient :math:`\boldsymbol{w} = \bar{\boldsymbol{n}}
-\otimes [N^s, -N^m]` is constant and the geometric Hessian vanishes identically; and the tangent
+is linear in the displacement DOFs, so the gradient :math:`\boldsymbol{w} = [N^s, -N^m] \otimes
+\bar{\boldsymbol{n}}` is constant and the geometric Hessian vanishes identically; and the tangent
 :math:`\mathrm{d}f_n/\mathrm{d}g \, \boldsymbol{w} \otimes \boldsymbol{w}` is symmetric. This
 is structurally the same algebra as the node-based frozen form, with that formulation's slave
 coefficient :math:`1` replaced by the slave face's shape-function vector.
@@ -804,6 +806,605 @@ contact-assembly entries. Whether that matters depends on contact's share of the
 worth measuring on a given model before adopting it in an explicit run.
 
 
+.. _contact-points:
+
+Contact points: the slave side as points
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The algebra of the integrated formulation does not care *what* the slave point is. A contact point
+:math:`p` moves with an interpolation vector :math:`\boldsymbol{c}` over the nodes it acts on, stands
+for an area :math:`A_p`, and its gap, gradient and tangent are
+
+.. math::
+    g = \bar{\boldsymbol{n}} \cdot \left( \boldsymbol{x}_p - N^m(\xi_m) \cdot \boldsymbol{x}^m \right) , \qquad
+    \boldsymbol{w} = [\boldsymbol{c}, -N^m] \otimes \bar{\boldsymbol{n}} , \qquad
+    \boldsymbol{K} = \frac{\mathrm{d}f_n}{\mathrm{d}g} \, \boldsymbol{w} \otimes \boldsymbol{w} ,
+
+with :math:`f_n` the penalty law at the stiffness ``penalty`` times :math:`A_p`. With
+:math:`\boldsymbol{c} = N^s(\xi_q)` and :math:`A_p = w_q J_q`, this is the integrated formulation above; with
+:math:`\boldsymbol{c} = [1]` and :math:`A_p` the tributary area, it has the form of the small-sliding
+node-to-surface gap (:ref:`small-sliding-kinematics`): its vector
+:math:`\bar{\boldsymbol{c}} = [1, -\bar{N}_1, \ldots, -\bar{N}_k]` is :math:`[\boldsymbol{c}, -N^m]` with the
+flat facet's weights :math:`\bar{N}` in place of the master's parent-face shape functions :math:`N^m` (the two agree on
+straight-edged linear faces). The force of a point is distributed with the same :math:`\boldsymbol{c}`
+with which the point moves, the transpose of its motion: so the stiffness of its penalty spring is symmetric, and the
+spring does no work over a closed cycle. EdelweissFE writes two kinds of point as contact points; another library
+may add a kind, as EdelweissMeshfree adds the quadrature points on the faces of its particles
+(``ContactPointsOnParticleFaces``, in its documentation of the contact of particles with finite elements):
+
+.. list-table::
+    :header-rows: 1
+
+    * - contact point
+      - :math:`\boldsymbol{c}`
+      - :math:`\boldsymbol{x}_p`
+      - :math:`A_p`
+    * - quadrature point of a slave element face
+        (:class:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface`)
+      - :math:`N^s(\xi_q)`
+      - :math:`N^s(\xi_q) \cdot (\boldsymbol{X}^s + \boldsymbol{U}^s)`
+      - :math:`w_q J_q`
+    * - slave node
+        (:class:`~edelweissfe.constraints.base.contactpointsatslavenodes.ContactPointsAtSlaveNodes`)
+      - :math:`[1]`
+      - :math:`\boldsymbol{X} + \boldsymbol{U}`
+      - tributary area (:ref:`tributary-areas`)
+
+In 2D, :math:`w_q J_q` and the tributary area are lengths :math:`L_p` of the section, and :math:`A_p` is that length
+times the out-of-plane extent of the body at the point, as the elements integrate (:ref:`contact-out-of-plane`): the
+thickness of the section in a plane model, the circumference :math:`2 \pi r` in an axisymmetric model.
+
+What a constraint needs from its slave side is the same for both, and is written down once, as
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`: the current coordinates of all points, for the
+contact search; the *located* points, the paired ones, which name the nodes they act on and so become the slave part
+of the constraint's block; and, for the located points, where they are, the residual contribution of their forces,
+and their interpolation vectors for the tangent and for the bound of the stiffness in the critical time step
+(:doc:`criticaltimestep`). The contact with a deformable master surface,
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` (:ref:`contact-one-constraint`), and the contact
+with a discrete rigid body, :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty`
+(:ref:`integrated-contact-rigid-body`), are written against it, each once for both kinds.
+
+**Origin and displacement.** A point's position is told in two parts: its *origin* :math:`\boldsymbol{x}^0_p`,
+where it is when the displacement it moves with is zero, and its *displacement*
+:math:`\boldsymbol{c} \cdot \boldsymbol{u}` from there. For the points of finite elements, :math:`\boldsymbol{u}`
+is the total displacement :math:`\boldsymbol{U}` of their nodes, so the origin is the point in the reference
+configuration (:math:`N^s(\xi_q) \cdot \boldsymbol{X}^s` and :math:`\boldsymbol{X}` in the table). A kind of point
+whose nodes carry the increment rather than the total displacement fits the same interface: for it,
+:math:`\boldsymbol{u}` is the increment :math:`\Delta\boldsymbol{U}`, and the origin the point at the start of the
+increment. The points on the faces of EdelweissMeshfree's updated-Lagrangian particles are of that kind. A constraint
+therefore passes
+both, and each kind takes the one it moves with. The split also keeps a small distance accurate: the stretch of a
+stiff penalty spring is a tiny difference of two large positions, and the contact with a deformable master takes it
+as the difference of the origins once plus the difference of the displacements in every evaluation, which rounds it
+relative to the displacements, not to the coordinates (:ref:`contact-origins`).
+
+.. _contact-one-constraint:
+
+One contact for every kind of contact point
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+One constraint, :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`, serves both kinds of contact
+point: the quadrature points of the slave facets (``contactPoints=quadraturePoints``, the default) and the slave
+nodes (``contactPoints=nodes``). What a kind of point contributes is its
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints`; the pairing, the gap, the law, the force, the
+tangent and the bound of the stiffness are written once. The constraint measures every relative position from the
+origins of the points (:ref:`contact-origins`). The slave nodes against the parent faces of the master differ from
+:mod:`~edelweissfe.constraints.nodetodeformablesurfacepenalty` with ``sliding=small`` in the master side (the force
+reaches the master with :math:`N^m`, not with the flat facet's weights) and in the pairing (creases, points found
+inside, the initial overlap; below); the node-based constraint has friction and augmented Lagrange, this one does not
+yet.
+
+The law is a separate piece as well (:mod:`~edelweissfe.constraints.base.penaltylaw`), and it owns what differs from
+one law to the next, and nothing else (:ref:`contact-law`): the penalty *springs* it puts at the paired points, and
+whether it pairs them *once* or anew in every search. The contact (``linear``, ``quadratic``) puts one spring along the
+normal at every closed point; the tie (:ref:`contact-tie`) one along every axis at every point, and pairs once.
+Everything the laws share is the constraint's.
+
+**The pairing.** In every update of the connectivity, a point within ``searchDistance`` of the master surface (every
+point, without a search distance) is paired with its closest facet while it is outside (*approaching*). A point in
+contact is paired anew in every update with its closest facet, however deep it is, so that it slides from facet to
+facet, from one face of the master onto the next and around a re-entrant corner -- but never across a *convex crease*
+(below): the closest facet of a point that has entered near a convex corner of the master may be on its side, and of a
+point deep inside a thin master on its far side, and either would push the point out of the wrong side. A point that
+leaves the master body is released at once, and is free if it is then beyond the search distance. A point that was out
+of reach at the previous update and is now inside has tunnelled through the search distance between two updates; it is
+*found inside*, gets no force, and is reported, and it counts as found inside until it is seen outside again, also while
+it is deeper inside than the search distance. The search distance must therefore exceed the distance a point travels
+towards the surface between two updates of the connectivity: every ``contact-update-frequency`` increments of ``NED``
+(by default 100), every increment in a model with particles or in an implicit analysis. Sized from the velocity times
+one time increment, it is too small by that frequency. The constraint warns when a point enters deeper than half of it.
+At the first update, the bodies are as the model gives them: every point is searched at any depth, once, and a point
+that overlaps within the search distance is in contact (:ref:`contact-initial-overlap`); one that overlaps deeper has
+not been seen outside, and is found inside.
+
+What the pairing learns belongs to the points: their states, the facet each one is paired with, and the offset of an
+initial overlap. A new mesh of the master, after a refinement, keeps the states and the offsets, and carries the facet
+of each paired point over to the facet of the new mesh where the old one lay (in the reference configuration), so that
+a point in contact walks on from there and keeps its side of a convex crease. Regenerated contact points are new
+points: they are paired as at the first update, and an overlap they have is pushed apart at once (reported). A tie
+is handed on across a new mesh of either side: which points are tied, to what, and how far each is displaced from rest
+(:ref:`contact-tie`).
+
+.. _contact-out-of-plane:
+
+Plane and axisymmetric models: one rule for the area of a point
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A contact point stands for the area its spring acts on, and that must be an area of the body the elements integrate
+over, or the springs and the elements would not balance at the nodes. The elements of a 2D model integrate over the
+area :math:`A` of the section, times the out-of-plane extent :math:`b` of the body: :math:`\mathrm{d}V = b \,
+\mathrm{d}A`. The surface of the body is then :math:`\mathrm{d}S = b \, \mathrm{d}L` along a line of the section, and a
+contact point stands for its length :math:`L_p` -- :math:`w_q J_q` of a quadrature point, the tributary length of a
+node -- times :math:`b` at the point:
+
+.. math::
+    A_p = b(\boldsymbol{X}_p) \, L_p .
+
+.. list-table::
+    :header-rows: 1
+
+    * - model
+      - the elements integrate over
+      - :math:`b(\boldsymbol{X})`
+      - :math:`A_p`
+    * - 3D
+      - the volume
+      - 1
+      - :math:`L_p`, an area itself
+    * - plane (``*job, domain=2d``)
+      - a slice of the thickness of their section
+      - :math:`t`
+      - :math:`t_p \, L_p`
+    * - axisymmetric (``*job, domain=axisymmetric``)
+      - the rings about the axis
+      - :math:`2 \pi r`
+      - :math:`2 \pi r_p \, L_p`
+
+The rule is one function, :func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`, with the factor
+:math:`b` the elements use; its axisymmetric part, :func:`~edelweissfe.constraints.base.contactpoints.circumferenceAt`
+on the radii and the sizes of the bodies the points lie on, is also the one a kind of point of another library
+calls. A node sums it over its faces, :math:`A_s = \sum_f b_f(\boldsymbol{X}_s) \, s_{s,f}` with
+its shares :math:`s_{s,f}` of the lengths of the faces. The pressure and the traction of a point are its force per
+:math:`A_p`, the area in the reference configuration: the nominal pressure, not per radian, not per unit thickness.
+
+.. _contact-plane:
+
+Plane models: every point stands for the thickness of its section
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A plane model is a slice of the body, of the thickness :math:`t` its plane sections give
+(``*section, type=plane, thickness=...``); the plane elements integrate their internal forces, masses and loads over
+their areas times that thickness. So :math:`b = t` (:ref:`contact-out-of-plane`), and a contact point on a line of the
+section stands for the length :math:`L_p` of its share of the line times the thickness,
+
+.. math::
+    A_p = t_p \, L_p ,
+
+with :math:`t_p` the thickness of the section of the element whose face the point lies on
+(:meth:`~edelweissfe.models.femodel.FEModel.thicknessOf`): the springs and the elements then act on the same slice. A
+slice twice as thick transmits twice the force at the same pressure. A node between faces of different thicknesses --
+elements of two sections meeting on the slave surface -- stands for its share of the area of each,
+:math:`A_s = \sum_f t_f s_{s,f}`. An element of the slave surface without a plane section is refused.
+
+.. _contact-axisymmetric:
+
+Axisymmetric models: every point stands for a ring
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An axisymmetric model (``*job, domain=axisymmetric``) is the section r-z of a body of revolution about the axis
+:math:`r = 0`: the first coordinate is the radius :math:`r`, the second the axial coordinate :math:`z`, and every point
+of the section stands for the ring it sweeps about the axis
+(:attr:`~edelweissfe.models.femodel.FEModel.axisymmetric`). Its elements are the axisymmetric ones -- ``CAX4``,
+``CAX8``, ``CAX8R``, ``GCAX4``, ``GCAX8``, ``GCAX8R``, ``CX8UL``, ``CX8RUL`` --, whose faces the surface element
+generator tiles into ``Line2ContactFacet`` like the faces of any 2D element. The contact points lie on these lines.
+
+**The job and the elements must agree.** The elements decide by their type how they integrate; the contact points
+decide by the job's ``domain``. Nothing checks yet that the two agree, since an element does not tell whether it
+integrates over rings. Axisymmetric elements in a ``domain=2d`` job make every point stand for :math:`t L_p` instead
+of :math:`2 \pi r L_p`: the contact is too soft by :math:`2 \pi r / t`, without a message. Plane elements in an
+axisymmetric job make it too stiff by the same factor.
+
+The geometry of the contact does not change. A point of the section has no hoop motion; the normal of a line of the
+section is the normal of the surface of revolution it sweeps; the gap of a point is the gap of its whole ring. The
+search, the pairing, the frozen projection, the gap and the springs are those of a plane model. What changes is the
+area a point stands for, :math:`b = 2 \pi r` (:ref:`contact-out-of-plane`). It is the area of its ring, the length
+:math:`L_p` of its share of the line times the circumference at its radius (Pappus' theorem for a surface of
+revolution):
+
+.. math::
+    A_p = 2 \pi r_p \, L_p .
+
+For a quadrature point, :math:`L_p = w_q J_q` and :math:`r_p` is the radius of its origin; for a node, :math:`L_p` is
+its tributary length and :math:`r_p` its radius. On a straight facet the radius is linear along the facet, and the
+quadrature rules -- the rule of the nodes, the trapezoidal rule, as well -- integrate a linear function exactly, so the
+areas of the points of a facet add up to the area of the facet's ring, :math:`2 \pi \bar{r} L` with its mid radius
+:math:`\bar{r}`.
+
+**The axis.** The axis is a line, not a surface of the body: a point on it stands for a ring of radius 0, no area,
+and carries no force; its pressure and traction are zero. A node within the round-off of the axis, :math:`-\epsilon h
+\le r < 0` with :math:`\epsilon = 10^{-12}` and the size :math:`h` of its element, is on the axis, as Marmot's
+axisymmetric elements accept it (:data:`~edelweissfe.constraints.base.contactpoints.axisTolerance`); a point further
+below is refused. On the end face of a solid cylinder the points sum to the disk, :math:`\pi R^2`. The quadrature points
+(``contactPoints=quadraturePoints``, the default) give the consistent load of a ring, with :math:`r` integrated by the
+shape functions; the nodes lump it by the trapezoid in :math:`r`, so the node on the axis gets nothing where the
+consistent load is not zero. Both sum to the same force; near the axis, prefer the quadrature points.
+
+**Why full rings.** The axisymmetric elements integrate their internal forces and their masses over the full ring,
+with :math:`\mathrm{d}V = 2 \pi r \, \mathrm{d}A`, not per radian: their nodal forces and masses are those of
+the rings of the nodes. The springs of the contact, at the stiffness ``penalty`` times the area of the ring, give the
+forces on the same rings, and the two balance at the nodes. A uniform pressure :math:`p` across an annulus
+:math:`r_i \le r \le r_o` then transmits the axial force :math:`\pi (r_o^2 - r_i^2) \, p`, across a cylinder of
+radius :math:`R` and height :math:`H` the radial ring force :math:`2 \pi R H p`. What a point reports is of its ring
+as well: its pressure and traction (``getNormalPressures``, ``getTractions``) are its force per the area of its ring
+in the reference configuration, the nominal pressure; a ring that expands radially by :math:`u_r` has a current area
+larger by :math:`u_r / r`, even with no strain along the line. The energy of its spring is the energy of the ring. The
+axial components of the forces add up to the total axial force; the radial forces of a ring cancel about the axis, so
+the radial component of a sum of forces (``contactForceOnSlave``) is no resultant on the body.
+
+**The critical time step.** The bound of the stiffness of the springs (:ref:`contact-explicit-dynamics`) adds the row
+sums :math:`\sum_j |K^\mathrm{c}_{ij}| / \sqrt{M_i M_j}` to the frequencies of the nodes. The stiffness of the springs
+and the lumped masses of the axisymmetric elements are both those of the full rings, so the row sums are the ones of
+any sector of the body, as if both were taken per radian: the bound is consistent. Whether a point could close within
+the next increment, and is then in the bound with its spring, is told by its gap, which the ring does not touch.
+
+**Every kind of point measures its areas when it is made.** The two kinds of finite element points take the model and
+measure their areas from it, also when a new mesh regenerates them and on a restart, as the areas are geometry; the
+frozen projection is adopted from the checkpoint, as in a plane model. A kind of point of another library measures its
+areas as its own bodies integrate and says whether it was made for an axisymmetric model
+(:attr:`~edelweissfe.constraints.base.contactpoints.ContactPoints.axisymmetric`); the constraint refuses points made for
+a model of another kind. In a plane model, whether such bodies are slices of the thickness of the finite elements they
+meet is not checked.
+
+Axisymmetric models are served by ``surfaceToDeformableSurfacePenalty``, for contact and for the tie, with either kind
+of contact point. The node-based ``nodeToDeformableSurfacePenalty`` refuses them (it is not verified on rings: use
+``surfaceToDeformableSurfacePenalty`` with ``contactPoints=nodes``),
+``surfaceToDiscreteRigidBodyPenalty`` is for 3D models only, and the tie by elimination (``type=tie``) has no areas and
+is the same as in a plane model.
+
+.. _contact-origins:
+
+Measured from the origins, not from the coordinates
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The gap of a closed contact and the stretch of a tie are tiny differences of two large positions: across a closed
+contact, the point and its master point are as far apart as the spring is stretched, :math:`t/k` for a traction
+:math:`t`, and a tied point is as far from where it rests, while their coordinates are as large as the model.
+Taking the difference of the coordinates loses the stretch to their round-off, :math:`\varepsilon |\boldsymbol{x}|`
+for the machine epsilon :math:`\varepsilon`, and the penalty turns it into a force of :math:`k A_p \varepsilon
+|\boldsymbol{x}|` per point. Worse than its size is its shape: the force jumps from one bit of the
+coordinates to the next, a staircase in the displacements. A Newton iteration on such a residual stalls: its corrections
+shrink to round-off, but its residual keeps scattering over the height of a step, and whether it falls below the
+tolerance in time is a draw that every change of the rounding -- another order of summation, another number of threads
+-- makes anew. A stiff contact or tie under a small load sits exactly there.
+
+So the displacement of a point from where it rests is split where the large numbers are. A contact point rests on
+its master point, :math:`\boldsymbol{r}_0 = \boldsymbol{0}`, and the gap is the normal part of its displacement from
+rest; a tied point rests at its resting offset :math:`\boldsymbol{r}_0` from its master point (:ref:`contact-tie`):
+
+.. math::
+    \boldsymbol{d} = \boldsymbol{x}_p - N^m \cdot \boldsymbol{x}^m - \boldsymbol{r}_0
+    = \underbrace{\left( \boldsymbol{x}^0_p - N^m \cdot \boldsymbol{X}^m \right) - \boldsymbol{r}_0}_{\text{the
+    same in every evaluation}}
+    + \left( \boldsymbol{c} \cdot \boldsymbol{u} - N^m \cdot \boldsymbol{U}^m \right) ,
+
+with the origin :math:`\boldsymbol{x}^0_p` and the displacement :math:`\boldsymbol{c} \cdot \boldsymbol{u}` of the
+point (:ref:`contact-points`).
+
+The relative position of the origins of the points and the reference configuration of the master is taken once, when the
+points are located, and the first part is the same to the last bit in every evaluation until they are located anew: its
+round-off is a constant, a shift of the state at rest by a fraction of a bit of the coordinates, which stalls nothing.
+The second part is a difference of displacements, rounded relative to the displacements. The force is a smooth function
+of the solution, and a Newton iteration converges to the round-off of the forces themselves. What a pairing records from
+where a point is -- the resting offset :math:`\boldsymbol{r}_0` of a tie, an initial overlap
+(:ref:`contact-initial-overlap`) -- is measured the same way, at the solution the model holds, so that a tied point,
+or a point whose overlap is adjusted, rests exactly where it was found. The relative position of the origins is not
+checkpointed: it follows from the origins whenever the points are located, also after a resume. The resting offsets
+are state of the points and are checkpointed.
+
+.. _contact-corners:
+
+Corners of the master: creases, the signed distance and the pseudonormal
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A thread is all corners: the crest of a tooth is a convex edge, its root, where the flank meets the
+core, a re-entrant one. What the frozen gap freezes there decides whether the contact is right.
+
+**The gap, expanded to first order.** At the update, the point's distance to the master surface is
+:math:`d = |\boldsymbol{x}_p - \boldsymbol{x}_c|`, with :math:`\boldsymbol{x}_c` the closest point of the
+closest facet, and its sign says inside or outside. The gap is the signed distance :math:`\pm d` where
+:math:`\boldsymbol{x}_c` lies on a crease, and the distance along the facet normal elsewhere: the two agree
+inside a facet, and differ only by the small turn of the normal at a seam of a smooth surface. Where the closest point
+passes from one rule to the other -- from a crease vertex onto an edge that is none, or across a seam -- the gap frozen
+at the next update jumps by up to :math:`1 - \cos 30^\circ` (about 13 %) of the distance, and the force of a closed
+point with it; the sign never changes. The frozen gap
+:math:`g = \bar{\boldsymbol{n}} \cdot (\boldsymbol{x}_p - N^m \cdot \boldsymbol{x}^m)` is that gap
+expanded to first order about the update, so :math:`\bar{\boldsymbol{n}}` is its gradient with respect to the
+point (:meth:`~edelweissfe.utils.facetcontactgeometry.FacetedSurface.gapsAndGradients`):
+
+- where :math:`\boldsymbol{x}_c` lies inside its facet, the facet's normal;
+- where it lies on a **crease** -- an edge (or, in 2D, a vertex) where two facets meet with normals more
+  than 30 degrees apart, a vertex on such an edge, or a vertex where one of its facets turns away from the
+  vertex's pseudonormal by more than half that angle, as at the tip of a finely faceted cone -- the line from
+  the closest point to the point, :math:`\bar{\boldsymbol{n}} = \pm(\boldsymbol{x}_p - \boldsymbol{x}_c)/d`,
+  and :math:`g = \pm d`;
+- where it lies on a seam of a *smooth* surface (the facets of a curved face meet at small angles), or on
+  the boundary of a master surface that ends, the facet's normal again, and the distance along it: the corners
+  of a smooth tiling are artefacts, and beyond its boundary a surface does not say what lies, so the plane of its
+  last facet goes on. A crease that ends on the boundary goes on along its last edge: the vertex where it ends
+  is a crease, with the pseudonormal of that edge.
+
+Measured along a facet normal, a point *beside* a crest -- beyond the edge of the crest's flat, below its
+plane, but outside the tooth -- has a negative gap and is pushed into the concrete by a crest that is not
+there. Measured as the distance to the edge, its gap is positive. Inside a re-entrant root, the distance to
+the root's edge is the shortest way out.
+
+**The sign: the angle-weighted pseudonormal.** At a crease, the facet's normal does not tell inside from
+outside: next to an acute crest, a point outside lies behind the plane of the flank whose edge is closest
+to it. The pseudonormal of the closest feature does (Bærentzen and Aanæs, *Signed distance computation
+using the angle weighted pseudonormal*, IEEE TVCG 11, 2005): the sum of the normals of the facets that
+meet at an edge, or at a vertex, each weighted with the facet's angle there. For the closest feature of a
+closed surface, :math:`\boldsymbol{x}_p - \boldsymbol{x}_c` has a positive component along it outside the
+body, a negative one inside, at convex and re-entrant features alike. The search finds the globally closest
+facet, so the sign is exact for a closed master; for a master surface that ends, exact away from its boundary.
+
+**Convex creases in the pairing.** A point in contact keeps away from the facets across a *convex*
+crease from the facet it was paired with: their normals differ by more than 30 degrees, and they lie
+behind its plane (the surface turns away, from the top of a block to its side, or from one side of a thin
+body to the other). Across a re-entrant crease the surface turns towards the point, and the point moves on
+to the facet that is closest: it slides around a root as it slides along a flank.
+
+**The pairing walks to a fixed point.** Where the closest facet of a point in contact lies across a convex
+crease from its facet, the point steps to the closest facet on this side of that crease: of the facets around
+its facet (the ring of facets that share a vertex with it, its *patch*) and of the facets that could be closest
+to it. If it has slid past several rings of the master since the last update -- around a curved master tiled
+by facets that each turn less than 30 degrees, say -- one step does not bring it where it is: from the facet it
+reached, another, closer facet lies on this side of the next crease. One step per update would move the point
+on by one more in every update, also in an update repeated at the same configuration, as a resumed step
+repeats the update of the step it resumes, and the resumed run would pair differently from the uninterrupted
+one. So the point walks, step by step, until its facet no longer changes. Every step goes to a closer facet,
+so the walk ends; it takes about as many steps as the point passed rings of facets, one or two at the usual
+frequency of the updates. It is bounded
+(``maximumStepsOfThePairingWalk`` of :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`): a point
+that needs more has moved over much of the master between two updates, keeps the facet of the last step, and is
+reported. The pairing is then the same as that of a search from scratch wherever the walk can reach the
+closest facet, and an update repeated at the same configuration changes nothing.
+
+The geometry is :class:`~edelweissfe.utils.facetcontactgeometry.FacetedSurface`; the tests
+``tests/test_facet_pseudonormals.py`` (inside and outside of a closed tooth with an acute crest and two
+roots, in 2D and 3D, of the tip of a finely faceted cone, and beyond the ends of an open tooth) and the class
+``TestContactAtCornersOfTheMaster`` of
+``tests/test_surfacetodeformablesurfacepenalty.py`` (a point sliding around a root stays in contact with the
+signed distance as its gap; a point sliding off a crest is released; a point that slid around a curved master in
+one update pairs as a search from scratch, and pairs the same after a checkpoint and a repeated update) show it.
+The tangent keeps its form: :math:`\bar{\boldsymbol{n}}` is frozen, whichever it is.
+
+.. _contact-initial-overlap:
+
+An initial overlap
+~~~~~~~~~~~~~~~~~~
+
+At the first update the bodies are as the model gives them, and a point that overlaps within the search distance
+is in contact. A point that overlaps deeper has not been seen outside: it is found inside, gets no force, and is
+reported. An overlap that deep is either real, and the search distance too small for it, or a point beyond the end
+of a master surface that ends, behind the continued plane of its last facet; pushed out, either would be pushed by its
+whole depth at once. Two things make an overlap at the start, and they mean opposite things:
+
+- an **interference fit**: a groove cut smaller than the thread, a shaft pressed into a smaller hole. The
+  overlap is real; pushing it apart is what loads the parts, as it does in the workshop.
+- an **error of the geometry**: two discretizations of one surface that do not coincide. The gap is
+  measured from a slave point on its face to a point of the master's curved parent face; where the slave
+  face is flat and the master curved, the slave face is a chord of the master's arc and lies inside it, by
+  the sag :math:`r (1 - \cos(\Delta\theta / 2))` of an arc of radius :math:`r` spanned by
+  :math:`\Delta\theta` -- the flat faces of a coarse mesh in the curved hole a screw fits: 10 degree faces at a
+  radius of 6 mm lie up to 23 micrometres inside the screw. A twisted master, such as a helical flank, makes
+  even matching faces overlap a little. Nothing in the body pushes that overlap apart: the faceted surface
+  only *stands for* the surface the two parts share.
+
+The option ``initialOverlap`` says which it is. With the gap :math:`g_0 \le 0` of every paired point at the
+first update (where it is closed), the penalty law sees
+
+.. math::
+    g_\text{law} = g - \lambda(t) \, g_0 .
+
+**pushApart** (the default): the interference fit. By default :math:`\lambda = 0` at once: the overlap is a
+prestress from the first increment, and a shock in an explicit analysis. With ``initialOverlapRampTime``
+:math:`T` it is pushed apart gradually:
+
+.. math::
+    \lambda = 1 - s + \frac{\sin 2 \pi s}{2 \pi} , \qquad s = \frac{t - t_0}{T} \in [0, 1] ,
+
+with :math:`t_0` the time of the first update. :math:`\lambda` falls from one to zero starting and ending at
+rest, as the pull of a quasi-static explicit analysis does; after :math:`T` the full overlap is pushed apart,
+and the parts are prestressed as the fit prescribes.
+
+**adjust**: the error of the geometry, like the strain-free adjustment of initial overclosures in commercial
+codes. :math:`\lambda = 1` for good: the master surface is taken as adjusted to touch each point where it
+was found, the point rests there without a force, and its gap is measured from there. A point that is
+pressed further in carries the force of a point that just touched at the start; a point that separates and
+comes back meets the surface where it touched it, not the faceted one. Nothing is prestressed, and nothing
+needs a ramp.
+
+Which one? Ask what the overlap is in the real parts. If the parts fit (the screw cut its own groove, the
+mesh around it stands for the concrete it cut), the overlap is an artefact of the meshes: **adjust**. If they
+do not fit (a press fit, a wedge driven in), the stress the overlap causes is the physics: **pushApart**, with
+a ramp in an explicit analysis. What adjust does not do is move any node: the offset belongs to the contact
+point, the size of the overlap is reported at the first update, and a point that slides far along a master
+whose curvature changes carries the offset of where it started (small sliding).
+
+Either way :math:`g_0` is a constant, so the gap's gradient and the tangent are as before. The law sees
+:math:`g_\text{law}`: it decides which points are closed and how hard they push, for the force, the tangent
+and the bound of the stiffness in the critical time step of an explicit analysis alike
+(:doc:`criticaltimestep`): an adjusted point at rest is open and adds no spring. The gaps the constraint
+reports (``getGaps``, ``deepestPenetration``) are :math:`g_\text{law}` too. The offsets belong to the points
+and are written to a checkpoint; a new mesh of the master keeps them, contact points regenerated by a
+refinement have none (reported). A tie (:ref:`contact-tie`) keeps any gap or overlap at the pairing as its state at
+rest, in every direction; ``initialOverlap`` is an option of contact. The tests are in
+``tests/test_surfacetodeformablesurfacepenalty.py`` (an overlap ramped out, an adjusted overlap at rest and pressed
+further, a point that separates and comes back, an overlap deeper than the search distance, the states and the offsets
+across a new mesh of the master).
+
+.. _contact-tie:
+
+A tie: contact that never opens and never slides
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To join two bodies that are meshed independently -- a fine mesh around a detail and a coarse mesh of the body around
+it -- along a surface whose two sides do not match, the faces of the one must be held to the faces of the other. That
+is a **tie**, and it is the same constraint with another law, ``type=tied``
+(:class:`~edelweissfe.constraints.base.penaltylaw.TiedPenaltyLaw`) -- the law option of the contact, not the constraint
+``*constraint, type=tie``, which ties by elimination (**Two ties**, below). The contact points, the parent faces of the
+master
+and the frozen projection are those of contact; what differs is the law: it pairs once (the first point below), and
+its springs (the other two).
+
+.. _contact-two-ties:
+
+**Two ties.** EdelweissFE has two ties, and they do different things:
+
+- The ``tie`` constraint (:mod:`~edelweissfe.constraints.tie`) *eliminates* the degrees of freedom of the slave nodes:
+  :math:`\boldsymbol{u}_s = \sum_a N_a \boldsymbol{u}_{m_a}` with the linear shape functions of the closest flat
+  facet of the master. It is exact, needs no penalty, and leaves the critical time step of an explicit analysis
+  untouched. It ties nodes only, and as a multi-point constraint it competes with the hanging nodes of a refinement for
+  the slave degrees of freedom. By default (``adjust=True``) it moves the slave nodes onto the master; with
+  ``adjust=False`` it keeps the gap.
+- ``surfaceToDeformableSurfacePenalty`` with ``type=tied`` (this section) holds its contact points, nodes or
+  quadrature points, to points of the curved parent faces of the master by *springs*. It is compliant, by :math:`t/k`,
+  and its springs add to the frequencies of the nodes in an explicit analysis. It eliminates nothing, so it does not
+  compete with hanging nodes, and it keeps the gap at rest by its resting offset :math:`\boldsymbol{r}_0`. It is the
+  stick of a friction law that never slips.
+
+With ``adjust=False`` the two keep a gap in the same way: the displacements are tied, not the positions. Use ``tie``
+for an exact tie of nodes, and in particular where an explicit analysis cannot afford a stiffer spring. Use
+``type=tied`` for quadrature points (a serendipity face, whose corner nodes must carry tension), for the parent faces
+of a curved master, and next to a refinement of either side.
+
+**Paired once.** At the first update, every contact point within ``searchDistance`` of the master surface (every
+point, without a search distance) is paired with the closest point of its closest facet, mapped onto the facet's
+parent face, :math:`N^m(\xi_m) \cdot \boldsymbol{x}^m`. It stays paired with that *material* point of the master for
+good: tension does not release it, sliding does not move it on. In the language of contact, the tie is contact that
+never opens and never slides -- the stick of a friction law that never slips, which is why no search is needed after
+the first.
+
+**At rest where it is paired.** The vector from the master point to the contact point at the pairing,
+:math:`\boldsymbol{r}_0`, is where the point rests. Two meshes of one curved surface do not coincide: a coarse mesh
+facets the surface with chords that lie inside the surface of a fine mesh, and the gap between them is a fraction of
+a millimetre where the coarse elements are a few millimetres. Closing that gap, or pushing an overlap apart, would be
+a prestress; the tie keeps it as part of the stress-free state.
+
+**Held in every direction.** A penalty spring along every axis :math:`\boldsymbol{e}_i` holds the point, in tension as
+in compression. With the displacement of the point from rest
+
+.. math::
+    \boldsymbol{d} = \boldsymbol{x}_p - N^m(\xi_m) \cdot \boldsymbol{x}^m - \boldsymbol{r}_0 ,
+
+the spring along :math:`\boldsymbol{e}_i` is exactly the spring of a contact point with the normal
+:math:`\bar{\boldsymbol{n}}` replaced by :math:`\boldsymbol{e}_i` and the gap by :math:`d_i`:
+
+.. math::
+    f_i = k A_p \, d_i , \qquad
+    \boldsymbol{w}_i = [\boldsymbol{c}, -N^m] \otimes \boldsymbol{e}_i , \qquad
+    \boldsymbol{K} = \sum_i k A_p \, \boldsymbol{w}_i \otimes \boldsymbol{w}_i
+      = k A_p \, [\boldsymbol{c}, -N^m] \otimes [\boldsymbol{c}, -N^m] \otimes \boldsymbol{I} .
+
+Together they pull the point back along :math:`\boldsymbol{d}` with the stiffness :math:`k A_p`, whatever the
+direction: the traction on the point is :math:`-k \boldsymbol{d}`, its normal part along the normal of the master at
+the pairing, the rest tangential. The force is linear in the displacements, the tangent constant and symmetric, the
+stored energy :math:`\tfrac{1}{2} k A_p |\boldsymbol{d}|^2`, and the explicit and the implicit solvers use it alike.
+In an explicit analysis, the springs along the axes enter the critical time step as the contact's spring does
+(:doc:`criticaltimestep`, "Penalty constraints"): each adds :math:`k A_p\, \boldsymbol{w}_i \otimes \boldsymbol{w}_i`,
+and the three act on different components of the nodes, so the bound of their stiffness is the row sums of the
+absolute value of :math:`\boldsymbol{K}`, as for the contact's spring. A mass
+:math:`m` at a node tied to a held master oscillates with :math:`\omega^2 = k A_p / m` along every axis, and that is
+what the estimate gives.
+
+**Its limits.** The interface is as compliant as its springs: a traction :math:`t` opens it by :math:`t/k`, so
+``penalty`` is chosen well above the stiffness of the adjoining solids over the size of their elements, :math:`E/h`,
+and within what the time step of an explicit analysis can carry. The offset :math:`\boldsymbol{r}_0` is a fixed
+vector, so a rotation :math:`\theta` of the interface is resisted by a traction :math:`k |\boldsymbol{r}_0| \theta`:
+nothing without a gap at rest, little for a small one. And the tie is enforced pointwise, like the contact: a
+homogeneous state is transmitted exactly where every slave face lies within one master face, while a slave face that
+straddles an edge of the master faces integrates a kink of the master's shape functions, and the traction varies by
+that quadrature error near the edge. Fine slave faces against coarse master faces confine it to the edges of the
+master faces.
+
+**A new mesh.** The tie is decided once, at the first update: which points are tied, and to which material point of
+the master. A new mesh of either side does not decide it again, in whatever configuration the model is then. It hands
+the tie on: which points are tied, the master point of each in the reference configuration, and the displacement of
+each from rest at the last accepted state. That displacement is state of the points: it is taken from the evaluation
+at the accepted configuration when an increment is accepted -- the converged iterate of an implicit increment; in
+``NED`` the evaluation at the end of the increment, which in a model with particles follows their reconnection --, and
+it is checkpointed. So a run that is resumed and refined before its first
+evaluation hands on what the uninterrupted run would, and a run that falls back to a checkpoint hands on the state of
+the checkpoint, not the trajectory it abandoned. At the next update each tied point is tied to the point of the new
+master closest to its master point, in the reference configuration, with the resting offset that leaves it displaced
+from rest as it was.
+
+- **A new mesh of the master** keeps the contact points. Every point keeps its tie and its displacement from rest, and
+  the forces of the tie are exactly what they were.
+- **A refined slave side** has new points. In the reference configuration, a new point is tied if the old point
+  nearest to it was tied. Its master point and its displacement from rest are interpolated from the old tied points:
+  by the affine function of the position along the surface that fits the nearest :math:`3^{n_\mathrm{dim}-1}` of them
+  best, in the least-squares sense. That is exact for a uniform displacement from rest, and for one that varies
+  linearly over a flat interface. Otherwise its error is of second order in the spacing of the old points, from the
+  change of the gradient of the displacement from rest and the curvature of the interface, within a smooth part of the
+  slave surface; at an edge of the slave surface, where the nearest old points lie on faces on either side of it, of
+  first order.
+
+The deck ``testfiles/edelweiss-only/SurfaceTieHexa20AMR`` refines the master of a loaded tie and checks the forces
+across it. ``tests/test_surfacetodeformablesurfacepenalty.py`` checks the rest: a tie stretched beyond the search
+distance stays tied, a point never tied stays untied, a linear displacement from rest is handed onto a refined slave
+side exactly, and a resume or a fall-back hands on the state it goes on from.
+
+.. _contact-law:
+
+The law: what differs, and the place of friction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Contact, the tie and, one day, friction are one constraint with three laws. What the constraint does is the same for
+all of them: it pairs each contact point with a point :math:`\boldsymbol{x}^m` of the master's
+parent face and freezes the normal :math:`\bar{\boldsymbol{n}}` there; at every evaluation it gives the
+law, for every paired point, the penalty times its area :math:`k A_p`, the normal, the displacement of the point from
+where it rests,
+
+.. math::
+    \boldsymbol{d} = \boldsymbol{x}_p - \boldsymbol{x}^m - \boldsymbol{r}_0 ,
+
+and the gap :math:`g = \bar{\boldsymbol{n}} \cdot \boldsymbol{d}`, less an initial overlap it does not
+count (:ref:`contact-initial-overlap`). The resting offset :math:`\boldsymbol{r}_0` is a state of the point:
+zero for a point that rests on its master point, the vector at the pairing for a tie. The law answers with
+its **springs** (:meth:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.springs`,
+:class:`~edelweissfe.constraints.base.penaltysprings.PenaltySprings`): for every spring its point, its unit
+direction :math:`\boldsymbol{n}_s`, its force :math:`f_s`, its stiffness :math:`\mathrm{d}f_s/\mathrm{d}g_s`
+and its stored energy. Each stretch is affine in the displacements with the gradient
+:math:`\boldsymbol{w}_s = [\boldsymbol{c}, -N^m] \otimes \boldsymbol{n}_s`, so the constraint does the rest for
+every law alike: the force :math:`-f_s \boldsymbol{w}_s` on the nodes, the tangent
+:math:`\mathrm{d}f_s/\mathrm{d}g_s\, \boldsymbol{w}_s \otimes \boldsymbol{w}_s`, the bound of the
+stiffness for the critical time step (:doc:`criticaltimestep`), the checkpoint of the state of the points,
+and the outputs, which come from the springs alone: the force on a point :math:`-\sum_s f_s
+\boldsymbol{n}_s` (its traction, and its normal part, the pressure), the resultants on the two sides, the
+energy stored in the springs, the number of points with a spring. The law also says how it is paired
+(:attr:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.pairsOnce`): anew in every search, as a point slides along
+the master (contact), or once, for good (the tie). A new law is a class with these two members;
+``tests/test_surfacetodeformablesurfacepenalty.py`` plugs one in, defined in the test, without touching the
+constraint.
+
+**A friction law** (not implemented) would be such a class. It pairs anew in every search, and its springs are
+
+- the normal spring of a contact law at every closed point, from :math:`g` as the contact's;
+- at those points, the tangential springs: the tangential part of the displacement from rest,
+  :math:`\boldsymbol{d}_t = (\boldsymbol{I} - \bar{\boldsymbol{n}} \otimes \bar{\boldsymbol{n}})\,
+  \boldsymbol{d}`, stretches springs of the tangential penalty :math:`k_t A_p` along the tangent directions; where
+  their force :math:`k_t A_p |\boldsymbol{d}_t|` exceeds :math:`\mu |f_n|` the point slips: the radial return of
+  *Coulomb friction* above limits the force and moves the point's rest tangentially, so that :math:`\boldsymbol{r}_0`
+  -- its stick point -- is its history.
+
+That history needs two things of the constraint, both the same for every law, neither there yet (no law has a history
+so far): the resting offsets the law returns for the last iterate are kept only when the increment is accepted
+(:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState`); and a point paired anew with
+another master point keeps its stick point where it is in space (:math:`\boldsymbol{r}_0` shifted by the move of its
+master point), so that the history follows the point as it slides. The search, the gap, the force, the tangent, the
+bound and the outputs stay as they are.
+
 .. _integrated-contact-algorithm:
 
 The integrated formulation, step by step
@@ -811,8 +1412,9 @@ The integrated formulation, step by step
 
 The argument above says what is computed and why; this is the order in which it happens, which is
 what a reader modifying :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` needs. The
-slave side of the steps below lives in
-:class:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface`, and
+slave side of the steps below lives in the contact points (:ref:`contact-points`), for quadrature
+points in
+:class:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface`, which
 is shared with the rigid-body variant (:ref:`integrated-contact-rigid-body`).
 
 **Once, at construction** (and again after an AMR retiling, through ``refresh``):
@@ -839,37 +1441,53 @@ is shared with the rigid-body variant (:ref:`integrated-contact-rigid-body`).
 #. Candidate master facets come from the shared broadphase (a centroid k-d tree with a
    triangle-inequality radius bound, a superset of the exhaustive sweep iterated in ascending facet
    index, so it reproduces the exhaustive tie-break). The clamped closest point is computed on each
-   candidate **flat** facet and the nearest wins, subject to ``searchDistance`` where one is given.
+   candidate **flat** facet and the nearest wins, subject to ``searchDistance`` where one is given
+   and to the pairing rules of :ref:`contact-one-constraint`.
 #. What is frozen from the winner is *not* the flat-facet interpolation: the clamped barycentric
    weights are mapped through that facet's ``vertexParametricCoords`` into its parent face's
    parametric space, and the parent-face shape functions :math:`N^m` are evaluated there. The
-   facet's unit normal :math:`\bar{\boldsymbol{n}}` is frozen alongside them, per facet rather than
-   per point.
-#. Only *assigned* points contribute DOFs, and each contributes one dense block over its slave
-   parent face's nodes plus its assigned master parent face's nodes. Gap activation is deliberately
+   direction of the gap :math:`\bar{\boldsymbol{n}}` is frozen alongside them: the facet's unit normal, or
+   at a crease the line from the closest point to the point (:ref:`contact-corners`).
+#. Only *assigned* points contribute DOFs. The block of the constraint holds first the nodes the
+   assigned contact points act on (for a quadrature point, a copy of its slave parent face's nodes;
+   for a slave node, the node), then, point after point, the nodes of the assigned master parent
+   faces; each assigned point contributes one dense tangent block over its own slave and master
+   nodes. Gap activation is deliberately
    **not** part of this: an assigned point that happens to be open still owns its block, which is
    then left at zero, so the sparsity pattern is stable across the Newton loop and only a genuine
    reassignment forces a rebuild.
+#. With the location, each assigned point's relative position at the zero solution of the block is taken
+   from its origin and the reference configuration of its master parent face (:ref:`contact-origins`).
 #. A point that loses its master facet has its stored gap reset to zero rather than left stale --
    it backs the public ``getGaps()``, whose callers cannot mask unassigned entries because they do
    not know the assignment.
 
 **Every evaluation**, in ``computeKernels`` (implicit) or ``computeKernelsExplicit``:
 
-#. The gap of each assigned point follows from the frozen data by the expression above; the point
-   is closed where :math:`g < 0`.
-#. The closed points' normal force is the penalty law applied to :math:`g`, scaled by that point's
-   integration weight -- so ``penalty`` is a stiffness per unit *area*, and the force of a point is
-   the pressure it carries times the area it represents.
-#. That force is distributed with :math:`\boldsymbol{w} = \bar{\boldsymbol{n}} \otimes [N^s,
-   -N^m]`, which is where a serendipity corner receives its tensile share. The tangent is assembled
-   only when one is asked for; the explicit path overrides the hook so that no tangent container is
-   ever allocated.
+#. Where each assigned point is relative to its master point, :math:`\boldsymbol{x}_p - N^m \cdot
+   \boldsymbol{x}^m`, less its resting offset: its displacement from rest, from the frozen data -- the displacement
+   from rest at the zero solution of the block, plus the difference of the displacements of the point and of its master
+   point (``_displacementsFromRestOfLocatedPoints``, :ref:`contact-origins`). Its component along
+   :math:`\bar{\boldsymbol{n}}` is the gap of the expression above (less the part of an initial overlap
+   not fed in yet).
+#. The law turns this into penalty **springs** (``_springsOfLocatedPoints``, :ref:`contact-law`): for a contact,
+   one along :math:`\bar{\boldsymbol{n}}` at every closed point (:math:`g < 0`), its normal force the penalty
+   law applied to :math:`g`, scaled by that point's area -- so ``penalty`` is a stiffness per unit *area*,
+   and the force of a point is the pressure it carries times the area it represents; for a tie, one along every
+   axis at every point.
+#. The force of every spring is distributed with :math:`\boldsymbol{w} = [\boldsymbol{c}, -N^m] \otimes
+   \bar{\boldsymbol{n}}`, its direction in place of :math:`\bar{\boldsymbol{n}}` (``_addForcesOfSprings``;
+   :math:`\boldsymbol{c} = N^s` for a quadrature point), which is
+   where a serendipity corner receives its tensile share. The tangent is assembled only when one is asked for;
+   the explicit path overrides the hook so that no tangent container is ever allocated. The bound of the
+   stiffness in an explicit analysis's critical time step (``addBoundOfAbsoluteStiffnessTimes``) goes through the
+   same springs.
+#. The springs are kept: every output (tractions, pressures, resultants, energy) is taken from them.
 
 Open points are skipped entirely rather than contributing a zero, and the whole evaluation is
-batched over the active set, falling back to a per-point loop where parent-node counts are not
-uniform across points. The two paths are held to each other by a dedicated equivalence test, since
-every ordinary model takes the batched one.
+batched over the assigned points: a fixed handful of array operations, gathered once per update of
+the connectivity. That is why the master surface, and a slave surface of quadrature points, must consist of faces of
+one type (one number of parent face nodes).
 
 
 .. _integrated-contact-rigid-body:
@@ -879,74 +1497,66 @@ Integrated contact against a discrete rigid body
 
 :mod:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty` applies the same integrated
 formulation when the master side is a :doc:`discrete rigid body </model/rigidbodies>` instead of a
-deformable surface. The slave side is identical and shared: the contact points, their weights and
-the distribution with the parent-face shape functions :math:`N^s` all come from
-:class:`~edelweissfe.constraints.base.contactpointsonslavesurface.ContactPointsOnSlaveSurface`, and
-the penalty law from :mod:`~edelweissfe.constraints.base.penaltylaw`. So a serendipity corner
-receives its tensile share exactly as above, and the node-based
-``nodeToDiscreteRigidBodyPenalty`` -- whose corners lift off for the reason explained in
-:ref:`serendipity-liftoff` -- is deprecated in its favour.
+deformable surface. The slave side is identical and shared: it is a
+:class:`~edelweissfe.constraints.base.contactpoints.ContactPoints` (:ref:`contact-points`), so both kinds of contact
+point meet a rigid body as they meet a deformable master -- the quadrature points of the slave facets
+(``contactPoints=quadraturePoints``, the default) and the slave nodes (``contactPoints=nodes``). Their positions, their
+areas and the distribution of their forces with their interpolation vectors :math:`\boldsymbol{c}` all come from the
+contact points, and the penalty law from :mod:`~edelweissfe.constraints.base.penaltylaw`. So a serendipity corner
+receives its tensile share exactly as above. With ``contactPoints=nodes`` it is also the contact of nodes against a
+rigid body, with the small-sliding gap below; how an input of the removed node-based
+``nodeToDiscreteRigidBodyPenalty`` (finite sliding, penalty per node) moves to it is described in
+:doc:`/model/constraints`.
 
 Only the master side differs. The rigid body moves with its reference point (RP): current position
-:math:`\boldsymbol{c} = \boldsymbol{X}_{RP} + \boldsymbol{u}_{RP}` and rotation
+:math:`\boldsymbol{x}_{RP} = \boldsymbol{X}_{RP} + \boldsymbol{u}_{RP}` and rotation
 :math:`\boldsymbol{R}(\boldsymbol{\theta})`, so that a body-frame point :math:`\boldsymbol{Y}` is at
-:math:`\boldsymbol{c} + \boldsymbol{R}(\boldsymbol{Y} - \boldsymbol{X}_{RP})`.
+:math:`\boldsymbol{x}_{RP} + \boldsymbol{R}(\boldsymbol{Y} - \boldsymbol{X}_{RP})`.
 
 **Contact search.** At each ``updateConnectivity``, every contact point is pulled back into the body
-frame, :math:`\hat{\boldsymbol{X}}_q = \boldsymbol{X}_{RP} + \boldsymbol{R}^T(\boldsymbol{x}_q -
-\boldsymbol{c})`, and assigned its closest triangle of the rigid surface, using the same broadphase
+frame, :math:`\hat{\boldsymbol{X}}_p = \boldsymbol{X}_{RP} + \boldsymbol{R}^T(\boldsymbol{x}_p -
+\boldsymbol{x}_{RP})`, and assigned its closest triangle of the rigid surface, using the same broadphase
 and clamped closest point as the deformable case. Frozen until the next search are the triangle's
-outward body-frame normal :math:`\boldsymbol{N}_q` and its plane offset
-:math:`d_q = \boldsymbol{N}_q \cdot (\boldsymbol{Y}_t - \boldsymbol{X}_{RP})` (:math:`\boldsymbol{Y}_t`
-a vertex of the triangle). The point then sees the triangle's plane, moving rigidly with the body.
+outward body-frame normal :math:`\boldsymbol{N}_p` and its plane offset
+:math:`d_p = \boldsymbol{N}_p \cdot (\boldsymbol{Y}_t - \boldsymbol{X}_{RP})` (:math:`\boldsymbol{Y}_t`
+a vertex of the triangle). The point then sees the triangle's plane, moving rigidly with the body. The points
+with a triangle -- within ``searchDistance`` of the rigid surface, or all without one -- are *located* in the
+block; the others take no part until a later search finds them within reach.
 The rigid surface must be closed and free of zero-area triangles, so that the outward normals are
 defined; both are checked when the constraint is created.
 
-**Gap.** With :math:`\boldsymbol{n}_q = \boldsymbol{R}\boldsymbol{N}_q` and the lever arm
-:math:`\boldsymbol{r}_q = \boldsymbol{x}_q - \boldsymbol{c}`,
+**Gap.** With :math:`\boldsymbol{n}_p = \boldsymbol{R}\boldsymbol{N}_p` and the lever arm
+:math:`\boldsymbol{r}_p = \boldsymbol{x}_p - \boldsymbol{x}_{RP}`,
 
 .. math::
-    g_q = \boldsymbol{n}_q \cdot \boldsymbol{r}_q - d_q ,
+    g_p = \boldsymbol{n}_p \cdot \boldsymbol{r}_p - d_p ,
     \qquad
-    \frac{\partial g_q}{\partial \boldsymbol{x}^s_a} = N^s_a \boldsymbol{n}_q , \quad
-    \frac{\partial g_q}{\partial \boldsymbol{u}_{RP}} = -\boldsymbol{n}_q , \quad
-    \frac{\partial g_q}{\partial \boldsymbol{\theta}} = -\boldsymbol{S}^T(\boldsymbol{r}_q \times \boldsymbol{n}_q) ,
+    \frac{\partial g_p}{\partial \boldsymbol{x}_a} = c_a \boldsymbol{n}_p , \quad
+    \frac{\partial g_p}{\partial \boldsymbol{u}_{RP}} = -\boldsymbol{n}_p , \quad
+    \frac{\partial g_p}{\partial \boldsymbol{\theta}} = -\boldsymbol{S}^T(\boldsymbol{r}_p \times \boldsymbol{n}_p) ,
 
-with :math:`\boldsymbol{S} = \boldsymbol{R}\,\boldsymbol{J}_r(\boldsymbol{\theta})` (see
-:doc:`/model/rigidbodies`). Unlike the deformable case, the gap is not linear in the degrees of freedom: the
-normal rotates with the body, :math:`\partial\boldsymbol{n}_q/\partial\boldsymbol{\theta} =
--\mathrm{skew}(\boldsymbol{n}_q)\boldsymbol{S}`, which gives the geometric tangent terms coupling
+with :math:`c_a` the interpolation vector of the point at a node :math:`a` it acts on (:math:`N^s_a` for a
+quadrature point, :math:`1` for a slave node) and :math:`\boldsymbol{S} =
+\boldsymbol{R}\,\boldsymbol{J}_r(\boldsymbol{\theta})`
+(see :doc:`/model/rigidbodies`). Unlike the deformable case, the gap is not linear in the degrees of freedom: the
+normal rotates with the body, :math:`\partial\boldsymbol{n}_p/\partial\boldsymbol{\theta} =
+-\mathrm{skew}(\boldsymbol{n}_p)\boldsymbol{S}`, which gives the geometric tangent terms coupling
 the rotation to the slave nodes and to :math:`\boldsymbol{u}_{RP}`. The
-:math:`\boldsymbol{\theta}\boldsymbol{\theta}` block is omitted, as for the node-based constraint;
-it plays no role for a fixed rigid body or in explicit runs.
+:math:`\boldsymbol{\theta}\boldsymbol{\theta}` block is omitted: it needs the second derivative of the
+exponential map. It plays no role for a fixed rigid body or in explicit runs.
 
-**Degrees of freedom.** The constraint acts on all parent-face nodes of the slave surface and on the
-RP. This footprint does not depend on the search, so a search never changes the discrete system --
-which matters on the explicit path, where the search runs every ``contact-update-frequency``
-increments. The stiffness consists of one block per slave facet plus the RP block they all share
-(:mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`). A fixed support is a rigid body
-whose RP carries Dirichlet conditions.
+**Degrees of freedom.** The constraint acts on the nodes of the located contact points -- for a quadrature
+point a copy of its slave parent face's nodes, for a slave node the node itself -- and on the RP. A search changes the
+block only if it locates other points (a point comes within ``searchDistance``); then the discrete system is rebuilt.
+The stiffness consists of one block per located point plus the RP block they all share
+(:mod:`~edelweissfe.constraints.base.rigidbodycontactstiffness`). A fixed support is a rigid body whose RP carries
+Dirichlet conditions.
 
 **Penalty units.** In both integrated constraints ``penalty`` is a modulus per unit area (force per
-length cubed), multiplied by each point's integration weight. The node-based constraints use a
-force per length per node instead, so a node-based value converts approximately as
-:math:`p_\text{integrated} \approx p_\text{node} / A_\text{tributary}`:
-
-.. list-table::
-    :header-rows: 1
-
-    * - Constraint
-      - ``type=linear``
-      - ``type=quadratic``
-    * - ``surfaceToDeformableSurfacePenalty``, ``surfaceToDiscreteRigidBodyPenalty``
-      - force / length\ :sup:`3`
-      - force / length\ :sup:`4`
-    * - ``nodeToDiscreteRigidBodyPenalty``
-      - force / length
-      - force / length\ :sup:`2`
-
-The integrated penalty is therefore also independent of the mesh size, e.g. under AMR, whereas a
-per-node penalty stiffens the interface by the refinement factor.
+length cubed for ``type=linear``, per length to the fourth for ``type=quadratic``), multiplied by each point's
+area: its integration weight, or the tributary area of a node. A penalty per node converts as
+:math:`k_\text{area} = k_\text{node} / A_\text{tributary}`. The penalty per area is independent of the mesh
+size, e.g. under AMR, whereas a penalty per node stiffens the interface by the refinement factor.
 
 
 Framework integration and verification
@@ -977,11 +1587,12 @@ Parameter guidance
   test that only compares resultants passes at one point per facet. Under-integration degrades the
   *distribution* of that resultant over the parent-face nodes, which is the whole quantity of
   interest. Lower it only with a distribution-level check in hand.
-* ``searchDistance`` gates the broadphase: a contact point whose nearest master facet is further
-  away than this is left unassigned and contributes nothing. Left unset, every point is always
-  assigned its single closest facet with no distance gate, which is the right default for a closed
-  interface; set it where slave facets genuinely have no counterpart, and size it well above the
-  largest expected approach so that a point does not enter and leave the assigned set repeatedly.
+* ``searchDistance`` gates the search for the points that are not in contact: a contact point further from the
+  master than this is not paired and contributes nothing (a point in contact is followed at any depth, see
+  :ref:`contact-one-constraint`). Left unset, there is no distance gate (the rules of the pairing still apply),
+  which is the right default for a closed interface; set it where slave facets genuinely have no counterpart, and
+  size it well above the largest expected approach so that a point does not enter and leave the assigned set
+  repeatedly. For a tie, it decides once, at the first update, which points are tied (:ref:`contact-tie`).
 
 
 Solver integration
@@ -1016,14 +1627,14 @@ ordered like the generator's ``<prefix>_nodes`` node set, and are typically requ
 
 The integrated constraint (:ref:`integrated-contact-algorithm`) presents the same
 ``updateConnectivity`` / ``computeKernels`` pair, with three differences worth knowing at the
-solver boundary. It carries no history, so it has no ``acceptLastState`` to promote -- every
-quantity derives from the converged state and :math:`d\boldsymbol{U}`. The nodes it couples are those
-of the *assigned* contact points, and do not respond to gap activation, so the sparsity pattern
-changes only on a genuine reassignment, not when a point opens or closes mid-Newton. And its
-results are ordered **by contact point**, not by node: ``getGaps()`` and ``getNormalPressures()``
-run over slave facets and, within a facet, over quadrature points, so a ``fromExpression`` output
-reading them cannot be tied to a node set -- use a reduction, or ``getSlaveNodalNormalForces()``,
-which is node-ordered like the accessors above.
+solver boundary. A contact law carries no history: every quantity derives from the converged state and
+:math:`d\boldsymbol{U}`. With a law that pairs once (the tie) it promotes the displacements from rest of the last
+evaluation in ``acceptLastState`` (:ref:`contact-tie`). The nodes it couples are those of the *assigned* contact
+points, and do not respond to gap activation, so the sparsity pattern changes only on a genuine reassignment, not when
+a point opens or closes mid-Newton. And its results are ordered **by contact point**: ``getGaps()`` and
+``getNormalPressures()`` run over the slave nodes with ``contactPoints=nodes``, otherwise over the slave facets and,
+within a facet, over its quadrature points, so a ``fromExpression`` output reading them cannot in general be tied to a
+node set -- use a reduction, or ``getSlaveNodalNormalForces()``, which is node-ordered like the accessors above.
 
 .. _contact-explicit-dynamics:
 
@@ -1042,25 +1653,24 @@ that has not been ported still works -- correctly, but paying for the tangent in
 Constraints for which the tangent is a material part of the cost should override the method; for this one it is, at a
 per-slave outer product and four block writes.
 
-``NED`` still asks for the tangent once per increment, for the bound of its critical time step
-(:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`): the contact
-adds the row sums of its stiffness, scaled by the lumped mass, to the frequencies of the nodes it couples. It asks
-right after the force, with the same arguments, so that the trial state of the friction, which ``computeKernels``
-writes for the next increment, is written again as the force wrote it. While a point slips, the friction makes the
-tangent unsymmetric (:ref:`friction-tangent`); the bound takes the rows of its symmetric part there as well.
-Until the follow-up contact changes bound the three force-only contacts (node-to-surface, surface-to-surface,
-surface-to-rigid-body) from the springs of their force, ``NED`` builds their tangent once per increment for this bound,
-in a scratch kept per location of the constraint: :math:`8\,(d\,(n_s + n_m))^2` bytes per surface point of the
-surface-to-surface contact, with :math:`d` the dimension and :math:`n_s`, :math:`n_m` the nodes of the slave and the
-master facet, and an index list of its entries of the same size. The forces are still evaluated without it.
+``NED`` bounds the contact for its critical time step
+(:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`) right after
+every net force, at the state of that force, and with ``follow-critical-time-step`` also over the next increment
+(:doc:`/theory/criticaltimestep`, "Over the next increment"): the contact adds the row sums of its stiffness, scaled by
+the lumped mass, to the frequencies of the nodes it couples. Every contact bounds the springs of its force -- at the
+closed points, and over the next increment at the points that could close within it -- from the same code as its
+force (:mod:`~edelweissfe.constraints.base.penaltysprings`); it builds no tangent for it.
 
 **The connectivity search is throttled.** The closest-facet search is
 :math:`\mathcal{O}(n_\text{slave} \times n_\text{facet})` work in Python, affordable once per
 increment of an implicit analysis -- where it is amortised over a Newton loop and a linear
 solve -- and not affordable at every one of millions of explicit increments. It therefore runs
-every ``contact-update-frequency`` increments, and is skipped entirely on an increment where a
-mid-run topology check is due, because that check re-searches every constraint anyway *after* a
-possible refinement (:doc:`/theory/adaptivity`).
+before every ``contact-update-frequency``-th increment, before that increment is proposed, and is
+skipped entirely where a mid-run topology check is due after that increment, because that check
+re-searches every constraint anyway *after* a possible refinement (:doc:`/theory/adaptivity`).
+With ``follow-critical-time-step``, the contact is then bounded over the next increment on the new
+pairing, before the time increment of that increment is set (:doc:`/theory/criticaltimestep`,
+"Over the next increment").
 
 What makes throttling defensible rather than merely cheap is that an explicit time step is tiny:
 between two searches a slave node moves :math:`\|\boldsymbol{v}\| \, \Delta t \, f`, orders of

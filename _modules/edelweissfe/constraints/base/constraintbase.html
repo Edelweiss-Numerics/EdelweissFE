@@ -177,6 +177,7 @@
     <span class="n">SystemMatrixContributorBase</span><span class="p">,</span>
     <span class="n">countEntriesOfBlock</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.criticaltimestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">NextIncrement</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.checkpointedstate</span><span class="w"> </span><span class="kn">import</span> <span class="n">packState</span><span class="p">,</span> <span class="n">unpackState</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptionSchemaProvider</span>
@@ -389,10 +390,12 @@
 <div class="viewcode-block" id="ConstraintBase.acceptLastState">
 <a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">acceptLastState</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment</span>
-<span class="sd">        is accepted, so a stateful constraint can promote the state of the last (converged) Newton</span>
-<span class="sd">        iterate to its history. Only an :attr:`active` constraint is called: one that took</span>
-<span class="sd">        no part in the increment keeps its history.</span>
+<span class="w">        </span><span class="sd">"""Called by :meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints` when an increment is</span>
+<span class="sd">        accepted, so a stateful constraint can promote the state of its last evaluation to its history. That evaluation</span>
+<span class="sd">        is at the accepted configuration: the converged Newton iterate of an implicit increment; in ``NED``, the</span>
+<span class="sd">        evaluation at the end of the increment, which in a model with entities that carry their own inertia follows</span>
+<span class="sd">        their reconnection. Only an :attr:`active` constraint is called: one that took no part in the increment keeps</span>
+<span class="sd">        its history.</span>
 
 <span class="sd">        The default implementation does nothing, which is correct for every stateless constraint</span>
 <span class="sd">        (i.e. every constraint that does not override this method)."""</span></div>
@@ -529,6 +532,7 @@
         <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">bound</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+        <span class="n">nextIncrement</span><span class="p">:</span> <span class="n">NextIncrement</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Add an upper bound of the row sums of the absolute value of this constraint's stiffness, weighted by column,</span>
 <span class="sd">        :math:`b_i \\mathrel{+}= \\sum_j |K_{ij}|\\, w_j`, at the state given; for a stiffness that is not symmetric, of</span>
@@ -538,6 +542,10 @@
 <span class="sd">        ``NED`` takes the weights :math:`w_j = 1/\\sqrt{M_j}` and scales the rows by :math:`1/\\sqrt{M_i}`. It calls</span>
 <span class="sd">        this right after the constraint's force, with the same arguments, so that the state :meth:`computeKernels`</span>
 <span class="sd">        writes for the next increment is written again as the force wrote it.</span>
+
+<span class="sd">        Given ``nextIncrement``, the bound holds over every state the next increment can reach</span>
+<span class="sd">        (:class:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement`), the state given among them: an explicit</span>
+<span class="sd">        solver that sets the time increment before the increment has evaluated its force needs it so.</span>
 
 <span class="sd">        This default bounds the tangent :meth:`computeKernels` gives at the state, in the scratch</span>
 <span class="sd">        :meth:`computeKernelsExplicit` uses: the stiffness itself, not a decomposition of it. Two arguments use the</span>
@@ -550,7 +558,19 @@
 <span class="sd">        that tangent, whether it evaluates them with the tangent or without it</span>
 <span class="sd">        (:class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`). A</span>
 <span class="sd">        constraint whose :meth:`computeKernels` gives no tangent must override it; one that has its stiffness in a</span>
-<span class="sd">        cheaper form may.</span>
+<span class="sd">        cheaper form may. The tangent is evaluated anew here, although ``NED`` asks right after the force, which the</span>
+<span class="sd">        default :meth:`computeKernelsExplicit` evaluates with the same scratch: the bound is also taken where no force</span>
+<span class="sd">        precedes it, at the start of a step and after a refinement, and reusing the force's scratch would need a flag</span>
+<span class="sd">        that says whether it holds the tangent of the state given -- a second path.</span>
+
+<span class="sd">        Over the next increment, this default takes the largest absolute value of each entry of the tangent in the</span>
+<span class="sd">        corners of the states the increment can reach</span>
+<span class="sd">        (:meth:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement.statesWithin`), the state given last, and</span>
+<span class="sd">        bounds that as above. It bounds every state the increment can reach where each entry of the block is a</span>
+<span class="sd">        monotone function of one quantity affine in the solution and the time, which is largest at a corner. Where an</span>
+<span class="sd">        entry sums terms that grow with different such quantities, they may be largest together at a state that no</span>
+<span class="sd">        corner is, and the largest value of the entry at the corners misses their sum: a constraint whose stiffness is</span>
+<span class="sd">        such a sum, and that needs the bound over the next increment, overrides this.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -565,11 +585,16 @@
 <span class="sd">        timeStep</span>
 <span class="sd">            The time step of the state: the increment that ended at it, or one of zero length where the state ends</span>
 <span class="sd">            none, e.g. at the start of a step.</span>
+<span class="sd">        nextIncrement</span>
+<span class="sd">            The next increment, restricted to this constraint's degrees of freedom; None for the state given alone.</span>
 <span class="sd">        """</span>
 
-        <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zeroedTangentScratch</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="n">scratch</span><span class="p">),</span> <span class="n">timeStep</span><span class="p">)</span>
-        <span class="n">absoluteStiffness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">scratch</span><span class="p">)</span>
+        <span class="c1"># In the states the next increment can reach first, so that the constraint is evaluated last at the state given.</span>
+        <span class="n">statesWithin</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="n">nextIncrement</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">nextIncrement</span><span class="o">.</span><span class="n">statesWithin</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]</span>
+        <span class="n">absoluteStiffnessWithin</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_absoluteTangentAt</span><span class="p">(</span><span class="o">*</span><span class="n">state</span><span class="p">)</span> <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">statesWithin</span><span class="p">]</span>
+        <span class="n">absoluteStiffness</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_absoluteTangentAt</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">withinTheIncrement</span> <span class="ow">in</span> <span class="n">absoluteStiffnessWithin</span><span class="p">:</span>
+            <span class="n">absoluteStiffness</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">absoluteStiffness</span><span class="p">,</span> <span class="n">withinTheIncrement</span><span class="p">)</span>
 
         <span class="c1"># The rows of |K| and of |K|^T; in each row the larger of |K|'s and of their mean.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">couplesAllItsDofs</span><span class="p">:</span>
@@ -586,6 +611,29 @@
             <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">rowsOfKTransposed</span><span class="p">,</span> <span class="n">columns</span><span class="p">,</span> <span class="n">absoluteStiffness</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[</span><span class="n">rows</span><span class="p">])</span>
         <span class="n">bound</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">rowsOfK</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">rowsOfK</span> <span class="o">+</span> <span class="n">rowsOfKTransposed</span><span class="p">))</span></div>
 
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_absoluteTangentAt</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U_np</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The absolute value of the entries of the tangent :meth:`computeKernels` gives at a state, in the order of the</span>
+<span class="sd">        scratch (:meth:`_zeroedTangentScratch`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U_np</span>
+<span class="sd">            The solution, restricted to this constraint's degrees of freedom.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The solution increment, likewise restricted.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step of the state.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The absolute values of the entries, one per entry of the block.</span>
+<span class="sd">        """</span>
+
+        <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zeroedTangentScratch</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="n">scratch</span><span class="p">),</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">scratch</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_zeroedTangentScratch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The scratch of the tangent (:attr:`_tangentScratch`), zeroed: sized once per discrete system, and re-zeroed</span>

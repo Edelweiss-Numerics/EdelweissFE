@@ -209,11 +209,14 @@
 <span class="sd">    ----------</span>
 <span class="sd">    dimension</span>
 <span class="sd">        The dimension of the model.</span>
+<span class="sd">    axisymmetric</span>
+<span class="sd">        True if the model is the section of a body of revolution (``*job, domain=axisymmetric``), see</span>
+<span class="sd">        :attr:`axisymmetric`.</span>
 <span class="sd">    """</span>
 
     <span class="n">identification</span> <span class="o">=</span> <span class="s2">"FEModel"</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dimension</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dimension</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">axisymmetric</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1">#: Current time of the model.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nodes</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1">#: Nodes in the model.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1">#: Elements in the model.</span>
@@ -234,6 +237,20 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">rigidBodies</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1">#: RigidBodies in the model.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">elementProperties</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1">#: Element properties.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">domainSize</span> <span class="o">=</span> <span class="n">dimension</span>  <span class="c1">#: Spatial dimension of the model</span>
+        <span class="k">if</span> <span class="n">axisymmetric</span> <span class="ow">and</span> <span class="n">dimension</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"An axisymmetric model is two-dimensional, the section r-z; got dimension </span><span class="si">{</span><span class="n">dimension</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+        <span class="c1">#: True if the model is the section r-z of a body of revolution about the axis r = 0: the first coordinate</span>
+        <span class="c1">#: is the radius r, the second the axial coordinate z, and every point of the section stands for the ring it</span>
+        <span class="c1">#: sweeps about the axis. What the model integrates is then integrated over the rings, with the circumference</span>
+        <span class="c1">#: :math:`2 \pi r` -- the axisymmetric elements their volumes, the contact points their areas (see</span>
+        <span class="c1">#: :func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`) --, so that the forces and the</span>
+        <span class="c1">#: masses at the nodes are those of the full rings. Set by ``*job, domain=axisymmetric``. The elements must</span>
+        <span class="c1">#: then be axisymmetric ones (``CAX4``, ``CAX8``, ``CAX8R``, ``GCAX4``, ``GCAX8``, ``GCAX8R``, ``CX8UL``,</span>
+        <span class="c1">#: ``CX8RUL``), and a model of plane elements a ``2d`` job: nothing checks this yet, since an element does not</span>
+        <span class="c1">#: tell whether it integrates over rings. Axisymmetric elements in a ``2d`` job make every contact point stand</span>
+        <span class="c1">#: for :math:`t L_p` instead of :math:`2 \pi r L_p`, the contact too soft by :math:`2 \pi r / t`; plane</span>
+        <span class="c1">#: elements in an axisymmetric job make it too stiff by the same factor.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axisymmetric</span> <span class="o">=</span> <span class="n">axisymmetric</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fieldOutputController</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1">#: Set once by the driver; lets in-model entities (e.g. AMR markers) look up a named *fieldOutput by value, not just by declaration.</span>
         <span class="c1">#: How the mesh may change during a run; see :class:`~edelweissfe.models.topologypipeline.TopologyPipeline`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">topology</span> <span class="o">=</span> <span class="n">TopologyPipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
@@ -564,6 +581,40 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">recordSetupFingerprint</span><span class="p">()</span></div>
 
 
+<div class="viewcode-block" id="FEModel.thicknessOf">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.femodel.FEModel.thicknessOf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">thicknessOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">element</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The thickness of a plane model at one of its elements: the thickness of the plane section the element</span>
+<span class="sd">        belongs to (``*section, type=plane, thickness=...``), by which the element multiplies what it integrates over</span>
+<span class="sd">        its area. What else integrates over the area of the slice -- e.g. the contact points, see</span>
+<span class="sd">        :func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt` -- takes it from here, so that the</span>
+<span class="sd">        forces balance at the nodes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        element</span>
+<span class="sd">            The element.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The thickness.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If no section with a thickness holds the element.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">section</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sections</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">section</span><span class="o">.</span><span class="n">thickness</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">element</span> <span class="ow">in</span> <span class="n">elementSet</span> <span class="k">for</span> <span class="n">elementSet</span> <span class="ow">in</span> <span class="n">section</span><span class="o">.</span><span class="n">elSets</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">section</span><span class="o">.</span><span class="n">thickness</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Element </span><span class="si">{</span><span class="n">element</span><span class="o">.</span><span class="n">elNumber</span><span class="si">}</span><span class="s2"> is in no section with a thickness (type=plane); a plane model is a slice of "</span>
+            <span class="s2">"the thickness of its sections."</span>
+        <span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="FEModel.activeConstraints">
 <a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.femodel.FEModel.activeConstraints">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">activeConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
@@ -764,12 +815,31 @@
 <div class="viewcode-block" id="FEModel.advanceToTime">
 <a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.femodel.FEModel.advanceToTime">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">advanceToTime</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Accept the current state of the model and sub instances, and</span>
-<span class="sd">        set the new time.</span>
+<span class="w">        </span><span class="sd">"""Accept the current state of the model at the end of an increment, and set the new time: the state of its</span>
+<span class="sd">        entities (:meth:`acceptTheStateOfTheEntities`), then that of its constraints</span>
+<span class="sd">        (:meth:`acceptTheStateOfTheConstraints`).</span>
 
-<span class="sd">        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that</span>
-<span class="sd">        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the</span>
-<span class="sd">        frictional history of a contact switched off for a step.</span>
+<span class="sd">        Both accept the state of their last evaluation, which must be the one at the configuration accepted. That is</span>
+<span class="sd">        what every solver evaluates last, except ``NED`` in a model with entities that carry their own inertia: there</span>
+<span class="sd">        the constraints are evaluated at the accepted configuration only after the entities are reconnected, so ``NED``</span>
+<span class="sd">        calls the two parts itself, with the reconnection and the evaluation between them (see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.acceptIncrement`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        time</span>
+<span class="sd">            The new time.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">acceptTheStateOfTheEntities</span><span class="p">(</span><span class="n">time</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">acceptTheStateOfTheConstraints</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="FEModel.acceptTheStateOfTheEntities">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptTheStateOfTheEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Let every element accept its computed state, and set the new time. A model with other entities that carry a</span>
+<span class="sd">        state accepts theirs here as well.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -778,8 +848,19 @@
 <span class="sd">        """</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_acceptElementStates</span><span class="p">()</span></div>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_acceptElementStates</span><span class="p">()</span>
+
+<div class="viewcode-block" id="FEModel.acceptTheStateOfTheConstraints">
+<a class="viewcode-back" href="../../../developer/models.html#edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptTheStateOfTheConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Let the constraints and the multi-point constraints accept the state of their last evaluation</span>
+<span class="sd">        (``acceptLastState``).</span>
+
+<span class="sd">        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that</span>
+<span class="sd">        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the</span>
+<span class="sd">        frictional history of a contact switched off for a step.</span>
+<span class="sd">        """</span>
 
         <span class="c1"># Serial: negligible next to the element loop.</span>
         <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">():</span>
@@ -1019,7 +1100,9 @@
             <span class="p">)</span>
 
     <span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-        <span class="s2">"Finite element model with spatial dimension </span><span class="si">{:}</span><span class="s2"> has"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">domainSize</span><span class="p">),</span>
+        <span class="s2">"Finite element model with spatial dimension </span><span class="si">{:}{:}</span><span class="s2"> has"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">domainSize</span><span class="p">,</span> <span class="s2">" (axisymmetric)"</span> <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">axisymmetric</span> <span class="k">else</span> <span class="s2">""</span>
+        <span class="p">),</span>
         <span class="n">identification</span><span class="p">,</span>
         <span class="mi">0</span><span class="p">,</span>
     <span class="p">)</span>

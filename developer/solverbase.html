@@ -992,9 +992,8 @@ report, and the topology update adds a change of the mesh. The solver never test
 <p>A rigid body’s surface (visualization) nodes are not degrees of freedom of their own; they
 are fully determined by the rigid body’s reference point. This propagates the just-converged
 reference-point pose onto those surface nodes so that output managers write the transient
-geometry of the moving body and any consumer relying on the surface nodes’ <code class="docutils literal notranslate"><span class="pre">coordinates</span></code>
-(e.g. the fast-path AABB of <a class="reference internal" href="../model/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB" title="edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getAABB()</span></code></a>)
-sees the current configuration.</p>
+geometry of the moving body and any consumer relying on the surface nodes’ <code class="docutils literal notranslate"><span class="pre">coordinates</span></code> sees the current
+configuration.</p>
 <p>Every nonlinear solver must call this once per converged increment, in <a class="reference internal" href="#edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement" title="edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptIncrement()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>

@@ -1198,7 +1198,7 @@ only has to deal with rigid body kinematics, not with how it is instantiated.</p
 </tbody>
 </table>
 <div class="literal-block-wrapper docutils container" id="id22">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/edelweiss-only/NodeToDiscreteRigidBodyContact/test.inp</span></code></span><a class="headerlink" href="#id22" title="Link to this code"></a></div>
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/edelweiss-only/SurfaceToDiscreteRigidBodyContactAtNodes/test.inp</span></code></span><a class="headerlink" href="#id22" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LinearElastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">linearelastic</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweiss</span>
 <span class="c c-Singleline">**Isotropic</span>
 <span class="c c-Singleline">**E    nu</span>
@@ -1222,20 +1222,30 @@ only has to deal with rigid body kinematics, not with how it is instantiated.</p
 <span class="c c-Singleline">** top cap sits flush with the block's bottom (z=0) face and shifted</span>
 <span class="c c-Singleline">** off-center relative to the block's footprint -- so only part of the</span>
 <span class="c c-Singleline">** cylinder's flat cap (and, at the far corner, its rounded rim) underlies</span>
-<span class="c c-Singleline">** the block, making the contact patch asymmetric.</span>
+<span class="c c-Singleline">** the block, making the contact patch asymmetric. Its surface is triangulated</span>
+<span class="c c-Singleline">** (each quadrilateral of the example's mesh split in two), as the contact needs.</span>
 <span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">discreteRigidBodyGenerator</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">cylinder</span>
-<span class="nv">filename</span><span class="ow">=</span><span class="m">rigid_body.exo</span>
+<span class="nv">filename</span><span class="ow">=</span><span class="m">rigid_body.stl</span>
 <span class="nv">translation</span><span class="ow">=</span><span class="s">'0, -10, -11.0'</span>
+
+<span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">surfaceElementGenerator</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen1</span>
+<span class="nv">surface </span><span class="ow">=</span><span class="m"> block_back</span>
+<span class="nv">name    </span><span class="ow">=</span><span class="m"> slaveSurf</span>
 
 <span class="c c-Singleline">** Scoped to block_all rather than all: all also contains the rigid body's</span>
 <span class="c c-Singleline">** surface/RP nodes/elements, which cannot take a solid section.</span>
 <span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">section1</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">linearelastic</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">solid</span>
 block_all
 
-<span class="k">*constraint</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">nodeToDiscreteRigidBodyPenalty</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">contact</span>
-<span class="nv">nSet</span><span class="ow">=</span><span class="m">block_back</span>
+<span class="c c-Singleline">** The nodes of the block's bottom face are the contact points. The penalty is a</span>
+<span class="c c-Singleline">** stiffness per unit area: 1.44e8 = 1e8 per node over the tributary area</span>
+<span class="c c-Singleline">** (10/12)^2 of an interior node; a node on the edge of the face stands for half</span>
+<span class="c c-Singleline">** of that area, a corner node for a quarter.</span>
+<span class="k">*constraint</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">surfaceToDiscreteRigidBodyPenalty</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">contact</span>
+<span class="nv">slaveSurface</span><span class="ow">=</span><span class="m">slaveSurf_facets</span>
+<span class="nv">contactPoints</span><span class="ow">=</span><span class="m">nodes</span>
 <span class="nv">rigidBody</span><span class="ow">=</span><span class="m">cylinder</span>
-<span class="nv">penalty</span><span class="ow">=</span><span class="m">1e8</span>
+<span class="nv">penalty</span><span class="ow">=</span><span class="m">1.44e8</span>
 
 <span class="k">*fieldOutput</span>
 &gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>

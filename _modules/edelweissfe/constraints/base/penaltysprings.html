@@ -167,11 +167,12 @@
 <span class="sd">degrees of freedom they couple, which lowers the critical time step.</span>
 
 <span class="sd">A penalty constraint acts through springs. A spring :math:`p` measures a stretch :math:`g_p` -- the gap of a contact</span>
-<span class="sd">point, the displacement of a held point from its prescribed value along one axis --; the vector with which it acts on</span>
-<span class="sd">the degrees of freedom of the constraint is the gradient of the stretch, :math:`\\boldsymbol{a}_p =</span>
-<span class="sd">\\partial g_p/\\partial \\boldsymbol{u}`, and its law gives it a force :math:`f_p` and a stiffness :math:`k_p =</span>
-<span class="sd">\\mathrm{d}f_p/\\mathrm{d}g_p`. The residual contribution of the springs is :math:`\\sum_p f_p \\boldsymbol{a}_p`,</span>
-<span class="sd">their stiffness :math:`\\sum_p k_p\\, \\boldsymbol{a}_p \\otimes \\boldsymbol{a}_p`.</span>
+<span class="sd">point, the displacement of a tied point from rest or of a held point from its prescribed value along one axis --; the</span>
+<span class="sd">vector with which it acts on the degrees of freedom of the constraint is the gradient of the stretch,</span>
+<span class="sd">:math:`\\boldsymbol{a}_p = \\partial g_p/\\partial \\boldsymbol{u}`, and its law gives it a force :math:`f_p` and a</span>
+<span class="sd">stiffness :math:`k_p = \\mathrm{d}f_p/\\mathrm{d}g_p`. The residual contribution of the springs is</span>
+<span class="sd">:math:`\\sum_p f_p \\boldsymbol{a}_p`, their stiffness</span>
+<span class="sd">:math:`\\sum_p k_p\\, \\boldsymbol{a}_p \\otimes \\boldsymbol{a}_p`.</span>
 
 <span class="sd">The explicit dynamic solver ``NED`` needs the row sums of the absolute value of that stiffness, weighted by column</span>
 <span class="sd">(:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). The absolute</span>
@@ -186,16 +187,61 @@
 <span class="sd">contract asks. :func:`addBoundOfAbsoluteStiffnessOfSprings` is that formula, written once for every penalty constraint</span>
 <span class="sd">of EdelweissFE and EdelweissMeshfree that bounds its springs instead of its tangent: one that has no tangent, or whose</span>
 <span class="sd">tangent is costly, overrides ``addBoundOfAbsoluteStiffnessTimes`` with it. A constraint takes its springs for the bound</span>
-<span class="sd">from the same code it takes them for its force, so that the force and the bound cannot drift apart.</span>
+<span class="sd">from the same code it takes them for its force, so that the force and the bound cannot drift apart. A contact law gives</span>
+<span class="sd">its springs at the paired contact points as :class:`PenaltySprings` (:mod:`~edelweissfe.constraints.base.penaltylaw`).</span>
 
 <span class="sd">The gradient of a spring moves nodes along the direction of the spring, :math:`a_{p,(n,j)} = C_{pn}\\, d_{pj}`: the</span>
-<span class="sd">coefficient :math:`C_{pn}` with which the spring moves node :math:`n` -- e.g. the interpolation vector of a point of a</span>
-<span class="sd">particle -- times the component :math:`j` of its direction (:class:`SpringGradientOnSharedNodes`).</span>
+<span class="sd">coefficient :math:`C_{pn}` with which the spring moves node :math:`n` (an interpolation vector, or the negative shape</span>
+<span class="sd">functions of a master face) times the component :math:`j` of its direction. It comes in parts, of two kinds:</span>
+
+<span class="sd">* :class:`SpringGradientOnSharedNodes`: the springs share their nodes, and the coefficients are a matrix over them --</span>
+<span class="sd">  the interpolation matrix of contact points</span>
+<span class="sd">  (:meth:`~edelweissfe.constraints.base.contactpoints.ContactPoints.interpolationMatrixOfLocatedPoints`), the</span>
+<span class="sd">  interpolation vectors of the points of a particle;</span>
+<span class="sd">* :class:`SpringGradientOnOwnNodes`: every spring has nodes of its own in the block -- the parent face nodes of the</span>
+<span class="sd">  master facet of a contact point, a slave node and its facet, the reference point of a rigid body.</span>
+
+<span class="sd">**Over the next increment.** With ``follow-critical-time-step``, ``NED`` asks for the bound over the states the next</span>
+<span class="sd">increment can reach (:class:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement`). A spring that switches on</span>
+<span class="sd">where its stretch turns negative -- a contact point that closes -- is in that bound if it is closed at its smallest</span>
+<span class="sd">stretch within the increment. With the pairing and the normals held, as within an increment, the gap of a point is</span>
+<span class="sd">affine in the solution, and so its smallest value within the increment is at a corner of the states the increment can</span>
+<span class="sd">reach, :math:`g + \\min(0, \\Delta g_v) + \\min(0, \\Delta g_a)`, with the changes of the gap by the part of the</span>
+<span class="sd">increment from the velocity and by the one from the acceleration (:func:`smallestGapsWithin`). A constraint that bounds</span>
+<span class="sd">its springs takes them at these gaps, and sums over its springs: a point that could close within the increment has its</span>
+<span class="sd">spring in the bound before it closes, whichever degrees of freedom the springs share, and a law whose stiffness grows</span>
+<span class="sd">with the depth is stiffest there.</span>
 <span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.criticaltimestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">NextIncrement</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.facetcontactgeometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">rowDot</span>
+
+
+<div class="viewcode-block" id="PenaltySprings">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.PenaltySprings">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PenaltySprings</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Penalty springs at located contact points, at most one per point, each along a unit direction: the spring of a</span>
+<span class="sd">    contact along the normal at a closed point, or the spring of a tie along one axis. A law makes them</span>
+<span class="sd">    (:meth:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.springs`); the constraint takes from them its force,</span>
+<span class="sd">    its tangent, the bound of its stiffness and its outputs."""</span>
+
+    <span class="c1">#: The located points with a spring (indices into the located points).</span>
+    <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The direction of each spring, (len(points), nDim).</span>
+    <span class="n">directions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The force of each spring along its direction, :math:`f`.</span>
+    <span class="n">forces</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The stiffness of each spring, :math:`k = \mathrm{d}f/\mathrm{d}g`.</span>
+    <span class="n">stiffness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The energy stored in each spring, :math:`\Pi` with :math:`\mathrm{d}\Pi/\mathrm{d}g = f`.</span>
+    <span class="n">energies</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span></div>
+
 
 
 <div class="viewcode-block" id="SpringGradientOnSharedNodes">
@@ -259,13 +305,60 @@
 
 
 
+<div class="viewcode-block" id="SpringGradientOnOwnNodes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnOwnNodes">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SpringGradientOnOwnNodes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The part of the gradients of springs on nodes of their own: spring :math:`p` moves its nodes :math:`n` with</span>
+<span class="sd">    :math:`a_{p,(n,j)} = N_{pn}\\, d_{pj}`, at the degrees of freedom ``dofs[p, n, j]`` of the block. Springs may name</span>
+<span class="sd">    the same degrees of freedom (the reference point of a rigid body). Only the absolute values enter the bound; they</span>
+<span class="sd">    are kept.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coefficients</span>
+<span class="sd">        :math:`N`, (nSprings, nNodes).</span>
+<span class="sd">    directions</span>
+<span class="sd">        The direction of each spring, (nSprings, nComponents).</span>
+<span class="sd">    dofs</span>
+<span class="sd">        Where the components of the nodes of each spring sit in the block, (nSprings, nNodes, nComponents).</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coefficients</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">directions</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absoluteCoefficients</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">coefficients</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absoluteDirections</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">directions</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofs</span> <span class="o">=</span> <span class="n">dofs</span>
+
+<div class="viewcode-block" id="SpringGradientOnOwnNodes.absoluteTimes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnOwnNodes.absoluteTimes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">absoluteTimes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`|\\boldsymbol{a}_p| \\cdot \\boldsymbol{w}` of this part, per spring; see</span>
+<span class="sd">        :meth:`SpringGradientOnSharedNodes.absoluteTimes`."""</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ai,aij,aj-&gt;a"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">absoluteCoefficients</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dofs</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">absoluteDirections</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SpringGradientOnOwnNodes.addAbsoluteTransposeTimes">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.SpringGradientOnOwnNodes.addAbsoluteTransposeTimes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">addAbsoluteTransposeTimes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">bound</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Distribute values of the springs with the absolute gradients of this part; see</span>
+<span class="sd">        :meth:`SpringGradientOnSharedNodes.addAbsoluteTransposeTimes`."""</span>
+
+        <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span>
+            <span class="n">bound</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dofs</span><span class="p">,</span>
+            <span class="n">values</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">absoluteCoefficients</span><span class="p">[:,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">absoluteDirections</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:],</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
 <div class="viewcode-block" id="addBoundOfAbsoluteStiffnessOfSprings">
 <a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">addBoundOfAbsoluteStiffnessOfSprings</span><span class="p">(</span>
     <span class="n">bound</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="n">stiffness</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">gradient</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">SpringGradientOnSharedNodes</span><span class="p">],</span>
+    <span class="n">gradient</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">SpringGradientOnSharedNodes</span> <span class="o">|</span> <span class="n">SpringGradientOnOwnNodes</span><span class="p">],</span>
 <span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Add the row sums of the absolute value of the stiffness of penalty springs, weighted by column,</span>
 <span class="sd">    :math:`b_i \\mathrel{+}= \\sum_p |k_p|\\, |a_{p,i}| \\, (|\\boldsymbol{a}_p| \\cdot \\boldsymbol{w})` (see the</span>
@@ -287,6 +380,49 @@
     <span class="n">stiffnessTimesWeighted</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">stiffness</span><span class="p">)</span> <span class="o">*</span> <span class="n">weighted</span>
     <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">gradient</span><span class="p">:</span>
         <span class="n">part</span><span class="o">.</span><span class="n">addAbsoluteTransposeTimes</span><span class="p">(</span><span class="n">stiffnessTimesWeighted</span><span class="p">,</span> <span class="n">bound</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="smallestGapsWithin">
+<a class="viewcode-back" href="../../../../model/constraints.html#edelweissfe.constraints.base.penaltysprings.smallestGapsWithin">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">smallestGapsWithin</span><span class="p">(</span>
+    <span class="n">nextIncrement</span><span class="p">:</span> <span class="n">NextIncrement</span><span class="p">,</span> <span class="n">gapsAt</span><span class="p">,</span> <span class="n">U_np</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The smallest gap each contact point may have within the next increment, at which a contact takes its springs</span>
+<span class="sd">    for the bound over it (see the module documentation, "Over the next increment"). With the pairing and the normals</span>
+<span class="sd">    held, a gap is affine in the solution, and changes over an increment of length :math:`s` by :math:`\\alpha\\,</span>
+<span class="sd">    \\Delta g_v + \\beta\\, \\Delta g_a`, :math:`\\alpha, \\beta \\in [0, 1]`</span>
+<span class="sd">    (:class:`~edelweissfe.solvers.base.criticaltimestep.NextIncrement`), with the changes :math:`\\Delta g_v` and</span>
+<span class="sd">    :math:`\\Delta g_a` of the gap by the two parts of the increment at its largest length. Each part, where it closes</span>
+<span class="sd">    the gap, closes it</span>
+<span class="sd">    most at its full length, so within the increment, whatever its length and wherever the point closes in it, the gap</span>
+<span class="sd">    is at least :math:`g + \\min(0, \\Delta g_v) + \\min(0, \\Delta g_a)`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nextIncrement</span>
+<span class="sd">        The next increment, restricted to the constraint.</span>
+<span class="sd">    gapsAt</span>
+<span class="sd">        The gaps of the contact points at a state, ``gapsAt(U_np, dU, timeStep)``.</span>
+<span class="sd">    U_np</span>
+<span class="sd">        The solution now, restricted to the constraint.</span>
+<span class="sd">    dU</span>
+<span class="sd">        The increment now, likewise.</span>
+<span class="sd">    timeStep</span>
+<span class="sd">        The time step now.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.ndarray</span>
+<span class="sd">        The smallest gaps, one per contact point.</span>
+<span class="sd">    """</span>
+
+    <span class="n">gaps</span> <span class="o">=</span> <span class="n">gapsAt</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+    <span class="n">move</span> <span class="o">=</span> <span class="n">nextIncrement</span><span class="o">.</span><span class="n">byTheVelocity</span>
+    <span class="n">byTheVelocity</span> <span class="o">=</span> <span class="n">gapsAt</span><span class="p">(</span><span class="n">U_np</span> <span class="o">+</span> <span class="n">move</span><span class="p">,</span> <span class="n">dU</span> <span class="o">+</span> <span class="n">move</span><span class="p">,</span> <span class="n">nextIncrement</span><span class="o">.</span><span class="n">timeStep</span><span class="p">)</span> <span class="o">-</span> <span class="n">gaps</span>
+    <span class="n">move</span> <span class="o">=</span> <span class="n">nextIncrement</span><span class="o">.</span><span class="n">byTheAcceleration</span>
+    <span class="n">byTheAcceleration</span> <span class="o">=</span> <span class="n">gapsAt</span><span class="p">(</span><span class="n">U_np</span> <span class="o">+</span> <span class="n">move</span><span class="p">,</span> <span class="n">dU</span> <span class="o">+</span> <span class="n">move</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span> <span class="o">-</span> <span class="n">gaps</span>
+    <span class="k">return</span> <span class="n">gaps</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">byTheVelocity</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">byTheAcceleration</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span></div>
 
 </pre></div>
 

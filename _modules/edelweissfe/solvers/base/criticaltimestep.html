@@ -186,8 +186,9 @@
 <span class="sd">  meshfree model), estimated anew **when the margin of the last estimate over the time increment in use may be used</span>
 <span class="sd">  up**;</span>
 <span class="sd">* :class:`CriticalTimeStepWithThePenaltyConstraints`: the parts with the penalty constraints, estimated **after every</span>
-<span class="sd">  evaluation of the net force**, from the stiffness the constraints had in it. This third value is not the constraints'</span>
-<span class="sd">  own critical time step (see the class).</span>
+<span class="sd">  evaluation of the net force**, from the stiffness the constraints had in it, and, where the time increment follows</span>
+<span class="sd">  the critical time step, also over the states the next increment can reach (:class:`NextIncrement`). This third value</span>
+<span class="sd">  is not the constraints' own critical time step (see the class).</span>
 
 <span class="sd">The theory, and what the estimates do not see, are explained in :doc:`/theory/criticaltimestep`.</span>
 <span class="sd">"""</span>
@@ -198,6 +199,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 
 
 <div class="viewcode-block" id="CriticalTimeStepEstimate">
@@ -770,6 +772,94 @@
 
 
 
+<div class="viewcode-block" id="NextIncrement">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.NextIncrement">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">NextIncrement</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The states the next increment of an explicit solver can reach, over which a constraint bounds its stiffness</span>
+<span class="sd">    (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`) when the</span>
+<span class="sd">    time increment is set before that increment has evaluated its force: ``NED`` with ``follow-critical-time-step``</span>
+<span class="sd">    (:class:`CriticalTimeStepWithThePenaltyConstraints`, "Over the next increment").</span>
+
+<span class="sd">    The central difference method takes the next increment, of a length :math:`s` up to the largest time increment</span>
+<span class="sd">    the solver could take next, :math:`\\Delta t_\\mathrm{max}`, from the state now as</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \\Delta\\boldsymbol{U}(s) = s\\, \\dot{\\boldsymbol{U}} + \\tfrac{1}{2} s (\\Delta t_\\mathrm{last} + s)\\,</span>
+<span class="sd">        \\ddot{\\boldsymbol{U}} = \\alpha\\, \\Delta\\boldsymbol{U}_v + \\beta\\, \\Delta\\boldsymbol{U}_a ,</span>
+
+<span class="sd">    with the velocity :math:`\\dot{\\boldsymbol{U}}` of the last increment, its length :math:`\\Delta</span>
+<span class="sd">    t_\\mathrm{last}`, and the acceleration :math:`\\ddot{\\boldsymbol{U}}` at its end. The two parts at</span>
+<span class="sd">    :math:`\\Delta t_\\mathrm{max}`, :math:`\\Delta\\boldsymbol{U}_v` and :math:`\\Delta\\boldsymbol{U}_a`, are taken</span>
+<span class="sd">    with the coefficients :math:`\\alpha = s / \\Delta t_\\mathrm{max}` and :math:`\\beta = s (\\Delta t_\\mathrm{last}</span>
+<span class="sd">    + s) / (\\Delta t_\\mathrm{max} (\\Delta t_\\mathrm{last} + \\Delta t_\\mathrm{max}))`, both between 0 and 1. So</span>
+<span class="sd">    every state the increment can reach, whatever its length, lies in the parallelogram spanned by the two parts, whose</span>
+<span class="sd">    corners are the states :meth:`statesWithin` gives. The time grows with :math:`s` as the velocity part does, so the</span>
+<span class="sd">    corners moved by the velocity part are at the time at the end of the increment (:attr:`timeStep`).</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: The part from the velocity, :math:`\\Delta\\boldsymbol{U}_v = \\Delta t_\\mathrm{max}\\, \\dot{\\boldsymbol{U}}`,</span>
+    <span class="c1">#: a vector of the discrete system or restricted to an entity (:meth:`restrictedTo`).</span>
+    <span class="n">byTheVelocity</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The part from the acceleration, :math:`\\Delta\\boldsymbol{U}_a = \\tfrac{1}{2} \\Delta t_\\mathrm{max}</span>
+    <span class="c1">#: (\\Delta t_\\mathrm{last} + \\Delta t_\\mathrm{max})\\, \\ddot{\\boldsymbol{U}}`, likewise.</span>
+    <span class="n">byTheAcceleration</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The time step at the end of the increment, of length :math:`\\Delta t_\\mathrm{max}`.</span>
+    <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+
+<div class="viewcode-block" id="NextIncrement.restrictedTo">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.NextIncrement.restrictedTo">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restrictedTo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"NextIncrement"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The next increment at the degrees of freedom of an entity.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        entity</span>
+<span class="sd">            The entity, e.g. a constraint, by which the vectors of the discrete system are indexed.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        NextIncrement</span>
+<span class="sd">            The next increment, restricted.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">NextIncrement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">byTheVelocity</span><span class="p">[</span><span class="n">entity</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">byTheAcceleration</span><span class="p">[</span><span class="n">entity</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStep</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NextIncrement.statesWithin">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.NextIncrement.statesWithin">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">statesWithin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U_np</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The corners of the parallelogram of the states the next increment can reach: the state now, and moved on by</span>
+<span class="sd">        either part of the increment or by both, those moved by the velocity part at the time step at the end of the</span>
+<span class="sd">        increment. A quantity affine in the solution and the time takes its smallest and its largest value within the</span>
+<span class="sd">        increment at one of them, and so does a monotone function of such a quantity.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U_np</span>
+<span class="sd">            The solution now, restricted as the parts are.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The increment now, likewise.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step now.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[tuple]</span>
+<span class="sd">            The four states, each the solution, the increment and the time step; the state now first.</span>
+<span class="sd">        """</span>
+
+        <span class="n">states</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">byTheVelocity</span><span class="p">,</span> <span class="n">timeStepOfTheState</span> <span class="ow">in</span> <span class="p">((</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">),</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">byTheVelocity</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStep</span><span class="p">)):</span>
+            <span class="k">for</span> <span class="n">byTheAcceleration</span> <span class="ow">in</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">byTheAcceleration</span><span class="p">):</span>
+                <span class="n">move</span> <span class="o">=</span> <span class="n">byTheVelocity</span> <span class="o">+</span> <span class="n">byTheAcceleration</span>
+                <span class="n">states</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">U_np</span> <span class="o">+</span> <span class="n">move</span><span class="p">,</span> <span class="n">dU</span> <span class="o">+</span> <span class="n">move</span><span class="p">,</span> <span class="n">timeStepOfTheState</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">states</span></div>
+</div>
+
+
+
 <div class="viewcode-block" id="CriticalTimeStepWithThePenaltyConstraints">
 <a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">CriticalTimeStepWithThePenaltyConstraints</span><span class="p">(</span><span class="n">CriticalTimeStepOfAPart</span><span class="p">):</span>
@@ -809,6 +899,17 @@
 <span class="sd">    that is new in :math:`\\boldsymbol{f}_n` -- a point that closed in increment :math:`n`, a point a contact search</span>
 <span class="sd">    paired at its start -- is half an increment late, since the average still holds an increment taken without it</span>
 <span class="sd">    (:doc:`/theory/criticaltimestep`, "What the estimate does not see").</span>
+
+<span class="sd">    **Over the next increment, where the time increment follows the critical time step.** Lowered only, the time</span>
+<span class="sd">    increment keeps the margin of a stiff state once met. Followed (``NED``'s ``follow-critical-time-step``), it is</span>
+<span class="sd">    raised as soon as the stiffness falls, and stiffness that is new in :math:`\\boldsymbol{f}_{n+1}` would meet the</span>
+<span class="sd">    raised increment. So the estimate at the state is followed by one over the states the next increment can reach</span>
+<span class="sd">    (:class:`NextIncrement`, up to the largest time increment the estimate at the state allows), and the smaller of the</span>
+<span class="sd">    two is kept (:meth:`estimateOverTheNextIncrement`): :math:`\\Delta t_{n+1}` is then within the critical time step of</span>
+<span class="sd">    both forces it is averaged in, :math:`\\boldsymbol{f}_n` and :math:`\\boldsymbol{f}_{n+1}`, as far as the bound over</span>
+<span class="sd">    the states holds (:doc:`/theory/criticaltimestep`, "Over the next increment"). Where the connectivity changes</span>
+<span class="sd">    between the force and the next increment -- after a contact search --, the bound over the next increment is taken</span>
+<span class="sd">    again on the new one.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -845,15 +946,84 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_take</span><span class="p">(</span>
             <span class="n">CriticalTimeStepEstimate</span><span class="p">(</span>
-                <span class="nb">min</span><span class="p">(</span>
-                    <span class="n">elements</span><span class="o">.</span><span class="n">estimateFromTheBoundOfEachDof</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">mpcTransformation</span><span class="p">)</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">(</span>
-                        <span class="n">rowSumsOfThePenaltyConstraints</span>
-                    <span class="p">),</span>
-                    <span class="n">entities</span><span class="o">.</span><span class="n">withThePenaltyConstraints</span><span class="p">(</span><span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">),</span>
-                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_withTheRowSums</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">,</span> <span class="n">elements</span><span class="p">,</span> <span class="n">entities</span><span class="p">,</span> <span class="n">mpcTransformation</span><span class="p">)</span>
             <span class="p">)</span>
         <span class="p">)</span></div>
-</div>
+
+
+<div class="viewcode-block" id="CriticalTimeStepWithThePenaltyConstraints.estimateOverTheNextIncrement">
+<a class="viewcode-back" href="../../../../theory/criticaltimestep.html#edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints.estimateOverTheNextIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">estimateOverTheNextIncrement</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">,</span>
+        <span class="n">rowSumsOverTheNextIncrement</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">elements</span><span class="p">:</span> <span class="n">CriticalTimeStepOfTheElements</span><span class="p">,</span>
+        <span class="n">entities</span><span class="p">:</span> <span class="n">CriticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">,</span>
+        <span class="n">mpcTransformation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Lower the last estimate to the critical time step of the parts with the row sums of the penalty constraints</span>
+<span class="sd">        over the states the next increment can reach, if that is smaller: the next increment is averaged with the force</span>
+<span class="sd">        of the state as well (see "Over the next increment"). It refines the last estimate, and is not counted as one</span>
+<span class="sd">        of its own.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The discrete system.</span>
+<span class="sd">        rowSumsOverTheNextIncrement</span>
+<span class="sd">            The row sums :math:`r_i` of the penalty constraints over the states the next increment can reach</span>
+<span class="sd">            (:class:`NextIncrement`), as for :meth:`estimate`.</span>
+<span class="sd">        elements</span>
+<span class="sd">            The critical time step of the finite elements, as last estimated.</span>
+<span class="sd">        entities</span>
+<span class="sd">            The critical time step of the entities that carry their own inertia, as last estimated.</span>
+<span class="sd">        mpcTransformation</span>
+<span class="sd">            The condensation of the multi-point constraints of the discrete system; None if it has none.</span>
+<span class="sd">        """</span>
+
+        <span class="n">overTheNextIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_withTheRowSums</span><span class="p">(</span>
+            <span class="n">system</span><span class="p">,</span> <span class="n">rowSumsOverTheNextIncrement</span><span class="p">,</span> <span class="n">elements</span><span class="p">,</span> <span class="n">entities</span><span class="p">,</span> <span class="n">mpcTransformation</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">overTheNextIncrement</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lastEstimate</span> <span class="o">=</span> <span class="n">CriticalTimeStepEstimate</span><span class="p">(</span><span class="n">overTheNextIncrement</span><span class="p">)</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_withTheRowSums</span><span class="p">(</span>
+        <span class="n">system</span><span class="p">,</span>
+        <span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">elements</span><span class="p">:</span> <span class="n">CriticalTimeStepOfTheElements</span><span class="p">,</span>
+        <span class="n">entities</span><span class="p">:</span> <span class="n">CriticalTimeStepOfEntitiesWithOwnInertia</span><span class="p">,</span>
+        <span class="n">mpcTransformation</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The critical time step of the parts, as last estimated, with the row sums of the penalty constraints added</span>
+<span class="sd">        (see :meth:`estimate`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        system</span>
+<span class="sd">            The discrete system.</span>
+<span class="sd">        rowSumsOfThePenaltyConstraints</span>
+<span class="sd">            The row sums of the constraints, scaled by the lumped mass, one per degree of freedom.</span>
+<span class="sd">        elements</span>
+<span class="sd">            The critical time step of the elements, as last estimated.</span>
+<span class="sd">        entities</span>
+<span class="sd">            The critical time step of the entities that carry their own inertia, as last estimated.</span>
+<span class="sd">        mpcTransformation</span>
+<span class="sd">            The condensation of the multi-point constraints; None without.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The critical time step.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span>
+            <span class="n">elements</span><span class="o">.</span><span class="n">estimateFromTheBoundOfEachDof</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">mpcTransformation</span><span class="p">)</span><span class="o">.</span><span class="n">criticalTimeStep</span><span class="p">(</span>
+                <span class="n">rowSumsOfThePenaltyConstraints</span>
+            <span class="p">),</span>
+            <span class="n">entities</span><span class="o">.</span><span class="n">withThePenaltyConstraints</span><span class="p">(</span><span class="n">rowSumsOfThePenaltyConstraints</span><span class="p">),</span>
+        <span class="p">)</span></div>
 
 </pre></div>
 

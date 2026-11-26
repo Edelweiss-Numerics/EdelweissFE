@@ -250,7 +250,7 @@
     <span class="n">jobInfo</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
 
     <span class="n">tic</span> <span class="o">=</span> <span class="n">getCurrentTime</span><span class="p">()</span>
-    <span class="n">model</span> <span class="o">=</span> <span class="n">FEModel</span><span class="p">(</span><span class="n">domainSize</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">FEModel</span><span class="p">(</span><span class="n">domainSize</span><span class="p">,</span> <span class="n">axisymmetric</span><span class="o">=</span><span class="n">job</span><span class="p">[</span><span class="s2">"domain"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"axisymmetric"</span><span class="p">)</span>
     <span class="n">model</span> <span class="o">=</span> <span class="n">fillFEModelFromInputFile</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">inputfile</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
     <span class="n">model</span><span class="o">.</span><span class="n">prepareYourself</span><span class="p">(</span><span class="n">journal</span><span class="p">)</span>
     <span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"startTime"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>

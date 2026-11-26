@@ -1303,11 +1303,13 @@ upper_all
 </pre></div>
 </div>
 </div>
-<p>The rigid-body contact constraints (<a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.nodetorigidsurfacepenalty" title="edelweissfe.constraints.nodetorigidsurfacepenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nodetorigidsurfacepenalty</span></code></a>,
-<a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.nodetodiscreterigidbodypenalty" title="edelweissfe.constraints.nodetodiscreterigidbodypenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nodetodiscreterigidbodypenalty</span></code></a>) are likewise <code class="docutils literal notranslate"><span class="pre">MeshDependent</span></code>, but
-lighter still: their master geometry is rigid (an analytic plane, or a triangulated rigid body), so
-refinement only ever grows their watched slave <code class="docutils literal notranslate"><span class="pre">nSet</span></code> – no facet regeneration, no per-slave
-history, just a node list refreshed by the topology pipeline after the refinement, as above.</p>
+<p>The contact against an analytic rigid wall (<a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.nodetorigidsurfacepenalty" title="edelweissfe.constraints.nodetorigidsurfacepenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nodetorigidsurfacepenalty</span></code></a>) is
+likewise <code class="docutils literal notranslate"><span class="pre">MeshDependent</span></code>, but lighter still: its master is rigid, so refinement only ever grows its watched slave
+<code class="docutils literal notranslate"><span class="pre">nSet</span></code> – no facet regeneration, no per-slave history, just a node list refreshed by the topology pipeline after
+the refinement, as above. The contact against a discrete rigid body
+(<a class="reference internal" href="../model/constraints.html#module-edelweissfe.constraints.surfacetodiscreterigidbodypenalty" title="edelweissfe.constraints.surfacetodiscreterigidbodypenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">surfacetodiscreterigidbodypenalty</span></code></a>) regenerates the contact points of its refined
+slave surface and searches their triangles anew
+(<code class="docutils literal notranslate"><span class="pre">testfiles/marmot/AMR_SurfaceToDiscreteRigidBodyContact/test.inp</span></code>).</p>
 <div class="literal-block-wrapper docutils container" id="id8">
 <div class="code-block-caption"><span class="caption-text">Example (the block is refined mid-run while its face already rests against an
 analytic rigid wall): <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/AMR_RigidContactRefine/test.inp</span></code></span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
