@@ -145,6 +145,28 @@ def test_the_entities_are_estimated_in_the_first_evaluation_of_a_step_and_after_
     assert criticalTimeStep.isDue(system, 0, M, C, 0.0)
 
 
+class _EntitiesWithoutAnEstimate(_Entities):
+    """A discrete system whose entities give no estimate, as a model without such entities."""
+
+    def criticalTimeStepOfEntitiesWithOwnInertia(self, M, C, forEachChunk, weightsOfTheEstimate=None):
+        return None
+
+
+def test_entities_without_an_estimate_are_not_made_due_by_the_penalty_constraints():
+    """Where the last estimate is none, the row sums of the penalty constraints make nothing due: the critical time
+    step of the entities stays infinite, with the constraints as without them."""
+
+    system, M = _entities()
+    system = _EntitiesWithoutAnEstimate(system.K)
+    C = np.zeros_like(M)
+    criticalTimeStep = CriticalTimeStepOfEntitiesWithOwnInertia(DELTA)
+    criticalTimeStep.estimate(system, M, C, None, 0)
+
+    assert criticalTimeStep.lastEstimate is None
+    assert not criticalTimeStep.isDue(system, 1, M, C, 1.0, np.ones_like(M))
+    assert criticalTimeStep.withThePenaltyConstraints(np.ones_like(M)) == np.inf
+
+
 def test_with_the_masses_held_the_entities_are_estimated_anew_when_the_assumed_decrease_uses_up_the_margin():
     """With a margin m of the estimate over the critical time step in use, the estimate is trusted for as many
     increments as (1 - delta)^n m >= 1 allows, and is due after the first one beyond."""

@@ -524,7 +524,8 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
             damping alone) it did not have at the last estimate, and when the critical time step at worst
             (:meth:`criticalTimeStepAtWorst`) has fallen below the one in use -- alone, or with the penalty constraints
             that couple the entities' degrees of freedom: their row sums are those of now, the entities' stiffness may
-            have grown by the square of the same factor as in :meth:`criticalTimeStepAtWorst`.
+            have grown by the square of the same factor as in :meth:`criticalTimeStepAtWorst`. The penalty constraints
+            make nothing due where the last estimate is none (a discrete system whose entities give no estimate).
         """
 
         if self._numbering is not system.numbering:
@@ -538,8 +539,10 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
             return True
         if self.criticalTimeStepAtWorst(increment, lumpedInertia, lumpedDamping) < criticalTimeStepInUse:
             return True
-        if rowSumsOfThePenaltyConstraints is None or not np.any(
-            rowSumsOfThePenaltyConstraints[self.lastEstimate.dofs] > 0.0
+        if (
+            rowSumsOfThePenaltyConstraints is None
+            or self.lastEstimate is None
+            or not np.any(rowSumsOfThePenaltyConstraints[self.lastEstimate.dofs] > 0.0)
         ):
             return False
         # With the entities' stiffness grown by 1/fall^2, their critical time step with the constraints is fall times

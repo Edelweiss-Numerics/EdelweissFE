@@ -1145,24 +1145,33 @@ class NED(NonlinearSolverBase):
         # The critical time steps, after the net force and the velocity. For the entities the order is not required:
         # their estimate needs only their lumped inertia and damping, just assembled, and nothing in the net force
         # depends on it. The penalty constraints are bounded with the stiffness they had in the net force, with the same
-        # arguments. What they decide is the time increment of the next increment, which integrates that force.
+        # arguments, after the entities, since their estimate adds to the entities' last one. The time increment is set
+        # once, from both: what they decide is the time increment of the next increment, which integrates that force.
         rowSumsOfThePenaltyConstraints = self._rowSumsOfThePenaltyConstraints(self._U, noIncrement, timeStep)
         criticalTimeStep = self._criticalTimeStepOfTheEntities
-        if criticalTimeStep.isDue(
+        entitiesAreDue = criticalTimeStep.isDue(
             system,
             timeStep.number,
             self._inertiaOfEntities,
             self._dampingOfEntities,
             self._timeIncrementInUse(step) / self.options["courant-number"],
             rowSumsOfThePenaltyConstraints,
-        ):
+        )
+        if entitiesAreDue:
             with performancetiming.timeit("critical time step of entities"):
                 criticalTimeStep.estimate(
                     system, self._inertiaOfEntities, self._dampingOfEntities, self.forEachChunk, timeStep.number
                 )
-            self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia", 2)
         self._estimateThePenaltyConstraints(rowSumsOfThePenaltyConstraints)
-        self._enforceTheCriticalTimeStep(step, "The penalty constraints", 2)
+        self._enforceTheCriticalTimeStep(
+            step,
+            (
+                "The entities that carry their own inertia and the penalty constraints"
+                if entitiesAreDue
+                else "The penalty constraints"
+            ),
+            2,
+        )
 
         if timeStep.timeIncrement > 0.0 and timeStep.number % self.options["output-frequency"] == 0:
             self.reportEnergyBalance(self._V, timeStep)
