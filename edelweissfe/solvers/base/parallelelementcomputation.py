@@ -35,8 +35,8 @@ from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     chunked_iterable,
     getNumberOfWorkerThreads,
-    getThreadPool,
     mapChunksOnWorkers,
+    mapTasksInParallel,
 )
 from edelweissfe.numerics.systemmatrixassembly import SystemMatrixAssembly
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -277,9 +277,7 @@ def computeElementsInParallelForExplicit(
         # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize
         psi_total = sum(compute_chunk(plannedChunk) for plannedChunk in plan)
     else:
-        executor = getThreadPool(numThreads)
-        # map returns the chunk_psi from each worker
-        psi_total = sum(executor.map(compute_chunk, plan))
+        psi_total = sum(mapTasksInParallel(compute_chunk, plan, numThreads))
 
     scatter_P.assembleInto(P)
 

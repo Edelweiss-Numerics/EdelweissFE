@@ -643,6 +643,12 @@ class NED(NonlinearSolverBase):
         self._halfDampingRate = None
         #: 1.0 on second-order DOFs, 0.0 elsewhere; see solveIncrement.
         self._secondOrderMask = None
+        #: The time increment, and per DOF the factors of the velocity and of the net force in the velocity update for
+        #: it, with a vector for the force term; see :meth:`_factorsOfTheVelocityUpdate`.
+        self._velocityUpdate = None
+        #: The time increment, and per DOF the inverse coefficient of the acceleration in the equation of motion for
+        #: it; see :meth:`_inverseCoefficientsOfTheAcceleration`.
+        self._accelerationUpdate = None
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
         #: Conservation check of every field's lumped total across topology changes; reset per step.
@@ -1746,17 +1752,69 @@ class NED(NonlinearSolverBase):
 
         if A is None:
             A = self._A
-        A[:] = 0.0
-        coefficient = self._inertia + (0.5 * timeIncrement) * self._damping
-        hasEquationOfMotion = coefficient > 0.0
-        forceNotSpentOnDamping = np.asarray(self._netForce) - self._damping * np.asarray(self._V)
-        A[hasEquationOfMotion] = forceNotSpentOnDamping[hasEquationOfMotion] / coefficient[hasEquationOfMotion]
+        # a = (f_net - C v) / (M + dt/2 C), written into A without temporaries; zero where the coefficient is.
+        a = A.asPlainArray()
+        np.multiply(self._damping, self._V.asPlainArray(), out=a)
+        np.subtract(self._netForce.asPlainArray(), a, out=a)
+        a *= self._inverseCoefficientsOfTheAcceleration(timeIncrement)
         for dirichlet in dirichlets:
             A[dirichlet.constrainedDofIndices] = 0.0
         if self.mpcTransformation is not None:
             self.mpcTransformation.applySlaveKinematics(A)
 
         return A
+
+    def _factorsOfTheVelocityUpdate(self, dtAverage: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The factors of the velocity update :math:`v \\leftarrow a \\, v + b \\, f_\\mathrm{net}` per DOF for a time
+        increment, see :meth:`solveIncrement`: :math:`a = (1 - h) / (1 + h)` and :math:`b = M^{-1} \\Delta t / (1 + h)`
+        on the second-order DOFs, with :math:`h = \\tfrac{1}{2} \\alpha \\Delta t`; :math:`a = 1` and :math:`b = 0`
+        elsewhere. They are derived when the time increment or the operators (:meth:`_deriveLumpedOperators`) change,
+        not in every increment.
+
+        Parameters
+        ----------
+        dtAverage
+            The time increment of the velocity update, the mean of the last and the current one.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray, np.ndarray]
+            The factor of the velocity, the factor of the net force, and a vector to hold the force term.
+        """
+
+        if self._velocityUpdate is None or self._velocityUpdate[0] != dtAverage:
+            halfRateStep = self._halfDampingRate * dtAverage
+            factorOfVelocity = (1.0 - halfRateStep) / (1.0 + halfRateStep)
+            factorOfNetForce = self._Minv * self._secondOrderMask * dtAverage / (1.0 + halfRateStep)
+            self._velocityUpdate = dtAverage, factorOfVelocity, factorOfNetForce, np.empty_like(factorOfNetForce)
+
+        return self._velocityUpdate[1:]
+
+    def _inverseCoefficientsOfTheAcceleration(self, timeIncrement: float) -> np.ndarray:
+        """The inverse coefficients of the acceleration in the equation of motion at the end of an increment (see
+        :meth:`accelerationAtTheEndOfTheIncrement`), :math:`1 / (M + \\tfrac{1}{2} \\Delta t \\, C)` per DOF, and zero
+        where the coefficient is: on a multi-point-constraint slave, which has no equation of motion of its own. They
+        are derived when the time increment or the operators (:meth:`_deriveLumpedOperators`) change, not in every
+        increment.
+
+        Parameters
+        ----------
+        timeIncrement
+            The time increment.
+
+        Returns
+        -------
+        np.ndarray
+            The inverse coefficients.
+        """
+
+        if self._accelerationUpdate is None or self._accelerationUpdate[0] != timeIncrement:
+            coefficient = self._inertia + (0.5 * timeIncrement) * self._damping
+            inverseCoefficient = np.zeros_like(coefficient)
+            np.divide(1.0, coefficient, out=inverseCoefficient, where=coefficient > 0.0)
+            self._accelerationUpdate = timeIncrement, inverseCoefficient
+
+        return self._accelerationUpdate[1]
 
     def formNetForceOfTheModelsState(self, dirichlets):
         """Form the net force a cold step starts from: that of the state the model holds,
@@ -1947,18 +2005,18 @@ class NED(NonlinearSolverBase):
 
             # Second-order DOFs: central difference with mass-proportional damping,
             # V = ((1 - h) V + Minv f_net dt) / (1 + h), h = alpha dt / 2, alpha = C/M; at alpha = 0 this is
-            # exactly the undamped update. Written on whole vectors: h and the mask are zero off the
-            # second-order DOFs. First-order DOFs: V = Minv f_net (forward Euler).
+            # exactly the undamped update. Written on whole vectors as V = a V + b f_net, with the factors
+            # a = (1 - h) / (1 + h) and b = Minv dt / (1 + h), which change only with the time increment; off the
+            # second-order DOFs, a = 1 and b = 0. First-order DOFs: V = Minv f_net (forward Euler).
             dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
-            halfRateStep = self._halfDampingRate * dtAverage
-            forceOverMass = Minv * netForce.asPlainArray()
+            factorOfVelocity, factorOfNetForce, forceTerm = self._factorsOfTheVelocityUpdate(dtAverage)
+            f = netForce.asPlainArray()
 
             velocity = V.asPlainArray()
-            velocity *= 1.0 - halfRateStep
-            velocity += forceOverMass * (self._secondOrderMask * dtAverage)
-            velocity /= 1.0 + halfRateStep
+            velocity *= factorOfVelocity
+            velocity += np.multiply(factorOfNetForce, f, out=forceTerm)
             if self.ids_1st is not None:
-                velocity[self.ids_1st] = forceOverMass[self.ids_1st]
+                velocity[self.ids_1st] = Minv[self.ids_1st] * f[self.ids_1st]
 
             # Restore the prescribed velocities, which both updates above overwrote.
             for constrainedDofIndices, prescribedVelocity in prescribedVelocities:
@@ -2384,6 +2442,7 @@ class NED(NonlinearSolverBase):
         self._Minv = self._lumpedMass = self._rawLumpedMass = None
         self._dampingRate = self._halfDampingRate = self._secondOrderMask = None
         self._inertia = self._damping = None
+        self._velocityUpdate = self._accelerationUpdate = None
         self.ids_1st = self.ids_2nd = self.ids_mechanicalEnergy = self.ids_inertiaOfEntities = None
         self._inertiaOfTheElements = self._dampingOfTheElements = None
         self._inertiaOfEntities = self._dampingOfEntities = None
@@ -2705,6 +2764,8 @@ class NED(NonlinearSolverBase):
         # divides by. Zero on a multi-point-constraint slave, whose inertia and damping are folded onto its masters.
         self._inertia = M * self._secondOrderMask
         self._damping = M * (self._dampingRate + (1.0 - self._secondOrderMask))
+        # The factors of the updates derived from these operators are derived again, for the next increment.
+        self._velocityUpdate = self._accelerationUpdate = None
 
     def secondOrderMomentum(self, mass: np.ndarray, V: DofVector, model: FEModel) -> np.ndarray:
         """The linear momentum of the fields whose inertia is a mass, per spatial component; see

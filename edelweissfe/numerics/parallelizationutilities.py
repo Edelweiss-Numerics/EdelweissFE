@@ -27,6 +27,7 @@
 import concurrent.futures
 import itertools
 import os
+import queue
 import sys
 import threading
 
@@ -180,16 +181,21 @@ def chunked_iterable(iterable, size):
         yield chunk
 
 
-def _mapOnPoolAndWaitForRunningCalls(work, tasks, numThreads: int) -> list:
+def mapTasksInParallel(work, tasks, numThreads: int) -> list:
     """Call ``work(task)`` for every task on the persistent thread pool, and return what the calls returned, in the
     order of the tasks.
 
-    If a call raises, the exception is that of the first failing call in the order of the tasks -- the one a serial
-    loop meets first -- raised once the calls before it are done. The calls that have not started are not made, as with
-    ``Executor.map``. The calls that are running cannot be stopped: ``Executor.map`` leaves them running, this function
-    waits for them. So when it returns or raises, no call is running. Whoever retries after the exception -- the solver
-    repeats an increment with a smaller time step when an element raises a ``CutbackRequest`` -- must not have workers
-    of the failed attempt still evaluating the same elements and writing into the same arrays as the retry.
+    The pool is handed one call per thread, not one per task: each of these calls takes the next task that is left, in
+    the order of the tasks, until none is left. Handing a call to the pool is serial work in the calling thread; this
+    way, it does not grow with the number of tasks. Handed out one by one, the many small chunks of an element loop
+    (several per thread, for the balance of the load) would keep many threads waiting for their next chunk.
+
+    If a call raises, no further task is taken, and the exception is that of the first failing call in the order of the
+    tasks -- the one a serial loop meets first. As the tasks are taken in order, every task before it has been called,
+    and none of them failed. The calls that are running cannot be stopped, so they are waited for: when this function
+    returns or raises, no call is running. Whoever retries after the exception -- the solver repeats an increment with
+    a smaller time step when an element raises a ``CutbackRequest`` -- must not have workers of the failed attempt
+    still evaluating the same elements and writing into the same arrays as the retry.
 
     Parameters
     ----------
@@ -206,19 +212,42 @@ def _mapOnPoolAndWaitForRunningCalls(work, tasks, numThreads: int) -> list:
         What ``work`` returned for each task, in the order of the tasks.
     """
 
+    tasks = list(tasks)
+    results = [None] * len(tasks)
+    numbersOfTheTasksLeft = queue.SimpleQueue()
+    for taskNumber in range(len(tasks)):
+        numbersOfTheTasksLeft.put(taskNumber)
+    aCallFailed = threading.Event()
+
+    def takeTasksUntilNoneIsLeft():
+        """Call ``work`` for the next task that is left, until none is left or a call failed; return the number and
+        the exception of the task that failed here, or None."""
+        while not aCallFailed.is_set():
+            try:
+                taskNumber = numbersOfTheTasksLeft.get_nowait()
+            except queue.Empty:
+                return None
+            try:
+                results[taskNumber] = work(tasks[taskNumber])
+            except BaseException as exception:  # returned and raised in the calling thread, as a serial loop would
+                aCallFailed.set()
+                return taskNumber, exception
+        return None
+
     pool = getThreadPool(numThreads)
-    futures = [pool.submit(work, task) for task in tasks]
+    calls = [pool.submit(takeTasksUntilNoneIsLeft) for _ in range(min(numThreads, len(tasks)))]
 
     try:
-        # In task order, like a serial loop: the first failing call raises, once the calls before it are done.
-        return [future.result() for future in futures]
-    except BaseException:  # also a KeyboardInterrupt must not leave workers running behind it
-        # The calls that have not started are not made, as with Executor.map. The running ones cannot be stopped, so
-        # wait for them: cancel() leaves them alone, and a cancelled call counts as done for wait().
-        for future in futures:
-            future.cancel()
-        concurrent.futures.wait(futures)
+        failures = [failure for failure in (call.result() for call in calls) if failure is not None]
+    except BaseException:  # also a KeyboardInterrupt while waiting must not leave workers running behind it
+        aCallFailed.set()
+        concurrent.futures.wait(calls)
         raise
+
+    if failures:
+        raise min(failures, key=lambda failure: failure[0])[1]
+
+    return results
 
 
 def mapChunksInParallel(items, work, chunksPerThread: int = 4) -> list:
@@ -259,7 +288,7 @@ def mapChunksInParallel(items, work, chunksPerThread: int = 4) -> list:
 
     chunkSize = max(1, len(items) // (numThreads * chunksPerThread))
 
-    return _mapOnPoolAndWaitForRunningCalls(work, chunked_iterable(items, chunkSize), numThreads)
+    return mapTasksInParallel(work, chunked_iterable(items, chunkSize), numThreads)
 
 
 def mapChunksOnWorkers(items, work, numberOfWorkers: int, chunksPerWorker: int = 4) -> list:
@@ -314,9 +343,7 @@ def mapChunksOnWorkers(items, work, numberOfWorkers: int, chunksPerWorker: int =
         return None
 
     failures = [
-        failure
-        for failure in _mapOnPoolAndWaitForRunningCalls(workOfWorker, range(numberOfWorkers), numberOfWorkers)
-        if failure
+        failure for failure in mapTasksInParallel(workOfWorker, range(numberOfWorkers), numberOfWorkers) if failure
     ]
     if failures:
         raise min(failures, key=lambda failure: failure[0])[1]
@@ -364,4 +391,4 @@ def forEachSliceInParallel(work, length: int, sliceLength: int = 1 << 20) -> lis
     if numThreads == 1 or len(slices) <= 1:
         return [work(s) for s in slices]
 
-    return _mapOnPoolAndWaitForRunningCalls(work, slices, numThreads)
+    return mapTasksInParallel(work, slices, numThreads)
