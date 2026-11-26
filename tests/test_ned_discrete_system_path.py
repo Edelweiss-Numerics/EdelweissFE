@@ -50,13 +50,26 @@ import numpy as np
 import pytest
 
 from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.constraints.base.multipointconstraintbase import (
+    MultiPointConstraintBase,
+)
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.elements.pointmass import PointMass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.change import Change
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.points.node import Node
+from edelweissfe.sets.elementset import ElementSet
+from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.solvers.base.criticaltimestep import CriticalTimeStepEstimate
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
+from edelweissfe.steps.adaptivestepforexplicitsimulations import (
+    AdaptiveStepForExplicitSimulations,
+)
+from edelweissfe.steps.stepmanager import StepActionCollection
 from edelweissfe.utils.exceptions import RestartError
+from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 #: Two blocks pressed into each other, with a penalty contact between them whose connectivity is
@@ -481,3 +494,63 @@ def test_a_checkpoint_without_the_numbering_of_its_net_force_is_refused(tmp_path
         _writeCheckpointAndResume(
             tmp_path, monkeypatch, lambda solverGroup: solverGroup.__delitem__("_numberingOfNetForce")
         )
+
+
+@pytest.mark.parametrize(
+    "masses, dampings, refusal",
+    [
+        ((0.1, 1.0, 1.0), (0.0, 0.0, 0.0), "Negative coefficient found"),
+        ((0.25, 1.0, 1.0), (0.0, 0.0, 0.0), "Zero found in the vector the increment divides by"),
+        ((1.0, 1.0, 1.0), (0.1, 1.0, 1.0), "lumped damping is not a valid dissipation"),
+    ],
+    ids=["negative-folded-mass", "zero-folded-mass", "negative-folded-damping"],
+)
+def test_non_positive_folded_mass_or_negative_folded_damping_is_refused(masses, dampings, refusal):
+    """When signed multi-point-constraint weights (as on HEX20/QUAD8 hanging nodes) subtract more slave mass or
+    damping from a master than its elements supply, NED refuses the non-positive folded master mass or negative
+    folded damping rather than integrating backwards in time or amplifying."""
+
+    class _DampedPointMass(PointMass):
+        def __init__(self, number, node, model, mass, damping):
+            super().__init__(number, [node], model, mass)
+            self._damping = damping
+
+        def computeLumpedDamping(self, Ce: np.ndarray):
+            Ce[:] = self._damping
+
+    class _SignedMPC(MultiPointConstraintBase):
+        def __init__(self, slave, masters):
+            self._name = "signed"
+            self._slave = slave
+            self._masters = masters
+
+        @property
+        def name(self):
+            return self._name
+
+        def getMultiPointConstraints(self, dofManager):
+            idcs = dofManager.idcsOfFieldVariablesInDofVector
+            sDofs = idcs[self._slave.fields["displacement"]]
+            mDofs = [(idcs[m.fields["displacement"]], w) for m, w in self._masters]
+            return [(sDofs[c], [(md[c], w) for md, w in mDofs]) for c in range(len(sDofs))]
+
+    model = FEModel(2)
+    nodes = [Node(i + 1, np.array([float(i), 0.0])) for i in range(3)]
+    for node in nodes:
+        model.nodes[node.label] = node
+    for i, (node, m, c) in enumerate(zip(nodes, masses, dampings), start=1):
+        model.elements[i] = _DampedPointMass(i, node, model, m, c)
+    model.nodeSets["all"] = NodeSet("all", nodes)
+    model.elementSets["all"] = ElementSet("all", list(model.elements.values()))
+    # Slave node 3 tied with signed weights (-0.25 on master 1, +1.25 on master 2): master 1 gets m1 - 0.25 * m3.
+    model.multiPointConstraints["signed"] = _SignedMPC(nodes[2], [(nodes[0], -0.25), (nodes[1], 1.25)])
+    journal = Journal(verbose=False)
+    model.prepareYourself(journal)
+
+    jobInfo = {"name": "signedFoldCheck", "domain": "2d"}
+    solver = NED(jobInfo, journal)
+    fieldOutputController = FieldOutputController(model, journal)
+    with pytest.raises(ValueError, match=refusal):
+        AdaptiveStepForExplicitSimulations(
+            0, model, fieldOutputController, journal, jobInfo, solver, [], StepActionCollection(), stepLength=0.1
+        ).solve()
