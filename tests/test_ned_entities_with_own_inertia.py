@@ -842,7 +842,12 @@ def test_a_constraint_on_finite_elements_in_a_hybrid_model_receives_their_displa
     if changeNumbering:
         assert len(set(model.feDofLocations)) == 2, "DOF remapping must move the finite element's global DOF indices"
 
-    records = model.constraint.recorded
+    # The bound of the penalty constraints in the critical time step evaluates every constraint again right after its
+    # force, with the same arguments: one evaluation per state, recorded as often as it is called.
+    records = []
+    for record in model.constraint.recorded:
+        if not records or not all(np.array_equal(a, b) for a, b in zip(record, records[-1])):
+            records.append(record)
     assert len(records) > 3
     # Zero increment: zero displacement increment everywhere.
     assert records[0][0] == 0.0
