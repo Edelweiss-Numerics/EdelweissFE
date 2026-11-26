@@ -353,13 +353,14 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
     from above, but weights refined at another configuration can bound it less tightly than the weights constant per
     field they started from when the stiffness changed faster than the weights followed, e.g. where entities reach
     nodes whose weights the power iteration has made small. So an estimate with carried weights below the estimate the
-    weights started from starts them anew: the entities are estimated again from the weights constant per field, and
-    the larger of the two estimates is taken. Every estimate is thus at least the one the weights started from: with
-    the time increment lowered only, it never falls below the smallest estimate with weights constant per field of
-    the step; followed (``follow-critical-time-step``), it can fall below the estimate without carried weights of the
-    same configuration, down to the one the weights started from. The weights start anew -- constant per field -- also
-    with every numbering (the nodes they belong to may have changed) and every step (a material property may have
-    changed), and after a resume: they are not part of the checkpoint.
+    weights started from checks a fresh estimate from weights constant per field, and keeps the larger of the two
+    estimates together with its weights (starting the weights anew only when the fresh estimate beats the carried one).
+    Every estimate is thus at least the one the weights started from: with the time increment lowered only, it never
+    falls below the smallest estimate with weights constant per field of the step; followed
+    (``follow-critical-time-step``), it can fall below the estimate without carried weights of the same configuration,
+    down to the one the weights started from. The weights start anew -- constant per field -- also with every numbering
+    (the nodes they belong to may have changed) and every step (a material property may have changed), and after a
+    resume: they are not part of the checkpoint.
 
     Parameters
     ----------
@@ -424,13 +425,14 @@ class CriticalTimeStepOfEntitiesWithOwnInertia(CriticalTimeStepOfAPart):
             if startsTheWeights:
                 self._valueTheWeightsStartedFrom = estimate.value
             elif estimate.value < self._valueTheWeightsStartedFrom:
-                weights[:] = 0.0
+                freshWeights = np.zeros_like(weights)
                 anew = system.criticalTimeStepOfEntitiesWithOwnInertia(
-                    lumpedInertia, lumpedDamping, forEachChunk, weights
+                    lumpedInertia, lumpedDamping, forEachChunk, freshWeights
                 )
                 self._valueTheWeightsStartedFrom = anew.value
                 if anew.value > estimate.value:
                     estimate = anew
+                    self._weightsOfTheEstimate = freshWeights
         self._take(estimate)
         self._numbering = system.numbering
         self._increment = increment
