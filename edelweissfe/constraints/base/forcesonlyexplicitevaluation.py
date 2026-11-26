@@ -40,14 +40,24 @@ class ForcesOnlyExplicitEvaluation:
     The base implementation of
     :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`
     asks for a tangent container through the ordinary sparse-stiffness protocol and then discards it.
-    For contact constraints that container is large -- one dense block per contact point, of order
-    50 MB per increment on the anchor pry-out -- and filling it costs one outer product per point.
+    For contact constraints that container is large -- one dense block per contact point, for a point of a
+    surface-to-surface contact :math:`8\\,(d\\,(n_s + n_m))^2` bytes, with :math:`d` the dimension and :math:`n_s`,
+    :math:`n_m` the nodes of its slave and its master facet -- and filling it costs one outer product per point.
 
     A constraint that inherits this mixin (listed *before*
     :class:`~edelweissfe.constraints.base.constraintbase.ConstraintBase`) instead runs its one
     :meth:`computeKernels` loop with ``K=None``. One loop rather than two, so the physics cannot
     drift between the implicit and the explicit path. :meth:`computeKernels` must therefore skip
     every tangent contribution when ``K`` is None.
+
+    Only the forces are evaluated without the tangent: ``NED`` still asks for the tangent once per
+    increment, for the bound of its critical time step
+    (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). So the
+    three contacts that use this mixin -- ``nodeToDeformableSurfacePenalty``, ``surfaceToDeformableSurfacePenalty`` and
+    ``surfaceToDiscreteRigidBodyPenalty`` -- build their tangent once per increment under ``NED``, in the scratch above,
+    kept per location of the constraint (with an index list of its entries of the same size), until the follow-up
+    contact changes bound them from the springs of their force (:mod:`~edelweissfe.constraints.base.penaltysprings`).
+    The mixin still saves the tangent of the forces: one tangent per increment instead of two.
     """
 
     def computeKernelsExplicit(

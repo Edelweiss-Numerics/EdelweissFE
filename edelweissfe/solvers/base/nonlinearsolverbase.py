@@ -486,23 +486,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The augmented residual contribution vector.
         """
 
-        # Per-constraint buffers and index plans, made once per discrete system.
-        if self._constraintForcePlans is None:
-            self._constraintForcePlans = {}
         PPlain = P.asPlainArray()
 
         for constraint in constraints:
-            # A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.
-            indices = self.system.locations[constraint]
-            plan = self._constraintForcePlans.get(constraint)
-            if plan is None or plan[1] is not indices:
-                # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
-                # facet), since fancy-indexed += would drop repeated contributions.
-                plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
-                self._constraintForcePlans[constraint] = plan
-                constraint.prepareExplicitEvaluation()
-
-            Pc, _, namesDofMoreThanOnce = plan
+            Pc, indices, namesDofMoreThanOnce = self._explicitEvaluationPlanOf(constraint)
 
             # Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.
             Pc[:] = 0.0
@@ -515,6 +502,37 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 PPlain[indices] += Pc
 
         return P
+
+    def _explicitEvaluationPlanOf(self, constraint) -> tuple[np.ndarray, np.ndarray, bool]:
+        """The plan of a constraint for its evaluation without a tangent (:meth:`assembleConstraintForces`): a buffer
+        of its size, its DOF indices, and whether a DOF appears more than once among them. Made once per location of the
+        constraint: whenever the locations locate it anew, the plan is made anew and the constraint is told so
+        (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation`).
+
+        Parameters
+        ----------
+        constraint
+            A constraint of the discrete system.
+
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray, bool]
+            The buffer, the DOF indices, and whether a DOF appears more than once.
+        """
+
+        if self._constraintForcePlans is None:
+            self._constraintForcePlans = {}
+
+        # A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.
+        indices = self.system.locations[constraint]
+        plan = self._constraintForcePlans.get(constraint)
+        if plan is None or plan[1] is not indices:
+            # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
+            # facet), since fancy-indexed += would drop repeated contributions.
+            plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
+            self._constraintForcePlans[constraint] = plan
+            constraint.prepareExplicitEvaluation()
+        return plan
 
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this solver carries from one increment to the next, as it is; see

@@ -42,6 +42,8 @@ same contract in a few lines of Python, and the tests check ``NED``'s path for i
   the increment, it is estimated in every increment,
 * after a brief stiff event, the increment comes back with ``follow-critical-time-step`` and stays low without it, and
   the increment that follows the critical time step is at most the step's ``maxInc``, whatever its ``startInc``,
+* so it does after a penalty contact that ends, when the discrete system loses its last constraint, as a particle that
+  leaves a wall: the critical time step of the penalty constraints is forgotten then, not kept,
 * a critical time step that is not a number is refused, whether the increment follows it or not, and without any
   estimate the step keeps its own increment, also when it follows the critical time step,
 * with ``carry-critical-time-step-weights``, the weights of the estimate are handed from one estimate to the next, zero
@@ -63,6 +65,12 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
+from edelweissfe.constraints.directionalspringpenalty import (
+    Constraint as DirectionalSpringPenalty,
+)
+from edelweissfe.constraints.directionalspringpenalty import (
+    DirectionalSpringPenaltySchema,
+)
 from edelweissfe.elements.pointmass import PointMass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.change import Change
@@ -72,7 +80,9 @@ from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.solvers.base.criticaltimestep import CriticalTimeStepEstimate
+from edelweissfe.solvers.base.criticaltimestep import (
+    CriticalTimeStepEstimateFromTheBoundOfEachDof,
+)
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.steps.adaptivestepforexplicitsimulations import (
     AdaptiveStepForExplicitSimulations,
@@ -94,6 +104,11 @@ DISPLACEMENTS = (0.02, -0.05)
 #: much. Its ends lie between the start times of the increments taken at the courant number 0.5.
 STIFF_EVENT_START, STIFF_EVENT_END = 10.3 * CRITICAL_TIME_STEP, 12.25 * CRITICAL_TIME_STEP
 STIFF_EVENT_FACTOR = 25.0
+#: The penalty contact of :class:`ModelOfMassesOnSpringsWithAContactThatEnds`: when it ends, between the start times of
+#: the increments taken at the courant number 0.5 in contact, and its penalty, which makes the first mass as stiff as in
+#: the stiff event.
+CONTACT_END = 2.05 * CRITICAL_TIME_STEP
+CONTACT_PENALTY = (STIFF_EVENT_FACTOR - 1.0) * STIFFNESS
 
 
 class MassOnASpring(PointMass):
@@ -178,7 +193,11 @@ class SystemOfMassesOnSprings(DiscreteSystem):
 
         entities = self.entitiesWithOwnInertia
         squaredFrequencies = np.array([squaredFrequencyOf(entity) for entity in entities])
-        return CriticalTimeStepEstimate(2.0 / np.sqrt(squaredFrequencies.max()))
+        return CriticalTimeStepEstimateFromTheBoundOfEachDof(
+            2.0 / np.sqrt(squaredFrequencies.max()),
+            np.concatenate([self.locations[entity] for entity in entities]),
+            np.repeat(squaredFrequencies, [entity.nDof for entity in entities]),
+        )
 
     def _onTheNodes(self, valueOf) -> DofVector:
         vector = self.locations.constructDofVector()
@@ -254,6 +273,33 @@ class ModelOfMassesOnSpringsWithAStiffEvent(ModelOfMassesOnSprings):
         return STIFFNESS * (STIFF_EVENT_FACTOR if stiffer else 1.0)
 
 
+class PenaltyContactThatEnds(DirectionalSpringPenalty):
+    """A penalty spring along x on the first mass while it is in contact, until :data:`CONTACT_END`, as a particle
+    against a wall it then leaves: it takes part in the discrete system while it is within reach, which it decides in
+    every reconnection. Only its stiffness matters here, in the critical time step."""
+
+    def updateConnectivity(self, model: FEModel) -> bool:
+        self.withinReach = model.time < CONTACT_END
+        return False
+
+
+class ModelOfMassesOnSpringsWithAContactThatEnds(ModelOfMassesOnSprings):
+    """Masses on springs, the first also in a penalty contact (:class:`PenaltyContactThatEnds`): after it, the discrete
+    system has no constraint left."""
+
+    def __init__(self):
+        super().__init__()
+        self.nodeSets["first"] = NodeSet("first", [self.nodes[1]])
+        self.constraints["contact"] = PenaltyContactThatEnds(
+            "contact",
+            self,
+            self.nodeSets["first"],
+            configuration=DirectionalSpringPenaltySchema(
+                field="displacement", component=0, penalty=CONTACT_PENALTY, nSet="first"
+            ),
+        )
+
+
 class SystemOfMassesOnSpringsWhoseCriticalTimeStepIsNotANumber(SystemOfMassesOnSprings):
     """Masses on springs whose critical time step is not a number, as from a stiffness or a mass that is not
     finite."""
@@ -261,8 +307,12 @@ class SystemOfMassesOnSpringsWhoseCriticalTimeStepIsNotANumber(SystemOfMassesOnS
     def criticalTimeStepOfEntitiesWithOwnInertia(
         self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate=None
     ):
-        super().criticalTimeStepOfEntitiesWithOwnInertia(lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate)
-        return CriticalTimeStepEstimate(np.nan)
+        estimate = super().criticalTimeStepOfEntitiesWithOwnInertia(
+            lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate
+        )
+        return CriticalTimeStepEstimateFromTheBoundOfEachDof(
+            np.nan, estimate.dofs, np.full_like(estimate.squaredFrequencies, np.nan)
+        )
 
 
 class ModelOfMassesOnSpringsWhoseCriticalTimeStepIsNotANumber(ModelOfMassesOnSprings):
@@ -278,8 +328,12 @@ class SystemOfMassesOnSpringsReportingNoCriticalTimeStep(SystemOfMassesOnSprings
     def criticalTimeStepOfEntitiesWithOwnInertia(
         self, lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate=None
     ):
-        super().criticalTimeStepOfEntitiesWithOwnInertia(lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate)
-        return CriticalTimeStepEstimate(np.inf)
+        estimate = super().criticalTimeStepOfEntitiesWithOwnInertia(
+            lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate
+        )
+        return CriticalTimeStepEstimateFromTheBoundOfEachDof(
+            np.inf, estimate.dofs, np.zeros_like(estimate.squaredFrequencies)
+        )
 
 
 class ModelOfMassesOnSpringsReportingNoCriticalTimeStep(ModelOfMassesOnSprings):
@@ -301,7 +355,9 @@ class SystemWhoseCarriedWeightsFallBehind(SystemOfMassesOnSprings):
         estimate = super().criticalTimeStepOfEntitiesWithOwnInertia(
             lumpedMass, lumpedDamping, forEachChunk, weightsOfTheEstimate
         )
-        return CriticalTimeStepEstimate(factor * estimate.value)
+        return CriticalTimeStepEstimateFromTheBoundOfEachDof(
+            factor * estimate.value, estimate.dofs, estimate.squaredFrequencies / factor**2
+        )
 
 
 class ModelWhoseCarriedWeightsFallBehind(ModelOfMassesOnSprings):
@@ -434,6 +490,33 @@ def test_after_a_brief_stiff_event_the_increment_comes_back_only_if_it_follows_t
     np.testing.assert_allclose(timeIncrements[beforeTheEvent], soft, rtol=1e-14)
     np.testing.assert_allclose(timeIncrements[inTheEvent], stiff, rtol=1e-14)
     np.testing.assert_allclose(timeIncrements[afterTheEvent], soft if follow else stiff, rtol=1e-14)
+
+
+@pytest.mark.parametrize("follow", [False, True])
+def test_after_the_last_penalty_contact_the_increment_comes_back_only_if_it_follows_the_critical_time_step(follow):
+    """While the first mass is in its penalty contact, the increment is the critical time step of the masses with the
+    contact's spring times the courant number. When the contact ends, the discrete system has no constraint left, and
+    the critical time step of the penalty constraints is forgotten: by default the increment, lowered only, stays where
+    the contact took it; with ``follow-critical-time-step``, it comes back to the one of the masses alone at once."""
+
+    courantNumber = 0.5
+    _, solver = _run(
+        6 * CRITICAL_TIME_STEP,
+        model=ModelOfMassesOnSpringsWithAContactThatEnds(),
+        **{"courant-number": courantNumber, "follow-critical-time-step": follow},
+    )
+
+    timeIncrements = np.array([timeIncrement for timeIncrement, _ in solver.history])[1:-1]  # without the zero
+    # increment, and the last one, which ends the step
+    startTimes = np.cumsum(timeIncrements) - timeIncrements
+    inContact = startTimes < CONTACT_END
+    assert inContact.any() and (~inContact).any()
+
+    alone = courantNumber * CRITICAL_TIME_STEP
+    withTheContact = alone / np.sqrt(STIFF_EVENT_FACTOR)
+    np.testing.assert_allclose(timeIncrements[inContact], withTheContact, rtol=1e-12)
+    np.testing.assert_allclose(timeIncrements[~inContact], alone if follow else withTheContact, rtol=1e-12)
+    assert solver._criticalTimeStepWithThePenaltyConstraints.value == np.inf
 
 
 @pytest.mark.parametrize("follow", [False, True])
