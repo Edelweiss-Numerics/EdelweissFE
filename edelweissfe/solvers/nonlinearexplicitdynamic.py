@@ -199,7 +199,7 @@ starts from, and the model holds it in the entry ``V`` of its node fields, for t
 the elements: it is written at acceptance and read back by node whenever the discrete system gets a new numbering, so a
 node keeps its velocity while the active nodes change around it, and a node that has just become active starts at
 rest. With ``project-velocity-every-increment``, the velocity of the nodes of the entities is projected from their
-momentum in every increment instead, :math:`\boldsymbol{v} = \boldsymbol{M}^{-1} \boldsymbol{p}`, which dissipates
+momentum in every increment instead, :math:`\\boldsymbol{v} = \\boldsymbol{M}^{-1} \\boldsymbol{p}`, which dissipates
 more; it is what the material point method does. The nodes of the elements are never projected.
 
 The critical time step is the smaller of the elements' (of the mesh) and the estimate of the critical time step of the
@@ -1267,7 +1267,7 @@ class NED(NonlinearSolverBase):
         entities' nodes (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.carriersOfTheMotion`), e.g. after a
         step of this solver, the step continues it from their velocity and acceleration, as at the nodes of finite
         elements. Otherwise, the force just evaluated is taken, and their velocity is projected from the entities'
-        momentum, :math:`\boldsymbol{v} = \boldsymbol{M}^{-1} \boldsymbol{p}`. The energy at the start of the step
+        momentum, :math:`\\boldsymbol{v} = \\boldsymbol{M}^{-1} \\boldsymbol{p}`. The energy at the start of the step
         follows, with their kinetic energy.
 
         Parameters

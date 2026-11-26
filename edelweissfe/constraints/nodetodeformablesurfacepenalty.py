@@ -982,10 +982,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`.
 
         Every slave node in contact (:meth:`_contactOfSlave`, as for the force) has a spring along the normal: it acts
-        with the vector :math:`\\boldsymbol{a}_p = \bar{c} \\otimes \\bar{n}`, the gradient of its gap over the slave
+        with the vector :math:`\\boldsymbol{a}_p = \\bar{c} \\otimes \\bar{n}`, the gradient of its gap over the slave
         node and the nodes of its facet, with the stiffness :math:`k_p = \\mathrm{d}f/\\mathrm{d}g` the law gives it.
         With friction, it has a spring of the tangential penalty :math:`k_T` along every direction :math:`t` of the
-        tangent plane, :math:`\\boldsymbol{a}_p = \bar{c} \\otimes t`: together, the tangent of sticking. The bound
+        tangent plane, :math:`\\boldsymbol{a}_p = \\bar{c} \\otimes t`: together, the tangent of sticking. The bound
         of the springs is the one of every penalty spring
         (:func:`~edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings`). Two parts of the
         tangent are not springs; they are added by their absolute row sums, from what the force computes:
@@ -993,7 +993,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         * the geometric stiffness of finite sliding, :math:`f_n \\boldsymbol{H}`, the normal force times the second
           derivative of the gap (against the spring, of the order of the penetration over the size of a facet);
         * while the node slips in the direction :math:`\\boldsymbol{e}_s`, the coupling of the tangential to the normal
-          force, :math:`\\mu k_p\\, (\bar{c} \\otimes \\boldsymbol{e}_s) \\otimes \\boldsymbol{a}_p`, which is not
+          force, :math:`\\mu k_p\\, (\\bar{c} \\otimes \\boldsymbol{e}_s) \\otimes \\boldsymbol{a}_p`, which is not
           symmetric: in every row the larger of its absolute row sums and of their mean with its absolute column sums,
           as the default bound of a tangent (the elements' argument needs the symmetric part). While the node slips,
           its tangential springs are taken along :math:`\\boldsymbol{e}_s` and along the direction :math:`q` of the
