@@ -219,6 +219,23 @@ records file, one line per slave node::
     [nSet] Node set to tie. (<class 'str'>)
     [referencePoint] Node set containing only the reference point. (<class 'str'>)
 ===== module documentation: edelweissfe.constraints.nodetodeformablesurfacepenalty =====
+A penalty based unilateral contact constraint between a deformable slave surface and a deformable
+master surface, both represented by flat contact facet elements (:mod:`~edelweissfe.elements.
+contactsurfaceelement`, typically created via :mod:`~edelweissfe.generators.surfaceelementgenerator`).
+The slave surface's nodes act as the contact points; each slave node's penalty force is weighted by
+its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets, evaluated
+in the reference configuration, times the thickness of their sections in a plane model), so ``penalty`` has the
+meaning of an interface stiffness modulus per unit area, and the contact response converges under slave surface
+refinement. An axisymmetric model is refused: use
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` with ``contactPoints=nodes`` there.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
+source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.
+hadaptivity`), it regenerates that side's facets from the current (refined) ``*surface`` definition
+and rebinds its cached facet list/reference coordinates at its own next :meth:`updateConnectivity`
+tick -- no separate wiring needed. A retained slave node (same across the rebuild, by ``Node``
+identity) keeps its frictional history and augmented-Lagrange multiplier; a newly exposed one
+starts at rest.
 [nodeToDeformableSurfacePenalty] A penalty based unilateral contact constraint preventing the nodes of a slave surface from penetrating a deformable master surface, both represented by contact facet elements.
   required arguments
     [slaveSurface] The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the slave surface; its nodes act as the contact points, penalty-weighted by their tributary areas. (<class 'str'>)
