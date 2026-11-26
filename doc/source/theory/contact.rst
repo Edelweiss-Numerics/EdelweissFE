@@ -1048,6 +1048,11 @@ adds the row sums of its stiffness, scaled by the lumped mass, to the frequencie
 right after the force, with the same arguments, so that the trial state of the friction, which ``computeKernels``
 writes for the next increment, is written again as the force wrote it. While a point slips, the friction makes the
 tangent unsymmetric (:ref:`friction-tangent`); the bound takes the rows of its symmetric part there as well.
+Until the follow-up contact changes bound the three force-only contacts (node-to-surface, surface-to-surface,
+surface-to-rigid-body) from the springs of their force, ``NED`` builds their tangent once per increment for this bound,
+in a scratch kept per location of the constraint: :math:`8\,(d\,(n_s + n_m))^2` bytes per surface point of the
+surface-to-surface contact, with :math:`d` the dimension and :math:`n_s`, :math:`n_m` the nodes of the slave and the
+master facet, and an index list of its entries of the same size. The forces are still evaluated without it.
 
 **The connectivity search is throttled.** The closest-facet search is
 :math:`\mathcal{O}(n_\text{slave} \times n_\text{facet})` work in Python, affordable once per

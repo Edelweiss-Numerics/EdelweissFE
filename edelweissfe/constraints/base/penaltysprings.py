@@ -71,7 +71,9 @@ class SpringGradientOnSharedNodes:
     directions
         The direction of each spring, (nSprings, nComponents).
     dofsOfNodes
-        Where the components of each node sit in the block of the constraint, (nNodes, nComponents).
+        Where the components of each node sit in the block of the constraint, (nNodes, nComponents): distinct
+        degrees of freedom, each node once, so that the fancy indexing of :meth:`addAbsoluteTransposeTimes` drops no
+        contribution (it keeps one of repeated indices). Not checked, since it is built anew in every increment.
     """
 
     def __init__(self, interpolation, directions: np.ndarray, dofsOfNodes: np.ndarray):

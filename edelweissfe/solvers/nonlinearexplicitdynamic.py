@@ -1161,9 +1161,8 @@ class NED(NonlinearSolverBase):
                     system, self._inertiaOfEntities, self._dampingOfEntities, self.forEachChunk, timeStep.number
                 )
             self._enforceTheCriticalTimeStep(step, "The entities that carry their own inertia", 2)
-        if rowSumsOfThePenaltyConstraints is not None:
-            self._estimateThePenaltyConstraints(rowSumsOfThePenaltyConstraints)
-            self._enforceTheCriticalTimeStep(step, "The penalty constraints", 2)
+        self._estimateThePenaltyConstraints(rowSumsOfThePenaltyConstraints)
+        self._enforceTheCriticalTimeStep(step, "The penalty constraints", 2)
 
         if timeStep.timeIncrement > 0.0 and timeStep.number % self.options["output-frequency"] == 0:
             self.reportEnergyBalance(self._V, timeStep)
@@ -1373,8 +1372,8 @@ class NED(NonlinearSolverBase):
     def _estimateThePenaltyConstraints(self, rowSumsOfThePenaltyConstraints: np.ndarray | None):
         """Estimate the critical time step of the parts with the penalty constraints, from the last estimates of the
         parts and the row sums of the constraints
-        (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints`); nothing if the
-        discrete system has no constraints.
+        (:class:`~edelweissfe.solvers.base.criticaltimestep.CriticalTimeStepWithThePenaltyConstraints`); forget the
+        last one if the discrete system has no constraints (any more), so that it does not hold the time increment down.
 
         Parameters
         ----------
@@ -1383,6 +1382,7 @@ class NED(NonlinearSolverBase):
         """
 
         if rowSumsOfThePenaltyConstraints is None:
+            self._criticalTimeStepWithThePenaltyConstraints.forget()
             return
         self._criticalTimeStepWithThePenaltyConstraints.estimate(
             self.system,

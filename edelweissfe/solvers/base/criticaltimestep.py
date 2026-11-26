@@ -148,10 +148,17 @@ class CriticalTimeStepOfAPart:
         """Forget the estimate, at the start of every step: a material property may have changed with the step. The next
         estimate is due at once."""
 
-        #: The last estimate; None before the first one, and for a model without such a part.
-        self.lastEstimate = None
+        self.forget()
         #: How often the part was estimated in the step.
         self.numberOfEstimates = 0
+
+    def forget(self):
+        """Forget the last estimate, without counting an estimate: the model has no such part any more, e.g. the
+        discrete system has lost its last penalty constraint. Its critical time step is infinite until it is estimated
+        again."""
+
+        #: The last estimate; None before the first one, and for a model without such a part.
+        self.lastEstimate = None
 
     @property
     def value(self) -> float:
@@ -584,7 +591,9 @@ class CriticalTimeStepWithThePenaltyConstraints(CriticalTimeStepOfAPart):
     taken; and a part estimated anew is estimated before it (the elements of a new mesh, the entities right before it),
     so it is never above their current ones either. The model's critical time step is nevertheless the minimum of all
     three (``NED._criticalTimeStepOfTheModel``), so that it needs no knowledge of which part has constraints: without
-    constraints, and before their first estimate in a step, this value is infinite.
+    constraints this value is infinite -- before their first estimate in a step, and from the estimate that finds the
+    discrete system without any (:meth:`~CriticalTimeStepOfAPart.forget`), e.g. once the last particle has left a wall,
+    so that the time increment it lowered can follow the parts again.
 
     **Policy: after every evaluation of the net force.** Increment :math:`n+1` integrates the net force
     :math:`\\boldsymbol{f}_n`, evaluated at the end of increment :math:`n`, over the average of its own time
