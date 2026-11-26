@@ -25,7 +25,7 @@ system, the solver takes:
   the system matrix, and the solver never asks a constraint whether it is active;
 * the entities whose inertia is assembled at the nodes
   (:attr:`~edelweissfe.models.discretesystem.DiscreteSystem.elementsWithNodalInertia`). ``NID`` loops over them for
-  the mass and the damping, ``NED`` for the lumped operators, the damping and the stable time increment. ``NID`` also
+  the mass and the damping, ``NED`` for the lumped operators, the damping and the critical time step. ``NID`` also
   asks which degrees of freedom carry the mass of the nodes
   (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.dofsWithNodalInertia`), for the lumped mass of the
   entities that integrate their own inertia
