@@ -502,3 +502,76 @@ def test_the_gap_agrees_with_a_winding_number_and_a_brute_force_distance(surface
     np.testing.assert_allclose(np.abs(gap[exact]), distance[exact], rtol=1e-9, atol=roundOff)
     assert np.all(np.abs(gap[resolved]) <= distance[resolved] * (1.0 + 1e-9) + roundOff)
     assert np.all(np.abs(gap[resolved]) >= np.cos(np.deg2rad(30.0)) * distance[resolved] * (1.0 - 1e-9) - roundOff)
+
+
+def test_a_boundary_vertex_where_two_creases_meet_stays_a_crease():
+    """On an open surface where two crease edges meet at a boundary vertex (an open 3-face box corner), the vertex is
+    still marked as a crease and takes the sum of its incident crease edges' pseudonormals, giving the true signed
+    distance outside and inside the corner."""
+
+    vertices = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 1.0, -1.0],
+            [0.0, 0.0, -1.0],
+        ]
+    )
+    # Three orthogonal faces meeting at vertex 0: normals +z, -x, -y. Two 90-degree crease edges meet at vertex 0,
+    # while the two edges to vertices 3 and 4 are boundary edges.
+    nodesOfFacet = np.array([[0, 1, 2], [0, 2, 3], [0, 4, 1]])
+    coordinatesOfFacet = vertices[nodesOfFacet]
+    normalOfFacet, _ = facetNormalAndMeasure(coordinatesOfFacet)
+    surface = FacetedSurface(nodesOfFacet)
+    features = surface.features(coordinatesOfFacet, normalOfFacet)
+
+    assert not surface.vertexIsInterior[0]
+    assert features.vertexIsCrease[0]
+    np.testing.assert_allclose(features.pseudonormalOfVertex[0], [-1.0, -1.0, 2.0], atol=1e-14)
+
+    # Outside the corner: the true distance to vertex 0 is sqrt(0.75) (not the facet-normal projection 0.5).
+    outsidePoint = np.array([[-0.5, -0.5, 0.5]])
+    closestFacet, weights, distance = closestFacets(outsidePoint, list(coordinatesOfFacet), [[0, 1, 2]])
+    gap, dGap_dPoint = surface.gapsAndGradients(
+        outsidePoint, closestFacet, weights, coordinatesOfFacet, normalOfFacet, features
+    )
+    np.testing.assert_allclose(gap, distance, rtol=1e-14)
+    np.testing.assert_allclose(dGap_dPoint, outsidePoint / distance[0], rtol=1e-14)
+
+    # Inside the corner, evaluated directly at vertex 0: negative signed distance.
+    insidePoint = np.array([[0.5, 0.5, -0.5]])
+    gapIn, _ = surface.gapsAndGradients(
+        insidePoint, np.array([0]), np.array([[1.0, 0.0, 0.0]]), coordinatesOfFacet, normalOfFacet, features
+    )
+    np.testing.assert_allclose(gapIn, [-np.linalg.norm(insidePoint)], rtol=1e-14)
+
+
+def test_a_180_degree_fold_produces_no_nan_in_gaps_or_gradients():
+    """A degenerate 180-degree fold whose opposing normals cancel to a zero pseudonormal is flagged as a crease in 2D
+    and 3D without producing NaN in gapsAndGradients."""
+
+    # 2D hairpin: two Line2 segments back-to-back with opposing normals (0, +1) and (0, -1).
+    vertices2d = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 0.0]])
+    nodes2d = np.array([[0, 1], [1, 2]])
+    coords2d = vertices2d[nodes2d]
+    normals2d, _ = facetNormalAndMeasure(coords2d)
+    surf2d = FacetedSurface(nodes2d)
+    feats2d = surf2d.features(coords2d, normals2d)
+    assert feats2d.vertexIsCrease[1]
+    gap2d, grad2d = surf2d.gapsAndGradients(
+        np.array([[1.2, 0.1]]), np.array([0]), np.array([[0.0, 1.0]]), coords2d, normals2d, feats2d
+    )
+    assert np.all(np.isfinite(gap2d)) and np.all(np.isfinite(grad2d))
+
+    # 3D zero-thickness fold: two Tria3 facets sharing edge (0, 1) with opposing normals +z and -z.
+    vertices3d = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
+    nodes3d = np.array([[0, 1, 2], [1, 0, 3]])
+    coords3d = vertices3d[nodes3d]
+    normals3d, _ = facetNormalAndMeasure(coords3d)
+    surf3d = FacetedSurface(nodes3d)
+    feats3d = surf3d.features(coords3d, normals3d)
+    gap3d, grad3d = surf3d.gapsAndGradients(
+        np.array([[0.5, -0.2, 0.1]]), np.array([0]), np.array([[0.5, 0.5, 0.0]]), coords3d, normals3d, feats3d
+    )
+    assert np.all(np.isfinite(gap3d)) and np.all(np.isfinite(grad3d))

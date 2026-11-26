@@ -113,9 +113,10 @@ The facets of a contact surface and where they meet: the edges and vertices of T
 angle-weighted pseudonormals, and which of them lie on a crease. With them, the gap of a point to its closest facet
 tells inside from outside also at the corners of a surface (:ref:`integrated-contact`): the gap is the signed distance
 to the surface where the closest point lies on a crease, and the distance along the facet normal elsewhere; the two
-agree inside a facet, and differ only by the small turn of the normal at a seam of a smooth surface. Where the
-closest point changes rule -- from a crease onto an edge that is none, or across a seam -- the gap, and a penalty
-force on it, jumps by at most :math:`1 - \cos 30^\circ` (about 13 %) of the distance; its sign does not.
+agree inside a facet, and differ only by the small turn of the normal at a seam of a smooth surface. On a closed
+surface (or across interior features of an open one), where the closest point changes rule -- from a crease onto an
+edge that is none, or across a seam -- the gap, and a penalty force on it, jumps by at most :math:`1 - \cos 30^\circ`
+(about 13 %) of the distance; its sign does not.
 
 Module ``edelweissfe.utils.facetcontactgeometry``
 
