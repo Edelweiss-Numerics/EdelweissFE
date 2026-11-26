@@ -61,8 +61,8 @@ e.g., a contact constraint). Such a contact search can only result in new locati
 constraints with scalar variables. In a model with entities that carry their own inertia, e.g. the particles of a
 meshfree model, ``NED`` calls :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity` after every increment
 instead, once the model has accepted it: the change may be a new numbering (the active nodes of the meshfree model
-changed), which gives new vectors read from the model, and an element mass assembled anew, but neither a new stable
-time increment nor a new classification of the fields, which belong to the mesh. ``NEST`` never updates the connectivity during a step, and refuses a constraint
+changed), which gives new vectors read from the model, and an element mass assembled anew, but neither a new critical
+time step nor a new classification of the fields, which belong to the mesh. ``NEST`` never updates the connectivity during a step, and refuses a constraint
 whose connectivity changes with the motion.
 
 ``NIST`` predicts the first iterate of an increment by extrapolating the last accepted increments. Once per increment,

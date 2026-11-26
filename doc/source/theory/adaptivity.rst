@@ -84,7 +84,7 @@ are sized by the old discrete system. Increment 0 is excluded deliberately -- th
 yields a zero-length increment first, before anything has been solved, and a marker evaluated
 there would refine on the initial condition.
 
-**What a refinement changes for an explicit run.** Refining lowers the stable time increment, so
+**What a refinement changes for an explicit run.** Refining lowers the critical time step, so
 the critical time step is recomputed from the new mesh (unlike a mere contact-connectivity change,
 which leaves the mesh alone and therefore reuses it). The lumped mass is rebuilt; because that
 mass *is* the operator an explicit increment divides by, the solver reports the total mass, the

@@ -404,7 +404,7 @@ def change(path):
         30,
         ly + 46,
         "The hooks are shown as NIST implements them; NID and NED hold more, e.g. NED builds its lumped "
-        "mass and its stable time increment in onNewNumbering().",
+        "mass and its critical time step in onNewNumbering().",
         size=TL,
     )
     svg.h = ly + 56 + 12

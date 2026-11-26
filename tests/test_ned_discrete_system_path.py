@@ -29,7 +29,7 @@
 """``NED`` on the one build path of the discrete system (``NonlinearSolverBase.updateDiscreteSystem``).
 
 What is sized by the numbering -- the lumped operators the increment divides by, the multi-point-constraint fold, the
-classification of the fields by time derivative, the stable time increment -- is built once for a numbering
+classification of the fields by time derivative, the critical time step -- is built once for a numbering
 (``onNewNumbering``), and a contact search that couples other nodes only makes new locations on the same numbering
 (``onNewLocations``): the operators are not touched, and the vectors keep their values. The tests drive the explicit
 solver over real problems whose connectivity changes mid-run, and over a refinement of the mesh, and pin
@@ -37,7 +37,7 @@ solver over real problems whose connectivity changes mid-run, and over a refinem
 * how often each hook is called, that what a new numbering builds is the same object afterwards, and that the vectors
   of the increments keep their values and are wrapped with the locations of the discrete system,
 * that a tie and a contact together keep the fold through new locations, and the slaves follow their masters,
-* that a change of the mesh builds a new numbering whose net force starts at zero, and whose stable time increment is
+* that a change of the mesh builds a new numbering whose net force starts at zero, and whose critical time step is
   that of the refined mesh,
 * that a resumed step takes the net force of its checkpoint over only if the checkpoint says it belongs to the
   numbering of the discrete system built from the resumed model.
@@ -53,6 +53,7 @@ from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.change import Change
+from edelweissfe.solvers.base.criticaltimestep import CriticalTimeStepEstimate
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.utils.exceptions import RestartError
@@ -283,7 +284,7 @@ def _run(tmp_path, monkeypatch, deck: str, solver: str = "NED"):
         onNewNumbering(self)
         record["operatorsAfterNewNumbering"] = operatorsOf(self)
         record["mpcTransformationAfterNewNumbering"] = self.mpcTransformation
-        record["criticalTimeSteps"].append(self._criticalTimeStep)
+        record["criticalTimeSteps"].append(self._criticalTimeStepOfTheElements.value)
         record["nDofs"].append(self.system.numbering.nDof)
 
     def recordingOnNewLocations(self):
@@ -371,7 +372,7 @@ def test_a_tie_and_a_contact_keep_the_fold_through_new_locations_and_the_slaves_
     assert np.any(solver._V), "nothing moves in the deck"
 
 
-def test_a_refinement_of_the_mesh_builds_a_new_numbering_with_a_zero_net_force_and_the_stable_increment_of_the_mesh(
+def test_a_refinement_of_the_mesh_builds_a_new_numbering_with_a_zero_net_force_and_the_critical_time_step_of_the_mesh(
     tmp_path, monkeypatch
 ):
     _, record = _run(tmp_path, monkeypatch, _REFINEMENT_DECK)
@@ -379,7 +380,7 @@ def test_a_refinement_of_the_mesh_builds_a_new_numbering_with_a_zero_net_force_a
     assert record["onNewNumbering"] == 2, "the first discrete system of the step and the one after the refinement"
     assert record["nDofs"][1] > record["nDofs"][0]
     assert record["assembled"] == 2, "the operators are assembled anew for the refined mesh"
-    assert record["criticalTimeSteps"][1] < record["criticalTimeSteps"][0], "a refinement lowers the stable increment"
+    assert record["criticalTimeSteps"][1] < record["criticalTimeSteps"][0], "a refinement lowers the critical time step"
 
     ((netForceBefore, netForceAfter),) = record["netForceBeforeAndAfterAMeshChange"]
     assert np.any(netForceBefore), "the bar is accelerated: there is a net force to be dropped"
@@ -388,7 +389,7 @@ def test_a_refinement_of_the_mesh_builds_a_new_numbering_with_a_zero_net_force_a
 
 def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built():
     """What a new numbering builds is sized by it: none of it is left standing, as an array of the old numbering, until
-    the next build. What is derived from the mesh -- the stable time increment and the classification of the fields --
+    the next build. What is derived from the mesh -- the critical time step and the classification of the fields --
     is no array of the numbering, and stays: a new numbering of the same mesh does not derive it again."""
 
     solver = NED(loadConfiguration({}), Journal(verbose=False))
@@ -398,7 +399,7 @@ def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built()
     solver._inertia = solver._damping = np.ones(3)
     solver._inertiaOfTheElements = solver._dampingOfTheElements = np.ones(3)
     solver._inertiaOfEntities = solver._dampingOfEntities = np.ones(3)
-    solver._criticalTimeStep = 1.0
+    solver._criticalTimeStepOfTheElements.lastEstimate = CriticalTimeStepEstimate(1.0)
     solver.firstOrderFields, solver.secondOrderFields = ["pressure"], ["displacement"]
     solver.linearMomentumFields, solver.nonMechanicalSecondOrderFields = ["displacement"], ["pressure"]
     solver.ids_1st = solver.ids_2nd = solver.ids_mechanicalEnergy = solver.ids_inertiaOfEntities = np.arange(3)
@@ -428,7 +429,7 @@ def test_forgetting_the_discrete_system_forgets_everything_the_numbering_built()
             solver.ids_inertiaOfEntities,
         )
     )
-    assert solver._criticalTimeStep == 1.0
+    assert solver._criticalTimeStepOfTheElements.value == 1.0
     assert solver.firstOrderFields == ["pressure"] and solver.secondOrderFields == ["displacement"]
     assert solver.linearMomentumFields == ["displacement"] and solver.nonMechanicalSecondOrderFields == ["pressure"]
 

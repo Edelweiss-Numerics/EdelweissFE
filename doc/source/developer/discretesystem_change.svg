@@ -91,5 +91,5 @@
 <text x="276" y="656" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" fill="#1f2328" text-anchor="start">new, per locations</text>
 <rect x="450" y="643" width="28" height="16" rx="3" fill="#ffffff" stroke="#8c959f" stroke-width="1.2" stroke-dasharray="5 4"/>
 <text x="486" y="656" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" fill="#1f2328" text-anchor="start">kept, or not called</text>
-<text x="30" y="677" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" fill="#57606a" text-anchor="start">The hooks are shown as NIST implements them; NID and NED hold more, e.g. NED builds its lumped mass and its stable time increment in onNewNumbering().</text>
+<text x="30" y="677" xml:space="preserve" font-family="DejaVu Sans, Helvetica, Arial, sans-serif" font-size="12" font-weight="normal" fill="#57606a" text-anchor="start">The hooks are shown as NIST implements them; NID and NED hold more, e.g. NED builds its lumped mass and its critical time step in onNewNumbering().</text>
 </svg>

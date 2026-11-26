@@ -28,7 +28,6 @@
 
 import numpy as np
 
-from edelweissfe.utils.isoparametricshapes import shapeFunctions
 from edelweissfe.utils.trianglequadrature import TRIANGLE_RULES_BY_POINTS
 
 """
@@ -80,27 +79,52 @@ PARENT_FACE_PARAMETRIC_COORDS = {
 
 
 def parentFaceShapeFunctions(faceType: str, parametricCoords: np.ndarray) -> np.ndarray:
-    """The parent face's shape functions at one parametric point.
+    """The parent face's shape functions at one parametric point, or at many at once.
 
     Parameters
     ----------
     faceType
         One of the keys of :data:`PARENT_FACE_PARAMETRIC_COORDS`.
     parametricCoords
-        The evaluation point, shape ``(1,)`` for a line face or ``(2,)`` for a quad face.
+        The evaluation point, shape ``(1,)`` for a line face or ``(2,)`` for a quad face; or many points, of shape
+        ``(..., 1)`` or ``(..., 2)``.
 
     Returns
     -------
     numpy.ndarray
-        The shape function values, ordered like the canonical node ordering and summing to one. For
-        ``quad8`` and ``line3`` these take *negative* values near the corners, which is the whole
-        point of this module.
+        The shape function values, ordered like the canonical node ordering and summing to one, of shape
+        ``(nNodes,)``, or ``(..., nNodes)`` for many points. For ``quad8`` and ``line3`` these take *negative* values
+        near the corners, which is the whole point of this module.
     """
 
-    # the shape functions of EdelweissFE live in one place, with the same node orderings
-    shape = {"quad8": "quad8", "quad4": "quad4", "line3": "bar3", "line2": "bar2"}.get(faceType)
-    if shape is not None:
-        return shapeFunctions(shape, parametricCoords)
+    nodes = PARENT_FACE_PARAMETRIC_COORDS[faceType]
+    parametricCoords = np.asarray(parametricCoords)
+
+    if faceType == "quad8":
+        xi, eta = parametricCoords[..., 0], parametricCoords[..., 1]
+        N = np.empty(parametricCoords.shape[:-1] + (8,))
+        for i in range(4):
+            a, b = nodes[i]
+            N[..., i] = 0.25 * (1.0 + xi * a) * (1.0 + eta * b) * (xi * a + eta * b - 1.0)
+        for i in range(4, 8):
+            a, b = nodes[i]
+            if a == 0.0:
+                N[..., i] = 0.5 * (1.0 - xi**2) * (1.0 + eta * b)
+            else:
+                N[..., i] = 0.5 * (1.0 + xi * a) * (1.0 - eta**2)
+        return N
+
+    if faceType == "quad4":
+        xi, eta = parametricCoords[..., 0], parametricCoords[..., 1]
+        return np.stack([0.25 * (1.0 + xi * a) * (1.0 + eta * b) for a, b in nodes], axis=-1)
+
+    if faceType == "line3":
+        xi = parametricCoords[..., 0]
+        return np.stack([0.5 * xi * (xi - 1.0), 0.5 * xi * (xi + 1.0), 1.0 - xi**2], axis=-1)
+
+    if faceType == "line2":
+        xi = parametricCoords[..., 0]
+        return np.stack([0.5 * (1.0 - xi), 0.5 * (1.0 + xi)], axis=-1)
 
     raise ValueError(f"parentFaceShapeFunctions: unsupported parent face type '{faceType}'.")
 

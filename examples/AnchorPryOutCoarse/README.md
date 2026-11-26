@@ -83,11 +83,11 @@ differences are consequences rather than choices. Each is argued where it is set
 
 | | implicit | explicit | why |
 |---|---|---|---|
-| densities | omitted | required, **×100 mass scaling** | a static solve builds no mass matrix; the explicit stable increment goes with 1/√ρ, and the scaling is what makes the run reach 1.5 mm in comparable time |
+| densities | omitted | required, **×100 mass scaling** | a static solve builds no mass matrix; the critical time step goes with √ρ, and the scaling is what makes the run reach 1.5 mm in comparable time |
 | Duvaut-Lions viscosity | `1e-6` | **`0`** | it is a relaxation time. At dT ≈ 2e-6 s nothing relaxes per increment, and a non-zero value makes the concrete respond nearly elastically — a run that completes, looks plausible, and shows no softening |
 | AMR marker | damage | damage | deliberately the same, so the comparison is not confounded. A stress marker is defensible implicitly but ratchets towards refining everything under explicit integration |
 | bulk viscosity | — | **b1 = 0.06, b2 = 1.2** on every element set, linear term degraded with damage (exponent 2.0) on the concrete | central difference dissipates nothing; undegraded, the linear term resists crack opening forever and inflates the fracture energy |
-| nonlocal field | — (static) | **hyperbolic**: `eta = 3e-4`, `m_k = eta^2/4 = 2.25e-8` | `m_k > 0` integrates the nonlocal damage by central difference, whose stable increment scales with h, not h² |
+| nonlocal field | — (static) | **hyperbolic**: `eta = 3e-4`, `m_k = eta^2/4 = 2.25e-8` | `m_k > 0` integrates the nonlocal damage by central difference, whose critical time step scales with h, not h² |
 
 The mass scaling is the one to watch. It buys speed by making the structure heavier, which works
 *against* quasi-staticity, so `plot_damage_comparison.py` integrates the reaction against the
