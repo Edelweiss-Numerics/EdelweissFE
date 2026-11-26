@@ -2300,6 +2300,29 @@ class NED(NonlinearSolverBase):
             # Folded like the inertia, so the ratio below is the damping rate of the folded system.
             self.mpcTransformation.foldLumpedMass(damping)
 
+            # Signed multi-point-constraint coefficients (e.g. HEX20/QUAD8 hanging nodes) subtract
+            # slave mass or damping from a master and can make a master's folded coefficient
+            # non-positive even when every raw element contribution was positive.
+            nonPositiveFolded = M <= 0.0
+            nonPositiveFolded[self.mpcTransformation.slaveDofIndices] = False
+            nonPositiveFolded[self.ids_inertiaOfEntities] = False
+            if np.any(nonPositiveFolded):
+                raise ValueError(
+                    "Non-positive coefficient found after folding multi-point constraints in {:} of {:} "
+                    "independent degrees of freedom (smallest: {:e}). Signed constraint weights subtracted "
+                    "more mass or damping from a master than its elements supplied.".format(
+                        int(np.count_nonzero(nonPositiveFolded)), M.shape[0], M[nonPositiveFolded].min()
+                    )
+                )
+
+            if np.any(damping < 0.0):
+                raise ValueError(
+                    "Negative lumped damping found after folding multi-point constraints in {:} of {:} "
+                    "entries (smallest: {:e}). A negative damping rate amplifies instead of damping.".format(
+                        int(np.count_nonzero(damping < 0.0)), damping.shape[0], damping.min()
+                    )
+                )
+
         Minv = np.zeros(nDof)
         Minv[M != 0.0] = 1.0 / M[M != 0.0]
         self._Minv = Minv
