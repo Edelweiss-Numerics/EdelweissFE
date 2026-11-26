@@ -507,7 +507,7 @@ def test_the_gap_agrees_with_a_winding_number_and_a_brute_force_distance(surface
 def test_a_boundary_vertex_where_two_creases_meet_stays_a_crease():
     """On an open surface where two crease edges meet at a boundary vertex (an open 3-face box corner), the vertex is
     still marked as a crease and takes the sum of its incident crease edges' pseudonormals, giving the true signed
-    distance outside and inside the corner."""
+    distance outside a convex corner and inside a re-entrant corner."""
 
     vertices = np.array(
         [
@@ -530,48 +530,48 @@ def test_a_boundary_vertex_where_two_creases_meet_stays_a_crease():
     assert features.vertexIsCrease[0]
     np.testing.assert_allclose(features.pseudonormalOfVertex[0], [-1.0, -1.0, 2.0], atol=1e-14)
 
-    # Outside the corner: the true distance to vertex 0 is sqrt(0.75) (not the facet-normal projection 0.5).
-    outsidePoint = np.array([[-0.5, -0.5, 0.5]])
-    closestFacet, weights, distance = closestFacets(outsidePoint, list(coordinatesOfFacet), [[0, 1, 2]])
+    # Outside the convex corner: vertex 0 is the closest point, and the gap is the true distance sqrt(0.75) (not the
+    # facet-normal projection 0.5).
+    point = np.array([[-0.5, -0.5, 0.5]])
+    closestFacet, weights, distance = closestFacets(point, list(coordinatesOfFacet), [[0, 1, 2]])
     gap, dGap_dPoint = surface.gapsAndGradients(
-        outsidePoint, closestFacet, weights, coordinatesOfFacet, normalOfFacet, features
+        point, closestFacet, weights, coordinatesOfFacet, normalOfFacet, features
     )
     np.testing.assert_allclose(gap, distance, rtol=1e-14)
-    np.testing.assert_allclose(dGap_dPoint, outsidePoint / distance[0], rtol=1e-14)
+    np.testing.assert_allclose(dGap_dPoint, point / distance[0], rtol=1e-14)
 
-    # Inside the corner, evaluated directly at vertex 0: negative signed distance.
-    insidePoint = np.array([[0.5, 0.5, -0.5]])
-    gapIn, _ = surface.gapsAndGradients(
-        insidePoint, np.array([0]), np.array([[1.0, 0.0, 0.0]]), coordinatesOfFacet, normalOfFacet, features
+    # Flip the orientation to a re-entrant open corner: the same point now lies inside the body, still with vertex 0 as
+    # its closest point via closestFacets, and gets the negative signed distance.
+    reentrantNodes = nodesOfFacet[:, [0, 2, 1]]
+    reentrantCoords = vertices[reentrantNodes]
+    reentrantNormals, _ = facetNormalAndMeasure(reentrantCoords)
+    reentrantSurface = FacetedSurface(reentrantNodes)
+    reentrantFeatures = reentrantSurface.features(reentrantCoords, reentrantNormals)
+    cfIn, wIn, dIn = closestFacets(point, list(reentrantCoords), [[0, 1, 2]])
+    gapIn, dGapIn = reentrantSurface.gapsAndGradients(
+        point, cfIn, wIn, reentrantCoords, reentrantNormals, reentrantFeatures
     )
-    np.testing.assert_allclose(gapIn, [-np.linalg.norm(insidePoint)], rtol=1e-14)
+    np.testing.assert_allclose(gapIn, -dIn, rtol=1e-14)
+    np.testing.assert_allclose(dGapIn, -point / dIn[0], rtol=1e-14)
 
 
 def test_a_180_degree_fold_produces_no_nan_in_gaps_or_gradients():
-    """A degenerate 180-degree fold whose opposing normals cancel to a zero pseudonormal is flagged as a crease in 2D
-    and 3D without producing NaN in gapsAndGradients."""
+    """A degenerate 180-degree 3D fold whose opposing normals cancel to a zero crease-edge pseudonormal falls back to
+    the facet normal in gapsAndGradients without producing NaN."""
 
-    # 2D hairpin: two Line2 segments back-to-back with opposing normals (0, +1) and (0, -1).
-    vertices2d = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 0.0]])
-    nodes2d = np.array([[0, 1], [1, 2]])
-    coords2d = vertices2d[nodes2d]
-    normals2d, _ = facetNormalAndMeasure(coords2d)
-    surf2d = FacetedSurface(nodes2d)
-    feats2d = surf2d.features(coords2d, normals2d)
-    assert feats2d.vertexIsCrease[1]
-    gap2d, grad2d = surf2d.gapsAndGradients(
-        np.array([[1.2, 0.1]]), np.array([0]), np.array([[0.0, 1.0]]), coords2d, normals2d, feats2d
-    )
-    assert np.all(np.isfinite(gap2d)) and np.all(np.isfinite(grad2d))
+    vertices = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
+    nodesOfFacet = np.array([[0, 1, 2], [1, 0, 3]])
+    coords = vertices[nodesOfFacet]
+    normals, _ = facetNormalAndMeasure(coords)
+    surface = FacetedSurface(nodesOfFacet)
+    features = surface.features(coords, normals)
+    foldEdge = surface.edgeOppositeVertex[0, 2]
+    assert features.edgeIsCrease[foldEdge]
+    np.testing.assert_array_equal(features.pseudonormalOfEdge[foldEdge], np.zeros(3))
 
-    # 3D zero-thickness fold: two Tria3 facets sharing edge (0, 1) with opposing normals +z and -z.
-    vertices3d = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
-    nodes3d = np.array([[0, 1, 2], [1, 0, 3]])
-    coords3d = vertices3d[nodes3d]
-    normals3d, _ = facetNormalAndMeasure(coords3d)
-    surf3d = FacetedSurface(nodes3d)
-    feats3d = surf3d.features(coords3d, normals3d)
-    gap3d, grad3d = surf3d.gapsAndGradients(
-        np.array([[0.5, -0.2, 0.1]]), np.array([0]), np.array([[0.5, 0.5, 0.0]]), coords3d, normals3d, feats3d
+    gap, grad = surface.gapsAndGradients(
+        np.array([[0.5, -0.2, 0.1]]), np.array([0]), np.array([[0.5, 0.5, 0.0]]), coords, normals, features
     )
-    assert np.all(np.isfinite(gap3d)) and np.all(np.isfinite(grad3d))
+    assert np.all(np.isfinite(gap)) and np.all(np.isfinite(grad))
+    np.testing.assert_allclose(gap, [0.1], atol=1e-14)
+    np.testing.assert_allclose(grad, [normals[0]], atol=1e-14)

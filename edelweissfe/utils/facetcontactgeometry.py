@@ -212,19 +212,18 @@ class FacetedSurface:
             edgeIsCrease = np.zeros(0, dtype=bool)
 
         # A facet that turns away from the pseudonormal of its vertex by more than half the limit: its angle to the
-        # pseudonormal has a cosine below that of half the limit, sqrt((1 + cos) / 2). A vanishing pseudonormal (a 180
-        # degree hairpin fold where opposing normals cancel) also marks the vertex as a crease.
+        # pseudonormal has a cosine below that of half the limit, sqrt((1 + cos) / 2).
         cosOfHalfTheLimit = np.sqrt(0.5 * (1.0 + cosOfSmoothNormalChangeLimit))
         atVertexOfFacet = pseudonormalOfVertex[self.nodesOfFacet]
         lengthAtVertexOfFacet = np.sqrt(rowDot(atVertexOfFacet, atVertexOfFacet))
-        facetTurnsAway = (lengthAtVertexOfFacet == 0.0) | (
-            rowDot(normalOfFacet[:, None, :], atVertexOfFacet) < cosOfHalfTheLimit * lengthAtVertexOfFacet
-        )
+        facetTurnsAway = rowDot(normalOfFacet[:, None, :], atVertexOfFacet) < cosOfHalfTheLimit * lengthAtVertexOfFacet
         np.logical_or.at(vertexIsCrease, self.nodesOfFacet, facetTurnsAway)
 
-        # On the boundary, the ring of facets around a vertex is incomplete, and so is its pseudonormal. Where one or
-        # more creases end on the boundary, the crease goes on beyond it: the vertex takes the sum of the pseudonormals
-        # of the crease edges ending there (the edge's own pseudonormal where a single crease ends).
+        # On the boundary, the ring of facets around a vertex is incomplete, and the facet angles depend on how the
+        # boundary cuts the surface (e.g. an oblique end). Where one or more creases end on the boundary, the vertex
+        # takes the sum of the pseudonormals of the crease edges ending there instead of the angle-weighted ring sum:
+        # this depends only on the crease flanks (not the cut angles) and reduces to the edge's own pseudonormal when
+        # a single crease ends there.
         creaseEdges = np.flatnonzero(edgeIsCrease)
         nCreaseEdgesAtVertex = np.bincount(self.verticesOfEdge[creaseEdges].ravel(), minlength=self.nVertices)
         endsACrease = ~self.vertexIsInterior & (nCreaseEdgesAtVertex >= 1)
@@ -319,8 +318,9 @@ class FacetedSurface:
 
         creased = np.flatnonzero(onACrease)
         if len(creased):
-            # A degenerate 180-degree fold has opposing normals whose pseudonormal cancels to zero: it has no
-            # pseudonormal direction, so keep the facet-normal fallback rather than dividing by zero.
+            # A degenerate 180-degree fold has opposing normals whose pseudonormal cancels to exactly zero: keep the
+            # facet-normal fallback rather than dividing by zero (a nearly cancelled fold still normalizes, which is
+            # acceptable for a degenerate geometry).
             pseudonormalLength = np.linalg.norm(pseudonormal[creased], axis=1)
             valid = pseudonormalLength > 0.0
             creased = creased[valid]
