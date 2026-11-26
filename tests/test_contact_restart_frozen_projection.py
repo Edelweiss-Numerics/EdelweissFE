@@ -222,7 +222,7 @@ def test_foreign_or_missing_projection_is_refused(resumedContact):
 
 
 def test_a_checkpoint_of_the_format_before_is_refused_before_its_contact_search_is_read(resumedContact, tmp_path):
-    """A contact checkpoint written in the format before -- that of a contact whose pairing had no states, say -- is
+    """A contact checkpoint written in the format before -- that of a contact that kept no resting offsets, say -- is
     refused by its format version, with the error that says how to resume it, before the restore reads an entry the
     format lacks."""
 

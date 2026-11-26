@@ -306,6 +306,20 @@ class ContactPointsOnSlaveSurface(ContactPoints):
             model.elementSets[self.setName], self.nQuadraturePoints, self._constraintName
         )
 
+    def referenceCoordinates(self) -> np.ndarray:
+        """:math:`N^s(\\xi_q) \\cdot X^s`, all points in the reference configuration, on the *curved* parent faces, in
+        the order of the points (by facet, then by quadrature point).
+
+        Returns
+        -------
+        numpy.ndarray
+            The coordinates, of shape (nPoints, nDim).
+        """
+
+        return np.concatenate(
+            [N @ X for N, X in zip(self.shapeFunctions, self.parentReferenceCoordinates)] + [np.zeros((0, self.nDim))]
+        )
+
     def locatePoints(self, points: np.ndarray) -> list:
         """Locate the given points: each takes the nodes of its parent face into the block, a copy of its own, and its
         shape functions and its origin, :math:`N^s(\\xi_q) \\cdot X^s` in the reference configuration, are gathered

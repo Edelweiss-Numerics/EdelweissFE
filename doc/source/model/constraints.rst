@@ -220,8 +220,20 @@ deeper one is found inside, and reported) is either an interference fit, pushed 
 over ``initialOverlapRampTime`` (``initialOverlap=pushApart``, the default), or an error of the geometry, such as flat
 faces in a curved hole, kept as the stress-free state (``initialOverlap=adjust``; :ref:`contact-initial-overlap`).
 
-Scope: frictionless normal penalty contact under ``sliding=small``, on both the implicit and the explicit solver
-path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
+With ``type=tied`` the constraint ties its points to the master surface instead (:ref:`contact-tie`): each point within
+``searchDistance`` at the first update is paired once, with the closest point of its closest facet, mapped onto the
+facet's parent face, and held there in every direction, in tension and compression, by penalty springs; a gap or an
+overlap at the pairing is part of the state at rest. It joins independently meshed bodies in implicit and explicit
+analyses. A new mesh of either side hands the tie on: the same points stay tied to the same material points of the
+master (on a curved master, to the nearest points of the new chords, mapped onto the parent face; the resting offset
+takes up the difference, so the forces stay exact), displaced from rest as at the last accepted state (checkpointed),
+interpolated onto the new points of a refined slave side. It is not the ``tie`` constraint below, which eliminates the
+degrees of freedom of slave nodes exactly; the penalty tie is compliant by :math:`t/k`, adds to the frequencies of an
+explicit analysis, works for both kinds of contact point on the parent faces, and does not compete with hanging nodes.
+Both keep a gap at rest, the ``tie`` with ``adjust=False``. Which to use when: :ref:`Two ties <contact-two-ties>`.
+
+Scope: frictionless normal penalty contact, or a tie, under ``sliding=small``, on both the implicit and the explicit
+solver path. Coulomb friction and augmented Lagrange are **not** implemented here (the node-based
 constraint has both), and ``sliding=finite`` is rejected rather than approximated. The master
 surface must consist of a single element type, and so must a slave surface whose contact points are its quadrature
 points.
@@ -243,6 +255,11 @@ Module ``edelweissfe.constraints.surfacetodeformablesurfacepenalty``
     :language: edelweiss
     :caption: Example (explicit dynamics):
               ``testfiles/edelweiss-only/NEDSurfaceContact/test.inp``
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/SurfaceTieHexa20AMR/test.inp
+    :language: edelweiss
+    :caption: Example (a tie with a gap at rest, across a refinement of its master side):
+              ``testfiles/edelweiss-only/SurfaceTieHexa20AMR/test.inp``
 
 ``surfacetodiscreterigidbodypenalty`` - Integrated contact against a discrete rigid body
 -----------------------------------------------------------------------------------------------
@@ -313,8 +330,10 @@ Module ``edelweissfe.constraints.surfacetodiscreterigidbodypenalty``
 --------------------------------------------------
 
 An Abaqus-style tie constraint bonding a slave surface rigidly to a deformable master surface.
-Unlike the penalty- and Lagrange-multiplier-based constraints above, the tie is enforced by
-master-slave DOF elimination (multi-point constraint condensation): each slave node's
+Unlike the penalty- and Lagrange-multiplier-based constraints above -- among them the penalty tie,
+``surfaceToDeformableSurfacePenalty`` with ``type=tied``, compared with this one in
+:ref:`Two ties <contact-two-ties>` -- the tie is enforced by master-slave DOF elimination (multi-point constraint
+condensation): each slave node's
 displacement is constrained to the frozen facet-linear interpolation of its closest master facet,
 :math:`u_s = \sum_a N_a \, u_{m_a}`, and the slave DOFs are condensed out of the system of equations
 -- exact enforcement, no penalty parameter, no additional DOFs, zero added stiffness. The same
@@ -572,8 +591,9 @@ slave surface and the quadrature points of its faces. A new kind of contact poin
 .. automodule:: edelweissfe.constraints.base.contactpointsonslavesurface
     :members:
 
-A new law derives from :class:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw` (its springs), a new normal
-contact law from :class:`~edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw` (its normal force and energy):
+A new law derives from :class:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw` (its springs, and whether it
+pairs once), a new normal contact law from :class:`~edelweissfe.constraints.base.penaltylaw.ContactPenaltyLaw` (its
+normal force and energy):
 
 .. automodule:: edelweissfe.constraints.base.penaltylaw
     :members:

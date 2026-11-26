@@ -29,11 +29,12 @@
 degrees of freedom they couple, which lowers the critical time step.
 
 A penalty constraint acts through springs. A spring :math:`p` measures a stretch :math:`g_p` -- the gap of a contact
-point, the displacement of a held point from its prescribed value along one axis --; the vector with which it acts on
-the degrees of freedom of the constraint is the gradient of the stretch, :math:`\\boldsymbol{a}_p =
-\\partial g_p/\\partial \\boldsymbol{u}`, and its law gives it a force :math:`f_p` and a stiffness :math:`k_p =
-\\mathrm{d}f_p/\\mathrm{d}g_p`. The residual contribution of the springs is :math:`\\sum_p f_p \\boldsymbol{a}_p`,
-their stiffness :math:`\\sum_p k_p\\, \\boldsymbol{a}_p \\otimes \\boldsymbol{a}_p`.
+point, the displacement of a tied point from rest or of a held point from its prescribed value along one axis --; the
+vector with which it acts on the degrees of freedom of the constraint is the gradient of the stretch,
+:math:`\\boldsymbol{a}_p = \\partial g_p/\\partial \\boldsymbol{u}`, and its law gives it a force :math:`f_p` and a
+stiffness :math:`k_p = \\mathrm{d}f_p/\\mathrm{d}g_p`. The residual contribution of the springs is
+:math:`\\sum_p f_p \\boldsymbol{a}_p`, their stiffness
+:math:`\\sum_p k_p\\, \\boldsymbol{a}_p \\otimes \\boldsymbol{a}_p`.
 
 The explicit dynamic solver ``NED`` needs the row sums of the absolute value of that stiffness, weighted by column
 (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.addBoundOfAbsoluteStiffnessTimes`). The absolute
@@ -86,7 +87,7 @@ from edelweissfe.utils.facetcontactgeometry import rowDot
 @dataclass(frozen=True)
 class PenaltySprings:
     """Penalty springs at located contact points, at most one per point, each along a unit direction: the spring of a
-    contact along the normal at a closed point. A law makes them
+    contact along the normal at a closed point, or the spring of a tie along one axis. A law makes them
     (:meth:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.springs`); the constraint takes from them its force,
     its tangent, the bound of its stiffness and its outputs."""
 

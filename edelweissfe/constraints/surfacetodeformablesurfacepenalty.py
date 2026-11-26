@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 import numpy as np
+from scipy.spatial import cKDTree
 
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.constraints.base.contactpoints import ContactPoints
@@ -40,7 +41,7 @@ from edelweissfe.constraints.base.forcesonlyexplicitevaluation import (
     ForcesOnlyExplicitEvaluation,
 )
 from edelweissfe.constraints.base.frozencontactsearch import FrozenContactSearch
-from edelweissfe.constraints.base.penaltylaw import penaltyLaw
+from edelweissfe.constraints.base.penaltylaw import penaltyLaw, penaltyLawsAndTheTie
 from edelweissfe.constraints.base.penaltysprings import (
     PenaltySprings,
     SpringGradientOnOwnNodes,
@@ -101,11 +102,13 @@ basis (:mod:`~edelweissfe.utils.parentfacegeometry`) is the load-bearing half of
 
 Scope of this implementation: frictionless normal penalty contact under ``sliding=small``, for both the implicit
 and the explicit solver path. The springs come from an exchangeable law
-(:mod:`~edelweissfe.constraints.base.penaltylaw`), which owns what differs between laws, its springs; the constraint
-owns everything the laws share. Coulomb friction and
+(:mod:`~edelweissfe.constraints.base.penaltylaw`), which owns what differs between laws -- its springs, and whether it
+pairs the points once or anew in every search; the constraint owns everything the laws share. Coulomb friction and
 augmented Lagrange are *not* implemented (the node-based constraint has both); friction enters as a law with a
 per-point history (the module documentation of :mod:`~edelweissfe.constraints.base.penaltylaw` says what it
-implements). ``sliding=finite`` is rejected rather than approximated, see :class:`Constraint`.
+implements). With the law ``type=tied`` the same constraint *ties* its points to the master surface instead, in every
+direction, with the gap or overlap at the pairing as the state at rest -- e.g. two independently meshed bodies, see
+:class:`Constraint`, *The tie*. ``sliding=finite`` is rejected rather than approximated, see :class:`Constraint`.
 
 What this formulation does *not* fix: pointwise enforcement at quadrature points still
 over-constrains a non-matching interface, and the integrand is discontinuous inside a slave facet
@@ -145,6 +148,78 @@ class ContactState(IntEnum):
     #: constraint reports it. It stays so until it is seen outside within the search distance: deeper inside than the
     #: search distance, it is out of sight, not free.
     FOUND_INSIDE = 3
+    #: The point is paired once, with a material point of the master surface, for good: it is tied to it (a law that
+    #: pairs once, :attr:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.pairsOnce`: the tie).
+    TIED = 4
+
+
+@dataclass(frozen=True)
+class TieOfThePoints:
+    """What a tie has decided for its contact points, independent of the mesh of the master, and what a new mesh hands
+    on (see :class:`Constraint`, *A new mesh*): which points are tied, the material point of the master each one is
+    tied to, and how far each one is displaced from rest at the last accepted state.
+
+    Attributes
+    ----------
+    tied
+        Which points are tied, a mask over all points.
+    masterPoints
+        The master point of each tied point, in the reference configuration, (nTied, nDim).
+    displacementsFromRest
+        The displacement of each tied point from rest at the last accepted state, (nTied, nDim).
+    """
+
+    tied: np.ndarray
+    masterPoints: np.ndarray
+    displacementsFromRest: np.ndarray
+
+
+def affineInterpolationAlongASurface(points: np.ndarray, at: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The weights that interpolate a field given at points of a surface onto other points of it: at each point of
+    ``at``, the value of the affine function of the position along the surface that fits the field at the
+    :math:`3^{n_\\mathrm{dim} - 1}` nearest ``points`` best, in the least-squares sense. The position along the surface
+    is measured in the plane that fits those points best, along their principal directions. The interpolation is
+    exact for a uniform field, and for a linear one on a flat surface; otherwise its error is of second order in the
+    spacing of the points, from the change of the gradient of the field and the curvature of the surface, within a
+    smooth part of the surface. At an edge or a corner of the surface, the nearest points may lie on faces on either
+    side of it, the plane that fits them best does not describe the surface there, and the error is of first order.
+
+    Parameters
+    ----------
+    points
+        Where the field is given, (nPoints, nDim).
+    at
+        Where it is wanted, (nAt, nDim).
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray]
+        The neighbours of each point of ``at`` among ``points`` and their weights, both (nAt, nNeighbours): the field
+        at ``at[i]`` is ``sum_j weights[i, j] * field[neighbours[i, j]]``.
+    """
+
+    nDim = points.shape[1]
+    nNeighbours = min(len(points), 3 ** (nDim - 1))
+    if not len(at):
+        return np.zeros((0, nNeighbours), dtype=np.intp), np.zeros((0, nNeighbours))
+
+    _, neighbours = cKDTree(points).query(at, k=nNeighbours)
+    neighbours = np.asarray(neighbours).reshape((len(at), nNeighbours))
+    patch = points[neighbours]
+    centre = patch.mean(axis=1)
+    _, _, principalDirections = np.linalg.svd(patch - centre[:, None, :])
+    alongTheSurface = principalDirections[:, : nDim - 1, :]
+
+    # the affine basis [1, s] at the neighbours and at the point, s the position along the surface
+    basisAtTheNeighbours = np.concatenate(
+        (np.ones((len(at), nNeighbours, 1)), np.einsum("akd,asd->aks", patch - centre[:, None, :], alongTheSurface)),
+        axis=2,
+    )
+    basisAtThePoint = np.concatenate(
+        (np.ones((len(at), 1)), np.einsum("ad,asd->as", at - centre, alongTheSurface)), axis=1
+    )
+    weights = np.einsum("ab,abk->ak", basisAtThePoint, np.linalg.pinv(basisAtTheNeighbours))
+    return neighbours, weights
 
 
 class ContactStiffnessView:
@@ -199,7 +274,8 @@ class SurfaceToDeformableSurfacePenaltySchema(SurfaceContactPenaltySchema):
         "real interference fit (a groove cut smaller than the thread), pushed apart -- at once, or over "
         "initialOverlapRampTime. 'adjust': an error of the geometry (flat faces standing for a curved surface): the "
         "overlap is kept as a stress-free offset of the point's gap for good, so that the point touches the master at "
-        "the start without a force, and a point that separates and comes back meets the surface where it touched it.",
+        "the start without a force, and a point that separates and comes back meets the surface where it touched it. "
+        "Not with type=tied, which keeps any gap or overlap at the pairing as the state at rest.",
         dtype=str,
         default="pushApart",
     )
@@ -210,12 +286,22 @@ class SurfaceToDeformableSurfacePenaltySchema(SurfaceContactPenaltySchema):
         dtype=float,
         default=0.0,
     )
+    contactType: str = schemaField(
+        description="The penalty law: 'linear' (linear force, constant stiffness with jump) or 'quadratic' "
+        "(quadratic force, linear stiffness), or 'tied': the contact points are tied to the master surface, in "
+        "tension and compression and in every direction, by linear springs of the penalty stiffness; each point is "
+        "paired once, at the first contact search, and the gap or overlap it has then is the state at rest. "
+        "searchDistance is then the distance within which points are tied, once: a point beyond it is never tied.",
+        dtype=str,
+        default="linear",
+        optionName="type",
+    )
 
 
 class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBase, MeshDependent):
     """
-    Penalty based unilateral contact between the contact points of a slave body and a deformable master surface,
-    distributed with the master's parent element face shape functions.
+    Penalty based unilateral contact between the contact points of a slave body and a deformable master surface, or a
+    tie of the two (``type=tied``), distributed with the master's parent element face shape functions.
 
     Theoretical background
     -----------------------
@@ -252,24 +338,26 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     Measured from the origins
     -------------------------
-    The vector :math:`\\boldsymbol{x}_p - N^m \\cdot x^m` is a difference of two nearly equal positions: across a
-    closed contact, the two points are as far apart as a spring is stretched, :math:`t / k` for a traction
-    :math:`t`, while their coordinates are as large as the model. Subtracting the coordinates would lose the stretch
-    to their round-off, :math:`\\varepsilon |\\boldsymbol{x}|` for the machine epsilon :math:`\\varepsilon`, and the
-    penalty turns that into a force of :math:`k A_p \\varepsilon |\\boldsymbol{x}|` per point: the force would
-    jump from one bit of the coordinates to the next, a staircase in the displacements, and a Newton iteration would
-    stall on that staircase instead of converging -- however small its corrections, its residual would scatter over
-    the height of a step, with any change of the rounding (another order of summation) drawing it anew.
+    The vector :math:`\\boldsymbol{x}_p - N^m \\cdot x^m` is a difference of two nearly equal positions: across a closed
+    contact, the two points are as far apart as a spring is stretched, :math:`t / k` for a traction :math:`t`, and a
+    tied point is as far from where it rests, while their coordinates are as large as the model. Subtracting the
+    coordinates would lose the stretch to their round-off, :math:`\\varepsilon |\\boldsymbol{x}|` for the machine
+    epsilon :math:`\\varepsilon`, and the penalty turns that into a force of :math:`k A_p \\varepsilon
+    |\\boldsymbol{x}|` per point: the force would jump from one bit of the coordinates to the next, a staircase in the
+    displacements, and a Newton iteration would stall on that staircase instead of converging -- however small its
+    corrections, its residual would scatter over the height of a step, with any change of the rounding (another order of
+    summation) drawing it anew.
 
     The constraint therefore measures every point from its *origin*
     (:meth:`~edelweissfe.constraints.base.contactpoints.ContactPoints.originsOfLocatedPoints`), where it is when the
     displacement it moves with is zero -- the reference configuration, for the points of finite elements --, and the
-    master from its reference configuration. A contact point rests on its master point, so its displacement from rest
-    is the vector from the master point to it,
+    master from its reference configuration. A contact point rests on its master point, a tied point at its resting
+    offset :math:`\\boldsymbol{r}_0` from it (see *The tie*), so its displacement from rest is
 
     .. math::
-        \\boldsymbol{d} = \\boldsymbol{x}_p - N^m \\cdot x^m
-        = \\underbrace{\\left( \\boldsymbol{x}^0_p - N^m \\cdot X^m \\right)}_{\\text{the same in every evaluation}}
+        \\boldsymbol{d} = \\boldsymbol{x}_p - N^m \\cdot x^m - \\boldsymbol{r}_0
+        = \\underbrace{\\left( \\boldsymbol{x}^0_p - N^m \\cdot X^m \\right) - \\boldsymbol{r}_0}_{\\text{the same in
+        every evaluation}}
         + \\left( c \\cdot \\boldsymbol{u} - N^m \\cdot U^m \\right) ,
 
     with :math:`c \\cdot \\boldsymbol{u}` the displacement of the point from its origin
@@ -281,14 +369,16 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     constant, which shifts the state at rest by a fraction of a bit of the coordinates and stalls nothing. The second
     part is a difference of displacements, rounded relative to the displacements, not to the coordinates. The force is
     then a smooth function of the solution, and a Newton iteration converges to the round-off of the forces themselves.
-    What a pairing records from where a point is -- an initial overlap (see *The first update*) -- is measured the same
-    way, at the solution the model holds, so that a point whose overlap is adjusted rests exactly where it was found.
+    What a pairing records from where a point is -- the resting offset of a tie, an initial overlap (see *The first
+    update*) -- is measured the same way, at the solution the model holds, so that a tied point, or a point whose
+    overlap is adjusted, rests exactly where it was found.
 
     The law
     -------
     The law (:mod:`~edelweissfe.constraints.base.penaltylaw`) owns what differs between laws: the springs it puts at
     the located points (:meth:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.springs`), from their gaps, their
-    frozen normals and their areas. Everything else is this constraint's,
+    frozen normals, their areas and their displacements from rest, and how they are paired
+    (:attr:`~edelweissfe.constraints.base.penaltylaw.PenaltyLaw.pairsOnce`). Everything else is this constraint's,
     the same for every law: the contact points, the search and the pairing, the relative position and the gap, the
     force and the tangent of the springs on the nodes, the bound of their stiffness for the critical time step, the
     state of the points in a checkpoint, and the outputs, which are taken from the springs of the last evaluation
@@ -354,13 +444,54 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     points are closed, and the bound of the stiffness for the critical time step) sees the offset gap. The offsets
     belong to the contact points and are checkpointed (see *A new mesh* for a refinement).
 
+    The tie
+    -------
+    With the law ``type=tied`` (:class:`~edelweissfe.constraints.base.penaltylaw.TiedPenaltyLaw`) the constraint
+    does not let its points touch the master surface, it *ties* them to it -- e.g. a finely meshed part to the coarse
+    mesh of the body around it. It is the same constraint, the same contact points, the same frozen projection, the
+    same parent face shape functions; what differs is the law, which pairs once and has its springs:
+
+    - **paired once.** At the first update, every point within ``searchDistance`` of the master surface (every point,
+      without a search distance), in the configuration of the model, is paired with the closest point of its closest
+      facet, mapped onto the facet's parent face, and stays paired with that *material* point of the master,
+      :math:`N^m(\\xi_m) \\cdot x^m`, for good: tension does not release it, sliding does not move it on, and none of
+      the rules of *The pairing* apply. A point beyond the search distance then is never tied. A new mesh does not
+      decide anew, it hands the tie on (see *A new mesh*).
+    - **at rest where it is.** The vector :math:`\\boldsymbol{r}_0` from the master point to the point at the pairing
+      is where the point rests: a gap or an overlap of the two surfaces -- of a coarse mesh, whose faceted surface
+      lies inside the curved surface of a fine one -- is part of the stress-free state, not closed or pushed apart.
+      ``initialOverlap`` is therefore an option of contact only.
+    - **held in every direction.** A spring of the penalty stiffness along every axis holds the point there, in
+      tension as in compression; together, with the displacement from rest
+      :math:`\\boldsymbol{d} = \\boldsymbol{x}_p - N^m \\cdot x^m - \\boldsymbol{r}_0`, the force on the point is
+
+      .. math::
+          \\boldsymbol{f} = -k A_p \\, \\boldsymbol{d} , \\qquad
+          \\boldsymbol{K} = k A_p \\, [c, -N^m] \\otimes [c, -N^m] \\otimes \\boldsymbol{I} ,
+
+      each spring along its axis :math:`\\boldsymbol{e}_i` exactly the spring of a contact with :math:`\\bar{n}`
+      replaced by :math:`\\boldsymbol{e}_i`. The force is linear in the displacements, its tangent constant and
+      symmetric, its energy :math:`\\tfrac{1}{2} k A_p |\\boldsymbol{d}|^2`.
+
+    The interface is as compliant as the springs: a traction :math:`t` opens it by :math:`t / k`. Choose ``penalty``
+    well above the stiffness of the adjoining material over the size of its elements, :math:`E / h`, and within what
+    the time step of an explicit analysis can carry. The rest offset is a fixed vector, so a rotation of the interface
+    by :math:`\\theta` is resisted by :math:`k |\\boldsymbol{r}_0| \\theta`: small for a small gap at rest, and zero
+    without one.
+
+    This tie is not the ``tie`` constraint (:mod:`~edelweissfe.constraints.tie`), which eliminates the degrees of
+    freedom of the slave nodes: exact, without a penalty and without a spring that lowers the critical time step, for
+    nodes only, on the flat facets. This one holds both kinds of contact point on the parent faces by springs:
+    compliant by :math:`t / k`, and the stick of a friction law that never slips. Both keep a gap at rest, the ``tie``
+    with ``adjust=False``. The documentation page of the theory of contact compares the two (*Two ties*).
+
     A new mesh
     ----------
     Like the node-based constraint, this is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either
     surface's source solid elements are refined mid-run, it rebuilds that side from the regenerated facets
     (:meth:`refresh`), and the update of the connectivity that follows every rebuild pairs the points anew. What the
     pairing has learnt belongs to the points: their states (:class:`ContactState`), the facet each point is paired
-    with, and the offsets of an initial overlap.
+    with, the offsets of an initial overlap, and the displacements from rest of a tie.
 
     - A new mesh of the master keeps the states and the offsets, and carries the facet of each paired point over to
       the facet of the new master where the old one lay (in the reference configuration). A point in contact walks on
@@ -370,6 +501,20 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
       identity that survives a retiling. They are paired as at the first update: a point inside within the search
       distance is in contact, with its closest facet, a point deeper inside is found inside; an overlap they have is
       pushed apart at once. The constraint reports it.
+    - A tie is decided once, at the first update (*The tie*): which points are tied, and to which material point of
+      the master. A new mesh hands that on (:class:`TieOfThePoints`), with the displacement of each tied point from
+      rest at the last accepted state, promoted in :meth:`acceptLastState` and checkpointed, so that a run resumed and
+      refined before its first evaluation, or a run fallen back to a checkpoint, hands on the state it goes on from.
+      The next update ties the points by it (:meth:`_tieAgainAfterANewMesh`): each one to the point of the new master
+      closest to its master point in the reference configuration, and with the resting offset that leaves it
+      displaced from rest as it was. A new mesh of the master keeps the points, and so every point keeps its tie and
+      the forces of the tie stay as they were. A refined slave side has new points: in the reference configuration, a
+      new point is tied if the old point nearest to it was, and its master point and its displacement from rest are
+      interpolated from the old tied points, by the affine function of the position along the surface that fits the
+      nearest of them best (:func:`affineInterpolationAlongASurface`). That is exact for a uniform displacement from
+      rest, and for a linear one on a flat interface; otherwise its error is of second order in the spacing of the old
+      points, from the change of the gradient of the displacement from rest and the curvature of the interface, within
+      a smooth part of the slave surface; at an edge of the slave surface, of first order.
 
     A law with a history, such as friction, will carry its history the same way.
 
@@ -433,7 +578,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         if self.penalty <= 0.0:
             raise ValueError("The penalty must be positive: a non-positive penalty silently disables contact.")
 
-        self.law = penaltyLaw(configuration.contactType)
+        self.law = penaltyLaw(configuration.contactType, penaltyLawsAndTheTie)
 
         self.sliding = configuration.sliding.lower()
         if self.sliding != "small":
@@ -462,6 +607,12 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             raise ValueError(
                 f"Constraint '{name}': an adjusted initial overlap is never pushed apart; it has no ramp time "
                 "(initialOverlapRampTime is for initialOverlap=pushApart)."
+            )
+        if self.law.pairsOnce and (self.adjustsTheInitialOverlap or self.initialOverlapRampTime > 0.0):
+            raise ValueError(
+                f"Constraint '{name}': a law that pairs once (type={self.law.name}) keeps the gap or overlap of its "
+                "points at the pairing as the state at rest; initialOverlap and initialOverlapRampTime are for laws "
+                "that pair anew in every search."
             )
         # The time of the first contact search, from which the initial overlap is offset; None before it, and
         # without an offset (an overlap pushed apart at once).
@@ -555,8 +706,15 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         # at once: the gap does not count it, for good (adjusted) or until the ramp has fed it in (pushed apart).
         self._initialOverlap = np.zeros(nPoints)
 
+        # For a law that pairs once: the displacement of each point from rest at the last accepted state (zero for a
+        # point not tied), promoted in acceptLastState; and the tie a new mesh handed on to the points, until the next
+        # update of the connectivity ties them by it (see the class documentation, *A new mesh*).
+        self._displacementsFromRestAtTheLastAcceptedState = np.zeros((nPoints, self.nDim))
+        self._tieHandedOver = None
+
     def _resetPairing(self):
-        """Unpair every contact point from the master: no facet, no frozen projection, nothing located."""
+        """Unpair every contact point from the master: no facet, no frozen projection, no resting offset, nothing
+        located."""
 
         nPoints = self.slave.nPoints
 
@@ -566,6 +724,11 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._assignedFacetIdx = np.full(nPoints, -1, dtype=np.intp)
         self._frozenMasterShapeFunctions = np.zeros((nPoints, self.nMasterParentNodes))
         self._frozenNormals = np.zeros((nPoints, self.nDim))
+
+        # Where each point rests relative to the master point it is paired with: zero for a law that pairs anew in
+        # every search (the point rests on its master point), the vector from its master point to it at the pairing
+        # for a law that pairs once.
+        self._restingOffset = np.zeros((nPoints, self.nDim))
 
         # The gap of every point at the last evaluation, as the law sees it, for output.
         self._gapCurrent = np.zeros(nPoints)
@@ -644,6 +807,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._masterShapeFunctionsOfLocated = self._frozenMasterShapeFunctions[located]
         self._normalsOfLocated = self._frozenNormals[located]
         self._initialOverlapOfLocated = self._initialOverlap[located]
+        self._restingOffsetOfLocated = self._restingOffset[located]
         # Where the points are relative to their master points when the solution of the block is zero: from the
         # origins of the points and the reference configuration of the master, once per location.
         masterReferenceCoordinatesOfLocated = self._masterParentRefCoords[facets].reshape(
@@ -653,6 +817,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             "ai,aij->aj", self._masterShapeFunctionsOfLocated, masterReferenceCoordinatesOfLocated
         )
         self._areasOfLocated = self.slave.areas[located]
+        # For a law that pairs once: the displacements from rest of the located points at the last evaluation, which
+        # acceptLastState promotes; none yet at these points.
+        self._displacementsFromRestOfLocatedAtTheLastEvaluation = None
         self._blockSizes = None
         # The springs of the last evaluation, at these located points: what the outputs report.
         self._springs = []
@@ -700,8 +867,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         All located points are evaluated at once: their displacements from rest, from the origins
         (:meth:`_displacementsFromRestOfLocatedPoints`), the springs the law puts there
-        (:meth:`_springsOfLocatedPoints`: one along :math:`\\bar{n}` at every closed point), and the forces of the
-        springs on the nodes (:meth:`_addForcesOfSprings`). The springs are kept for the outputs.
+        (:meth:`_springsOfLocatedPoints`: the contact's one along :math:`\\bar{n}` at every closed point, the tie's one
+        along every axis at every point), and the forces of the springs on the nodes (:meth:`_addForcesOfSprings`).
+        The springs are kept for the outputs, and for a law that pairs once the displacements from rest, which
+        :meth:`acceptLastState` promotes if this is the evaluation at the accepted configuration.
         """
 
         self._springs = []
@@ -709,20 +878,37 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         if not len(located):
             return
 
-        gaps, springs = self._springsOfLocatedPoints(self._displacementsFromRestOfLocatedPoints(U_np, dU), timeStep)
+        displacementsFromRest = self._displacementsFromRestOfLocatedPoints(U_np, dU)
+        gaps, springs = self._springsOfLocatedPoints(displacementsFromRest, timeStep)
         for spring in springs:
             self._addForcesOfSprings(P, K, spring)
 
         # What the outputs report.
         self._springs = springs
         self._gapCurrent[located] = gaps
+        if self.law.pairsOnce:
+            # What the acceptance of the increment promotes, if this is the evaluation at the accepted configuration.
+            self._displacementsFromRestOfLocatedAtTheLastEvaluation = displacementsFromRest
+
+    def acceptLastState(self):
+        """For a law that pairs once, promote the displacements from rest of the last evaluation, the one at the
+        accepted configuration (see
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState`), to the state of the
+        points, which a checkpoint holds and a new mesh hands on (see the class documentation, *A new mesh*). An
+        iterate, or an increment that is cut back, is never handed on."""
+
+        if self._displacementsFromRestOfLocatedAtTheLastEvaluation is not None:
+            self._displacementsFromRestAtTheLastAcceptedState[self._locatedPoints] = (
+                self._displacementsFromRestOfLocatedAtTheLastEvaluation
+            )
 
     def _displacementsFromRestOfLocatedPoints(self, U_np: np.ndarray, dU: np.ndarray) -> np.ndarray:
-        """The displacements of the located points from where they rest, their master points, :math:`\\boldsymbol{d} =
-        \\boldsymbol{x}_p - N^m \\cdot x^m`, told from the origins (see the class documentation, *Measured from the
-        origins*): the relative position at the zero solution of the block, the same in every evaluation until the
+        """The displacements of the located points from where they rest, :math:`\\boldsymbol{d} = \\boldsymbol{x}_p - N^m
+        \\cdot x^m - \\boldsymbol{r}_0`, told from the origins (see the class documentation, *Measured from the
+        origins*): the displacement from rest at the zero solution of the block, the same in every evaluation until the
         points are located anew, plus the difference of the displacements of the points and of their master points
-        (:meth:`_relativeDisplacementsOfLocatedPoints`).
+        (:meth:`_relativeDisplacementsOfLocatedPoints`). The resting offset :math:`\\boldsymbol{r}_0` is zero unless
+        the law pairs once: a contact point rests on its master point.
 
         Parameters
         ----------
@@ -737,7 +923,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             The displacements from rest, (nLocated, nDim).
         """
 
-        return self._relativePositionsAtZeroSolutionOfLocated + self._relativeDisplacementsOfLocatedPoints(U_np, dU)
+        displacementsFromRestAtZeroSolution = (
+            self._relativePositionsAtZeroSolutionOfLocated - self._restingOffsetOfLocated
+        )
+        return displacementsFromRestAtZeroSolution + self._relativeDisplacementsOfLocatedPoints(U_np, dU)
 
     def _relativeDisplacementsOfLocatedPoints(self, U_np: np.ndarray, dU: np.ndarray) -> np.ndarray:
         """How far the located points have moved relative to their master points since the zero solution of the block:
@@ -773,12 +962,14 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         """The penalty springs the law puts at the located points, from their displacements from rest.
 
         What the constraint gives the law is the same for every law: the penalty times the area of each point, its
-        frozen normal :math:`\\bar{n}`, and its gap :math:`g = \\bar{n} \\cdot \\boldsymbol{d}`, the normal part of
-        its displacement from rest :math:`\\boldsymbol{d} = \\boldsymbol{x} - \\boldsymbol{x}^m`, less the part of
-        the initial overlap it does not count (all of an adjusted one, the part of one pushed apart that the ramp has
-        not fed in yet; :meth:`_gapsOfLocatedPoints`). The gap is affine in the displacements with a constant
-        gradient, so the tangent is that of the springs alone. The contact law puts one spring along
-        :math:`\\bar{n}` at every closed point.
+        frozen normal :math:`\\bar{n}`, its displacement from rest :math:`\\boldsymbol{d} = \\boldsymbol{x} -
+        \\boldsymbol{x}^m - \\boldsymbol{r}_0` (the resting offset :math:`\\boldsymbol{r}_0` is zero unless the law
+        pairs once), and its gap :math:`g = \\bar{n} \\cdot \\boldsymbol{d}`, less the part of the initial overlap
+        it does not count (all of an adjusted one, the part of one pushed apart that the ramp has not fed in yet;
+        :meth:`_gapsOfLocatedPoints`). Every one of them is affine in the displacements with a constant gradient, so
+        the tangent is that of the springs alone. The contact law puts one spring along :math:`\\bar{n}` at every
+        closed point, the tie one along every axis :math:`\\boldsymbol{e}_i` at every point, of the stretch
+        :math:`d_i`.
 
         The force (:meth:`_addForcesOfSprings`), the bound of the stiffness
         (:meth:`addBoundOfAbsoluteStiffnessTimes`) and the outputs go through the same springs. The bound over the next
@@ -802,7 +993,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         """
 
         gaps = self._gapsOfLocatedPoints(displacementsFromRest, timeStep) if smallestGaps is None else smallestGaps
-        springs = self.law.springs(self.penalty * self._areasOfLocated, gaps, self._normalsOfLocated)
+        springs = self.law.springs(
+            self.penalty * self._areasOfLocated, gaps, self._normalsOfLocated, displacementsFromRest
+        )
         return gaps, springs
 
     def _gapsOfLocatedPointsAt(self, U_np: np.ndarray, dU: np.ndarray, timeStep: TimeStep | None) -> np.ndarray:
@@ -852,7 +1045,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def _addForcesOfSprings(self, P: np.ndarray, K: ContactStiffnessView | None, springs: PenaltySprings):
         """Add the residual contribution of penalty springs at located points, each along a unit direction
-        :math:`\\bar{n}` (the normal of a contact point), and their tangent unless ``K`` is None.
+        :math:`\\bar{n}` (the normal of a contact point, an axis of a tie), and their tangent unless ``K`` is None.
 
         The residual contribution is the negative of the force on the nodes, :math:`f\\, w` with
         :math:`w = [c, -N^m] \\otimes \\bar{n}`: the contact points distribute their part with their interpolation
@@ -903,8 +1096,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def _springForcesOfLocatedPoints(self) -> np.ndarray:
         """The force of the springs at each located point at the last evaluation, :math:`\\sum_s f_s
-        \\boldsymbol{n}_s` over its springs, :math:`f_n \\bar{n}` of a closed contact point. The force on the point is
-        its negative.
+        \\boldsymbol{n}_s` over its springs: :math:`f_n \\bar{n}` of a closed contact point, :math:`k A_p
+        \\boldsymbol{d}` of a tied one. The force on the point is its negative.
 
         Returns
         -------
@@ -1017,7 +1210,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     @property
     def numberOfPointsWithASpring(self) -> int:
         """The number of contact points with a spring at the last evaluation: those that carried a force, the closed
-        points of the contact law. Not the points :attr:`ContactState.IN_CONTACT`: a point in contact at rest on an
+        points of the contact law, every tied point of the tie. Not the points :attr:`ContactState.IN_CONTACT`: a point in contact at rest on an
         adjusted initial overlap has no spring.
 
         Returns
@@ -1042,8 +1235,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def getTractions(self) -> np.ndarray:
         """The traction on each contact point at the last evaluation: the force of its springs on it per unit of the
-        area it stands for, :math:`-\\sum f\\, \\boldsymbol{n} / A_p` -- :math:`-f_n \\bar{n} / A_p` in contact --, with
-        its normal and its tangential part; zero where a point has no spring. Ordered like :meth:`getNormalPressures`.
+        area it stands for, :math:`-\\sum f\\, \\boldsymbol{n} / A_p` -- :math:`-f_n \\bar{n} / A_p` in contact,
+        :math:`-k \\boldsymbol{d}` in a tie --, with its normal and its tangential part; zero where a point has no
+        spring. Ordered like :meth:`getNormalPressures`.
 
         Returns
         -------
@@ -1058,8 +1252,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     def getGaps(self) -> np.ndarray:
         """The current gap at each contact point (negative when penetrating) as the law sees it: along the normal
-        frozen at the pairing, from its master point, less an initial overlap it does not count; ordered like
-        :meth:`getNormalPressures`.
+        frozen at the pairing, from where the point rests, less an initial overlap it does not count; ordered like
+        :meth:`getNormalPressures`. For a tie, the normal part of the displacement from rest.
 
         A point with no assigned master facet reports 0, not a stale value from when it last had
         one -- see :meth:`updateConnectivity`. Returned as a copy, so a caller cannot corrupt the
@@ -1092,7 +1286,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     def updateConnectivity(self, model: FEModel) -> bool:
         """Pair the contact points with the master surface at the configuration of the model, freeze their
         projections, and locate the paired points in the block (see the class documentation, *The pairing* and *The
-        first update*).
+        first update*). A law that pairs once pairs at the first update (:meth:`_tieAtTheFirstUpdate`), and after a new
+        mesh by the tie it hands on (:meth:`_tieAgainAfterANewMesh`); see *The tie* and *A new mesh*.
 
         Called once per increment by the solver, before the discrete system is (re)built. The
         candidate search runs on the *flat* master facets, which keeps it robust; what is frozen from it is the
@@ -1109,6 +1304,15 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         bool
             True if the nodes of the constraint changed.
         """
+
+        if self.law.pairsOnce:
+            if self._tieHandedOver is not None:
+                return self._tieAgainAfterANewMesh(model)
+            if not self._searchedBefore:
+                return self._tieAtTheFirstUpdate(model)
+            # A tied point stays with its master point; it is only located anew, for a kind of contact point whose
+            # nodes change as it moves.
+            return self._assignMasterFacets(self._assignedFacetIdx)
 
         coordinatesOfPoint = self.slave.currentPointCoordinates(model)
         coordinatesOfFacet, normalOfFacet, features = self._masterFacetsInTheConfigurationOf(model)
@@ -1326,6 +1530,210 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             self._frozenMasterShapeFunctions[paired] = parentFaceShapeFunctions(self._masterParentFaceType, parametric)
             self._frozenNormals[paired] = dGap_dPoint
 
+    def _tieAtTheFirstUpdate(self, model: FEModel) -> bool:
+        """The first pairing of a law that pairs once (see the class documentation, *The tie*): every contact point
+        within ``searchDistance`` of the master surface (every point, without a search distance), in the configuration
+        of the model, is tied to the closest point of its closest facet, mapped onto the facet's parent face, and rests
+        where it is. This decides, once, which points are tied and what to: a new mesh hands it on
+        (:meth:`_tieAgainAfterANewMesh`).
+
+        Parameters
+        ----------
+        model
+            The model, whose node field ``displacement`` places both sides.
+
+        Returns
+        -------
+        bool
+            True if the nodes of the constraint changed.
+        """
+
+        coordinatesOfPoint = self.slave.currentPointCoordinates(model)
+        masterSurface = self._masterFacetsInTheConfigurationOf(model)
+        facetCoords = list(masterSurface[0])
+
+        closestFacet, weights, distance = closestFacets(
+            coordinatesOfPoint,
+            facetCoords,
+            closestFacetCandidates(coordinatesOfPoint, facetCoords, self.searchDistance),
+        )
+        tied = closestFacet >= 0
+        if self.searchDistance is not None:
+            tied &= distance <= self.searchDistance
+
+        hasChanged = self._tie(
+            model,
+            coordinatesOfPoint,
+            masterSurface,
+            tied,
+            closestFacet[tied],
+            weights[tied],
+            np.zeros((np.count_nonzero(tied), self.nDim)),
+        )
+
+        nTied = int(np.count_nonzero(tied))
+        largestGap = float(np.linalg.norm(self._restingOffset[tied], axis=1).max()) if nTied else 0.0
+        self.journal.message(
+            f"contact '{self.name}' (type={self.law.name}): {nTied}/{self.nPoints} points paired for good, largest gap "
+            f"or overlap at rest {largestGap:.3e}",
+            self.identification,
+        )
+        if nTied < self.nPoints and self.searchDistance is not None:
+            self.journal.message(
+                f"contact '{self.name}' (type={self.law.name}): {self.nPoints - nTied} point(s) farther than the "
+                f"search distance ({self.searchDistance:.3e}) from the master surface are not paired, for good.",
+                self.identification,
+                level=1,
+            )
+
+        return hasChanged
+
+    def _tieAgainAfterANewMesh(self, model: FEModel) -> bool:
+        """Tie the points by the tie a new mesh handed on to them (:class:`TieOfThePoints`, see the class
+        documentation, *A new mesh*): the points it ties, no others, whatever their distance to the master now; each
+        one to the closest point of the master surface to its master point in the reference configuration, of the
+        closest facet, mapped onto the facet's parent face; and displaced from rest as it was handed on.
+
+        Parameters
+        ----------
+        model
+            The model, whose node field ``displacement`` places both sides.
+
+        Returns
+        -------
+        bool
+            True if the nodes of the constraint changed.
+        """
+
+        handedOver, self._tieHandedOver = self._tieHandedOver, None
+        facets, weights = self._closestPointsOfTheMasterAt(handedOver.masterPoints)
+        return self._tie(
+            model,
+            self.slave.currentPointCoordinates(model),
+            self._masterFacetsInTheConfigurationOf(model),
+            handedOver.tied,
+            facets,
+            weights,
+            handedOver.displacementsFromRest,
+        )
+
+    def _tie(
+        self,
+        model: FEModel,
+        coordinatesOfPoint: np.ndarray,
+        masterSurface: tuple,
+        tied: np.ndarray,
+        facets: np.ndarray,
+        weights: np.ndarray,
+        displacementsFromRest: np.ndarray,
+    ) -> bool:
+        """Tie the given points to the given points of the master facets, displaced from rest by
+        ``displacementsFromRest`` in the configuration of the model: freeze their projections, locate them, and record
+        their resting offsets :math:`\\boldsymbol{r}_0 = (\\boldsymbol{x}_p - N^m \\cdot x^m) - \\boldsymbol{d}`, with
+        the relative position measured from the origins as an evaluation measures it (see the class documentation,
+        *Measured from the origins*), so that the next evaluation at the model's state finds exactly ``d``.
+
+        Parameters
+        ----------
+        model
+            The model, whose node field ``displacement`` places both sides.
+        coordinatesOfPoint
+            The coordinates of all points in the configuration of the model.
+        masterSurface
+            The master facets in the configuration of the model (:meth:`_masterFacetsInTheConfigurationOf`).
+        tied
+            Which points are tied, a mask over all points.
+        facets
+            The facet of each tied point.
+        weights
+            The barycentric weights of its master point in that facet.
+        displacementsFromRest
+            The displacement from rest of each tied point, (nTied, nDim).
+
+        Returns
+        -------
+        bool
+            True if the nodes of the constraint changed.
+        """
+
+        _, dGap_dPoint = self._masterFacets.gapsAndGradients(coordinatesOfPoint[tied], facets, weights, *masterSurface)
+        self._freezeProjections(tied, facets, weights, dGap_dPoint)
+        self._stateOfPoint = np.where(tied, ContactState.TIED, ContactState.FREE).astype(np.int8)
+        self._searchedBefore = True
+        assignment = np.full(self.nPoints, -1, dtype=np.intp)
+        assignment[tied] = facets
+        hasChanged = self._assignMasterFacets(assignment)
+
+        relativePositions = self._relativePositionsAtZeroSolutionOfLocated + self._relativeDisplacementsOfLocatedPoints(
+            *self._solutionOfTheBlockInTheModel(model)
+        )
+        self._restingOffset[tied] = relativePositions - displacementsFromRest
+        self._restingOffsetOfLocated = self._restingOffset[self._locatedPoints]
+        self._displacementsFromRestAtTheLastAcceptedState[tied] = displacementsFromRest
+        return hasChanged
+
+    def _tieOfThePoints(self) -> TieOfThePoints | None:
+        """What the tie has decided for the current points: the tie a new mesh handed on to them, if they have not been
+        tied by it yet, otherwise the points tied, their master points in the reference configuration, and their
+        displacements from rest at the last accepted state. None before the first update, which decides it.
+
+        Returns
+        -------
+        TieOfThePoints | None
+            The tie of the points.
+        """
+
+        if self._tieHandedOver is not None:
+            return self._tieHandedOver
+        if not self._searchedBefore:
+            return None
+        tied = self._stateOfPoint == ContactState.TIED
+        facets = self._assignedFacetIdx[tied]
+        masterPoints = np.einsum(
+            "ai,aij->aj",
+            self._frozenMasterShapeFunctions[tied],
+            self._masterParentRefCoords[facets].reshape((len(facets), self.nMasterParentNodes, self.nDim)),
+        )
+        return TieOfThePoints(tied, masterPoints, self._displacementsFromRestAtTheLastAcceptedState[tied])
+
+    def _tieOfTheRegeneratedPoints(
+        self, tieOfTheOldPoints: TieOfThePoints, originsOfTheOldPoints: np.ndarray
+    ) -> TieOfThePoints:
+        """The tie of regenerated contact points, from the tie of the points they replace, in the reference
+        configuration: a new point is tied if the old point nearest to it was, and its master point and its
+        displacement from rest are interpolated from the old tied points (:func:`affineInterpolationAlongASurface`).
+
+        Parameters
+        ----------
+        tieOfTheOldPoints
+            The tie of the old points.
+        originsOfTheOldPoints
+            Where the old points are in the reference configuration, (nOldPoints, nDim).
+
+        Returns
+        -------
+        TieOfThePoints
+            The tie of the current, regenerated points.
+        """
+
+        if not tieOfTheOldPoints.tied.any():
+            nothing = np.zeros((0, self.nDim))
+            return TieOfThePoints(np.zeros(self.nPoints, dtype=bool), nothing, nothing)
+
+        origins = self.slave.referenceCoordinates()
+        _, nearestOldPoint = cKDTree(originsOfTheOldPoints).query(origins)
+        tied = tieOfTheOldPoints.tied[nearestOldPoint]
+        neighbours, weights = affineInterpolationAlongASurface(
+            originsOfTheOldPoints[tieOfTheOldPoints.tied], origins[tied]
+        )
+
+        def interpolated(values: np.ndarray) -> np.ndarray:
+            return np.einsum("ak,akj->aj", weights, values[neighbours])
+
+        return TieOfThePoints(
+            tied, interpolated(tieOfTheOldPoints.masterPoints), interpolated(tieOfTheOldPoints.displacementsFromRest)
+        )
+
     def _reportEntriesAndPointsFoundInside(
         self, previousState: np.ndarray, state: np.ndarray, gap: np.ndarray, firstSearch: bool
     ):
@@ -1420,6 +1828,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             "masterShapeFunctions": self._frozenMasterShapeFunctions,
             "normals": self._frozenNormals,
             "initialOverlap": self._initialOverlap,
+            "restingOffset": self._restingOffset,
+            "displacementsFromRestAtTheLastAcceptedState": self._displacementsFromRestAtTheLastAcceptedState,
             # Empty before the first search.
             "initialOverlapTime": np.array([] if self._initialOverlapTime is None else [self._initialOverlapTime]),
         }
@@ -1432,6 +1842,14 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         )
         self._frozenNormals = np.array(projection["normals"]).reshape(self._frozenNormals.shape)
         self._initialOverlap = np.array(projection["initialOverlap"]).reshape(self._initialOverlap.shape)
+        self._restingOffset = np.array(projection["restingOffset"]).reshape(self._restingOffset.shape)
+        # The state of the points the run goes on from: a new mesh hands it on, not what was evaluated since (a
+        # fall-back), nor a tie handed on before (a resume, whose replay of the topology rebuilt the points).
+        self._displacementsFromRestAtTheLastAcceptedState = np.array(
+            projection["displacementsFromRestAtTheLastAcceptedState"]
+        ).reshape(self._displacementsFromRestAtTheLastAcceptedState.shape)
+        self._displacementsFromRestOfLocatedAtTheLastEvaluation = None
+        self._tieHandedOver = None
         initialOverlapTime = np.asarray(projection["initialOverlapTime"]).ravel()
         self._initialOverlapTime = float(initialOverlapTime[0]) if len(initialOverlapTime) else None
         assignment = np.array(projection["assignedFacetIdx"], dtype=np.intp)
@@ -1449,8 +1867,10 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         modifier; this constraint is a pure reader of the resulting element sets. What is cached about the surfaces is
         derived from the reference configuration and rebuilt wholesale. What the pairing has learnt about the points
         stays with them if only the master was retiled -- the facet of a paired point carried over to the facet of the
-        new master where the old one lay -- and is lost with regenerated contact points (reported). The update of the
-        connectivity that follows every rebuild pairs the points anew: until then, no point is located.
+        new master where the old one lay -- and is lost with regenerated contact points (reported). A law that pairs
+        once hands on what it decided for the points (:class:`TieOfThePoints`), to the same points after a new mesh of
+        the master, interpolated onto the new points of a regenerated slave side. The update of the connectivity that
+        follows every rebuild pairs the points anew: until then, no point is located.
 
         Parameters
         ----------
@@ -1471,8 +1891,12 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         if not (touchedSlave or touchedMaster):
             return False
 
+        # What a tie has decided for the points, taken before either side changes: it is handed on.
+        tieOfThePoints = self._tieOfThePoints() if self.law.pairsOnce else None
+
         if touchedSlave:
             initialOverlap = self._initialOverlap
+            originsOfTheOldPoints = self.slave.referenceCoordinates() if tieOfThePoints is not None else None
             self.slave = self.slave.regenerated(model)
             lost = (
                 f"; the offsets of their initial overlap (deepest {-initialOverlap.min():.3e}) are lost, and an "
@@ -1480,31 +1904,49 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 if initialOverlap.any()
                 else ""
             )
+            how = (
+                "tied where the points they replace were tied, to the master points and displaced from rest as "
+                "interpolated from them"
+                if self.law.pairsOnce
+                else "paired as at the first update, so a point that overlaps the master deeper than the search "
+                "distance is found inside and loses its force"
+            )
             self.journal.message(
-                f"contact '{self.name}': the contact points were regenerated; they are paired as at the first update, "
-                f"so a point that overlaps the master deeper than the search distance is found inside and loses its "
-                f"force{lost}.",
+                f"contact '{self.name}': the contact points were regenerated; they are {how}{lost}.",
                 self.identification,
                 level=1,
             )
 
+        # Regenerated contact points, and the points of a law that pairs once, are paired from scratch: the contact as
+        # at the first update, the tie by the tie handed on.
+        pairedFromScratch = touchedSlave or self.law.pairsOnce
+
         # The paired points that are kept, and where their facets lay on the master (the centroids).
-        keptPairedPoints = np.flatnonzero(self._assignedFacetIdx >= 0) if not touchedSlave else np.zeros(0, np.intp)
+        keptPairedPoints = (
+            np.flatnonzero(self._assignedFacetIdx >= 0) if not pairedFromScratch else np.zeros(0, np.intp)
+        )
         whereTheirFacetsLay = self._referenceCoordinatesOfMasterNodes[
             self._masterNodesOfFacet[self._assignedFacetIdx[keptPairedPoints]]
         ].mean(axis=1)
 
         self._buildMaster(model.elementSets[self._masterSurfaceSetName])
-        if touchedSlave:
+        if pairedFromScratch:
             self._resetContactPoints()
         self._resetPairing()
+        if tieOfThePoints is not None:
+            self._tieHandedOver = (
+                self._tieOfTheRegeneratedPoints(tieOfThePoints, originsOfTheOldPoints)
+                if touchedSlave
+                else tieOfThePoints
+            )
         if len(keptPairedPoints):
             # Where the next update starts the walk of a point in contact, as from the facet of the previous update.
-            self._assignedFacetIdx[keptPairedPoints] = self._facetsOfTheMasterAt(whereTheirFacetsLay)
+            self._assignedFacetIdx[keptPairedPoints], _ = self._closestPointsOfTheMasterAt(whereTheirFacetsLay)
         return True
 
-    def _facetsOfTheMasterAt(self, referencePoints: np.ndarray) -> np.ndarray:
-        """The facet of the master closest to each point, in the reference configuration.
+    def _closestPointsOfTheMasterAt(self, referencePoints: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """The closest point of the master to each point, in the reference configuration: its facet, and its
+        barycentric weights in it.
 
         Parameters
         ----------
@@ -1513,15 +1955,17 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
         Returns
         -------
-        numpy.ndarray
-            The facets.
+        tuple[numpy.ndarray, numpy.ndarray]
+            The facets, (nPoints,), and the weights, (nPoints, nVerticesOfAFacet).
         """
 
         facetCoords = list(self._referenceCoordinatesOfMasterNodes[self._masterNodesOfFacet])
-        facets, _, _ = closestFacets(
+        if not len(referencePoints):
+            return np.zeros(0, dtype=np.intp), np.zeros((0, self._masterNodesOfFacet.shape[1]))
+        facets, weights, _ = closestFacets(
             referencePoints, facetCoords, closestFacetCandidates(referencePoints, facetCoords, None)
         )
-        return facets
+        return facets, weights
 
     # --- 3. An initial overlap: the part of it the gap does not count -------------------------------------------------
 
@@ -1627,6 +2071,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         (:func:`~edelweissfe.constraints.base.penaltysprings.addBoundOfAbsoluteStiffnessOfSprings`), with the contact
         points' interpolation over their slave nodes and the parent face nodes of each point's master facet; each point
         has a copy of its own of both in the block.
+        The tie's springs along different axes act on different components of the nodes.
         """
 
         located = self._locatedPoints

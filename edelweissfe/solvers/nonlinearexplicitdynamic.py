@@ -163,11 +163,13 @@ what each may change: Marmot's page "Meshfree Particles", section "The explicit 
 1. **advance**: the elements compute their internal force with the solution and the increment, and the entities take
    the increment on the kernel functions they were assigned at its start
    (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.advanceEntitiesWithOwnInertia`), and move;
-2. **accept and reconnect**: the model accepts the state, assigns the entities to the kernel functions they reach now
-   and says what that changed (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the discrete system
-   follows, through the one build path: new locations if the entities reach other nodes of the same numbering, a new
-   numbering if the nodes of the active domain changed. The internal force of the elements is carried to a new
-   numbering element by element; nothing is evaluated again;
+2. **accept and reconnect**: the elements and the entities accept their state
+   (:meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities`), the model assigns the entities to the
+   kernel functions they reach now and says what that changed
+   (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the discrete system follows, through the one
+   build path: new locations if the entities reach other nodes of the same numbering, a new numbering if the nodes of
+   the active domain changed. The internal force of the elements is carried to a new numbering element by element;
+   nothing is evaluated again;
 3. **evaluate**: on the new kernel functions, the entities return their internal force, their lumped inertia and
    damping, their lumped momentum and, when its estimate is due, their critical time step
    (:meth:`~edelweissfe.models.discretesystem.DiscreteSystem.assembleInternalForceAndMomentumOfEntitiesWithOwnInertia`,
@@ -177,7 +179,11 @@ what each may change: Marmot's page "Meshfree Particles", section "The explicit 
    internal force of the elements and the forces of the loads and the constraints, they give the net force. The
    configuration is accepted, no increment is left: the loads and the constraints are evaluated with a zero
    increment, so only a constraint that measures its condition at the configuration acts here
-   (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis`).
+   (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.actsInExplicitAnalysis`). This is the first
+   evaluation of the constraints at the accepted configuration, so they accept its state now
+   (:meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints`), not with the entities: the state a
+   constraint keeps, checkpoints and hands on across a new mesh is then that of the accepted configuration, as in a
+   finite element model.
 
 The inertia and the damping of the entities are assembled anew in every increment -- they are theirs at the kernel
 functions as they are at their current positions, which change in every increment, whether or not the locations do --
@@ -1074,24 +1080,8 @@ class NED(NonlinearSolverBase):
 
         P, A = self._forceAndAccelerationToPublish(step, timeStep)
         self.writeResultsToModel(U, dU, P, V, A)
-        self._acceptTheStateOfTheModel(model, timeStep)
-
-    def _acceptTheStateOfTheModel(self, model: FEModel, timeStep: TimeStep):
-        """Move the rigid bodies with the increment and let the model accept the state of its entities at the end of
-        it (:meth:`~edelweissfe.models.femodel.FEModel.advanceToTime`): what both kinds of model do once the increment
-        has reached the model, a finite element model last, a model with entities that carry their own inertia before
-        it reconnects.
-
-        Parameters
-        ----------
-        model
-            The model tree.
-        timeStep
-            The increment.
-        """
-
         self.updateRigidBodies(model, timeStep)
-
+        # The constraints were evaluated last in the increment, at its end: the whole model accepts the state.
         # Timed: a serial Python loop over all elements and constraints, run every increment here.
         with performancetiming.timeit("accept state"):
             model.advanceToTime(timeStep.totalTime)
@@ -1126,11 +1116,21 @@ class NED(NonlinearSolverBase):
     def _acceptReconnectAndEvaluate(self, step, model: FEModel, timeStep: TimeStep):
         """Accept an increment of a model with entities that carry their own inertia (see the module documentation,
         "Entities that carry their own inertia"): the increment, and the velocity it was taken with, reach the model on
-        the connectivity of its start; the model accepts the state and reconnects the entities
+        the connectivity of its start; the elements and the entities accept their state
+        (:meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheEntities`), and the model reconnects the entities
         (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the discrete system follows. On the new
         connectivity, the net force the next increment starts from is evaluated
         (:meth:`_evaluateTheNetForceOnTheNewConnectivity`), and the force, the velocity and the acceleration reach the
         model.
+
+        The constraints accept their state last
+        (:meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints`): their last evaluation is the one
+        of the net force, the first at the accepted configuration, so what they accept is the state of that
+        configuration, as in a finite element model. Accepted before the reconnection, it would be the state of the
+        evaluation after the previous increment, at the configuration of the start of this one: a checkpoint written
+        now would hold that, and so would hand it to a new mesh that hands a constraint's state on in a following step
+        or after a resume. ``NED`` itself refuses model modifiers that act after the start of the analysis in a model
+        with entities that carry their own inertia.
 
         Parameters
         ----------
@@ -1143,7 +1143,9 @@ class NED(NonlinearSolverBase):
         """
 
         self.writeResultsToModel(self._U, self._dU, None, self._V, None)
-        self._acceptTheStateOfTheModel(model, timeStep)
+        self.updateRigidBodies(model, timeStep)
+        with performancetiming.timeit("accept state"):
+            model.acceptTheStateOfTheEntities(timeStep.totalTime)
 
         numberingOfTheIncrement, internalForceOfTheElements = self.system.numbering, self._internalForce
         with performancetiming.timeit("reconnect"):
@@ -1156,6 +1158,8 @@ class NED(NonlinearSolverBase):
                 self._internalForce[element] = internalForceOfTheElements[element]
 
         self._evaluateTheNetForceOnTheNewConnectivity(step, timeStep)
+        with performancetiming.timeit("accept state"):
+            model.acceptTheStateOfTheConstraints()
 
         P, A = self._forceAndAccelerationToPublish(step, timeStep)
         self.writeResultsToModel(self._U, None, P, self._V, A)

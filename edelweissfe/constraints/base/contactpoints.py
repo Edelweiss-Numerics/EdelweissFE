@@ -276,6 +276,19 @@ class ContactPoints(ABC):
 
         raise NotImplementedError(f"{type(self).__name__} is never touched by a change of the mesh.")
 
+    def referenceCoordinates(self) -> np.ndarray:
+        """Where all the contact points are in the reference configuration, for a kind of contact points that a change
+        of the mesh regenerates (:meth:`regenerated`): what a constraint carries the state of the old points over to
+        the new ones by (a tie, see :mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty`).
+
+        Returns
+        -------
+        numpy.ndarray
+            The coordinates, of shape (nPoints, nDim).
+        """
+
+        raise NotImplementedError(f"{type(self).__name__} is never touched by a change of the mesh.")
+
     def normalPressures(self, normalForces: np.ndarray) -> np.ndarray:
         """Convert the normal forces of the contact points into pressures (positive in compression).
 

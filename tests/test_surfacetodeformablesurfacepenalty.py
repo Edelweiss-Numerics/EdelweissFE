@@ -43,6 +43,7 @@ from _hexa20cube import (  # noqa: E402  (tests/ is on sys.path)
     _hexa20Coordinates,
     twoBlockModel,
 )
+from scipy.spatial import cKDTree
 
 import edelweissfe.utils.inputfileparser  # noqa: F401 bootstrap input language
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
@@ -52,7 +53,11 @@ from edelweissfe.constraints.base.contactpointsatslavenodes import (
 from edelweissfe.constraints.base.contactpointsonslavesurface import (
     ContactPointsOnSlaveSurface,
 )
-from edelweissfe.constraints.base.penaltylaw import PenaltyLaw, penaltyLaws
+from edelweissfe.constraints.base.penaltylaw import (
+    PenaltyLaw,
+    penaltyLaw,
+    penaltyLawsAndTheTie,
+)
 from edelweissfe.constraints.base.penaltysprings import PenaltySprings
 from edelweissfe.constraints.surfacetodeformablesurfacepenalty import (
     Constraint as IntegratedContact,
@@ -900,6 +905,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         for options in (
             {"initialOverlap": "close"},
             {"initialOverlap": "adjust", "initialOverlapRampTime": 1.0},
+            {"initialOverlap": "adjust", "contactType": "tied"},
         ):
             with self.assertRaises(ValueError, msg=str(options)):
                 self._constraint(model, slaveSurface, masterSurface, **options)
@@ -1235,14 +1241,502 @@ class TestContactAtCornersOfTheMaster(unittest.TestCase):
         self.assertTrue(any("after 2 steps of the pairing" in call.args[0] for call in message.call_args_list))
 
 
+class TestTie(unittest.TestCase):
+    """The tie (``type=tied``): the same constraint, its points paired once and held in every direction, at rest where
+    they were paired."""
+
+    _constraint = TestIntegratedSurfaceContact._constraint
+    _forces = TestIntegratedSurfaceContact._forces
+    _addDisplacementField = TestIntegratedSurfaceContact._addDisplacementField
+    _slaveDisplacedBy = TestIntegratedSurfaceContact._slaveDisplacedBy
+
+    #: The penalty, per unit area.
+    PENALTY = 1.0e4
+
+    def setUp(self):
+        self.journal = Journal()
+
+    def _tie(self, penetration: float, **options) -> tuple:
+        """The two hexa20 blocks, the lower one's top face tied to the upper one's bottom face, with a gap (negative
+        ``penetration``) or an overlap between them."""
+
+        model, slaveSurface, masterSurface = twoBlockModel(self.journal, penetration)
+        options = {"contactType": "tied", "penalty": self.PENALTY} | options
+        return model, self._constraint(model, slaveSurface, masterSurface, **options)
+
+    def test_a_tie_with_a_gap_or_an_overlap_is_at_rest(self):
+        """A gap or an overlap at the pairing is the state at rest: no force, also when both sides move together."""
+
+        for penetration in (0.05, 0.0, -0.05):
+            model, tie = self._tie(penetration)
+            self.assertTrue((tie.stateOfPoints == ContactState.TIED).all())
+            np.testing.assert_allclose(tie._restingOffset[:, 1], penetration, atol=1e-14)
+
+            for U in (np.zeros(tie.nDof), np.tile([0.3, -0.2, 0.1], tie.nDof // 3)):
+                forces = self._forces(tie, U)
+                np.testing.assert_allclose(forces, 0.0, atol=1e-12 * self.PENALTY, err_msg=f"{penetration}")
+                self.assertAlmostEqual(tie.penaltyEnergy, 0.0, delta=1e-20)
+
+    def test_a_tie_far_from_the_origin_follows_a_displacement_below_the_round_off_of_its_coordinates(self):
+        """The displacement from rest is measured from the origins of the points, not as a difference of their
+        coordinates (see the class documentation of the constraint, *Measured from the origins*). A tie a thousand
+        lengths from the origin of the coordinates, whose coordinates are rounded to about 1e-13, is exactly at rest
+        where it was paired, and its force follows a displacement of a fraction of that round-off linearly: it is a
+        smooth function of the displacements, not a staircase of the bits of the coordinates, on which a Newton
+        iteration would stall."""
+
+        origin = np.array([1e3, -1e3, 1e3])
+        roundOffOfTheCoordinates = np.spacing(np.abs(origin).max())
+        area = _SIDE**2
+        for contactPoints in ("quadraturePoints", "nodes"):
+            for penetration in (-0.05, 0.0):
+                model, slaveSurface, masterSurface = twoBlockModel(self.journal, penetration, origin=origin)
+                tie = self._constraint(
+                    model,
+                    slaveSurface,
+                    masterSurface,
+                    contactType="tied",
+                    penalty=self.PENALTY,
+                    contactPoints=contactPoints,
+                )
+                case = f"{contactPoints}, {penetration}"
+                np.testing.assert_array_equal(self._forces(tie, np.zeros(tie.nDof)), 0.0, err_msg=case)
+
+                for fraction in (1e-3, 1e-2, 1e-1):
+                    d = fraction * roundOffOfTheCoordinates * np.array([1.0, -2.0, 0.5])
+                    self._forces(tie, self._slaveDisplacedBy(tie, d))
+                    np.testing.assert_allclose(
+                        tie.contactForceOnSlave, -self.PENALTY * area * d, rtol=1e-12, err_msg=case
+                    )
+
+    def test_a_tie_transmits_tension_compression_and_shear(self):
+        """Displaced from rest by ``d``, every point is pulled back with the traction ``-k d``, in every direction:
+        apart, together, and along the faces; the forces on the two sides cancel."""
+
+        area = _SIDE**2
+        for penetration in (0.05, -0.05):
+            for d in ([0.0, -1e-3, 0.0], [0.0, 1e-3, 0.0], [1e-3, 0.0, -2e-3], [1e-3, -1e-3, 1e-3]):
+                d = np.array(d)
+                model, tie = self._tie(penetration)
+                self._forces(tie, self._slaveDisplacedBy(tie, d))
+
+                np.testing.assert_allclose(
+                    tie.getTractions(),
+                    np.tile(-self.PENALTY * d, (tie.nPoints, 1)),
+                    rtol=1e-9,
+                    atol=1e-9 * self.PENALTY * np.abs(d).max(),
+                )
+                force = self.PENALTY * area * d
+                np.testing.assert_allclose(tie.contactForceOnSlave, -force, rtol=1e-9, atol=1e-9 * np.abs(force).max())
+                np.testing.assert_allclose(tie.contactForceOnMaster, force, rtol=1e-9, atol=1e-9 * np.abs(force).max())
+                energy = 0.5 * self.PENALTY * area * d @ d
+                self.assertAlmostEqual(tie.penaltyEnergy, energy, delta=1e-9 * energy)
+                # the normal pressure, positive in compression: pulled apart (the slave, below, moves down by
+                # -d[1] > 0), the tie is in tension
+                np.testing.assert_allclose(
+                    tie.getNormalPressures(), self.PENALTY * d[1], rtol=1e-9, atol=1e-12 * self.PENALTY
+                )
+
+    def test_the_tangent_of_a_tie_is_the_derivative_of_its_residual_contribution(self):
+        """``K == dP/dU``, symmetric, for quadrature points and nodes; the explicit path delivers the same forces."""
+
+        for contactPoints in ("quadraturePoints", "nodes"):
+            model, tie = self._tie(-0.05, contactPoints=contactPoints)
+            U = 1e-3 * np.random.default_rng(5).standard_normal(tie.nDof)
+            K, P = residualContributionAndTangent(tie, U, np.zeros_like(U))[1], self._forces(tie, U)
+            dP_dU = finiteDifferenceTangent(tie, U, np.zeros_like(U), h=1e-8)
+            scale = np.abs(K).max()
+            np.testing.assert_allclose(K, dP_dU, atol=1e-6 * scale, err_msg=contactPoints)
+            np.testing.assert_allclose(K, K.T, atol=1e-12 * scale)
+
+            PExplicit = np.zeros(tie.nDof)
+            tie.computeKernelsExplicit(U, np.zeros_like(U), PExplicit, None)
+            np.testing.assert_array_equal(-PExplicit, P)
+
+    def test_a_tie_is_paired_once(self):
+        """Pulled apart far beyond the search distance and slid along, a tied point stays tied to the same master
+        point, and is pulled back the whole way."""
+
+        model, tie = self._tie(0.0, searchDistance=0.1)
+        field = self._addDisplacementField(model)
+        pairing = (tie._assignedFacetIdx.copy(), tie._frozenMasterShapeFunctions.copy())
+
+        d = np.array([0.4, -0.5, 0.0])
+        for node in model.surfaces["slaveFace"][_YMAX][0].nodes:
+            field["U"][field._indicesOfNodesInArray[node]] = d
+        self.assertFalse(tie.updateConnectivity(model))
+        self.assertTrue((tie.stateOfPoints == ContactState.TIED).all())
+        np.testing.assert_array_equal(tie._assignedFacetIdx, pairing[0])
+        np.testing.assert_array_equal(tie._frozenMasterShapeFunctions, pairing[1])
+
+        self._forces(tie, self._slaveDisplacedBy(tie, d))
+        np.testing.assert_allclose(tie.contactForceOnSlave, -self.PENALTY * _SIDE**2 * d, rtol=1e-9)
+
+    def test_points_beyond_the_search_distance_are_not_tied(self):
+        model, tie = self._tie(-0.5, searchDistance=0.1)
+        self.assertTrue((tie.stateOfPoints == ContactState.FREE).all())
+        self.assertFalse(tie.withinReach)
+
+    def test_a_checkpoint_continues_the_tie(self):
+        """A tie restored from a checkpoint rests where the checkpointed one did, not where it would pair itself."""
+
+        model, slaveSurface, masterSurface = twoBlockModel(self.journal, -0.05)
+        tie = self._constraint(model, slaveSurface, masterSurface, contactType="tied", penalty=self.PENALTY)
+        U = 1e-3 * np.random.default_rng(3).standard_normal(tie.nDof)
+        forces = self._forces(tie, U)
+
+        field = self._addDisplacementField(model)
+        for node in model.surfaces["slaveFace"][_YMAX][0].nodes:
+            field["U"][field._indicesOfNodesInArray[node]] = [0.0, 0.01, 0.0]
+        restored = self._constraint(model, slaveSurface, masterSurface, contactType="tied", penalty=self.PENALTY)
+        self.assertFalse(np.array_equal(restored._restingOffset, tie._restingOffset))
+        restored.setRestartData(tie.getRestartData())
+        np.testing.assert_array_equal(restored._restingOffset, tie._restingOffset)
+        np.testing.assert_array_equal(self._forces(restored, U), forces)
+
+    def _displace(self, field, nodes, displacement):
+        """Displace ``nodes`` in the model by ``displacement(X)`` of their reference coordinates ``X``."""
+
+        for node in nodes:
+            field["U"][field.indexOfNode(node)] = displacement(np.asarray(node.coordinates))
+
+    def _evaluatedAtTheModel(self, tie, model) -> np.ndarray:
+        """Evaluate the tie at the state of the model, as an iteration does, and return its tractions."""
+
+        field = model.nodeFields["displacement"]
+        self._forces(tie, np.array([field["U"][field.indexOfNode(node)] for node in tie.nodes]).ravel())
+        return tie.getTractions()
+
+    def _acceptedAtTheModel(self, tie, model) -> np.ndarray:
+        """Evaluate the tie at the state of the model, accept that as the converged state of an increment, and return
+        its tractions."""
+
+        tractions = self._evaluatedAtTheModel(tie, model)
+        tie.acceptLastState()
+        return tractions
+
+    def _refreshed(self, tie, model, surface: str):
+        """A new mesh of ``surface``, the source surface of the slave or of the master facets, and the update of the
+        connectivity that follows it."""
+
+        self.assertTrue(tie.refresh(model, ModelChange(kind=ModelChangeType.REFINEMENT, changedSurfaces={surface})))
+        tie.updateConnectivity(model)
+
+    def _tieAndAFinerSlave(self, penetration: float, displacementAtThePairing=None, **options) -> tuple:
+        """The two blocks of :meth:`_tie`, and four hexa20 elements, half the size, under the top face of the lower
+        block: what a refinement of the slave side makes of its face. The model has a displacement field over all
+        nodes; the tie is paired with the lower block displaced by ``displacementAtThePairing(X)``, if given.
+
+        Returns
+        -------
+        tuple
+            ``(model, tie, field, slaveSideNodes, refineTheSlave)``: the nodes of the lower block and of the four
+            elements, and a function that refines the slave side of a tie on this model to the four elements.
+        """
+
+        model, slaveSurface, masterSurface = twoBlockModel(self.journal, penetration)
+        lowerBlock = model.surfaces["slaveFace"][_YMAX][0]
+        unitCube = np.array(_hexa20Coordinates(0.0)) / _SIDE
+        half = 0.5 * _SIDE
+        finer = []
+        label = max(model.nodes) + 1
+        with model.topology.changes():
+            for x, z in ((0.0, 0.0), (half, 0.0), (0.0, half), (half, half)):
+                nodes = []
+                for coordinates in np.array([x, penetration - half, z]) + half * unitCube:
+                    model.nodes[label] = Node(label, coordinates)
+                    nodes.append(model.nodes[label])
+                    label += 1
+                (elNumber,) = model.topology.reserveElementNumbers(1)
+                element = DisplacementElement("C3D20", elNumber)
+                element.setNodes(nodes)
+                model.createElement(element)
+                finer.append(element)
+        slaveSideNodes = list(lowerBlock.nodes) + [node for element in finer for node in element.nodes]
+
+        field = self._addDisplacementField(model)
+        if displacementAtThePairing is not None:
+            self._displace(field, lowerBlock.nodes, displacementAtThePairing)
+        tie = self._constraint(
+            model, slaveSurface, masterSurface, **({"contactType": "tied", "penalty": self.PENALTY} | options)
+        )
+
+        def refineTheSlave(tie):
+            with model.topology.changes():
+                model.surfaces["slaveFace"] = {_YMAX: ElementSet("s", finer)}
+                buildContactFacets(model, "slaveFace", "slv", "midside", "facetConsistent", self.journal)
+            self._refreshed(tie, model, "slaveFace")
+
+        return model, tie, field, slaveSideNodes, refineTheSlave
+
+    def test_a_new_mesh_of_either_side_keeps_the_state_of_the_tie(self):
+        """On a change of the mesh of the master or of the slave side, the points are tied again by the tie they had:
+        to the same master points, displaced from rest as they were at the last accepted state. The forces of the tie
+        stay as they were, and so do the resting offsets."""
+
+        d = np.array([2e-3, -1e-3, 3e-3])
+        for surface in ("masterFace", "slaveFace"):
+            model, tie = self._tie(-0.05)
+            field = self._addDisplacementField(model)
+            self._displace(field, model.surfaces["slaveFace"][_YMAX][0].nodes, lambda X: d)
+            tie.updateConnectivity(model)
+            before = self._acceptedAtTheModel(tie, model)
+
+            self._refreshed(tie, model, surface)
+            np.testing.assert_allclose(tie._restingOffset[:, 1], -0.05, atol=1e-12, err_msg=surface)
+            np.testing.assert_allclose(self._acceptedAtTheModel(tie, model), before, rtol=1e-9, err_msg=surface)
+
+    def test_a_tie_stretched_beyond_the_search_distance_stays_tied_across_a_new_mesh(self):
+        """Which points are tied is decided once, at the first update, not again by a new mesh: a tie pulled apart far
+        beyond the search distance stays tied, with its forces, across a new mesh of the master and a refinement of
+        the slave side."""
+
+        d = np.array([0.4, -0.5, 0.0])
+        for refined in ("master", "slave"):
+            model, tie, field, slaveSideNodes, refineTheSlave = self._tieAndAFinerSlave(0.0, searchDistance=0.1)
+            self._displace(field, slaveSideNodes, lambda X: d)
+            tie.updateConnectivity(model)
+            self._acceptedAtTheModel(tie, model)
+
+            if refined == "master":
+                self._refreshed(tie, model, "masterFace")
+            else:
+                refineTheSlave(tie)
+            self.assertTrue((tie.stateOfPoints == ContactState.TIED).all(), refined)
+            self._acceptedAtTheModel(tie, model)
+            np.testing.assert_allclose(
+                tie.contactForceOnSlave, -self.PENALTY * _SIDE**2 * d, rtol=1e-9, err_msg=refined
+            )
+
+    def test_a_point_never_tied_is_not_tied_by_a_new_mesh(self):
+        """A point beyond the search distance at the first update is never tied: not by a new mesh of the master, and
+        a new point of a refined slave side is tied only where the old point nearest to it, in the reference
+        configuration, was tied -- however close to the master the points are when the mesh changes."""
+
+        # nothing within reach at the first update, then all of the slave side at the master
+        model, tie, field, slaveSideNodes, refineTheSlave = self._tieAndAFinerSlave(-0.5, searchDistance=0.1)
+        self.assertFalse(tie.withinReach)
+        self._displace(field, slaveSideNodes, lambda X: np.array([0.0, 0.5, 0.0]))
+        tie.updateConnectivity(model)
+        self._acceptedAtTheModel(tie, model)
+        self._refreshed(tie, model, "masterFace")
+        self.assertTrue((tie.stateOfPoints == ContactState.FREE).all())
+        refineTheSlave(tie)
+        self.assertTrue((tie.stateOfPoints == ContactState.FREE).all())
+        self.assertFalse(tie.withinReach)
+
+        # the points near x = 2 pulled away beyond the search distance at the first update, then all back at the master
+        model, tie, field, slaveSideNodes, refineTheSlave = self._tieAndAFinerSlave(
+            0.0, displacementAtThePairing=lambda X: np.array([0.0, -0.5 * (X[0] / _SIDE) ** 4, 0.0]), searchDistance=0.1
+        )
+        tiedAtTheFirstUpdate = tie.stateOfPoints == ContactState.TIED
+        self.assertTrue(0 < np.count_nonzero(tiedAtTheFirstUpdate) < tie.nPoints)
+        whereTheyWere = tie.slave.referenceCoordinates()
+        self._displace(field, slaveSideNodes, lambda X: np.zeros(3))
+        tie.updateConnectivity(model)
+        self._acceptedAtTheModel(tie, model)
+
+        self._refreshed(tie, model, "masterFace")
+        np.testing.assert_array_equal(tie.stateOfPoints == ContactState.TIED, tiedAtTheFirstUpdate)
+        refineTheSlave(tie)
+        _, nearestOldPoint = cKDTree(whereTheyWere).query(tie.slave.referenceCoordinates())
+        tied = tie.stateOfPoints == ContactState.TIED
+        np.testing.assert_array_equal(tied, tiedAtTheFirstUpdate[nearestOldPoint])
+        self.assertTrue(0 < np.count_nonzero(tied) < tie.nPoints)
+
+    def test_a_refined_slave_side_takes_the_tie_interpolated(self):
+        """The new points of a refined slave side are tied to the master points, and displaced from rest, as
+        interpolated from the old points along the surface -- affinely, so that a displacement from rest that varies
+        linearly over the interface is handed on exactly: right after the refinement, every new point carries the
+        traction of the linear field at its place, the resultant is the one before, and the gap at rest is kept. The
+        nearest old point would hand on a staircase of the field instead."""
+
+        def u(X):
+            return (
+                np.array([1e-3, -2e-3, 5e-4])
+                + 1e-3 * np.array([[1.0, 0.0, 2.0], [-1.0, 0.0, 1.5], [3.0, 0.0, -1.0]]) @ X
+            )
+
+        for contactPoints in ("quadraturePoints", "nodes"):
+            model, tie, field, slaveSideNodes, refineTheSlave = self._tieAndAFinerSlave(
+                -0.05, contactPoints=contactPoints
+            )
+            # old and new nodes alike, as a refinement interpolates a linear field
+            self._displace(field, slaveSideNodes, u)
+            tie.updateConnectivity(model)
+            before = self._acceptedAtTheModel(tie, model)
+            resultant = tie.contactForceOnSlave
+            nOldPoints = tie.nPoints
+            expected = -self.PENALTY * np.array([u(X) for X in tie.slave.originsOfLocatedPoints()])
+            np.testing.assert_allclose(before, expected, rtol=1e-12, atol=1e-12 * np.abs(expected).max())
+
+            refineTheSlave(tie)
+            self.assertGreater(tie.nPoints, nOldPoints, contactPoints)
+            self.assertTrue((tie.stateOfPoints == ContactState.TIED).all(), contactPoints)
+            expected = -self.PENALTY * np.array([u(X) for X in tie.slave.originsOfLocatedPoints()])
+            np.testing.assert_allclose(
+                self._acceptedAtTheModel(tie, model),
+                expected,
+                rtol=1e-12,
+                atol=1e-12 * np.abs(expected).max(),
+                err_msg=contactPoints,
+            )
+            np.testing.assert_allclose(tie.contactForceOnSlave, resultant, rtol=1e-12, err_msg=contactPoints)
+            np.testing.assert_allclose(tie._restingOffset[:, 1], -0.05, atol=1e-12, err_msg=contactPoints)
+
+    def test_a_resumed_tie_refined_before_its_first_evaluation_keeps_its_forces(self):
+        """A resumed run may refine its mesh at the start of its first increment, before any evaluation. What the tie
+        hands on is the state of the points that the checkpoint holds, so its forces are those of the uninterrupted
+        run -- across a new mesh of the master and a refinement of the slave side."""
+
+        def u(X):
+            return np.array([2e-3, -1e-3, 3e-3]) + 1e-3 * np.array([X[2], 0.0, -X[0]])
+
+        for refined in ("master", "slave"):
+            model, tie, field, slaveSideNodes, refineTheSlave = self._tieAndAFinerSlave(-0.05)
+            self._displace(field, slaveSideNodes, u)
+            tie.updateConnectivity(model)
+            self._acceptedAtTheModel(tie, model)
+            checkpoint = tie.getRestartData()
+
+            # the run goes on in a new process: a new constraint, which would pair itself where the model is now
+            resumed = self._constraint(
+                model,
+                model.elementSets[tie.slave.setName],
+                model.elementSets[tie._masterSurfaceSetName],
+                contactType="tied",
+                penalty=self.PENALTY,
+            )
+            resumed.setRestartData(checkpoint)
+            if refined == "master":
+                self._refreshed(resumed, model, "masterFace")
+            else:
+                refineTheSlave(resumed)
+            expected = -self.PENALTY * np.array([u(X) for X in resumed.slave.originsOfLocatedPoints()])
+            np.testing.assert_allclose(
+                self._evaluatedAtTheModel(resumed, model),
+                expected,
+                rtol=1e-12,
+                atol=1e-12 * np.abs(expected).max(),
+                err_msg=refined,
+            )
+
+    def test_a_fall_back_hands_on_the_state_it_falls_back_to(self):
+        """What a new mesh hands on is the state of the last accepted increment: not an iterate, and after a fall-back
+        to a checkpoint not the trajectory that was abandoned, but the state of the checkpoint."""
+
+        d, astray = np.array([2e-3, -1e-3, 3e-3]), np.array([-5e-3, 4e-3, 1e-3])
+        model, tie, field, slaveSideNodes, _ = self._tieAndAFinerSlave(-0.05)
+        self._displace(field, slaveSideNodes, lambda X: d)
+        tie.updateConnectivity(model)
+        before = self._acceptedAtTheModel(tie, model)
+        checkpoint = tie.getRestartData()
+
+        # the next increment goes astray: evaluated, never accepted, and abandoned for the checkpoint
+        self._displace(field, slaveSideNodes, lambda X: astray)
+        self._evaluatedAtTheModel(tie, model)
+        self._displace(field, slaveSideNodes, lambda X: d)
+        tie.setRestartData(checkpoint)
+
+        self._refreshed(tie, model, "masterFace")
+        np.testing.assert_allclose(self._evaluatedAtTheModel(tie, model), before, rtol=1e-12)
+
+    def test_masses_on_a_tie_have_the_critical_time_step_of_its_springs(self):
+        """Masses at the slave nodes, tied to a held master: with the nodes as contact points, every slave degree of
+        freedom :math:`a` sits on one spring of the stiffness :math:`k A` along its axis, so the critical time step is
+        exactly :math:`2 \\sqrt{m_a / (k A)}` at the stiffest of them, and the bound of the stiffness gives exactly
+        that (``NED`` weighs the columns by :math:`1/\\sqrt{M}`, a held degree of freedom by zero). With the quadrature
+        points as contact points the springs couple the nodes of a face: the bound is above the exact eigenvalue, the
+        estimate below the exact critical time step. Either way the bound is the one of the tangent."""
+
+        for contactPoints in ("nodes", "quadraturePoints"):
+            model, tie = self._tie(-0.05, contactPoints=contactPoints)
+            nSlave = tie._nSlaveDof
+            masses = np.repeat(np.random.default_rng(7).uniform(1.0, 3.0, nSlave // 3), 3)
+            weights = np.zeros(tie.nDof)
+            weights[:nSlave] = 1.0 / np.sqrt(masses)
+            U = 1e-3 * np.random.default_rng(8).standard_normal(tie.nDof)
+
+            bound = np.zeros(tie.nDof)
+            tie.addBoundOfAbsoluteStiffnessTimes(U, np.zeros_like(U), weights, bound, None)
+            estimate = 2.0 / np.sqrt(np.max(weights * bound))
+
+            K = residualContributionAndTangent(tie, U, np.zeros_like(U))[1][:nSlave, :nSlave]
+            s = weights[:nSlave]
+            exact = 2.0 / np.sqrt(np.max(np.linalg.eigvalsh(s[:, None] * K * s[None, :])))
+            if contactPoints == "nodes":
+                springs = self.PENALTY * tie.slave.areas
+                np.testing.assert_allclose(K, np.diag(np.repeat(springs, 3)), atol=1e-12 * springs.max())
+                self.assertAlmostEqual(estimate, exact, delta=1e-12 * exact)
+            else:
+                self.assertLess(estimate, exact)
+                self.assertGreater(estimate, 0.5 * exact)
+            assertTheBoundIsTheOneOfTheTangent(tie, U)
+
+    def test_a_tie_takes_no_ramp_and_only_this_constraint_ties(self):
+        model, slaveSurface, masterSurface = twoBlockModel(self.journal, 0.05)
+        with self.assertRaises(ValueError):
+            self._constraint(model, slaveSurface, masterSurface, contactType="tied", initialOverlapRampTime=1.0)
+        with self.assertRaises(ValueError):
+            penaltyLaw("tied")
+
+
+def test_a_refinement_of_the_master_keeps_the_state_of_the_tie(tmp_path, monkeypatch):
+    """The deck ``SurfaceTieHexa20AMR``: a tie, loaded, whose master side is retiled by a refinement of its elements.
+    Right after the refinement, each point tied again to its master point, displaced from rest as at the last accepted
+    state, the tie exerts the forces it exerted before. And it stays a tie with the gap at rest it started with."""
+
+    from pathlib import Path
+
+    from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+    from edelweissfe.utils.inputfileparser import parseInputFile
+
+    refreshOfTheContact = IntegratedContact.refresh
+    forcesAcrossTheRefinement = []
+
+    def tractionsAtTheModel(tie, model) -> np.ndarray:
+        field = model.nodeFields["displacement"]
+        U = np.concatenate([field["U"][field.indexOfNode(node)] for node in tie.nodes])
+        tie.computeKernels(U, np.zeros_like(U), np.zeros_like(U), None, None)
+        return tie.getTractions()
+
+    def recordingRefresh(self, model, change):
+        # an evaluation hands nothing on: only an accepted state is
+        before, nMasterFacetsBefore = tractionsAtTheModel(self, model), len(self.facetElements)
+        refreshed = refreshOfTheContact(self, model, change)
+        if refreshed:
+            self.updateConnectivity(model)
+            after = tractionsAtTheModel(self, model)
+            forcesAcrossTheRefinement.append((before, after, nMasterFacetsBefore, len(self.facetElements)))
+        return refreshed
+
+    monkeypatch.setattr(IntegratedContact, "refresh", recordingRefresh)
+    monkeypatch.chdir(tmp_path)
+    deck = Path(__file__).parents[1] / "testfiles" / "edelweiss-only" / "SurfaceTieHexa20AMR" / "test.inp"
+    model, _ = finiteElementSimulation(parseInputFile(str(deck)), verbose=False, suppressPlots=True)
+
+    assert len(forcesAcrossTheRefinement) == 1
+    before, after, nMasterFacetsBefore, nMasterFacetsAfter = forcesAcrossTheRefinement[0]
+    assert nMasterFacetsAfter == 4 * nMasterFacetsBefore  # the master face became four
+    assert np.abs(before[:, 2]).min() > 0.0  # loaded
+    np.testing.assert_allclose(after, before, rtol=1e-8, atol=1e-8 * np.abs(before).max())
+
+    tie = model.constraints["tie"]
+    assert (tie.stateOfPoints == ContactState.TIED).all()
+    np.testing.assert_allclose(tie._restingOffset[:, 2], 0.02, atol=1e-12)
+
+
 class BondedNormalLaw(PenaltyLaw):
-    """A toy law, defined here and nowhere in the library: every paired point is bonded to the master in the direction
-    of the normal only, free to slide along the surface -- one linear spring along the frozen normal at every paired
-    point, of the stretch :math:`g`, in tension and in compression."""
+    """A toy law, defined here and nowhere in the library: each point is paired once and bonded to the master in the
+    direction of the normal only, free to slide along the surface -- one linear spring along the frozen normal at every
+    point, of the stretch :math:`\\bar{n} \\cdot \\boldsymbol{d}` (the gap from rest), in tension and in
+    compression."""
 
     name = "bonded"
 
-    def springs(self, penaltyTimesArea, gaps, normals):
+    pairsOnce = True
+
+    def springs(self, penaltyTimesArea, gaps, normals, displacementsFromRest=None):
         return [
             PenaltySprings(
                 np.arange(len(gaps)),
@@ -1255,11 +1749,13 @@ class BondedNormalLaw(PenaltyLaw):
 
 
 class TestALawDefinedOutsideTheLibrary(unittest.TestCase):
-    """A law is a class with its springs (:class:`BondedNormalLaw`): it plugs into the constraint through the registry
-    of laws, and the constraint pairs, assembles, bounds and reports it without a change."""
+    """A law is a class with its springs and whether it pairs once (:class:`BondedNormalLaw`): it plugs into the
+    constraint through the registry of laws, and the constraint pairs, assembles, bounds and reports it without a
+    change."""
 
     _constraint = TestIntegratedSurfaceContact._constraint
     _forces = TestIntegratedSurfaceContact._forces
+    _addDisplacementField = TestIntegratedSurfaceContact._addDisplacementField
     _slaveDisplacedBy = TestIntegratedSurfaceContact._slaveDisplacedBy
 
     #: The penalty, per unit area.
@@ -1267,22 +1763,30 @@ class TestALawDefinedOutsideTheLibrary(unittest.TestCase):
 
     def setUp(self):
         self.journal = Journal()
-        registered = mock.patch.dict(penaltyLaws, {BondedNormalLaw.name: BondedNormalLaw})
+        registered = mock.patch.dict(penaltyLawsAndTheTie, {BondedNormalLaw.name: BondedNormalLaw})
         registered.start()
         self.addCleanup(registered.stop)
 
     def _bonded(self, **options):
-        model, slaveSurface, masterSurface = twoBlockModel(self.journal, 0.0)
+        model, slaveSurface, masterSurface = twoBlockModel(self.journal, -0.05)
         options = {"contactType": BondedNormalLaw.name, "penalty": self.PENALTY} | options
         return model, self._constraint(model, slaveSurface, masterSurface, **options)
 
-    def test_it_holds_the_paired_points_along_the_normal_only(self):
-        """The two faces touching: every point is paired, and pulled back along the normal in tension as in
-        compression, whatever it slides along the faces."""
+    def test_it_pairs_once_and_holds_the_points_along_the_normal_only(self):
+        """Paired once, every point stays with its master point however far it moves, and is pulled back along the
+        normal in tension as in compression, whatever it slides along the faces."""
 
-        model, bonded = self._bonded()
+        model, bonded = self._bonded(searchDistance=0.1)
         self.assertIsInstance(bonded.law, BondedNormalLaw)
-        self.assertTrue((bonded.stateOfPoints == ContactState.APPROACHING).all())
+        self.assertTrue((bonded.stateOfPoints == ContactState.TIED).all())
+
+        # pulled apart beyond the search distance and slid along: still paired with the same master points
+        field = self._addDisplacementField(model)
+        pairing = bonded._assignedFacetIdx.copy()
+        for node in model.surfaces["slaveFace"][_YMAX][0].nodes:
+            field["U"][field._indicesOfNodesInArray[node]] = [0.4, -0.5, 0.0]
+        self.assertFalse(bonded.updateConnectivity(model))
+        np.testing.assert_array_equal(bonded._assignedFacetIdx, pairing)
 
         area = _SIDE**2
         normal = np.array([0.0, -1e-3, 0.0])

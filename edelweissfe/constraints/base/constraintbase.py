@@ -242,10 +242,12 @@ class ConstraintBase(OptionSchemaProvider, BaseNodeCouplingEntity, SystemMatrixC
         return False
 
     def acceptLastState(self):
-        """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
-        is accepted, so a stateful constraint can promote the state of the last (converged) Newton
-        iterate to its history. Only an :attr:`active` constraint is called: one that took
-        no part in the increment keeps its history.
+        """Called by :meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints` when an increment is
+        accepted, so a stateful constraint can promote the state of its last evaluation to its history. That evaluation
+        is at the accepted configuration: the converged Newton iterate of an implicit increment; in ``NED``, the
+        evaluation at the end of the increment, which in a model with entities that carry their own inertia follows
+        their reconnection. Only an :attr:`active` constraint is called: one that took no part in the increment keeps
+        its history.
 
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""

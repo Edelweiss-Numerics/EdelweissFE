@@ -291,3 +291,14 @@ class ContactPointsAtSlaveNodes(ContactPoints):
         """
 
         return ContactPointsAtSlaveNodes(model.elementSets[self.setName], self._constraintName)
+
+    def referenceCoordinates(self) -> np.ndarray:
+        """:math:`\\boldsymbol{X}`, the reference coordinates of all slave nodes.
+
+        Returns
+        -------
+        numpy.ndarray
+            The coordinates, of shape (nPoints, nDim).
+        """
+
+        return self._referenceCoordinates

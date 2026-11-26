@@ -589,12 +589,28 @@ class FEModel:
         return DiscreteSystem(self, locations)
 
     def advanceToTime(self, time: float):
-        """Accept the current state of the model and sub instances, and
-        set the new time.
+        """Accept the current state of the model at the end of an increment, and set the new time: the state of its
+        entities (:meth:`acceptTheStateOfTheEntities`), then that of its constraints
+        (:meth:`acceptTheStateOfTheConstraints`).
 
-        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that
-        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
-        frictional history of a contact switched off for a step.
+        Both accept the state of their last evaluation, which must be the one at the configuration accepted. That is
+        what every solver evaluates last, except ``NED`` in a model with entities that carry their own inertia: there
+        the constraints are evaluated at the accepted configuration only after the entities are reconnected, so ``NED``
+        calls the two parts itself, with the reconnection and the evaluation between them (see
+        :meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.acceptIncrement`).
+
+        Parameters
+        ----------
+        time
+            The new time.
+        """
+
+        self.acceptTheStateOfTheEntities(time)
+        self.acceptTheStateOfTheConstraints()
+
+    def acceptTheStateOfTheEntities(self, time: float):
+        """Let every element accept its computed state, and set the new time. A model with other entities that carry a
+        state accepts theirs here as well.
 
         Parameters
         ----------
@@ -603,8 +619,16 @@ class FEModel:
         """
 
         self.time = time
-
         self._acceptElementStates()
+
+    def acceptTheStateOfTheConstraints(self):
+        """Let the constraints and the multi-point constraints accept the state of their last evaluation
+        (``acceptLastState``).
+
+        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that
+        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
+        frictional history of a contact switched off for a step.
+        """
 
         # Serial: negligible next to the element loop.
         for constraint in self.activeConstraints():

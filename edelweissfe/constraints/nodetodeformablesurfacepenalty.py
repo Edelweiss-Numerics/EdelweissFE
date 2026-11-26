@@ -1179,7 +1179,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     def acceptLastState(self):
         """Promote the tangential forces of the last (converged) Newton iterate to the frictional
         history, and perform the incremental Uzawa update of the normal traction multipliers.
-        Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` upon increment
+        Called by :meth:`~edelweissfe.models.femodel.FEModel.acceptTheStateOfTheConstraints` upon increment
         acceptance."""
 
         self._tangentialForceConverged[:] = self._tangentialForceCurrent
