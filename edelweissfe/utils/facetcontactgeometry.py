@@ -219,14 +219,18 @@ class FacetedSurface:
         facetTurnsAway = rowDot(normalOfFacet[:, None, :], atVertexOfFacet) < cosOfHalfTheLimit * lengthAtVertexOfFacet
         np.logical_or.at(vertexIsCrease, self.nodesOfFacet, facetTurnsAway)
 
-        # On the boundary, the ring of facets around a vertex is incomplete, and so is its pseudonormal. Where a crease
-        # ends on the boundary, the crease goes on beyond it: the vertex takes the pseudonormal of that crease edge.
+        # On the boundary, the ring of facets around a vertex is incomplete, and the facet angles depend on how the
+        # boundary cuts the surface (e.g. an oblique end). Where one or more creases end on the boundary, the vertex
+        # takes the sum of the pseudonormals of the crease edges ending there instead of the angle-weighted ring sum:
+        # this depends only on the crease flanks (not the cut angles) and reduces to the edge's own pseudonormal when
+        # a single crease ends there.
         creaseEdges = np.flatnonzero(edgeIsCrease)
         nCreaseEdgesAtVertex = np.bincount(self.verticesOfEdge[creaseEdges].ravel(), minlength=self.nVertices)
-        endsACrease = ~self.vertexIsInterior & (nCreaseEdgesAtVertex == 1)
+        endsACrease = ~self.vertexIsInterior & (nCreaseEdgesAtVertex >= 1)
+        pseudonormalOfVertex[endsACrease] = 0.0
         for end in (0, 1):
             endingHere = creaseEdges[endsACrease[self.verticesOfEdge[creaseEdges, end]]]
-            pseudonormalOfVertex[self.verticesOfEdge[endingHere, end]] = pseudonormalOfEdge[endingHere]
+            np.add.at(pseudonormalOfVertex, self.verticesOfEdge[endingHere, end], pseudonormalOfEdge[endingHere])
         vertexIsCrease &= self.vertexIsInterior | endsACrease
 
         return SurfaceFeatures(pseudonormalOfEdge, pseudonormalOfVertex, edgeIsCrease, vertexIsCrease)
@@ -259,12 +263,14 @@ class FacetedSurface:
           where no crease ends -- the distance along the facet's normal, and the normal as its gradient: beyond its
           boundary, the surface goes on in the plane of its last facet.
 
-        The gap is continuous where the closest point keeps its rule, but not where the rule changes: where the closest
-        point moves from a crease onto a feature that is none (from a crease vertex onto an edge that is not a crease),
-        or across a seam onto the next facet, the gap jumps between the distance and the distance along a facet normal.
-        The jump is at most :math:`1 - \\cos 30^\\circ` (about 13 %) of the distance, the crease limit
-        :data:`cosOfSmoothNormalChangeLimit`; the sign does not change, so inside and outside stay apart. A penalty
-        force on the gap jumps by the same fraction there.
+        The gap is continuous where the closest point keeps its rule, but not where the rule changes: on a closed
+        surface (or across interior features of an open one), where the closest point moves from a crease onto a feature
+        that is none (from a crease vertex onto an edge that is not a crease), or across a seam onto the next facet, the
+        gap jumps between the distance and the distance along a facet normal. There, the jump is at most
+        :math:`1 - \\cos 30^\\circ` (about 13 %) of the distance, the crease limit :data:`cosOfSmoothNormalChangeLimit`;
+        the sign does not change, so inside and outside stay apart. A penalty force on the gap jumps by the same
+        fraction there. Across the boundary of an open surface, where the rule switches to the continued plane of the
+        last facet, that bound does not apply.
 
         Parameters
         ----------
@@ -312,9 +318,17 @@ class FacetedSurface:
 
         creased = np.flatnonzero(onACrease)
         if len(creased):
+            # A degenerate 180-degree fold has opposing normals whose pseudonormal cancels to exactly zero: keep the
+            # facet-normal fallback rather than dividing by zero (a nearly cancelled fold still normalizes, which is
+            # acceptable for a degenerate geometry).
+            pseudonormalLength = np.linalg.norm(pseudonormal[creased], axis=1)
+            valid = pseudonormalLength > 0.0
+            creased = creased[valid]
+            pseudonormalLength = pseudonormalLength[valid]
+        if len(creased):
             toFeature = toPoint[creased]
             distance = np.sqrt(rowDot(toFeature, toFeature))
-            unitPseudonormal = pseudonormal[creased] / np.linalg.norm(pseudonormal[creased], axis=1)[:, None]
+            unitPseudonormal = pseudonormal[creased] / pseudonormalLength[:, None]
             sign = np.where(rowDot(unitPseudonormal, toFeature) < 0.0, -1.0, 1.0)
 
             _, measure = facetNormalAndMeasure(coordinatesOfFacet[facets[creased]])

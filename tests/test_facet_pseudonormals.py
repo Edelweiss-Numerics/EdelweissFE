@@ -502,3 +502,76 @@ def test_the_gap_agrees_with_a_winding_number_and_a_brute_force_distance(surface
     np.testing.assert_allclose(np.abs(gap[exact]), distance[exact], rtol=1e-9, atol=roundOff)
     assert np.all(np.abs(gap[resolved]) <= distance[resolved] * (1.0 + 1e-9) + roundOff)
     assert np.all(np.abs(gap[resolved]) >= np.cos(np.deg2rad(30.0)) * distance[resolved] * (1.0 - 1e-9) - roundOff)
+
+
+def test_a_boundary_vertex_where_two_creases_meet_stays_a_crease():
+    """On an open surface where two crease edges meet at a boundary vertex (an open 3-face box corner), the vertex is
+    still marked as a crease and takes the sum of its incident crease edges' pseudonormals, giving the true signed
+    distance outside a convex corner and inside a re-entrant corner."""
+
+    vertices = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 1.0, -1.0],
+            [0.0, 0.0, -1.0],
+        ]
+    )
+    # Three orthogonal faces meeting at vertex 0: normals +z, -x, -y. Two 90-degree crease edges meet at vertex 0,
+    # while the two edges to vertices 3 and 4 are boundary edges.
+    nodesOfFacet = np.array([[0, 1, 2], [0, 2, 3], [0, 4, 1]])
+    coordinatesOfFacet = vertices[nodesOfFacet]
+    normalOfFacet, _ = facetNormalAndMeasure(coordinatesOfFacet)
+    surface = FacetedSurface(nodesOfFacet)
+    features = surface.features(coordinatesOfFacet, normalOfFacet)
+
+    assert not surface.vertexIsInterior[0]
+    assert features.vertexIsCrease[0]
+    np.testing.assert_allclose(features.pseudonormalOfVertex[0], [-1.0, -1.0, 2.0], atol=1e-14)
+
+    # Outside the convex corner: vertex 0 is the closest point, and the gap is the true distance sqrt(0.75) (not the
+    # facet-normal projection 0.5).
+    point = np.array([[-0.5, -0.5, 0.5]])
+    closestFacet, weights, distance = closestFacets(point, list(coordinatesOfFacet), [[0, 1, 2]])
+    gap, dGap_dPoint = surface.gapsAndGradients(
+        point, closestFacet, weights, coordinatesOfFacet, normalOfFacet, features
+    )
+    np.testing.assert_allclose(gap, distance, rtol=1e-14)
+    np.testing.assert_allclose(dGap_dPoint, point / distance[0], rtol=1e-14)
+
+    # Flip the orientation to a re-entrant open corner: the same point now lies inside the body, still with vertex 0 as
+    # its closest point via closestFacets, and gets the negative signed distance.
+    reentrantNodes = nodesOfFacet[:, [0, 2, 1]]
+    reentrantCoords = vertices[reentrantNodes]
+    reentrantNormals, _ = facetNormalAndMeasure(reentrantCoords)
+    reentrantSurface = FacetedSurface(reentrantNodes)
+    reentrantFeatures = reentrantSurface.features(reentrantCoords, reentrantNormals)
+    cfIn, wIn, dIn = closestFacets(point, list(reentrantCoords), [[0, 1, 2]])
+    gapIn, dGapIn = reentrantSurface.gapsAndGradients(
+        point, cfIn, wIn, reentrantCoords, reentrantNormals, reentrantFeatures
+    )
+    np.testing.assert_allclose(gapIn, -dIn, rtol=1e-14)
+    np.testing.assert_allclose(dGapIn, -point / dIn[0], rtol=1e-14)
+
+
+def test_a_180_degree_fold_produces_no_nan_in_gaps_or_gradients():
+    """A degenerate 180-degree 3D fold whose opposing normals cancel to a zero crease-edge pseudonormal falls back to
+    the facet normal in gapsAndGradients without producing NaN."""
+
+    vertices = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
+    nodesOfFacet = np.array([[0, 1, 2], [1, 0, 3]])
+    coords = vertices[nodesOfFacet]
+    normals, _ = facetNormalAndMeasure(coords)
+    surface = FacetedSurface(nodesOfFacet)
+    features = surface.features(coords, normals)
+    foldEdge = surface.edgeOppositeVertex[0, 2]
+    assert features.edgeIsCrease[foldEdge]
+    np.testing.assert_array_equal(features.pseudonormalOfEdge[foldEdge], np.zeros(3))
+
+    gap, grad = surface.gapsAndGradients(
+        np.array([[0.5, -0.2, 0.1]]), np.array([0]), np.array([[0.5, 0.5, 0.0]]), coords, normals, features
+    )
+    assert np.all(np.isfinite(gap)) and np.all(np.isfinite(grad))
+    np.testing.assert_allclose(gap, [0.1], atol=1e-14)
+    np.testing.assert_allclose(grad, [normals[0]], atol=1e-14)
