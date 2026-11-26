@@ -40,6 +40,7 @@ from test_residual_tangent_convention import (
 
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.solvers.base.criticaltimestep import (
+    CriticalTimeStepEstimate,
     CriticalTimeStepEstimateFromTheBoundOfEachDof,
     CriticalTimeStepOfEntitiesWithOwnInertia,
     CriticalTimeStepOfTheElements,
@@ -306,6 +307,78 @@ def test_carried_weights_start_anew_with_a_new_numbering_and_with_every_step():
     assert [weights.shape for weights in system.handed] == [(len(M),)] * 5
     assert [float(np.max(weights)) for weights in system.handed] == [0.0, 1.0, 2.0, 0.0, 0.0]
     assert criticalTimeStep.value == _gershgorinEstimate(system.K, M)
+
+
+def test_carried_weights_are_kept_when_they_beat_the_fresh_estimate_after_stiffening():
+    """When the system stiffens so that the estimate with carried weights falls below the estimate they started from,
+    the policy checks a fresh estimate from zero weights. If the carried weights still give a larger (tighter) estimate
+    than the fresh one, they are kept rather than overwritten by the fresh weights; if the fresh estimate is larger,
+    the fresh weights take over."""
+
+    class _EntitiesWithWeightedEstimate:
+        """Uses the carried weights as a Collatz-Wielandt vector on the mass-scaled stiffness and advances them by one
+        power-iteration step."""
+
+        def __init__(self, K):
+            self.K = K
+            self.numbering = SimpleNamespace(nDof=len(K))
+            self.handed = []
+
+        def criticalTimeStepOfEntitiesWithOwnInertia(self, M, C, forEachChunk, weightsOfTheEstimate=None):
+            self.handed.append(np.array(weightsOfTheEstimate))
+            M = np.asarray(M)
+            s = 1.0 / np.sqrt(M)
+            A = np.abs(s[:, None] * self.K * s[None, :])
+            w = np.ones(len(M)) if not weightsOfTheEstimate.any() else weightsOfTheEstimate.copy()
+            Aw = A @ w
+            bound = float(np.max(Aw / w))
+            weightsOfTheEstimate[:] = Aw / np.linalg.norm(Aw)
+            return CriticalTimeStepEstimate(2.0 / np.sqrt(bound))
+
+    rng = np.random.default_rng(7)
+    A0 = rng.normal(size=(8, 8))
+    K0 = A0 @ A0.T + np.diag([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 50.0])
+    M = np.ones(8)
+    C = np.zeros(8)
+    system = _EntitiesWithWeightedEstimate(K0)
+    criticalTimeStep = CriticalTimeStepOfEntitiesWithOwnInertia(DELTA, carryWeights=True)
+
+    # Refine the weights over several increments on K0 so they converge well past the constant-weight bound.
+    for increment in range(6):
+        criticalTimeStep.estimate(system, M, C, None, increment)
+    refinedValue = criticalTimeStep.value
+
+    # Stiffen the system uniformly by 1.5x: the carried weights are still near the Perron vector, so they still beat
+    # a fresh constant-weight estimate, even though the new estimate falls below the start value on K0.
+    system.K = 1.5 * K0
+    freshAtStiff = _gershgorinEstimate(system.K, M)
+    criticalTimeStep.estimate(system, M, C, None, 6)
+    keptValue = criticalTimeStep.value
+    # Fresh estimate was tried (zeros) after the carried one fell below the start value, and lost to the carried one.
+    assert not system.handed[-1].any()
+    assert keptValue >= refinedValue / np.sqrt(1.5)
+    assert keptValue > freshAtStiff
+
+    # The next estimate must continue from the kept refined weights, not from the discarded fresh ones: the estimate
+    # stays at or above keptValue (a discarded reset would drop back towards the 1-step constant-weight estimate).
+    nHandedBefore = len(system.handed)
+    criticalTimeStep.estimate(system, M, C, None, 7)
+    assert len(system.handed) == nHandedBefore + 1, "no second reset needed once the baseline updated"
+    assert criticalTimeStep.value >= keptValue * (1.0 - 1e-12)
+
+    # Now rotate K so the old carried weights point at the wrong mode and lose to a fresh constant-weight estimate:
+    # the fresh estimate must win, and its 1-step weights must take over for the next estimate.
+    perm = np.roll(np.arange(8), 4)
+    system.K = 1.5 * K0[np.ix_(perm, perm)]
+    expectedFresh = _gershgorinEstimate(system.K, M)
+    A_rot = np.abs(system.K)
+    expectedFreshWeights = (A_rot @ np.ones(8)) / np.linalg.norm(A_rot @ np.ones(8))
+    criticalTimeStep.estimate(system, M, C, None, 8)
+    assert not system.handed[-1].any()
+    assert criticalTimeStep.value == pytest.approx(expectedFresh, rel=1e-14)
+    criticalTimeStep.estimate(system, M, C, None, 9)
+    np.testing.assert_allclose(system.handed[-1], expectedFreshWeights, rtol=1e-14)
+    assert criticalTimeStep.value > expectedFresh
 
 
 class _ElementWithItsEigenvalue:
