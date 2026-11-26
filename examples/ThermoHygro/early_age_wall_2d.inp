@@ -1,0 +1,80 @@
+** Massive concrete wall, 1 m thick, in the first 28 days: heat of hydration and self-desiccation over the equivalent
+** (maturity) age, then drying after the formwork is removed (DC2D4TH, ThermoHygro).
+**
+** Half of the wall thickness through a strip (0 <= x <= 0.5 m, x = 0 the face, x = 0.5 m the mid-plane: symmetry).
+** Fresh concrete at 20 degC and h = 1. Days 0-3: in the formwork, sealed, heat loss to the air at 20 degC through
+** the formwork (heat film 5 W/(m2 K)). Day 3: the formwork is removed: heat film 15 W/(m2 K), drying to h_inf = 0.6
+** (moisture film) with the latent heat of evaporation (latent heat film). The adiabatic temperature rise is
+** Q_inf / (rho c) = 50 K; the hydration rate follows the equivalent age (E_h/R = 4000 K), so the hot core hydrates
+** faster than the face. Units: m, s, kg, degC. Results at 1, 3, 7 and 28 days.
+** 5 mm elements resolve the drying skin after the formwork removal; with 20 mm ones the humidity next to the face
+** overshoots (to 1.02 at 7 days) when the drying starts.
+** The hygrothermic coefficient kappa is 0 here: at h = 1 a temperature rise of 40 K with kappa = 0.003 would push the
+** humidity of the sealed concrete to about 1.1, and the material has no saturated branch (h is not capped at 1).
+
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DC2D4TH
+nX=100
+nY=1
+l=0.5
+h=0.005
+
+** heat (11): rho [kg/m3], c0 [J/(kg K)], k11, k22, k33 [W/(m K)], k12, k13, k23, beta_k, beta_c, T_ref [degC]
+** moisture (10): D1 [kg/(m s)], alpha0, h_c, n, isotherm (1 = BSB), C, k, V_m [kg/m3], dw_inf [kg/m3], tau_s [s]
+** couplings (11): T_0 (absolute zero) [degC], Q_D/R [K], m, kappa [1/K], chi, c_w [J/(kg K)], beta_kh, ell [J/kg],
+**                 E_h/R [K], Q_inf [J/m3], tau_q [s]
+*material, name=ThermoHygro, id=concrete
+2400.0, 1000.0, 1.5, 1.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0
+1.1574e-08, 0.05, 0.8, 6.0, 1, 18.0, 0.73, 20.0, 5.0, 864000.0
+-273.15, 4000.0, 0.0, 0.0, 0.0, 4186.0, 0.0, 0.0, 4000.0, 1.2e8, 86400.0
+
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=earlyagewall, domain=2d
+*solver, solver=NIST, name=theSolver
+
+** While sealed, content change and self-desiccation cancel almost exactly inside each element: absolute flux floors
+** that fit the units (W and kg/s per unit thickness) keep Newton from chasing round-off.
+*updateConfiguration, configuration=absoluteFluxResidualTolerance
+temperature=1e-6
+relative humidity=1e-13
+
+*fieldOutput
+>>perNode, name=temperature, elSet=all, field=temperature, result=U
+>>perNode, name=humidity, elSet=all, field=relative humidity, result=U
+>>perNode, name=T_core, nSet=gen_rightBottom, field=temperature, result=U
+>>perNode, name=T_face, nSet=gen_leftBottom, field=temperature, result=U
+>>perNode, name=h_face, nSet=gen_leftBottom, field=relative humidity, result=U
+
+*output, type=monitor, name=monitorT_core
+fieldOutput=T_core, f(x)='mean(x)'
+
+*output, type=monitor, name=monitorT_face
+fieldOutput=T_face, f(x)='mean(x)'
+
+*output, type=monitor, name=monitorh_face
+fieldOutput=h_face, f(x)='mean(x)'
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=temperature
+>>perNode, fieldOutput=humidity
+
+** days 0 ... 1 ... 3: in the formwork
+*step, solver=theSolver
+startInc=0.01, maxInc=0.02, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=86400.0
+>>setfield, name=T0, fieldOutput=temperature, type=uniform, value=20.0
+>>setfield, name=h0, fieldOutput=humidity, type=uniform, value=1.0
+>>distributedload, name=heat, surface=gen_left, type=heat film, magnitude='5.0, 20.0', f(t)='1'
+*step, solver=theSolver
+startInc=0.02, maxInc=0.02, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=172800.0
+
+** day 3 ... 7 ... 28: formwork removed
+*step, solver=theSolver
+startInc=0.002, maxInc=0.02, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=345600.0
+>>distributedload, name=heat, surface=gen_left, type=heat film, magnitude='15.0, 20.0', f(t)='1'
+>>distributedload, name=moisture, surface=gen_left, type=moisture film, magnitude='1.1574e-05, 0.6', f(t)='1'
+>>distributedload, name=latent, surface=gen_left, type=latent heat film, magnitude='28.356, 0.6', f(t)='1'
+*step, solver=theSolver
+startInc=0.02, maxInc=0.02, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=1814400.0

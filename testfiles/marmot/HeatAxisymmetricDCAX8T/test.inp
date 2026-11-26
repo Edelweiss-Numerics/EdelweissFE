@@ -1,0 +1,31 @@
+** Transient heat conduction in a hollow cylinder 0.1 m <= r <= 0.3 m (DCAX8T, r = x, z = y): a heat flux of 2 kW/m2
+** into the inner surface, a uniform heat source of 5 kW/m3, convection to the surroundings at 20 degC on the outer
+** surface.
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DCAX8T
+x0=0.1
+nX=8
+nY=1
+l=0.2
+h=0.025
+
+*material, name=HeatConduction, id=concrete
+2400.0, 900.0, 2.0
+
+** the thickness is not used by the axisymmetric elements
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=heatjob, domain=axisymmetric
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=temperature, elSet=all, field=temperature, result=U
+>>perNode, name=heatflow, nSet=gen_right, field=temperature, result=P
+
+*step, solver=theSolver
+startInc=0.05, maxInc=0.05, minInc=1e-3, maxNumInc=100, maxIter=25, stepLength=36000
+>>setfield, name=initial, fieldOutput=temperature, type=uniform, value=20.0
+>>distributedload, name=flux, surface=gen_left, type=heat flux, magnitude=2000.0, f(t)='1'
+>>distributedload, name=film, surface=gen_right, type=heat film, magnitude='10.0, 20.0', f(t)='1'
+>>bodyforce, name=source, elSet=all, forceVector='5000.0', f(t)='1'

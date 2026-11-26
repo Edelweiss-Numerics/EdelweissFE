@@ -1,0 +1,56 @@
+** Thick-walled concrete pipe carrying hot water, axisymmetric (DCAX8T, HeatConduction): from 20 degC to steady state.
+**
+** Wall 0.5 m <= r <= 0.8 m (r = x), a slice of 0.1 m height (z = y; top and bottom insulated). The bore is held at
+** 80 degC (Dirichlet on the field temperature), the outer surface loses heat by convection (10 W/(m2 K)) to air at
+** 0 degC. Initially 20 degC everywhere. After about 10 days the wall is at steady state, which has the closed form
+**   T(r) = T_i - (T_i - T_inf) ln(r / r_i) / (ln(r_o / r_i) + k / (h r_o)),
+**   heat flow through the slice Q = 2 pi H k (T_i - T_inf) / (ln(r_o / r_i) + k / (h r_o)),
+** i.e. T(r_o) = 23.88 degC and Q = 120.04 W. The heat flow is the reaction (result P) at the prescribed temperature.
+** Units: m, s, kg, degC.
+
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DCAX8T
+x0=0.5
+nX=12
+nY=1
+l=0.3
+h=0.1
+
+** rho, c, k (isotropic short form: 3 properties)
+*material, name=HeatConduction, id=concrete
+2400.0, 900.0, 1.6
+
+** axisymmetric elements take a plane section and do not use its thickness
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=pipe, domain=axisymmetric
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=temperature, elSet=all, field=temperature, result=U
+>>perNode, name=T_outer, nSet=gen_rightBottom, field=temperature, result=U
+>>perNode, name=Q_bore, nSet=gen_left, field=temperature, result=P
+
+*output, type=monitor, name=monitorT_outer
+fieldOutput=T_outer, f(x)='mean(x)'
+
+*output, type=monitor, name=monitorQ_bore
+fieldOutput=Q_bore, f(x)='sum(x)'
+
+*output, type=ensight, name=esExport
+>>configuration, overwrite=yes
+>>perNode, fieldOutput=temperature
+
+** 0 ... 60 s: the bore is brought from 20 to 80 degC. A Dirichlet value is the CHANGE of the field over the step
+** (here + 60 K), applied with the amplitude (default: linear in the step); a short first step ramps it. Distributed
+** loads instead take their value at once with f(t)='1'.
+*step, solver=theSolver
+startInc=0.1, maxInc=0.1, minInc=1e-4, maxNumInc=100, maxIter=20, stepLength=60.0
+>>setfield, name=T0, fieldOutput=temperature, type=uniform, value=20.0
+>>dirichlet, name=bore, nSet=gen_left, field=temperature, 1=60.0
+>>distributedload, name=film, surface=gen_right, type=heat film, magnitude='10.0, 0.0', f(t)='1'
+
+** ... 10 days: towards steady state (the Dirichlet condition and the film stay active)
+*step, solver=theSolver
+startInc=1e-4, maxInc=0.02, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=863940.0

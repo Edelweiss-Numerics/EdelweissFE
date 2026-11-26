@@ -1,0 +1,33 @@
+** Drying of a concrete slab (DC2D8H), half thickness 100 mm (units mm, day): initially saturated (h = 1), exposed at
+** x = 0 to an environment of 50 % relative humidity through a moisture film, sealed (symmetry) at x = 100 mm.
+** Bazant-Najjar diffusivity with the CEB-FIP MC90 shape (alpha0 = 0.05, hc = 0.8, n = 15), classical form (linear
+** isotherm, K = 1: D in mm2/d).
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DC2D8H
+nX=10
+nY=1
+l=100.0
+h=10.0
+
+** D1 [mm2/d], alpha0, hc, n, isotherm type (0: linear), K
+*material, name=MoistureDiffusion, id=concrete
+30.0, 0.05, 0.8, 15.0, 0, 1.0
+
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=dryingjob, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=rh, elSet=all, field=relative humidity, result=U
+>>perElement, name=flux, elSet=all, result=flux, quadraturePoint=0
+
+** 10 days in steps of 0.5 d, then up to 100 days in steps of 5 d
+*step, solver=theSolver
+startInc=0.05, maxInc=0.05, minInc=1e-3, maxNumInc=30, maxIter=12, stepLength=10
+>>setfield, name=initial, fieldOutput=rh, type=uniform, value=1.0
+>>distributedload, name=film, surface=gen_left, type=moisture film, magnitude='10.0, 0.5', f(t)='1'
+
+*step, solver=theSolver
+startInc=0.0555555555555556, maxInc=0.0555555555555556, minInc=1e-3, maxNumInc=30, maxIter=12, stepLength=90

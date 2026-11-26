@@ -1,0 +1,42 @@
+** Coupled heat and moisture transport (DC2D8TH, THERMOHYGRO): a concrete slab of half thickness 0.1 m (units m, s, C,
+** kg), initially at 20 C and 80 % pore relative humidity, exposed at x = 0 to hot, dry air (60 C, 40 %): heat film,
+** moisture film and the latent heat leaving with the evaporating water; symmetry (insulated, sealed) at x = 0.1 m.
+** Couplings: Arrhenius diffusivity, hygrothermic coefficient, vapour pressure driving, heat capacity of the water,
+** moisture dependent conductivity, latent heat carried by the vapour. Illustrative parameters.
+*modelGenerator, generator=planeRectQuad, name=gen
+elType=DC2D8TH
+nX=10
+nY=1
+l=0.1
+h=0.01
+
+** heat: rho, c0, k11, k22, k33, k12, k13, k23, beta_k, beta_c, T_ref
+** moisture: D1 [kg/(m s)], alpha0, hc, n, isotherm (1: BSB), C, k, Vm [kg/m3], dw_inf, tau_s
+** couplings: T_0, Q_D/R [K], m, kappa [1/K], chi, c_w [J/(kg K)], beta_kh, ell [J/kg], E_h/R [K], Q_inf, tau_q
+*material, name=ThermoHygro, id=concrete
+2400.0, 900.0, 1.5, 1.5, 1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 20.0
+3.4722222222222222e-08, 0.05, 0.8, 6.0, 1.0, 18.0, 0.73, 20.0, 0.0, 1.0
+-273.15, 4000.0, 0.0, 0.003, 1.0, 4186.0, 0.3, 1.225e6, 0.0, 0.0, 1.0
+
+*section, name=section1, thickness=1.0, material=concrete, type=plane
+all
+
+*job, name=heateddrying, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=T, elSet=all, field=temperature, result=U
+>>perNode, name=rh, elSet=all, field=relative humidity, result=U
+>>perElement, name=flux, elSet=all, result=flux, quadraturePoint=0
+
+** 1 h in steps of 6 min, then up to 2 d in steps of 6 h
+*step, solver=theSolver
+startInc=0.1, maxInc=0.1, minInc=1e-4, maxNumInc=40, maxIter=12, stepLength=3600
+>>setfield, name=T0, fieldOutput=T, type=uniform, value=20.0
+>>setfield, name=h0, fieldOutput=rh, type=uniform, value=0.8
+>>distributedload, name=heat, surface=gen_left, type=heat film, magnitude='10.0, 60.0', f(t)='1'
+>>distributedload, name=moist, surface=gen_left, type=moisture film, magnitude='1.1574074074074074e-05, 0.4', f(t)='1'
+>>distributedload, name=latent, surface=gen_left, type=latent heat film, magnitude='28.356481481481481, 0.4', f(t)='1'
+
+*step, solver=theSolver
+startInc=0.125, maxInc=0.125, minInc=1e-4, maxNumInc=40, maxIter=12, stepLength=169200
