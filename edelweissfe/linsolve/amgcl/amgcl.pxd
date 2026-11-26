@@ -81,6 +81,19 @@ cdef extern from "amgcl-wrapper.hpp":
                    int& iters,
                    double& error,
                    bint onUnscaledOperator) except +
+        void solveBordered(const EquilibratedSystem& system,
+                           const double* column,
+                           const double* row,
+                           double corner,
+                           const double* rhs,
+                           double* x,
+                           double tol,
+                           int maxiter,
+                           PyPrecondApplyFn applyFn,
+                           void* ctx,
+                           int& iters,
+                           double& error,
+                           bint onUnscaledOperator) except +
 
     OuterKrylovSolver* makeOuterKrylovSolver(const string& method, int n, const char* json_params) except +
 

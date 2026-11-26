@@ -47,6 +47,7 @@ scales only what the block Gauss--Seidel sweep sees, while the outer Krylov solv
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.linsolve.base import Border
 from edelweissfe.linsolve.composition.base import (
     Description,
     Preconditioner,
@@ -144,6 +145,14 @@ class DiagonalScaling(Preconditioner):
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
         return self.D * self.inner(self.D * r)
+
+    def _solveBordered(self, border: Border, b: np.ndarray, beta: float) -> tuple[np.ndarray, float]:
+        """The bordered system in the scaled variables :math:`\\hat x = D^{-1} x`: :math:`\\hat A \\hat x + D
+        \\boldsymbol{a} \\, \\xi = D \\boldsymbol{b}` and :math:`D \\boldsymbol{c} \\cdot \\hat x + d \\, \\xi =
+        \\beta`, solved by the child; the new unknown and its equation keep their scale."""
+        D = self.D
+        x_scaled, xi = self.inner.solveBordered(Border(D * border.column, D * border.row, border.corner), D * b, beta)
+        return D * x_scaled, xi
 
     def children(self) -> tuple:
         return (("inner", self.inner),)

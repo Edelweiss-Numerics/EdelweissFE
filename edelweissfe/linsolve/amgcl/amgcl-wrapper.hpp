@@ -869,6 +869,90 @@ public:
   }
 };
 
+/// The bordered operator of an arc length method, one unknown and one equation more than the matrix A it borders:
+///
+///   [ A    a ] [ x  ]
+///   [ c^T  d ] [ xi ]
+///
+/// with the column a, the row c and the corner d (composition/krylov.py, KrylovSolver.solveBordered). A is the operator
+/// of an EquilibratedSystemT, and the vectors of the Krylov solve have n + 1 entries, the new unknown last. The
+/// products with A are AMGCL's threaded ones; the border adds an axpy and a dot product.
+struct BorderedOperator {
+  /// @brief the type of the entries, which AMGCL's Krylov solvers ask an operator for
+  typedef double value_type;
+
+  /// @brief the bordered matrix, of n rows
+  const EquilibratedSystemT::Matrix& A;
+  /// @brief a, n entries
+  const double* column;
+  /// @brief c, n entries
+  const double* row;
+  /// @brief d
+  double corner;
+  /// @brief the size of A
+  ptrdiff_t n;
+
+  /// @brief c . x, of the first n entries of x
+  double rowDot( const double* x ) const
+  {
+    double sum = 0.0;
+#pragma omp parallel for reduction( + : sum )
+    for ( ptrdiff_t i = 0; i < n; ++i )
+      sum += row[i] * x[i];
+    return sum;
+  }
+
+  /// @brief y <- y + alpha a xi, on the first n entries of y
+  void addColumn( double alpha, double xi, double* y ) const
+  {
+#pragma omp parallel for
+    for ( ptrdiff_t i = 0; i < n; ++i )
+      y[i] += alpha * column[i] * xi;
+  }
+};
+
+namespace amgcl::backend {
+  /// y <- alpha [A a; c^T d] x + beta y, for the Krylov solve on a BorderedOperator
+  template < class Alpha, class Vector1, class Beta, class Vector2 >
+  struct spmv_impl< Alpha, BorderedOperator, Vector1, Beta, Vector2 > {
+    static void apply( Alpha alpha, const BorderedOperator& K, const Vector1& x, Beta beta, Vector2& y )
+    {
+      const ptrdiff_t n  = K.n;
+      const double*   xp = &x[0];
+      double*         yp = &y[0];
+      const double    xi = xp[n];
+      // the border row first: y's last entry is overwritten below, and x is not y
+      const double rowTimesX = K.rowDot( xp );
+      const double yLast     = yp[n];
+
+      auto xRange = amgcl::make_iterator_range( xp, xp + n );
+      auto yRange = amgcl::make_iterator_range( yp, yp + n );
+      amgcl::backend::spmv( alpha, K.A, xRange, beta, yRange );
+      K.addColumn( alpha, xi, yp );
+      yp[n] = alpha * ( rowTimesX + K.corner * xi ) + ( beta ? beta * yLast : 0.0 );
+    }
+  };
+
+  /// r <- rhs - [A a; c^T d] x, for the Krylov solve on a BorderedOperator
+  template < class Vector1, class Vector2, class Vector3 >
+  struct residual_impl< BorderedOperator, Vector1, Vector2, Vector3 > {
+    static void apply( const Vector1& rhs, const BorderedOperator& K, const Vector2& x, Vector3& r )
+    {
+      const ptrdiff_t n      = K.n;
+      const double*   rhsp   = &rhs[0];
+      const double*   xp     = &x[0];
+      double*         rp     = &r[0];
+      const double    xi     = xp[n];
+      auto            rhsRng = amgcl::make_iterator_range( rhsp, rhsp + n );
+      auto            xRange = amgcl::make_iterator_range( xp, xp + n );
+      auto            rRange = amgcl::make_iterator_range( rp, rp + n );
+      amgcl::backend::residual( rhsRng, K.A, xRange, rRange );
+      K.addColumn( -1.0, xi, rp );
+      rp[n] = rhsp[n] - K.rowDot( xp ) - K.corner * xi;
+    }
+  };
+} // namespace amgcl::backend
+
 // Bridges AMGCL's own native amgcl::solver::lgmres (an outer Krylov solve running entirely on
 // the OpenMP-threaded builtin backend) to a preconditioner in Python -- the component tree under LGMRES or FGMRES
 // (composition/krylov.py) -- via a plain C function-pointer callback + opaque context set from Cython.
@@ -939,6 +1023,22 @@ public:
                       int&                       iters,
                       double&                    error,
                       bool                       onUnscaledOperator ) = 0;
+
+  /// @brief [x; xi] <- [A a; c^T d]^-1 rhs, the bordered system of n + 1 unknowns (BorderedOperator), right-
+  /// preconditioned by the callback, which receives and returns vectors of n + 1 entries; see solve().
+  virtual void solveBordered( const EquilibratedSystemT& system,
+                              const double*              column,
+                              const double*              row,
+                              double                     corner,
+                              const double*              rhs,
+                              double*                    x,
+                              double                     tol,
+                              int                        maxiter,
+                              PyPrecondApplyFn           applyFn,
+                              void*                      ctx,
+                              int&                       iters,
+                              double&                    error,
+                              bool                       onUnscaledOperator ) = 0;
 };
 
 /// @brief The parameters LGMRES is always run with, whatever the caller's tree says: always_reset (see the class
@@ -1010,9 +1110,46 @@ public:
               bool                       onUnscaledOperator ) override
   {
     system.checkBuilt();
-    const int n = system.n_;
+    solveOn( system.matrix( onUnscaledOperator ), system.n_, rhs, x, tol, maxiter, applyFn, ctx, iters, error );
+  }
+
+  /// @brief The bordered system of n + 1 unknowns, see OuterKrylovSolver::solveBordered(); this instance must have
+  /// been constructed for n + 1.
+  void solveBordered( const EquilibratedSystemT& system,
+                      const double*              column,
+                      const double*              row,
+                      double                     corner,
+                      const double*              rhs,
+                      double*                    x,
+                      double                     tol,
+                      int                        maxiter,
+                      PyPrecondApplyFn           applyFn,
+                      void*                      ctx,
+                      int&                       iters,
+                      double&                    error,
+                      bool                       onUnscaledOperator ) override
+  {
+    system.checkBuilt();
+    const BorderedOperator K{ system.matrix( onUnscaledOperator ), column, row, corner, system.n_ };
+    solveOn( K, system.n_ + 1, rhs, x, tol, maxiter, applyFn, ctx, iters, error );
+  }
+
+private:
+  /// @brief The solve of solve() and solveBordered() on the operator `op` of n unknowns.
+  template < class Operator >
+  void solveOn( const Operator&  op,
+                int              n,
+                const double*    rhs,
+                double*          x,
+                double           tol,
+                int              maxiter,
+                PyPrecondApplyFn applyFn,
+                void*            ctx,
+                int&             iters,
+                double&          error )
+  {
     if ( n != n_ ) {
-      throw std::runtime_error( "OuterKrylovSolverT::solve(): n=" + std::to_string( n ) + " does not match the size " +
+      throw std::runtime_error( "OuterKrylovSolverT: n=" + std::to_string( n ) + " does not match the size " +
                                 std::to_string( n_ ) + " this instance was constructed for." );
     }
 
@@ -1026,7 +1163,7 @@ public:
 
     size_t itersOut;
     double errorOut;
-    std::tie( itersOut, errorOut ) = ( *solver_ )( system.matrix( onUnscaledOperator ), precond, rhs_rng, x_rng );
+    std::tie( itersOut, errorOut ) = ( *solver_ )( op, precond, rhs_rng, x_rng );
     iters                          = static_cast< int >( itersOut );
     error                          = errorOut;
   }

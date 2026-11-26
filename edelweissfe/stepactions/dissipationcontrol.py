@@ -78,6 +78,12 @@ The dissipation equation is singular where nothing dissipates. Two ways cover th
   controlled phase (the first one from a zero prediction) is moved by the secant of the last increment, or, without
   one, by the load parameter rule.
 
+Without ``displacement``, the controller gives its equation as one linear row as well, for the bordered system of the
+solver option ``borderedSystem`` (:meth:`StepAction.linearizedConstraint`): the load parameter rule, or the
+dissipation linearized at the iterate, :math:`\\nabla D \\cdot \\Delta\\Delta\\boldsymbol{U} = \\Delta\\tau - (D -
+D_n)`. The displacement limit cannot: it bounds :math:`\\Delta\\Delta\\lambda` to an interval, which takes the
+correction of the reference load at every displacement degree of freedom.
+
 References
 ----------
 Gutiérrez, M. A. (2004). Energy release control for numerical simulations of failure in quasi-brittle solids.
@@ -100,7 +106,10 @@ from edelweissfe.numerics.doflocations import DofLocations
 from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.sets.elementset import ElementSet
-from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
+from edelweissfe.stepactions.base.arclengthcontrollerbase import (
+    ArcLengthControllerBase,
+    LinearizedConstraint,
+)
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
@@ -604,11 +613,7 @@ class StepAction(ArcLengthControllerBase, MeshDependent):
 
         if self.displacement is None:
             if abs(dD_f) <= self.elasticDissipationRate * abs(self.F):
-                # an elastic iterate, e.g. the first one from a zero prediction: the secant of the last increment, and
-                # without one the load parameter rule, which moves the iterate until it dissipates
-                if self.dDLast > 0.0:
-                    return min((dTau - D + self.D_n) / self.dDLast, self.maxPredictorRatio) * self.dLambdaLast
-                return self._loadParameterRule(timeStep)
+                return self._elasticIterateCorrection(D, timeStep)
             return (dTau - dD_0) / dD_f
 
         # interval of ddLambda within the displacement limit, |a_i + ddLambda b_i| <= dUMax for all nodal dofs
@@ -646,6 +651,68 @@ class StepAction(ArcLengthControllerBase, MeshDependent):
             return (a + ddLambda * b).dot(dULast)
 
         return max(candidates, key=forwardness)
+
+    def _elasticIterateCorrection(self, D: float, timeStep: TimeStep) -> float:
+        """The correction of the load parameter of an elastic iterate, e.g. the first one from a zero prediction, which
+        the linearized dissipation fixes none: the secant of the last increment, and without one the load parameter
+        rule, which moves the iterate until it dissipates."""
+
+        if self.dDLast > 0.0:
+            dTau = timeStep.stepProgressIncrement * self.dissipation
+            return min((dTau - D + self.D_n) / self.dDLast, self.maxPredictorRatio) * self.dLambdaLast
+        return self._loadParameterRule(timeStep)
+
+    @property
+    def providesLinearizedConstraint(self) -> bool:
+        """Without ``displacement``, the equation is one linear row (:meth:`linearizedConstraint`). The displacement
+        limit is none: it bounds the correction of the load parameter to an interval, from the two corrections of the
+        right-hand sides at every displacement degree of freedom."""
+
+        return self.displacement is None
+
+    def linearizedConstraint(self, dU: DofVector, timeStep: TimeStep, system: DiscreteSystem) -> LinearizedConstraint:
+        """The equation of :meth:`computeDDLambda` without ``displacement`` as one row, see
+        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.linearizedConstraint`:
+
+        * a zero increment, and before the ``threshold``, the load parameter: :math:`\\Delta\\Delta\\lambda` of the
+          load parameter rule;
+        * the dissipation, linearized at the iterate: :math:`\\nabla D \\cdot \\Delta\\Delta \\boldsymbol{U} =
+          \\Delta\\tau - (D - D_n)`;
+        * an elastic iterate, whose linearized dissipation fixes no load parameter, :math:`\\Delta\\Delta\\lambda` of
+          the secant of the last increment. Without the correction :math:`\\Delta\\Delta \\boldsymbol{U}_f` of the
+          reference load, the iterate counts as elastic if the dissipation rate along its own increment,
+          :math:`\\nabla D \\cdot \\Delta \\boldsymbol{U}`, is below :attr:`elasticDissipationRate` times the work
+          of the reference load over it, :math:`F \\, \\Delta\\lambda` -- also the first iterate from a zero
+          prediction, which has no increment yet.
+
+        Parameters
+        ----------
+        dU
+            The current increment of the solution.
+        timeStep
+            The increment being solved.
+        system
+            The current discrete system.
+
+        Returns
+        -------
+        LinearizedConstraint
+            The row.
+        """
+
+        nDof = len(dU)
+        if timeStep.stepProgressIncrement == 0.0:
+            # a zero increment controls nothing, see computeDDLambda
+            return LinearizedConstraint.ofLoadParameter(0.0, nDof)
+        if not self.isDissipationControlled():
+            return LinearizedConstraint.ofLoadParameter(self._loadParameterRule(timeStep), nDof)
+
+        D, dD_dU = self._linearizationOfIterate(system.locations)
+        if abs(dD_dU.dot(dU)) <= self.elasticDissipationRate * abs(self.F * self.dLambda):
+            return LinearizedConstraint.ofLoadParameter(self._elasticIterateCorrection(D, timeStep), nDof)
+
+        dTau = timeStep.stepProgressIncrement * self.dissipation
+        return LinearizedConstraint(dD_dU, 0.0, dTau - (D - self.D_n))
 
     def isDissipationControlled(self) -> bool:
         """Whether the current increment is dissipation controlled (without displacement)."""

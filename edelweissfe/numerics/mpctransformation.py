@@ -401,6 +401,30 @@ class MultiPointConstraintTransformation:
         Rt[self.slaveDofIndices] = -(dU[self.slaveDofIndices] - self._W @ dU)
         return Rt
 
+    def transformEquation(self, c: np.ndarray, R_condensed: np.ndarray) -> tuple[np.ndarray, float]:
+        """Condense one more linear equation :math:`\\boldsymbol{c} \\cdot \\delta U = r` in the corrections of all
+        DOFs, e.g. the equation that borders the system of an arc length method: with the solution :math:`x` of the
+        condensed system, the corrections are :math:`\\delta U = T x` plus the slave rows :math:`\\tilde{R}_s` of the
+        condensed residual (:meth:`recoverSlaveSolution`), so the equation reads :math:`(T^T \\boldsymbol{c}) \\cdot x
+        = r - \\boldsymbol{c}_s \\cdot \\tilde{R}_s`.
+
+        Parameters
+        ----------
+        c
+            The coefficients of the equation, over all DOFs.
+        R_condensed
+            The condensed residual, whose slave rows the condensed system returns at the slave DOFs
+            (:meth:`transformResidual`).
+
+        Returns
+        -------
+        tuple[np.ndarray,float]
+            - :math:`T^T \\boldsymbol{c}`, the coefficients of the equation in the condensed system.
+            - :math:`\\boldsymbol{c}_s \\cdot \\tilde{R}_s`, to be subtracted from its right-hand side.
+        """
+
+        return self._T.T @ c, c[self.slaveDofIndices].dot(R_condensed[self.slaveDofIndices])
+
     @performancetiming.timeit("mpc recover slave solution")
     def recoverSlaveSolution(self, x: np.ndarray) -> np.ndarray:
         """Complete the solution of the condensed system (in place): add the master-interpolated

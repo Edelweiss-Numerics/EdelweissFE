@@ -35,6 +35,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.sparse import csr_matrix
 
+import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.linsolve.base import Border
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.systemmatrixassembly import SystemMatrixAssembly
@@ -43,7 +45,7 @@ from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import ConditionalStop
+from edelweissfe.utils.exceptions import ConditionalStop, DivergingSolution
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
 from edelweissfe.utils.schema import schemaField
@@ -63,6 +65,16 @@ class NISTPArcLengthSchema(NISTParallel.schema):
         ),
         dtype=str,
         default="off",
+    )
+    borderedSystem: bool | None = schemaField(
+        description=(
+            "Solve for the corrections of the solution and of the load parameter together, as one linear system "
+            "bordered by the controller's linearized equation, instead of solving for two right-hand sides; an "
+            "iterative linear solver then needs one Krylov solve per iteration instead of two. Needs a controller "
+            "that gives its equation as one linear row, and no line search."
+        ),
+        dtype=bool,
+        default=False,
     )
     stopCondition: str | None = schemaField(
         description=(
@@ -105,6 +117,11 @@ class ArcLengthIncrement:
     #: The correction of the solution :math:`\\boldsymbol{R}_f` causes, :math:`\\Delta\\Delta \\boldsymbol{U}_f`, of the
     #: last linear solve.
     referenceCorrection: np.ndarray | None = None
+    #: With ``borderedSystem``: the correction of the load parameter of the last linear solve,
+    #: :math:`\\Delta\\Delta\\lambda`, solved for together with the correction of the solution.
+    loadParameterCorrection: float | None = None
+    #: The solution increment of the state evaluated last, the iterate the controller's equation is linearized at.
+    solutionIncrement: DofVector | None = None
     #: The increment of the load parameter of the iterate, :math:`\\Delta\\lambda`.
     loadParameterIncrement: float = 0.0
     #: The load parameter of the state being evaluated: of the iterate, or of a trial state of a line search.
@@ -149,6 +166,21 @@ class NISTPArcLength(NISTParallel):
     leaves by an exception before). A cut back increment therefore starts again from the load parameter of the last
     accepted one.
 
+    With the option ``borderedSystem``, every iteration solves one linear system instead of two right-hand sides: the
+    linearized equilibrium bordered by the controller's equation, linearized at the iterate, as one more row, and by the
+    reference load as one more column,
+
+    .. math::
+
+        \\begin{bmatrix} \\boldsymbol{K} & -\\boldsymbol{R}_f \\\\ \\boldsymbol{c}^T & d \\end{bmatrix}
+        \\begin{bmatrix} \\Delta\\Delta \\boldsymbol{U} \\\\ \\Delta\\Delta\\lambda \\end{bmatrix}
+        = \\begin{bmatrix} \\boldsymbol{R}_0 \\\\ r \\end{bmatrix}
+
+    (see :meth:`solveBorderedSystemForCorrection`). A direct linear solver solves it by eliminating
+    :math:`\\Delta\\Delta\\lambda`, which gives the corrections of the two right-hand sides; an iterative one as one
+    Krylov solve, which costs about one solve with :math:`\\boldsymbol{K}` instead of two (Alkmim et al. 2026, IJNME, doi
+    10.1002/nme.70309).
+
     The re-equilibration after a model change (option ``equilibrateAfterModelChange``) is an arc length increment of
     size zero, solved by :meth:`solveIncrement` like any other: the controller's equation asks for a change of zero, so
     the controlled quantity stays where the last accepted increment left it, and the load parameter is solved for, and
@@ -172,7 +204,11 @@ class NISTPArcLength(NISTParallel):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTPArcLengthSchema
 
-    SolverSpecificOptions = NISTParallel.SolverSpecificOptions | {"arcLengthController": "off", "stopCondition": None}
+    SolverSpecificOptions = NISTParallel.SolverSpecificOptions | {
+        "arcLengthController": "off",
+        "borderedSystem": False,
+        "stopCondition": None,
+    }
 
     #: The state between increments: the load parameter the step has reached, and the predictor's state, NIST's plus
     #: the increments of the load parameter that belong to its accepted increments.
@@ -272,6 +308,7 @@ class NISTPArcLength(NISTParallel):
         if self.arcLengthController is None:
             self.journal.message("No ArcLengthController specified in current step", self.identification)
         else:
+            self.checkBorderedSystemIsPossible()
             self.arcLengthController.beginControl(model)
 
         stopCondition = self.options["stopCondition"]
@@ -327,6 +364,31 @@ class NISTPArcLength(NISTParallel):
                 )
             )
         return named[0]
+
+    def checkBorderedSystemIsPossible(self):
+        """With ``borderedSystem``, the controller must give its equation as one linear row, and the line search, which
+        needs the two corrections of the right-hand sides apart (:meth:`correctionAtStepLength`), must be off.
+
+        Raises
+        ------
+        ValueError
+            If the bordered system is asked for but not possible.
+        """
+
+        if not self.options["borderedSystem"]:
+            return
+        if not self.arcLengthController.providesLinearizedConstraint:
+            raise ValueError(
+                "borderedSystem=True: the arc length controller {:} gives no linear row for the bordered system (e.g. "
+                "the displacement limit of a dissipationcontrol); solve with borderedSystem=False".format(
+                    self.arcLengthController.name
+                )
+            )
+        if self.options["lineSearch"]:
+            raise ValueError(
+                "borderedSystem=True: the line search needs the corrections of the two right-hand sides apart; solve "
+                "with lineSearch=False or borderedSystem=False"
+            )
 
     def endStep(self, step, model: FEModel):
         """End the step as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.endStep` does, and the control of
@@ -600,6 +662,43 @@ class NISTPArcLength(NISTParallel):
             return super().solveForCorrection(K_, R, dirichlets)
 
         increment = self.arcLengthIncrement
+        K_ = self.linearizedSystem(K_, R, dirichlets)
+        self.passSystemStateToController(dirichlets)
+
+        if self.options["borderedSystem"]:
+            return self.solveBorderedSystemForCorrection(K_)
+
+        # solve 2 eq. systems at once: ddU_0 = K⁻¹ R_0 and ddU_f = K⁻¹ R_f
+        ddU_ = self.linearSolve(K_, increment.rightHandSides)
+        # add the master-interpolated part at the slave DOFs of both corrections
+        if self.mpcTransformation is not None:
+            ddU_ = self.mpcTransformation.recoverSlaveSolution(ddU_)
+        increment.referenceCorrection = ddU_[:, 1]
+
+        return ddU_[:, 0]
+
+    def linearizedSystem(self, K_: csr_matrix, R: DofVector, dirichlets: list) -> csr_matrix:
+        """The linearized system of the iterate with its two right-hand sides, the out-of-balance force :math:`R_0 = R`
+        and the reference load :math:`R_f`, written to ``rightHandSides`` of the increment: condensed by the
+        multi-point constraints, with the Dirichlet boundary conditions applied (see :meth:`solveForCorrection`).
+
+        Parameters
+        ----------
+        K_
+            The system matrix of the iteration.
+        R
+            The out-of-balance force.
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+
+        Returns
+        -------
+        csr_matrix
+            The system matrix with the identity rows of the prescribed degrees of freedom, whose columns are eliminated
+            into both right-hand sides.
+        """
+
+        increment = self.arcLengthIncrement
         rightHandSides = increment.rightHandSides
         R_0, R_f = rightHandSides[:, 0], rightHandSides[:, 1]
 
@@ -612,19 +711,78 @@ class NISTPArcLength(NISTParallel):
             R_0[dirichlet.constrainedDofIndices] = 0.0
         R_f = self.applyDirichletToResidual(increment.referenceTimeStep, R_f, dirichlets)
 
-        self.passSystemStateToController(dirichlets)
-
         # identity rows, and the columns eliminated into both right-hand sides R_0 and R_f
-        K_ = self.applyDirichletToStiffness(K_, dirichlets, rightHandSides)
+        return self.applyDirichletToStiffness(K_, dirichlets, rightHandSides)
 
-        # solve 2 eq. systems at once: ddU_0 = K⁻¹ R_0 and ddU_f = K⁻¹ R_f
-        ddU_ = self.linearSolve(K_, rightHandSides)
-        # add the master-interpolated part at the slave DOFs of both corrections
+    def solveBorderedSystemForCorrection(self, K_: csr_matrix) -> DofVector:
+        """Solve for the corrections of the solution and of the load parameter together (option ``borderedSystem``):
+        the linearized system with the two right-hand sides of :meth:`linearizedSystem`, bordered by the reference load
+        as one more column and by the controller's equation, linearized at the iterate
+        (:meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.linearizedConstraint`), as
+        one more row:
+
+        .. math::
+
+            \\begin{bmatrix} \\boldsymbol{K} & -\\boldsymbol{R}_f \\\\ \\boldsymbol{c}^T & d \\end{bmatrix}
+            \\begin{bmatrix} \\Delta\\Delta \\boldsymbol{U} \\\\ \\Delta\\Delta\\lambda \\end{bmatrix}
+            = \\begin{bmatrix} \\boldsymbol{R}_0 \\\\ r \\end{bmatrix}.
+
+        Its first rows are those of the two right-hand sides, :math:`\\Delta\\Delta \\boldsymbol{U} = \\Delta\\Delta
+        \\boldsymbol{U}_0 + \\Delta\\Delta\\lambda \\, \\Delta\\Delta \\boldsymbol{U}_f`, and at the prescribed
+        degrees of freedom :math:`\\Delta\\Delta U_p = \\Delta\\Delta\\lambda \\, \\Delta u_p`: the prescribed
+        degrees of freedom move with the load parameter inside the system, and the controller's equation sees them
+        there. The linear solver solves it (:meth:`~edelweissfe.linsolve.base.LinearSolver.solveBordered`). With
+        multi-point constraints, the equation is condensed as well
+        (:meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.transformEquation`).
+
+        Parameters
+        ----------
+        K_
+            The system matrix of :meth:`linearizedSystem`.
+
+        Returns
+        -------
+        DofVector
+            The correction of the solution; the correction of the load parameter is kept as
+            ``loadParameterCorrection`` of the increment.
+        """
+
+        increment = self.arcLengthIncrement
+        R_0, R_f = increment.rightHandSides[:, 0], increment.rightHandSides[:, 1]
+        constraint = self.arcLengthController.linearizedConstraint(
+            increment.solutionIncrement, increment.timeStep, self.system
+        )
+
+        row, rightHandSide = constraint.weights, constraint.rightHandSide
         if self.mpcTransformation is not None:
-            ddU_ = self.mpcTransformation.recoverSlaveSolution(ddU_)
-        increment.referenceCorrection = ddU_[:, 1]
+            row, slavePart = self.mpcTransformation.transformEquation(row, R_0)
+            rightHandSide -= slavePart
 
-        return ddU_[:, 0]
+        ddU, ddLambda = self.linearSolveBordered(
+            K_, Border(-R_f, row, constraint.loadParameterWeight), R_0, rightHandSide
+        )
+        if self.mpcTransformation is not None:
+            ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
+        increment.loadParameterCorrection = ddLambda
+
+        return ddU
+
+    @performancetiming.timeit("linear solve")
+    def linearSolveBordered(
+        self, K_: csr_matrix, border: Border, b: np.ndarray, beta: float
+    ) -> tuple[np.ndarray, float]:
+        """Solve the bordered system, see :meth:`~edelweissfe.linsolve.base.LinearSolver.solveBordered`.
+
+        Raises
+        ------
+        DivergingSolution
+            If the solution is not finite, e.g. a declined solve.
+        """
+
+        ddU, ddLambda = self.linSolver.solveBordered(K_, border, b, beta)
+        if not (np.isfinite(ddLambda) and np.isfinite(ddU).all()):
+            raise DivergingSolution("Obtained NaN in linear solve")
+        return ddU, ddLambda
 
     def assembleResidualAndTangent(
         self,
@@ -686,6 +844,7 @@ class NISTPArcLength(NISTParallel):
         increment = self.arcLengthIncrement
         if increment is not None:
             increment.internalForces, increment.loadsAndConstraints = P, PLoadsAndConstraints
+            increment.solutionIncrement = dU
 
         return P, K, F
 
@@ -795,6 +954,10 @@ class NISTPArcLength(NISTParallel):
         """
 
         increment = self.arcLengthIncrement
+        if self.options["borderedSystem"]:
+            # the correction of the bordered system, already complete (no line search: stepLength is 1)
+            return stepLength * ddU_0, stepLength * increment.loadParameterCorrection
+
         ddU_f = increment.referenceCorrection
 
         ddU_0 = stepLength * ddU_0

@@ -54,6 +54,7 @@ referencePoint=RP
 
 *job, name=job, domain=2d
 *solver, solver={solver}, name=theSolver
+{solverOptions}
 
 *fieldOutput
 >>perNode, name=U, elSet=all, field=displacement, result=U
@@ -67,10 +68,13 @@ maxInc={maxInc}, minInc=1e-4, maxNumInc=100, maxIter=10, stepLength=1
 {actions}
 """
 
-NIST = dict(solver="NIST", maxInc=1.0, actions=f">>dirichlet, name=pull, nSet=RP, field=displacement, 2={URP}")
+NIST = dict(
+    solver="NIST", solverOptions="", maxInc=1.0, actions=f">>dirichlet, name=pull, nSet=RP, field=displacement, 2={URP}"
+)
 
 INDIRECT = dict(
     solver="NISTPArcLength",
+    solverOptions="",
     maxInc=0.25,
     actions=f""">>options, name=theSolver, arcLengthController=control
 >>indirectcontrol, name=control, dof1='model.nodeSets["RP"][0].fields["displacement"]', cVector1='[0,1]', dof2='model.nodeSets["RP"][0].fields["displacement"]', cVector2='[0,0]', L={URP}
@@ -80,6 +84,7 @@ INDIRECT = dict(
 # elastic range: nothing is dissipated, the displacement limit governs every increment
 DISSIPATION = dict(
     solver="NISTPArcLength",
+    solverOptions="",
     maxInc=0.25,
     actions=f""">>options, name=theSolver, arcLengthController=control, stopCondition='fieldOutputs["URP"] < {URP}+1e-9'
 >>dissipationcontrol, name=control, elSet=all, dissipation=1.0, displacement={abs(URP)}
@@ -111,8 +116,10 @@ def _assertSameState(result, reference):
     assert result["PRP"] == pytest.approx(0.0, abs=1e-9 * abs(reference["PRight"]))
 
 
-def test_indirect_control_with_a_rigid_body_constraint_matches_nist(tmp_path, reference):
-    _assertSameState(_simulate(tmp_path, INDIRECT, "linearElastic"), reference["linearElastic"])
+@pytest.mark.parametrize("borderedSystem", [False, True])
+def test_indirect_control_with_a_rigid_body_constraint_matches_nist(tmp_path, reference, borderedSystem):
+    case = INDIRECT | dict(solverOptions="borderedSystem={:}".format(borderedSystem))
+    _assertSameState(_simulate(tmp_path, case, "linearElastic"), reference["linearElastic"])
 
 
 def test_dissipation_control_with_a_rigid_body_constraint_matches_nist(tmp_path, reference):
@@ -130,10 +137,12 @@ maxInc=0.25, minInc=1e-4, maxNumInc=50, maxIter=25,
 """
 
 
-def _simulateHangingNodes(tmp_path, arcLength):
+def _simulateHangingNodes(tmp_path, arcLength, solverOptions=""):
     deck = (HANGING_NODES / "test.inp").read_text()
     if arcLength:
-        deck = deck.replace("*solver, solver=NIST, name=S\n", "*solver, solver=NISTPArcLength, name=S\n")
+        deck = deck.replace(
+            "*solver, solver=NIST, name=S\n", "*solver, solver=NISTPArcLength, name=S\n" + solverOptions
+        )
         deck = deck.replace("*step, solver=S\nmaxInc=1.0, minInc=1e-4, maxNumInc=50, maxIter=25,\n", HANGING_NODES_STEP)
         assert "NISTPArcLength" in deck and "indirectcontrol" in deck
     (tmp_path / "hanging.dat").write_text((HANGING_NODES / "hanging.dat").read_text())
@@ -149,10 +158,12 @@ def _simulateHangingNodes(tmp_path, arcLength):
     return {name: np.asarray(fieldOutputController.fieldOutputs[name].getLastResult()) for name in ("U", "D")}
 
 
-def test_indirect_control_with_hanging_nodes_matches_nist(tmp_path):
+# the bordered system with an iterative linear solver: the controller's equation condensed by the multi-point constraints
+@pytest.mark.parametrize("solverOptions", ["", "borderedSystem=True\nlinsolver=blockamg\n"])
+def test_indirect_control_with_hanging_nodes_matches_nist(tmp_path, solverOptions):
     for sub in ("nist", "arc"):
         (tmp_path / sub).mkdir()
     reference = _simulateHangingNodes(tmp_path / "nist", arcLength=False)
-    result = _simulateHangingNodes(tmp_path / "arc", arcLength=True)
+    result = _simulateHangingNodes(tmp_path / "arc", arcLength=True, solverOptions=solverOptions)
     for name in ("U", "D"):
         np.testing.assert_allclose(result[name], reference[name], rtol=1e-5, atol=1e-6 * np.abs(reference[name]).max())
