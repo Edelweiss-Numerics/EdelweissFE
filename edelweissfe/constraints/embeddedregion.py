@@ -42,6 +42,9 @@ a row of the transformation :math:`\\mathbf{T}` that condenses the system to :ma
 embedded elements are meshed independently of the host mesh; they keep their own stiffness, which is added to the
 host's.
 
+For bond-slip instead of perfect bond, see the ``embeddedBond`` generator
+(:mod:`edelweissfe.generators.embeddedbond`).
+
 **Embedded beams** (elements with a ``rotation`` field, e.g., Marmot ``B2D2``, ``B3D3``): their displacements are
 tied as above; their rotations as chosen by ``rotations``. The rotation of an Euler-Bernoulli beam is the slope of
 its axis, :math:`\\boldsymbol{\\theta}_\\perp = \\boldsymbol{t} \\times \\mathrm{d}\\boldsymbol{u}/\\mathrm{d}s`. An embedded

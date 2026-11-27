@@ -127,13 +127,15 @@ class TopologyPipeline:
 
     @contextmanager
     def changes(self, deferFieldBookkeeping: bool = False):
-        """The only scope in which elements may be created or deleted.
+        """The only scope in which elements and nodes may be created or deleted.
 
         Opened once around model setup, and once per increment around the model modifiers. Outside
-        it, :meth:`~edelweissfe.models.femodel.FEModel.createElement` and :meth:`~edelweissfe.models.femodel.FEModel.removeElement` raise -- which is what makes "only model
+        it, :meth:`~edelweissfe.models.femodel.FEModel.createElement`,
+        :meth:`~edelweissfe.models.femodel.FEModel.removeElement`, :meth:`~edelweissfe.models.femodel.FEModel.createNode`
+        and :meth:`~edelweissfe.models.femodel.FEModel.removeNodes` raise -- which is what makes "only model
         modifiers mutate the topology" an enforced property rather than a convention, and what lets
-        :meth:`reserveElementNumbers` guarantee that element numbering is a pure function of the
-        ordered creation sequence.
+        :meth:`reserveElementNumbers` and :meth:`reserveNodeNumbers` guarantee that element and node numbering is a
+        pure function of the ordered creation sequence.
 
         Nesting is permitted and is a no-op for the inner scope: setup-time helpers may open a
         window without knowing whether their caller already did.

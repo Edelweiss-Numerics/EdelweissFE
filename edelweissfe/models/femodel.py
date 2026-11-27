@@ -190,6 +190,46 @@ class FEModel:
 
         del self.elements[elNumber]
 
+    def removeNodes(self, labels):
+        """Remove nodes from the model and from every node set. Their labels are retired, never reissued:
+        :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers` is monotonic.
+
+        Like :meth:`removeElement`, this is allowed only inside a topology change. A node is refused while an element
+        or a constraint still references it -- remove or re-mesh those first. The check is one pass over the elements
+        and constraints for all ``labels``, so removing many nodes at once costs no more than removing one. As for
+        :meth:`removeElement`, the node fields are not touched: a caller removing nodes after the model is prepared
+        resizes them (:meth:`_resizeNodeFieldsForNodes`).
+
+        Parameters
+        ----------
+        labels
+            The labels of the nodes to remove.
+        """
+
+        if not self.topology.isOpen:
+            raise TopologyError(
+                "node(s) {:} were deleted outside a topology change: only model modifiers may create "
+                "or delete nodes, inside TopologyPipeline.changes()".format(sorted(labels))
+            )
+
+        nodes = {self.nodes[label] for label in labels}
+        if not nodes:
+            return
+
+        users = itertools.chain(self.elements.values(), self.constraints.values(), self.multiPointConstraints.values())
+        for user in users:
+            used = nodes.intersection(user.nodes)
+            if used:
+                raise TopologyError(
+                    "node(s) {:} cannot be removed: still used by {:}".format(sorted(n.label for n in used), user)
+                )
+
+        for node in nodes:
+            del self.nodes[node.label]
+        for nodeSet in self.nodeSets.values():
+            if any(node in nodeSet for node in nodes):
+                nodeSet.replaceMembers([n for n in nodeSet if n not in nodes])
+
     def _populateNodeFieldVariablesFromElements(
         self,
     ):
