@@ -224,7 +224,9 @@ def _stampParentFace(facet, sourceElement, faceType: str, canonicalIndices: tupl
             "face tables and the canonical parent-face derivation disagree."
         ) from exception
 
-    facet.setParentFace(faceType, [sourceElement.nodes[i] for i in canonicalIndices], vertexParametricCoords)
+    facet.setParentFace(
+        faceType, sourceElement, [sourceElement.nodes[i] for i in canonicalIndices], vertexParametricCoords
+    )
 
 
 def _assignQuadConsistentShares(quadFacets: list):
@@ -269,7 +271,7 @@ def _applyModifiedSerendipityShares(cornerTriangles: list):
     the transmitted traction).
 
     Among all resultant-exact, non-negative weightings the mismatch per node is
-    :math:`w_{\text{corner}} + A/12`, monotone in the corner share, so a *vanishing* corner share
+    :math:`w_{\\text{corner}} + A/12`, monotone in the corner share, so a *vanishing* corner share
     is the optimum. That is this weighting: it reduces the mismatch from :math:`A/8` per node (the
     default ``facetConsistent`` shares of the midside triangulation) to :math:`A/12`, i.e. by a
     third, and it is provably the best a per-node weighting can do. Removing the remaining

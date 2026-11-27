@@ -69,11 +69,14 @@ class FEModel:
     ----------
     dimension
         The dimension of the model.
+    axisymmetric
+        True if the model is the section of a body of revolution (``*job, domain=axisymmetric``), see
+        :attr:`axisymmetric`.
     """
 
     identification = "FEModel"
 
-    def __init__(self, dimension: int):
+    def __init__(self, dimension: int, axisymmetric: bool = False):
         self.time = 0.0  #: Current time of the model.
         self.nodes = {}  #: Nodes in the model.
         self.elements = {}  #: Elements in the model.
@@ -94,6 +97,20 @@ class FEModel:
         self.rigidBodies = {}  #: RigidBodies in the model.
         self.elementProperties = []  #: Element properties.
         self.domainSize = dimension  #: Spatial dimension of the model
+        if axisymmetric and dimension != 2:
+            raise ValueError(f"An axisymmetric model is two-dimensional, the section r-z; got dimension {dimension}.")
+        #: True if the model is the section r-z of a body of revolution about the axis r = 0: the first coordinate
+        #: is the radius r, the second the axial coordinate z, and every point of the section stands for the ring it
+        #: sweeps about the axis. What the model integrates is then integrated over the rings, with the circumference
+        #: :math:`2 \pi r` -- the axisymmetric elements their volumes, the contact points their areas (see
+        #: :func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt`) --, so that the forces and the
+        #: masses at the nodes are those of the full rings. Set by ``*job, domain=axisymmetric``. The elements must
+        #: then be axisymmetric ones (``CAX4``, ``CAX8``, ``CAX8R``, ``GCAX4``, ``GCAX8``, ``GCAX8R``, ``CX8UL``,
+        #: ``CX8RUL``), and a model of plane elements a ``2d`` job: nothing checks this yet, since an element does not
+        #: tell whether it integrates over rings. Axisymmetric elements in a ``2d`` job make every contact point stand
+        #: for :math:`t L_p` instead of :math:`2 \pi r L_p`, the contact too soft by :math:`2 \pi r / t`; plane
+        #: elements in an axisymmetric job make it too stiff by the same factor.
+        self.axisymmetric = axisymmetric
         self.fieldOutputController = None  #: Set once by the driver; lets in-model entities (e.g. AMR markers) look up a named *fieldOutput by value, not just by declaration.
         #: How the mesh may change during a run; see :class:`~edelweissfe.models.topologypipeline.TopologyPipeline`.
         self.topology = TopologyPipeline(self)
@@ -452,6 +469,37 @@ class FEModel:
         self._prepareElements(journal)
         self.topology.recordSetupFingerprint()
 
+    def thicknessOf(self, element) -> float:
+        """The thickness of a plane model at one of its elements: the thickness of the plane section the element
+        belongs to (``*section, type=plane, thickness=...``), by which the element multiplies what it integrates over
+        its area. What else integrates over the area of the slice -- e.g. the contact points, see
+        :func:`~edelweissfe.constraints.base.contactpoints.outOfPlaneExtentAt` -- takes it from here, so that the
+        forces balance at the nodes.
+
+        Parameters
+        ----------
+        element
+            The element.
+
+        Returns
+        -------
+        float
+            The thickness.
+
+        Raises
+        ------
+        ValueError
+            If no section with a thickness holds the element.
+        """
+
+        for section in self.sections.values():
+            if section.thickness is not None and any(element in elementSet for elementSet in section.elSets):
+                return section.thickness
+        raise ValueError(
+            f"Element {element.elNumber} is in no section with a thickness (type=plane); a plane model is a slice of "
+            "the thickness of its sections."
+        )
+
     def activeConstraints(self) -> list:
         """The constraints that take part in the discrete system: all constraints, in their order, that are active,
         i.e. switched on and within reach (see
@@ -629,12 +677,28 @@ class FEModel:
         return DiscreteSystem(self, locations)
 
     def advanceToTime(self, time: float):
-        """Accept the current state of the model and sub instances, and
-        set the new time.
+        """Accept the current state of the model at the end of an increment, and set the new time: the state of its
+        entities (:meth:`acceptTheStateOfTheEntities`), then that of its constraints
+        (:meth:`acceptTheStateOfTheConstraints`).
 
-        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that
-        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
-        frictional history of a contact switched off for a step.
+        Both accept the state of their last evaluation, which must be the one at the configuration accepted. That is
+        what every solver evaluates last, except ``NED`` in a model with entities that carry their own inertia: there
+        the constraints are evaluated at the accepted configuration only after the entities are reconnected, so ``NED``
+        calls the two parts itself, with the reconnection and the evaluation between them (see
+        :meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.acceptIncrement`).
+
+        Parameters
+        ----------
+        time
+            The new time.
+        """
+
+        self.acceptTheStateOfTheEntities(time)
+        self.acceptTheStateOfTheConstraints()
+
+    def acceptTheStateOfTheEntities(self, time: float):
+        """Let every element accept its computed state, and set the new time. A model with other entities that carry a
+        state accepts theirs here as well.
 
         Parameters
         ----------
@@ -643,8 +707,16 @@ class FEModel:
         """
 
         self.time = time
-
         self._acceptElementStates()
+
+    def acceptTheStateOfTheConstraints(self):
+        """Let the constraints and the multi-point constraints accept the state of their last evaluation
+        (``acceptLastState``).
+
+        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that
+        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
+        frictional history of a contact switched off for a step.
+        """
 
         # Serial: negligible next to the element loop.
         for constraint in self.activeConstraints():
@@ -873,7 +945,9 @@ def printPrettyModelSummary(model: FEModel, journal: Journal):
             )
 
     journal.message(
-        "Finite element model with spatial dimension {:} has".format(model.domainSize),
+        "Finite element model with spatial dimension {:}{:} has".format(
+            model.domainSize, " (axisymmetric)" if model.axisymmetric else ""
+        ),
         identification,
         0,
     )

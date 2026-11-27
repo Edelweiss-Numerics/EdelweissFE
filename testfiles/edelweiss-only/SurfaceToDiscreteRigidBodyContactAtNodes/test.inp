@@ -21,20 +21,30 @@ elType  =C3D8
 ** top cap sits flush with the block's bottom (z=0) face and shifted
 ** off-center relative to the block's footprint -- so only part of the
 ** cylinder's flat cap (and, at the far corner, its rounded rim) underlies
-** the block, making the contact patch asymmetric.
+** the block, making the contact patch asymmetric. Its surface is triangulated
+** (each quadrilateral of the example's mesh split in two), as the contact needs.
 *modelGenerator, generator=discreteRigidBodyGenerator, name=cylinder
-filename=rigid_body.exo
+filename=rigid_body.stl
 translation='0, -10, -11.0'
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = block_back
+name    = slaveSurf
 
 ** Scoped to block_all rather than all: all also contains the rigid body's
 ** surface/RP nodes/elements, which cannot take a solid section.
 *section, name=section1, material=linearelastic, type=solid
 block_all
 
-*constraint, type=nodeToDiscreteRigidBodyPenalty, name=contact
-nSet=block_back
+** The nodes of the block's bottom face are the contact points. The penalty is a
+** stiffness per unit area: 1.44e8 = 1e8 per node over the tributary area
+** (10/12)^2 of an interior node; a node on the edge of the face stands for half
+** of that area, a corner node for a quarter.
+*constraint, type=surfaceToDiscreteRigidBodyPenalty, name=contact
+slaveSurface=slaveSurf_facets
+contactPoints=nodes
 rigidBody=cylinder
-penalty=1e8
+penalty=1.44e8
 
 *fieldOutput
 >>perNode, elSet=all, field=displacement, name=displacement, result=U

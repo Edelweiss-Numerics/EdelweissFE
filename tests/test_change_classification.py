@@ -40,9 +40,6 @@ from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
     Constraint as NodeToDeformableSurfacePenalty,
 )
-from edelweissfe.constraints.nodetodiscreterigidbodypenalty import (
-    Constraint as NodeToDiscreteRigidBodyPenalty,
-)
 from edelweissfe.constraints.nodetorigidsurfacepenalty import (
     Constraint as NodeToRigidSurfacePenalty,
 )
@@ -241,8 +238,7 @@ def test_only_a_constraint_that_searches_as_the_bodies_move_says_so():
     ):
         assert contact.connectivityChangesWithMotion
     # fixed nodes, a stateless gap: only refreshed after a change of the mesh
-    for fixedNodes in (NodeToRigidSurfacePenalty, NodeToDiscreteRigidBodyPenalty):
-        assert not fixedNodes.connectivityChangesWithMotion
+    assert not NodeToRigidSurfacePenalty.connectivityChangesWithMotion
 
 
 def _registeredConstraintClasses() -> list[type]:

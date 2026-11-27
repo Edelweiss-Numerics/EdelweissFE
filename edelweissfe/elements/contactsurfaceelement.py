@@ -57,6 +57,7 @@ class ContactFacetElementBase(BaseElement):
     #: The parent element face this facet tiles, stamped by the surface element generator; see
     #: setParentFace. None until stamped, which is what the integrated contact formulation checks.
     _parentFaceType = None
+    _parentElement = None
     _parentFaceNodes = None
     _vertexParametricCoords = None
 
@@ -140,7 +141,9 @@ class ContactFacetElementBase(BaseElement):
     def setNodalAreaShares(self, shares: np.ndarray):
         self._nodalAreaShares = np.asarray(shares, dtype=float)
 
-    def setParentFace(self, faceType: str, parentFaceNodes: list, vertexParametricCoords: np.ndarray):
+    def setParentFace(
+        self, faceType: str, parentElement: BaseElement, parentFaceNodes: list, vertexParametricCoords: np.ndarray
+    ):
         """Record the element face this facet was cut from.
 
         This is what an integrated (Gauss-point-to-segment) contact formulation needs and a
@@ -154,6 +157,8 @@ class ContactFacetElementBase(BaseElement):
         faceType
             The parent face's canonical type, a key of
             :data:`~edelweissfe.utils.parentfacegeometry.PARENT_FACE_PARAMETRIC_COORDS`.
+        parentElement
+            The element the face belongs to, whose section says how thick the body is in a plane model.
         parentFaceNodes
             The parent face's nodes, in that canonical ordering. A superset of this facet's own
             nodes.
@@ -163,6 +168,7 @@ class ContactFacetElementBase(BaseElement):
         """
 
         self._parentFaceType = faceType
+        self._parentElement = parentElement
         self._parentFaceNodes = list(parentFaceNodes)
         self._vertexParametricCoords = np.asarray(vertexParametricCoords, dtype=float)
 
@@ -171,6 +177,12 @@ class ContactFacetElementBase(BaseElement):
         """The parent face's canonical type, or None if this facet was never stamped."""
 
         return self._parentFaceType
+
+    @property
+    def parentElement(self) -> BaseElement | None:
+        """The element whose face this facet tiles, or None if this facet was never stamped."""
+
+        return self._parentElement
 
     @property
     def parentFaceNodes(self) -> list | None:

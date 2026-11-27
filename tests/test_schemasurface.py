@@ -535,14 +535,14 @@ _NEWLY_BYTE_IDENTICAL_MODULES = frozenset(
     }
 )
 
-#: The 11 constraints whose structural args (`slaveSurface`/`masterSurface`/`nSet`/
+#: The 10 constraints whose structural args (`slaveSurface`/`masterSurface`/`nSet`/
 #: `referencePoint`/`constrainedNSet`/`loadNSet`/`rigidBody`) were resolved in
 #: `fromConstraintDefinition` (popped from the raw definition) rather than declared on the schema,
 #: leaving the schema under-describing the grammar. These constraints now declare them as required
 #: schema fields (dtype/order matching the golden) and `fromConstraintDefinition` reads them off the
-#: built schema instance instead. 2 of these 11 (`nodetodeformablesurfacepenalty.augmentedLagrange`,
+#: built schema instance instead. 2 of these 10 (`nodetodeformablesurfacepenalty.augmentedLagrange`,
 #: `tie.adjust`) also carry a `str`->`bool` improvement, whose golden lines were updated alongside.
-#: `constraints/hangingnode` is the twelfth registered constraint but is NOT here -- it
+#: `constraints/hangingnode` is the eleventh registered constraint but is NOT here -- it
 #: was already byte-identical (see `_PREVIOUSLY_BYTE_IDENTICAL_MODULES`).
 _U3A_CONSTRAINT_MODULES = frozenset(
     {
@@ -552,14 +552,13 @@ _U3A_CONSTRAINT_MODULES = frozenset(
         "edelweissfe.constraints.equalvaluepenalty",
         "edelweissfe.constraints.linearizedrigidbody",
         "edelweissfe.constraints.nodetodeformablesurfacepenalty",
-        "edelweissfe.constraints.nodetodiscreterigidbodypenalty",
         "edelweissfe.constraints.nodetorigidsurfacepenalty",
         "edelweissfe.constraints.penaltyindirectcontrol",
         "edelweissfe.constraints.rigidbody",
         "edelweissfe.constraints.tie",
     }
 )
-assert len(_U3A_CONSTRAINT_MODULES) == 11
+assert len(_U3A_CONSTRAINT_MODULES) == 10
 
 #: hadaptivity gained a real (documentation-only -- construction is untouched, see
 #: HAdaptivitySchema's own docstring) schema, reproducing its golden module section byte-for-byte.
@@ -580,7 +579,7 @@ _EXPECTED_BYTE_IDENTICAL_MODULES = (
 #: Every module documentation section that HAS a ``[name] ...``-headed golden body (i.e. is a member
 #: of :data:`_REGISTRY_SCHEMA_ENTRIES`) but is *not* byte-identical, deliberately deferred -- the
 #: "documented, deliberately-excluded list" so coverage can only grow, never
-#: shrink silently. All 11 constraints are now closed (see :data:`_U3A_CONSTRAINT_MODULES`), so this set
+#: shrink silently. All 10 constraints are now closed (see :data:`_U3A_CONSTRAINT_MODULES`), so this set
 #: is now empty; the remaining not-yet-schema-described modules are the ``schema=None`` ones tracked
 #: in :data:`_SCHEMA_NONE_WITH_GOLDEN_SECTION` and the ``< name >``-headed ones in
 #: :data:`_NON_BRACKET_FORMAT_WITH_GOLDEN_SECTION`, neither of which is a member of
@@ -643,7 +642,7 @@ def _moduleSectionBody(schema: type) -> str:
 def test_module_section_matches_golden_byte_for_byte(modpath):
     """Every module documentation section not deferred -- the
     21 already-identical modules, the ``ensight``/``section.plane``/``section.solid`` trio closed
-    by the renderer's ``datalineField`` support and ``optionsOverrideOnly`` marker, and the 11 constraints closed by
+    by the renderer's ``datalineField`` support and ``optionsOverrideOnly`` marker, and the 10 constraints closed by
     adding their structural args to their schemas -- renders byte-identical to its golden grammar body.
     """
     schema = _REGISTRY_SCHEMA_ENTRIES[modpath]
@@ -654,7 +653,7 @@ def test_module_section_byte_identical_set_is_exactly_the_expected_closed_set():
     """The end-to-end assertion: computing byte-identity
     fresh for every qualifying registry entry (not trusting the parametrized list above, which could
     in principle omit an entry) yields exactly ``_EXPECTED_BYTE_IDENTICAL_MODULES`` -- no regression
-    among the previous 21, the three additional closures, and the 11 constraints, and no more.
+    among the previous 21, the three additional closures, and the 10 constraints, and no more.
     """
     matching = {
         modpath

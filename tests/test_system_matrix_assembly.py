@@ -41,9 +41,6 @@ from edelweissfe.constraints.base.rigidbodycontactstiffness import (
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
     Constraint as NodeToDeformableSurfacePenalty,
 )
-from edelweissfe.constraints.nodetodiscreterigidbodypenalty import (
-    Constraint as NodeToDiscreteRigidBodyPenalty,
-)
 from edelweissfe.constraints.rigidbody import Constraint as RigidBody
 from edelweissfe.constraints.surfacetodeformablesurfacepenalty import (
     Constraint as SurfaceToDeformableSurfacePenalty,
@@ -84,8 +81,8 @@ class _SparseEntity(SystemMatrixContributorBase):
 
 
 class _OneSlaveRigidBodyContact(SystemMatrixContributorBase):
-    """The block of a contact between one node and a rigid body in 3D, as
-    :class:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty.Constraint` lays it out: the six degrees of
+    """The block of a contact between one located contact point (a node) and a rigid body in 3D, as
+    :class:`~edelweissfe.constraints.surfacetodiscreterigidbodypenalty.Constraint` lays it out: the six degrees of
     freedom of the reference point (first) coupled with each other, the three of the node (last) with each other, and
     the two groups both ways. That is 36 + 9 + 18 + 18 = 81 entries on nDof = 9 degrees of freedom: exactly as many as
     a dense 9 x 9 block, but ordered block by block, not column by column."""
@@ -229,7 +226,6 @@ def test_sparse_entity_whose_size_is_a_square_is_scattered_entry_by_entry(assemb
     "constraintType",
     [
         RigidBody,
-        NodeToDiscreteRigidBodyPenalty,
         SurfaceToDiscreteRigidBodyPenalty,
         NodeToDeformableSurfacePenalty,
         SurfaceToDeformableSurfacePenalty,
@@ -282,7 +278,7 @@ def test_the_entries_of_a_rigid_body():
 
 def test_the_entries_of_a_surface_to_deformable_surface_contact():
     """Two active contact points, on two and on three degrees of freedom: one dense block each, row by row."""
-    contact = SimpleNamespace(_activeBlockSizes=lambda: [2, 3])
+    contact = SimpleNamespace(_dofsOfLocatedPoints=lambda: [np.arange(2), np.arange(2, 5)])
     localRows, localColumns = SurfaceToDeformableSurfacePenalty.localEntriesOfBlock(contact)
     expected = np.array([(a, b) for a in (0, 1) for b in (0, 1)] + [(a, b) for a in (2, 3, 4) for b in (2, 3, 4)])
     np.testing.assert_array_equal(localRows, expected[:, 0])
@@ -290,7 +286,7 @@ def test_the_entries_of_a_surface_to_deformable_surface_contact():
 
 
 def test_a_contact_without_active_points_has_no_entries():
-    contact = SimpleNamespace(_activeBlockSizes=lambda: [])
+    contact = SimpleNamespace(_dofsOfLocatedPoints=lambda: [])
     localRows, localColumns = SurfaceToDeformableSurfacePenalty.localEntriesOfBlock(contact)
     assert localRows.shape == (0,) and localColumns.shape == (0,)
 

@@ -35,10 +35,7 @@ import numpy as np
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
-from edelweissfe.constraints.base.penaltylaw import (
-    normalPenaltyForce,
-    validatedContactType,
-)
+from edelweissfe.constraints.base.penaltylaw import penaltyLaw
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
@@ -142,7 +139,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self.value = configuration.value
         self.direction = configuration.direction
 
-        self.type = validatedContactType(configuration.contactType)
+        self.law = penaltyLaw(configuration.contactType)
 
         self._nSetName = nSet.name
         self._lastSeenTopologyVersion = model.topology.version
@@ -152,7 +149,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self.journal.message(
             f"{self._nNodes} nodes, field={self._field}, component={self.component}, "
-            f"type={self.type}, direction={self.direction:+.1f}",
+            f"type={self.law.name}, direction={self.direction:+.1f}",
             name,
         )
 
@@ -212,9 +209,9 @@ class Constraint(ConstraintBase, MeshDependent):
         active_indices = self.indices_component[active_mask]
         active_gaps = gap[active_mask]
 
-        # active_gaps is the penetration, positive in contact; normalPenaltyForce takes the gap,
+        # active_gaps is the penetration, positive in contact; the penalty law takes the gap,
         # negative in contact, and returns the (negative) normal force
-        normalForce, stiffness = normalPenaltyForce(self.type, self.penalty, -active_gaps)
+        normalForce, stiffness = self.law.normalForce(self.penalty, -active_gaps)
         force_magnitude = -normalForce
 
         # the boundary pushes the nodes back, against direction; P is the negative of that force
