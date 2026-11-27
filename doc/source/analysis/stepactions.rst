@@ -83,7 +83,9 @@ gradients, when the step it controls starts.
 
 A bar of ten elements in uniaxial strain, whose three weak elements soften and harden again one after the other, is
 pulled through three snap-backs; ``tests/test_dissipationcontrol.py`` compares its path with the analytical solution.
-``testfiles/marmot/DissipationControlSnapBacksThreshold`` runs the same bar without a displacement limit, and
+``testfiles/marmot/DissipationControlSnapBacksThreshold`` runs the same bar without a displacement limit,
+``testfiles/marmot/DissipationControlSnapBacksThresholdBordered`` that one as the bordered system with an iterative
+linear solver (see :ref:`arc-length-control`), and
 ``testfiles/marmot/AMR_DissipationControl`` across a mesh refinement.
 
 .. literalinclude:: ../../../testfiles/marmot/DissipationControlSnapBacks/test.inp

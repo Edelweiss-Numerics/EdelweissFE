@@ -356,6 +356,27 @@ dofs, with the preconditioner the preset would give that field. A ``fieldOutput`
 zone instead (testfile ``GradientEnhancedDamageSchurComplement``). The other arguments of ``SchurComplement`` are
 listed in :ref:`composed-schur-complement-arguments`.
 
+A bordered system
+-----------------
+
+The arc length method with ``borderedSystem`` (see :ref:`arc-length-control`) asks the linear solver for a system of
+one unknown and one equation more than :math:`A`,
+
+.. math::
+
+    \begin{bmatrix} A & \boldsymbol{a} \\ \boldsymbol{c}^T & d \end{bmatrix}
+    \begin{bmatrix} \boldsymbol{x} \\ \xi \end{bmatrix}
+    = \begin{bmatrix} \boldsymbol{b} \\ \beta \end{bmatrix}
+
+(:class:`~edelweissfe.linsolve.base.Border`). A tree with a Krylov solver solves it as one Krylov solve of
+:math:`n + 1` unknowns: the products with :math:`A` are those of the solve of :math:`A x = b`, and the preconditioner is
+the block triangular :math:`[M, 0; \boldsymbol{c}^T, \gamma]` around the tree's own :math:`M^{-1}`, with
+:math:`\gamma = d - \boldsymbol{c} \cdot M^{-1} \boldsymbol{a}`, an estimate of the scalar Schur complement. With an
+exact :math:`M`, GMRES converges in two iterations, whatever :math:`\gamma`; with an AMG preconditioner, in about as
+many as the solve with :math:`A`. A ``DiagonalScaling`` around the Krylov solver scales the border with :math:`D`; the
+tree below the Krylov solver never sees the border. A tree without a Krylov solver (a direct solve) eliminates
+:math:`\xi` instead, with the two right-hand sides :math:`\boldsymbol{b}` and :math:`\boldsymbol{a}`.
+
 .. _composed-own-component:
 
 Writing your own component

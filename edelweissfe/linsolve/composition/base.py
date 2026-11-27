@@ -379,6 +379,12 @@ class Preconditioner:
         """Apply this component, :math:`z = M^{-1} r`: :meth:`_apply`, recorded."""
         return self._recorded("apply", self._apply, r)
 
+    def solveBordered(self, border, b: np.ndarray, beta: float) -> tuple[np.ndarray, float]:
+        """Solve the bordered system of :class:`~edelweissfe.linsolve.base.Border` with this component as the
+        solve with :math:`A`: :meth:`_solveBordered`, recorded as an application. Only a Krylov solve can, and what
+        rescales its matrix around it."""
+        return self._recorded("apply", self._solveBordered, border, b, beta)
+
     def applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
         """:math:`M^{-1} r_f` on the dofs of :attr:`fieldIndex` alone: :meth:`_applyRestricted`, recorded as an
         application."""
@@ -413,6 +419,14 @@ class Preconditioner:
     def _apply(self, r: np.ndarray) -> np.ndarray:
         """:math:`z = M^{-1} r`."""
         raise NotImplementedError
+
+    def _solveBordered(self, border, b: np.ndarray, beta: float) -> tuple[np.ndarray, float]:
+        """The bordered system, see :meth:`solveBordered`; a component that is no Krylov solve cannot solve it."""
+        raise NotImplementedError(
+            "{:} cannot solve a bordered system: only a Krylov solver can, possibly inside a DiagonalScaling".format(
+                self.describe().name
+            )
+        )
 
     def _applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
         """:math:`M^{-1} r_f` on the dofs of :attr:`fieldIndex` alone (all dofs: the same as :meth:`_apply`)."""

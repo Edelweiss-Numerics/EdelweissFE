@@ -45,6 +45,7 @@ from dataclasses import dataclass
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.linsolve.base import Border
 from edelweissfe.linsolve.composition.base import (
     Description,
     MatrixChange,
@@ -363,6 +364,7 @@ class KrylovSolver(Preconditioner):
         self.lastScaledSystem = False
         self.lastRebuildReason = None
         self._krylov = None
+        self._borderedKrylov = None
         # the outer iterations of the solve the preconditioner was built for, and whether the last solve made it stale
         self._referenceIterations = None
         self._stale = False
@@ -414,24 +416,127 @@ class KrylovSolver(Preconditioner):
     def _solverFor(self, n: int):
         """AMGCL's solver for size ``n``: its scratch vectors are allocated for one size."""
         if self._krylov is None or self._krylov.n != n:
-            from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLKrylovSolver
-
             # the scratch vectors for the old size go first
             self._krylov = None
-            self._krylov = PyAMGCLKrylovSolver(n, self.method, self._parameters())
+            self._krylov = self._newSolver(n)
         return self._krylov
 
+    def _borderedSolverFor(self, n: int):
+        """AMGCL's solver for the bordered system of size ``n``, kept apart from the one of :meth:`_solverFor`."""
+        if self._borderedKrylov is None or self._borderedKrylov.n != n:
+            self._borderedKrylov = None
+            self._borderedKrylov = self._newSolver(n)
+        return self._borderedKrylov
+
+    def _newSolver(self, n: int):
+        """A new AMGCL solver of this method for size ``n``."""
+        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLKrylovSolver
+
+        return PyAMGCLKrylovSolver(n, self.method, self._parameters())
+
     def _apply(self, b: np.ndarray) -> np.ndarray:
+        """The solve of :math:`A x = b`, see :meth:`_solveWithRestarts`."""
+        return self._solveWithRestarts(b, self._pass, self._residuals)
+
+    def _solveBordered(self, border: Border, b: np.ndarray, beta: float) -> tuple[np.ndarray, float]:
+        """The bordered system of :class:`~edelweissfe.linsolve.base.Border` as one Krylov solve of :math:`n + 1`
+        unknowns, instead of two solves with :math:`A` (Alkmim et al. 2026, IJNME, doi 10.1002/nme.70309),
+        right-preconditioned by the block triangular
+
+        .. math::
+
+            P = \\begin{bmatrix} M & \\boldsymbol{0} \\\\ \\boldsymbol{c}^T & \\gamma \\end{bmatrix}, \\qquad
+            z_x = M^{-1} r_x, \\qquad z_\\xi = (r_\\xi - \\boldsymbol{c} \\cdot z_x) / \\gamma,
+
+        with :math:`M^{-1}` the preconditioner of this Krylov solve and :math:`\\gamma` the scalar Schur complement
+        :math:`S = d - \\boldsymbol{c} \\cdot A^{-1} \\boldsymbol{a}`, estimated as :math:`d - \\boldsymbol{c}
+        \\cdot M^{-1} \\boldsymbol{a}` (one more application of :math:`M^{-1}`). With :math:`M = A`,
+        :math:`P^{-1}` times the bordered matrix is :math:`[I, A^{-1}\\boldsymbol{a}; 0, S/\\gamma]`, whose
+        minimal polynomial is of degree two: GMRES converges in two iterations whatever :math:`\\gamma \\neq 0`.
+        So the solve costs about what the solve with :math:`A` alone costs.
+
+        The residual norm of the solve, which its tolerance is relative to, weighs the new equation by its scale. It is
+        scaled to measure in forces: such that :math:`\\gamma = \\pm \\lVert \\boldsymbol{a} \\rVert`, so that its
+        residual is the force :math:`\\lVert \\boldsymbol{a} \\rVert \\, \\Delta\\xi` of the correction
+        :math:`\\Delta\\xi \\approx r_\\xi / \\gamma` it asks for. The tolerance then applies to the driving force
+        :math:`\\boldsymbol{b} - \\boldsymbol{a} \\, \\xi` as a whole, as for a solve with prescribed values in the
+        right-hand side; scaled to a unit row instead, a small :math:`\\beta` (an increment of the load parameter) would
+        ask for an accuracy relative to :math:`\\boldsymbol{b}` alone, much more than the solve with :math:`A` needs.
+        """
+        n = b.size
+        equationSize = max(np.linalg.norm(border.row), abs(border.corner))
+        if not np.isfinite(equationSize) or equationSize == 0.0:
+            raise FloatingPointError(
+                "{:}: the equation of the border is empty or not finite".format(type(self).__name__)
+            )
+        column = np.ascontiguousarray(border.column, dtype=float)
+        # the estimate of the Schur complement of the equation scaled to a unit row (or corner)
+        gamma = (border.corner - border.row.dot(self.preconditioner(column))) / equationSize
+        if not np.isfinite(gamma) or gamma == 0.0:
+            raise FloatingPointError(
+                "{:}: the bordered system is singular for its preconditioner (Schur complement estimate {:})".format(
+                    type(self).__name__, gamma
+                )
+            )
+        # the equation in forces: gamma becomes +-|a|
+        scale = np.linalg.norm(column) / (abs(gamma) * equationSize)
+        if not np.isfinite(scale) or scale == 0.0:
+            raise FloatingPointError("{:}: the column of the border is zero or not finite".format(type(self).__name__))
+        row, corner, beta, gamma = scale * border.row, scale * border.corner, scale * beta, scale * equationSize * gamma
+
+        def applyBorderedPreconditioner(r: np.ndarray) -> np.ndarray:
+            z = np.empty_like(r)
+            z[:n] = self.preconditioner(np.ascontiguousarray(r[:n]))
+            z[n] = (r[n] - row.dot(z[:n])) / gamma
+            return z
+
+        krylov = self._borderedSolverFor(n + 1)
+
+        def borderedPass(rhs: np.ndarray, tolerance: float, x0: np.ndarray = None) -> tuple:
+            x = krylov.solveBordered(
+                self.A.krylovOperator(),
+                column,
+                row,
+                corner,
+                rhs,
+                applyBorderedPreconditioner,
+                tolerance,
+                self.maxIterations,
+                x0=x0,
+                onUnscaledOperator=self.A.scaling is None,
+            )
+            capHit = krylov.lastIterations >= self.maxIterations and not krylov.lastError < tolerance
+            return x, krylov.lastIterations, capHit
+
+        def borderedResiduals(rhs: np.ndarray, x: np.ndarray, onScaledSystem: bool) -> tuple:
+            if not onScaledSystem:
+                return krylov.lastError, float("nan")
+            # the scaled residual of the equations of A, and the new equation, which the scaling leaves as it is
+            r = np.append(
+                self.A.krylovOperator().residual(rhs[:n], x[:n], unscaled=False) - column * x[n],
+                rhs[n] - row.dot(x[:n]) - corner * x[n],
+            )
+            D = np.append(self.A.scaling, 1.0)
+            return (
+                np.linalg.norm(r / D) / max(np.linalg.norm(rhs / D), 1e-300),
+                np.linalg.norm(r) / max(np.linalg.norm(rhs), 1e-300),
+            )
+
+        x = self._solveWithRestarts(np.append(b, beta), borderedPass, borderedResiduals)
+        return x[:n], x[n]
+
+    def _solveWithRestarts(self, b: np.ndarray, solvePass, residuals) -> np.ndarray:
         """The solve: a first pass, and on a diagonally scaled matrix the true-residual restarts while the true residual
-        misses :math:`\\eta` (see ``trueResidualRestarts``)."""
+        misses :math:`\\eta` (see ``trueResidualRestarts``). ``solvePass`` and ``residuals`` are :meth:`_pass` and
+        :meth:`_residuals`, or their counterparts of the bordered system."""
         # on D A D (DiagonalScaling(LGMRES(...))): the method converges the scaled residual, not the true one
         onScaledSystem = self.A.scaling is not None
         eta = self.eta
         compensating = self.residualGapCompensation is not None and onScaledSystem
         passTolerance = self.residualGapCompensation.firstPassTolerance(eta) if compensating else eta
         with performancetiming.timeit("outer Krylov solve"):
-            x, iterations, capHit = self._pass(b, passTolerance)
-            trueResidual, scaledResidual = self._residuals(b, x, onScaledSystem)
+            x, iterations, capHit = solvePass(b, passTolerance)
+            trueResidual, scaledResidual = residuals(b, x, onScaledSystem)
         if compensating:
             self.residualGapCompensation.learn(trueResidual, scaledResidual)
         trueResidualRestarts = 0
@@ -446,8 +551,8 @@ class KrylovSolver(Preconditioner):
                     )
                 else:
                     passTolerance *= 0.01
-                x, passIterations, passCapHit = self._pass(b, passTolerance, x0=x)
-                trueResidual, scaledResidual = self._residuals(b, x, onScaledSystem)
+                x, passIterations, passCapHit = solvePass(b, passTolerance, x0=x)
+                trueResidual, scaledResidual = residuals(b, x, onScaledSystem)
                 iterations += passIterations
                 capHit = capHit or passCapHit
                 self._context.message(

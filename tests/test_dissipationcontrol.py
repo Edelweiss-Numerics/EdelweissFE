@@ -142,7 +142,14 @@ def _nonzeroIncrements(fieldOutputController):
     )
 
 
-@pytest.fixture(scope="module", params=["DissipationControlSnapBacks", "DissipationControlSnapBacksThreshold"])
+@pytest.fixture(
+    scope="module",
+    params=[
+        "DissipationControlSnapBacks",
+        "DissipationControlSnapBacksThreshold",
+        "DissipationControlSnapBacksThresholdBordered",
+    ],
+)
 def snapBackRun(request):
     return _simulate(TESTFILES / request.param / "test.inp")
 
@@ -236,6 +243,34 @@ def test_refinement_conserves_the_dissipation_and_keeps_the_control():
     dD = np.diff(D)[nonzero]
     assert np.all(dD <= (1 + TOLERANCE) * dTau)
     assert np.sum(np.abs(dD - dTau) <= TOLERANCE * dTau) > 10
+
+
+def test_the_bordered_system_follows_the_same_path_across_a_refinement(tmp_path):
+    """The threshold variant across the refinement of AMR_DissipationControl, solved with two right-hand sides and as
+    the bordered system with an iterative linear solver: the refinement creates hanging nodes, at which the gradient of
+    the dissipation enters the bordered system condensed onto their masters. Both dissipate the same increments."""
+
+    deck = (TESTFILES / "AMR_DissipationControl" / "test.inp").read_text()
+    deck = deck.replace("displacement=0.002", "loadParameter=1.0, threshold=1e-9")
+    histories = {}
+    for name, solverOptions in (("twoRightHandSides", ""), ("bordered", "borderedSystem=True\nlinsolver=blockamg\n")):
+        (tmp_path / name).mkdir()
+        variant = deck.replace(
+            "*solver, solver=NISTPArcLength, name=S\n", "*solver, solver=NISTPArcLength, name=S\n" + solverOptions
+        )
+        (tmp_path / name / "test.inp").write_text(variant)
+        _, model, fieldOutputController = _simulate(tmp_path / name / "test.inp")
+        assert len(model.elements) > 2, "the stress marker never refined"
+        histories[name] = np.ravel(_history(fieldOutputController, "D"))
+
+    D, DBordered = histories["twoRightHandSides"], histories["bordered"]
+    assert DBordered.shape == D.shape
+    # the same increments dissipate, and those the dissipation controls dissipate the same; the load controlled
+    # increment in which the cantilever starts to dissipate controls no dissipation, which is only as exact as
+    # Newton's method converged, with a direct and with an inexact iterative linear solve
+    np.testing.assert_array_equal(DBordered > 0.0, D > 0.0)
+    controlled = D[:-1] > 1e-9
+    np.testing.assert_allclose(np.diff(DBordered)[controlled], np.diff(D)[controlled], rtol=1e-6)
 
 
 # The edge cases, with stand-ins for the elements and the model

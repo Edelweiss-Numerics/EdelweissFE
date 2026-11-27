@@ -35,7 +35,10 @@ import numpy as np
 from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.numerics.dofnumbering import DofNumbering
 from edelweissfe.numerics.dofvector import DofVector
-from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
+from edelweissfe.stepactions.base.arclengthcontrollerbase import (
+    ArcLengthControllerBase,
+    LinearizedConstraint,
+)
 from edelweissfe.timesteppers.timestep import TimeStep
 
 
@@ -177,3 +180,33 @@ class IndirectDisplacementControlBase(ArcLengthControllerBase):
         dL = timeStep.stepProgressIncrement * self.changeOverStep
 
         return (dL - self.cVector.dot(dU[idcs] + ddU_0[idcs])) / self.cVector.dot(ddU_f[idcs])
+
+    @property
+    def providesLinearizedConstraint(self) -> bool:
+        """The equation is linear in the solution: it is its own linearization."""
+        return True
+
+    def linearizedConstraint(self, dU: DofVector, timeStep: TimeStep, system: DiscreteSystem) -> LinearizedConstraint:
+        """The equation of :meth:`computeDDLambda` as one row: :math:`\\boldsymbol{c} \\cdot \\Delta\\Delta
+        \\boldsymbol{U} = \\Delta p \\, \\Delta L - \\boldsymbol{c} \\cdot \\Delta \\boldsymbol{U}`; see
+        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.linearizedConstraint`.
+
+        Parameters
+        ----------
+        dU
+            The current increment of the solution.
+        timeStep
+            The increment being solved, whose size :math:`\\Delta p` is ``timeStep.stepProgressIncrement``.
+        system
+            The current discrete system.
+
+        Returns
+        -------
+        LinearizedConstraint
+            The row.
+        """
+        idcs = self.controlledDofIndices(system.numbering)
+        weights = np.zeros(len(dU))
+        np.add.at(weights, idcs, self.cVector)
+        dL = timeStep.stepProgressIncrement * self.changeOverStep
+        return LinearizedConstraint(weights, 0.0, dL - self.cVector.dot(dU[idcs]))

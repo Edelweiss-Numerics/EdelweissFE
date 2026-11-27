@@ -143,6 +143,38 @@ Multi-point constraints, e.g. the hanging nodes of a refined mesh, enter the arc
 reference load is condensed like the out-of-balance force, and the slave degrees of freedom of both corrections,
 :math:`\Delta\Delta U_0` and :math:`\Delta\Delta U_f`, take the part their masters interpolate.
 
+With an iterative linear solver, the second right-hand side costs a second Krylov solve in every Newton iteration,
+and the more expensive one: its right-hand side, the reference load, does not shrink as Newton's method converges. The
+solver option ``borderedSystem`` solves for both corrections together instead, as one linear system: the linearized
+equilibrium, bordered by the reference load as one more column and by the controller's equation, linearized at the
+iterate, as one more row,
+
+.. math::
+
+    \begin{bmatrix} \boldsymbol{K} & -\boldsymbol{R}_f \\ \boldsymbol{c}^T & d \end{bmatrix}
+    \begin{bmatrix} \Delta\Delta \boldsymbol{U} \\ \Delta\Delta\lambda \end{bmatrix}
+    = \begin{bmatrix} \boldsymbol{R}_0 \\ r \end{bmatrix}.
+
+A direct linear solver solves it by eliminating :math:`\Delta\Delta\lambda`, i.e. with the two right-hand sides as
+before (see :meth:`~edelweissfe.linsolve.base.LinearSolver.solveBordered`). A composed iterative solver runs one Krylov
+solve of one unknown more, right-preconditioned by the block triangular :math:`[M, 0; \boldsymbol{c}^T, \gamma]`, with
+:math:`M^{-1}` its preconditioner of :math:`\boldsymbol{K}` and :math:`\gamma` an estimate of the scalar Schur
+complement (see :meth:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver.solveBordered`, and Alkmim, Gamnitzer,
+Dummer, Neuner and Hofstetter (2026), *Algebraic multigrid based preconditioning approaches for generalized continuum
+models and indirect displacement control techniques*, IJNME, doi:10.1002/nme.70309). It costs about one solve with
+:math:`\boldsymbol{K}`. The controller gives its equation as the row (``linearizedConstraint``): the indirect
+displacement controls, and ``dissipationcontrol`` without the displacement limit, do; a controller that cannot is
+refused when the step starts, and so is the line search, which needs the two corrections apart:
+
+.. code-block:: edelweiss
+
+    *solver, solver=NISTPArcLength, name=theSolver
+    linsolver=blockamg
+    borderedSystem=True
+
+With multi-point constraints, the row is condensed like the residual: the coefficients of a slave degree of freedom go
+to its masters.
+
 The options of Newton's method act on the pair of the solution increment and the increment of the load parameter
 :math:`(\Delta U, \Delta\lambda)`:
 

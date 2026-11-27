@@ -58,7 +58,12 @@ import time
 import numpy as np
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.linsolve.base import FieldBlock, LinearSolver, LinearSolveSummary
+from edelweissfe.linsolve.base import (
+    Border,
+    FieldBlock,
+    LinearSolver,
+    LinearSolveSummary,
+)
 from edelweissfe.linsolve.composition.base import (
     MatrixChange,
     Preconditioner,
@@ -361,8 +366,40 @@ class ComposedLinearSolver(LinearSolver):
         return np.full(shape, np.nan)
 
     def __call__(self, A, b):
-        """Solve :math:`A x = b`, for one right-hand side ``b`` (a vector) or several (the columns of a matrix, e.g.
-        the two of an arc-length method), each with the same set-up of the tree."""
+        """Solve :math:`A x = b`, for one right-hand side ``b`` (a vector) or several (the columns of a matrix), each with
+        the same set-up of the tree."""
+        b = np.asarray(b, dtype=float)
+        rightHandSides = b.reshape(A.shape[0], -1)
+
+        def solveWithTree():
+            return np.column_stack([self.root(np.ascontiguousarray(r)) for r in rightHandSides.T]).reshape(b.shape)
+
+        return self._solve(A, b, solveWithTree, lambda reason: self._notSolved(b.shape, reason), dumped=True)
+
+    def solveBordered(self, A, border: Border, b: np.ndarray, beta: float) -> tuple[np.ndarray, float]:
+        """Solve the bordered system of :class:`~edelweissfe.linsolve.base.Border`: with a Krylov solver in the tree, as
+        one Krylov solve of :math:`n + 1` unknowns (see
+        :meth:`~edelweissfe.linsolve.composition.krylov.KrylovSolver._solveBordered`), else (a direct solver) by block
+        elimination, see :meth:`~edelweissfe.linsolve.base.LinearSolver.solveBordered`. A bordered solve is not dumped:
+        a replay of a dump solves :math:`A x = b`.
+        """
+        if not self.root.containsKrylovSolver:
+            return super().solveBordered(A, border, b, beta)
+        b = np.asarray(b, dtype=float)
+        if not np.isfinite(beta):
+            return self._notSolved(b.shape, "the right-hand side of the border is not finite"), float("nan")
+        return self._solve(
+            A,
+            b,
+            lambda: self.root.solveBordered(border, b, beta),
+            lambda reason: (self._notSolved(b.shape, reason), float("nan")),
+            dumped=False,
+        )
+
+    def _solve(self, A, b: np.ndarray, solveWithTree, notSolved, dumped: bool):
+        """A solve with the tree: the tree takes the matrix (set up or updated), ``solveWithTree()`` solves, and the
+        solve is reported (and dumped, if ``dumped``). A system that is declined -- a right-hand side that is not finite,
+        a matrix or a bordered system that the tree finds singular -- returns ``notSolved(reason)``."""
         start = time.time()
         self._solveCount += 1
         if self.hotReload:
@@ -371,11 +408,9 @@ class ComposedLinearSolver(LinearSolver):
         n = A.shape[0]
         # a direct solve needs no fields: a caller may not hand over any (EdelweissMeshfree's solvers)
         fields = [] if self._fieldStructure is None else tileFieldBlocks(self._fieldStructure, n, _IDENTIFICATION)
-        b = np.asarray(b, dtype=float)
-        rightHandSides = b.reshape(n, -1)
         residualNorm = float(np.linalg.norm(b))
         if not np.isfinite(residualNorm):
-            return self._notSolved(b.shape, "the right-hand side is not finite")
+            return notSolved("the right-hand side is not finite")
 
         change = self._changeFor(A, fields, residualNorm)
         try:
@@ -384,7 +419,7 @@ class ComposedLinearSolver(LinearSolver):
             # a non-finite scaling, a singular matrix: the nonlinear solver cuts the increment back, and what the
             # tree formed from A goes before the next matrix is assembled
             self.root.finishSolve()
-            return self._notSolved(b.shape, str(error))
+            return notSolved(str(error))
         except Exception as error:
             if self._rootBeforeReload is None:
                 raise
@@ -396,7 +431,12 @@ class ComposedLinearSolver(LinearSolver):
             # after the first set-up: a combination made per field has made its corrections only then
             requireEachComponentOnce(self.root)
             self._logFramed("info", "composed linear solver", str(self.root) + self._scriptLine())
-        x = np.column_stack([self.root(np.ascontiguousarray(r)) for r in rightHandSides.T]).reshape(b.shape)
+        try:
+            x = solveWithTree()
+        except FloatingPointError as error:
+            # a bordered system singular for the preconditioner: a cutback, as for a singular matrix
+            self.root.finishSolve()
+            return notSolved(str(error))
         record = self.root.solveRecord()
         condensedDofs = self.root.condensedDofs()
         self.root.finishSolve()
@@ -411,7 +451,7 @@ class ComposedLinearSolver(LinearSolver):
             self._report(record, change, time.time() - start)
         else:
             self._lastSolveSummary = None
-        if self.dumps is not None:
+        if dumped and self.dumps is not None:
             self._dump(A.A, b, fields, record, change, patternChanged, condensedDofs)
         if record is not None:
             self._previousIterations = record.iterations

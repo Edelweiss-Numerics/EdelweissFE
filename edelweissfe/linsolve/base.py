@@ -49,6 +49,36 @@ replay of a dumped system).
 
 from dataclasses import dataclass
 
+import numpy as np
+
+
+@dataclass(frozen=True)
+class Border:
+    """The border of a bordered system: one more unknown :math:`\\xi` and one more equation,
+
+    .. math::
+
+        \\begin{bmatrix} \\boldsymbol{A} & \\boldsymbol{a} \\\\ \\boldsymbol{c}^T & d \\end{bmatrix}
+        \\begin{bmatrix} \\boldsymbol{x} \\\\ \\xi \\end{bmatrix}
+        = \\begin{bmatrix} \\boldsymbol{b} \\\\ \\beta \\end{bmatrix},
+
+    e.g. the load parameter of the arc length method and the equation of its controller. See
+    :meth:`LinearSolver.solveBordered`.
+
+    Attributes
+    ----------
+    column
+        :math:`\\boldsymbol{a}`, the column of the new unknown in the equations of :math:`\\boldsymbol{A}`.
+    row
+        :math:`\\boldsymbol{c}`, the coefficients of :math:`\\boldsymbol{x}` in the new equation.
+    corner
+        :math:`d`, the coefficient of the new unknown in the new equation.
+    """
+
+    column: np.ndarray
+    row: np.ndarray
+    corner: float
+
 
 @dataclass(frozen=True)
 class FieldBlock:
@@ -207,6 +237,49 @@ class LinearSolver:
 
     def __call__(self, A, b):
         raise NotImplementedError
+
+    def solveBordered(self, A, border: Border, b: np.ndarray, beta: float) -> tuple[np.ndarray, float]:
+        """Solve the bordered system of :class:`Border`, :math:`\\boldsymbol{A} \\boldsymbol{x} + \\boldsymbol{a}
+        \\, \\xi = \\boldsymbol{b}` and :math:`\\boldsymbol{c} \\cdot \\boldsymbol{x} + d \\, \\xi = \\beta`.
+
+        By default, by block elimination of :math:`\\xi`: one solve with :math:`\\boldsymbol{A}` for the two
+        right-hand sides :math:`\\boldsymbol{b}` and :math:`\\boldsymbol{a}`,
+
+        .. math::
+
+            \\boldsymbol{x}_b = \\boldsymbol{A}^{-1} \\boldsymbol{b}, \\qquad
+            \\boldsymbol{x}_a = \\boldsymbol{A}^{-1} \\boldsymbol{a}, \\qquad
+            \\xi = \\frac{\\beta - \\boldsymbol{c} \\cdot \\boldsymbol{x}_b}{d - \\boldsymbol{c} \\cdot
+            \\boldsymbol{x}_a}, \\qquad
+            \\boldsymbol{x} = \\boldsymbol{x}_b - \\xi \\, \\boldsymbol{x}_a,
+
+        with the scalar Schur complement :math:`d - \\boldsymbol{c} \\cdot \\boldsymbol{A}^{-1}
+        \\boldsymbol{a}` in the denominator. For a direct solver, the second right-hand side costs one more pair of
+        triangular solves with the same factorization. A Krylov solver would need a second full solve for it, and
+        solves the bordered system as one instead (see
+        :meth:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver.solveBordered`).
+
+        Parameters
+        ----------
+        A
+            The matrix :math:`\\boldsymbol{A}` (CSR).
+        border
+            The border.
+        b
+            The right-hand side of the equations of :math:`\\boldsymbol{A}`.
+        beta
+            The right-hand side of the new equation.
+
+        Returns
+        -------
+        tuple[np.ndarray,float]
+            :math:`\\boldsymbol{x}` and :math:`\\xi`.
+        """
+
+        x = self(A, np.column_stack([b, border.column]))
+        x_b, x_a = x[:, 0], x[:, 1]
+        xi = (beta - border.row.dot(x_b)) / (border.corner - border.row.dot(x_a))
+        return x_b - xi * x_a, xi
 
 
 class DirectSolverBackend:

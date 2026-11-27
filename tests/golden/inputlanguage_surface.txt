@@ -928,6 +928,12 @@ The dissipation equation is singular where nothing dissipates. Two ways cover th
   controlled phase (the first one from a zero prediction) is moved by the secant of the last increment, or, without
   one, by the load parameter rule.
 
+Without ``displacement``, the controller gives its equation as one linear row as well, for the bordered system of the
+solver option ``borderedSystem`` (:meth:`StepAction.linearizedConstraint`): the load parameter rule, or the
+dissipation linearized at the iterate, :math:`\nabla D \cdot \Delta\Delta\boldsymbol{U} = \Delta\tau - (D -
+D_n)`. The displacement limit cannot: it bounds :math:`\Delta\Delta\lambda` to an interval, which takes the
+correction of the reference load at every displacement degree of freedom.
+
 References
 ----------
 Gutiérrez, M. A. (2004). Energy release control for numerical simulations of failure in quasi-brittle solids.

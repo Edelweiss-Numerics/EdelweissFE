@@ -29,12 +29,58 @@
 :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength`."""
 
 from abc import abstractmethod
+from dataclasses import dataclass
+
+import numpy as np
 
 from edelweissfe.models.discretesystem import DiscreteSystem
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
+
+
+@dataclass(frozen=True)
+class LinearizedConstraint:
+    """The controller's equation, linearized at the iterate in the corrections of the solution and of the load
+    parameter,
+
+    .. math::
+
+        \\boldsymbol{c} \\cdot \\Delta\\Delta \\boldsymbol{U} + d \\, \\Delta\\Delta\\lambda = r,
+
+    the last row of the bordered system that
+    :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength` solves with
+    ``borderedSystem`` (see
+    :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.linearizedConstraint`).
+
+    Attributes
+    ----------
+    weights
+        :math:`\\boldsymbol{c}`, over the whole dof vector of the discrete system.
+    loadParameterWeight
+        :math:`d`.
+    rightHandSide
+        :math:`r`, what the equation lacks at the iterate.
+    """
+
+    weights: np.ndarray
+    loadParameterWeight: float
+    rightHandSide: float
+
+    @classmethod
+    def ofLoadParameter(cls, ddLambda: float, nDof: int) -> "LinearizedConstraint":
+        """The equation :math:`\\Delta\\Delta\\lambda = \\Delta\\Delta\\lambda_0`, which fixes the correction of
+        the load parameter, e.g. under load control.
+
+        Parameters
+        ----------
+        ddLambda
+            The correction of the load parameter, :math:`\\Delta\\Delta\\lambda_0`.
+        nDof
+            The size of the dof vector.
+        """
+        return cls(np.zeros(nDof), 1.0, ddLambda)
 
 
 class ArcLengthControllerBase(StepActionBase):
@@ -61,6 +107,11 @@ class ArcLengthControllerBase(StepActionBase):
     :meth:`setSystemState` (the state of the iterate, with :attr:`receivesSystemState`), :meth:`isConstraintSatisfied`
     (its equation in the convergence check, as it is only linearized in :meth:`computeDDLambda`) and
     :meth:`getExtrapolationFactor` (the predictor), with :attr:`extrapolatesAfterCutback`.
+
+    With the solver option ``borderedSystem``, the solver does not split the correction into the two parts: it asks
+    the controller for its equation linearized at the iterate as one row (:meth:`linearizedConstraint`), and solves
+    for the corrections of the solution and of the load parameter together, as one system bordered by that row. A
+    controller that can give its equation as such a row says so (:attr:`providesLinearizedConstraint`).
     """
 
     #: The name of this step action, by which the solver option ``arcLengthController`` selects it.
@@ -100,6 +151,37 @@ class ArcLengthControllerBase(StepActionBase):
         float
             The correction of the load parameter.
         """
+
+    @property
+    def providesLinearizedConstraint(self) -> bool:
+        """Whether the controller gives its equation as one linear row (:meth:`linearizedConstraint`), for the bordered
+        system of the solver option ``borderedSystem``. By default, it does not."""
+        return False
+
+    def linearizedConstraint(self, dU: DofVector, timeStep: TimeStep, system: DiscreteSystem) -> LinearizedConstraint:
+        """The controller's equation linearized at the iterate, the row that borders the linearized system (see
+        :class:`LinearizedConstraint`): the corrections that satisfy it are those that :meth:`computeDDLambda` would
+        give, :math:`\\boldsymbol{c} \\cdot (\\Delta\\Delta \\boldsymbol{U}_0 + \\Delta\\Delta\\lambda \\,
+        \\Delta\\Delta \\boldsymbol{U}_f) + d \\, \\Delta\\Delta\\lambda = r`. Asked once per iteration, after
+        :meth:`setSystemState`.
+
+        Parameters
+        ----------
+        dU
+            The current increment of the solution.
+        timeStep
+            The increment being solved.
+        system
+            The current discrete system.
+
+        Returns
+        -------
+        LinearizedConstraint
+            The row.
+        """
+        raise NotImplementedError(
+            "{:} {:} gives no linearized equation for the bordered system".format(type(self).__name__, self.name)
+        )
 
     @abstractmethod
     def finishIncrement(self, U: DofVector, dU: DofVector, dLambda: float, timeStep: TimeStep, system: DiscreteSystem):

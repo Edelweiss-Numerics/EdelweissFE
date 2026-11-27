@@ -508,25 +508,8 @@ cdef class PyAMGCLKrylovSolver:
         the system. So the solve runs on ``rhs`` (and ``x0``) scaled by a power of two to a norm in [0.5, 1), and
         its solution is scaled back: exact in floating point, so the iterates are those of the unscaled solve.
         """
-        cdef int n = system.n
-        if n != self.n:
-            raise ValueError(
-                "PyAMGCLKrylovSolver: matrix size {:} does not match the size {:} this instance was "
-                "constructed for -- construct a fresh instance on any field-structure/size "
-                "change.".format(n, self.n)
-            )
-
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] rhs_arr = _vector(rhs, n, "rhs")
-
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x
-        if x0 is None:
-            x = np.zeros(n, dtype=np.float64)
-        else:
-            x = _vector(x0, n, "x0").copy()
-
-        cdef int exponent = np.frexp(np.linalg.norm(rhs_arr))[1]
-        rhs_arr = np.ldexp(rhs_arr, -exponent)
-        x = np.ldexp(x, -exponent)
+        self._checkSize(system.n)
+        rhs_arr, x, exponent = self._scaledToUnitNorm(rhs, x0)
 
         cdef double[::1] rhs_ = rhs_arr
         cdef double[::1] x_ = x
@@ -549,6 +532,57 @@ cdef class PyAMGCLKrylovSolver:
         self.lastIterations = iters
         self.lastError = error
         return np.ldexp(x, exponent)
+
+    def solveBordered(self, PyAMGCLEquilibratedSystem system, object column, object row, double corner, object rhs,
+                      object applyPreconditioner, double tol, int maxiter, object x0=None,
+                      bint onUnscaledOperator=False):
+        """The bordered system ``[A column; row^T corner] [x; xi] = rhs`` of ``n + 1`` unknowns, ``A`` the operator of
+        ``system`` (see :meth:`solve`), on an instance constructed for ``n + 1``; ``rhs``, ``x0``, the solution and the
+        vectors of ``applyPreconditioner`` have ``n + 1`` entries, the new unknown last.
+        """
+        self._checkSize(system.n + 1)
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] column_arr = _vector(column, system.n, "column")
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] row_arr = _vector(row, system.n, "row")
+        rhs_arr, x, exponent = self._scaledToUnitNorm(rhs, x0)
+
+        cdef double[::1] column_ = column_arr
+        cdef double[::1] row_ = row_arr
+        cdef double[::1] rhs_ = rhs_arr
+        cdef double[::1] x_ = x
+
+        cdef int iters = 0
+        cdef double error = 0.0
+
+        cdef _PreconditionerCallback callback = _PreconditionerCallback(applyPreconditioner)
+        try:
+            self.solver.solveBordered(
+                system.system[0], &column_[0], &row_[0], corner, &rhs_[0], &x_[0],
+                tol, maxiter, _preconditionerCallbackTrampoline, <void*> callback, iters, error, onUnscaledOperator
+            )
+        except RuntimeError:
+            callback.raisePending()
+            raise
+
+        self.lastIterations = iters
+        self.lastError = error
+        return np.ldexp(x, exponent)
+
+    def _checkSize(self, int n):
+        """Raise unless this instance was constructed for ``n`` unknowns."""
+        if n != self.n:
+            raise ValueError(
+                "PyAMGCLKrylovSolver: system size {:} does not match the size {:} this instance was "
+                "constructed for -- construct a fresh instance on any field-structure/size "
+                "change.".format(n, self.n)
+            )
+
+    def _scaledToUnitNorm(self, object rhs, object x0):
+        """``rhs`` and the initial guess ``x0`` (zero if None) scaled by the power of two that brings the norm of
+        ``rhs`` to [0.5, 1), and its exponent, see :meth:`solve`."""
+        rhs_arr = _vector(rhs, self.n, "rhs")
+        x = np.zeros(self.n, dtype=np.float64) if x0 is None else _vector(x0, self.n, "x0").copy()
+        exponent = np.frexp(np.linalg.norm(rhs_arr))[1]
+        return np.ldexp(rhs_arr, -exponent), np.ldexp(x, -exponent), exponent
 
 
 ctypedef fused _ArrayEntry:
