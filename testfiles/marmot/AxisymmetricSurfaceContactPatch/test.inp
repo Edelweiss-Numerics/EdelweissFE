@@ -1,0 +1,67 @@
+** The contact patch test of an AXISYMMETRIC model under type=surfaceToDeformableSurfacePenalty: two rings of CX8RUL
+** elements over the annulus 1 <= r <= 2, the upper one a gap g0 = 1e-3 above the lower one, its top pushed down by
+** 3e-3. The gap closes, and the interface carries a uniform pressure across the annulus.
+**
+** nu = 0 (K = E/3, G = E/2), so the state is uniaxial, sigma_zz = (3e-3 - g0) / (2 h / E + 1 / penalty) with h = 1,
+** E = 1000, to the finite strain of the Neo-Hooke material. Every contact point stands for the ring it sweeps about the
+** axis, 2 pi r times its length, so the force across the interface is that of the annulus, pi (2^2 - 1^2) sigma_zz,
+** and it balances the reactions of the elements at the bottom, which integrate over the full rings as well.
+** tests/test_axisymmetric_contact.py runs this deck and asserts both.
+*material, name=CompressibleNeoHooke, id=neoHooke
+**K,                  G,      density
+333.3333333333333,    500.0,  1.0
+
+*job, name=axisymmetricContactPatch, domain=axisymmetric
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=planeRectQuad, name=lower
+x0      =1
+y0      =0
+l       =1
+h       =1
+nX      =2
+nY      =2
+elType  =CX8RUL
+
+*modelGenerator, generator=planeRectQuad, name=upper
+x0      =1
+y0      =1.001
+l       =1
+h       =1
+nX      =2
+nY      =2
+elType  =CX8RUL
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = upper_bottom
+name    = slaveSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = lower_top
+name    = masterSurf
+
+** thickness=1.0: type=plane requires one; the axisymmetric elements and the contact points integrate over the
+** rings about the axis and do not use it.
+*section, name=section1, thickness=1.0, material=neoHooke, type=plane
+lower_all
+upper_all
+
+*constraint, name=contact, type=surfaceToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=1e5, type=linear,
+searchDistance=0.5, sliding=small
+
+*fieldOutput
+>>perNode, elSet=lower_all, field=displacement, result=U, name=dispLower
+>>perNode, elSet=upper_all, field=displacement, result=U, name=dispUpper
+>>perNode, name=reactionBottom, nSet=lower_bottom, field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True
+>>fromExpression, name=pressureMean, elSet=slaveSurf_facets, expression='model.constraints["contact"].getNormalPressures()', f(x)='np.mean(x)', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=reactionBottom
+fieldOutput=pressureMean
+
+*step, solver=theSolver
+maxInc=0.25, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixBottom, nSet=lower_bottom, field=displacement, 2=0.0
+>>dirichlet, name=pushTop, nSet=upper_top, field=displacement, 2=-3e-3

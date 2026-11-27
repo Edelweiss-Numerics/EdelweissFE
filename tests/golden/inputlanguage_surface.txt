@@ -60,7 +60,19 @@
 
     job    definition of an analysis job
         domain                string              define spatial domain: 1d, 2d,
-                                                  3d
+                                                  3d, or axisymmetric (2d: the
+                                                  section r-z of a body of
+                                                  revolution, r the first
+                                                  coordinate; what the model
+                                                  integrates is integrated over
+                                                  the rings about the axis). The
+                                                  elements must match:
+                                                  axisymmetric ones (CAX*,
+                                                  GCAX*, CX8UL, CX8RUL) in an
+                                                  axisymmetric job, plane ones
+                                                  in a 2d job; nothing checks
+                                                  it, and contact is off by the
+                                                  factor 2 pi r / t otherwise
         startTime             float               (optional) start time of job
         name                  string              Name of job.
         solver                string              (deprecated) define the solver
@@ -207,6 +219,23 @@ records file, one line per slave node::
     [nSet] Node set to tie. (<class 'str'>)
     [referencePoint] Node set containing only the reference point. (<class 'str'>)
 ===== module documentation: edelweissfe.constraints.nodetodeformablesurfacepenalty =====
+A penalty based unilateral contact constraint between a deformable slave surface and a deformable
+master surface, both represented by flat contact facet elements (:mod:`~edelweissfe.elements.
+contactsurfaceelement`, typically created via :mod:`~edelweissfe.generators.surfaceelementgenerator`).
+The slave surface's nodes act as the contact points; each slave node's penalty force is weighted by
+its tributary area (the sum of ``measure / nFacetNodes`` over its incident slave facets, evaluated
+in the reference configuration, times the thickness of their sections in a plane model), so ``penalty`` has the
+meaning of an interface stiffness modulus per unit area, and the contact response converges under slave surface
+refinement. An axisymmetric model is refused: use
+:mod:`~edelweissfe.constraints.surfacetodeformablesurfacepenalty` with ``contactPoints=nodes`` there.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if either surface's
+source solid elements are refined mid-run (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.
+hadaptivity`), it regenerates that side's facets from the current (refined) ``*surface`` definition
+and rebinds its cached facet list/reference coordinates at its own next :meth:`updateConnectivity`
+tick -- no separate wiring needed. A retained slave node (same across the rebuild, by ``Node``
+identity) keeps its frictional history and augmented-Lagrange multiplier; a newly exposed one
+starts at rest.
 [nodeToDeformableSurfacePenalty] A penalty based unilateral contact constraint preventing the nodes of a slave surface from penetrating a deformable master surface, both represented by contact facet elements.
   required arguments
     [slaveSurface] The element set of contact facet elements (Tria3ContactFacet/Line2ContactFacet) forming the slave surface; its nodes act as the contact points, penalty-weighted by their tributary areas. (<class 'str'>)
@@ -219,15 +248,6 @@ records file, one line per slave node::
     [mu] The Coulomb friction coefficient. Requires sliding=small; mu=0 disables friction. Strongly recommended in combination with type=quadratic: the quadratic law's contact stiffness vanishes continuously at gap activation, keeping the frictional tangent continuous for slave nodes lifting off/touching down -- with type=linear, the activation stiffness jump scaled by mu makes Newton prone to limit-cycling at such events. (<class 'float'>, default = 0.0)
     [tangentPenalty] The tangential penalty stiffness per unit slave surface area for frictional stick. Defaults to the normal penalty. (<class 'float'>, default = None)
     [augmentedLagrange] Augment the penalty force with a per-slave normal traction multiplier, updated once per increment on acceptance (incremental Uzawa: lambda <- min(0, lambda + penalty * A * g)). The multiplier is constant within an increment (zero tangent contribution), drives the penetration toward zero over the increments at a fixed penalty, and sharpens the friction cone mu * N. Requires sliding=small. (<class 'bool'>, default = False)
-===== module documentation: edelweissfe.constraints.nodetodiscreterigidbodypenalty =====
-[nodeToDiscreteRigidBodyPenalty] A penalty based unilateral contact constraint preventing nodes of a node set from penetrating the surface of a discrete rigid body.
-  required arguments
-    [nSet] The (slave) node set to be protected from penetrating the rigid body. (<class 'str'>)
-    [rigidBody] The name of the discrete rigid body (as registered in model.rigidBodies). (<class 'str'>)
-    [penalty] The numerical penalty value. (<class 'float'>)
-  optional arguments
-    [type] The formulation type: 'linear' (linear force, constant stiffness with jump) or 'quadratic' (quadratic force, linear stiffness). (<class 'str'>, default = linear)
-    [searchDistance] An optional broadphase distance (passed on to the rigid body's surface query) for culling nodes far away from the rigid body. If not given, every slave node is queried exactly every iteration. (<class 'float'>, default = None)
 ===== module documentation: edelweissfe.constraints.nodetorigidsurfacepenalty =====
 [nodeToRigidSurfacePenalty] A penalty based unilateral constraint used for preventing the nodes of a node set from penetrating a defined rigid boundary.
   required arguments

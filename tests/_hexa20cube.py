@@ -25,9 +25,15 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""A single hexa20 cube fixture, shared by the integrated contact tests."""
+"""A single hexa20 cube fixture, and two cubes in contact, shared by the contact tests."""
 
 import numpy as np
+
+from edelweissfe.elements.displacementelement.element import DisplacementElement
+from edelweissfe.generators.surfaceelementgenerator import buildContactFacets
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.points.node import Node
+from edelweissfe.sets.elementset import ElementSet
 
 _HEXA20_EDGES = (
     (0, 1),
@@ -71,3 +77,53 @@ def _hexa20Coordinates(yOffset: float) -> list:
         np.array([_SIDE, yOffset + _SIDE, 0.0]),
     ]
     return corners + [0.5 * (corners[a] + corners[b]) for a, b in _HEXA20_EDGES]
+
+
+def twoBlockModel(
+    journal, penetration: float, nodalWeights: str = "facetConsistent", origin: np.ndarray | None = None
+) -> tuple:
+    """Two hexa20 cubes meeting at y = 0, the lower one overlapping the upper by
+    ``penetration``, with the lower block's Ymax face as slave and the upper block's Ymin face
+    as master; both moved by ``origin``, if given.
+
+    Parameters
+    ----------
+    journal
+        The journal the contact facets are reported to.
+    penetration
+        How far the lower block overlaps the upper one.
+    nodalWeights
+        The nodal weights of the contact facets.
+    origin
+        Where the corner of the two cubes at the origin is moved, e.g. far from the origin of the coordinates.
+
+    Returns
+    -------
+    tuple
+        ``(model, slaveSurface, masterSurface)``.
+    """
+
+    model = FEModel(3)
+    label = 1
+    elements = {}
+    with model.topology.changes():
+        for key, yOffset in (("upper", 0.0), ("lower", -_SIDE + penetration)):
+            nodes = []
+            for x in _hexa20Coordinates(yOffset):
+                node = Node(label, x if origin is None else x + origin)
+                model.nodes[label] = node
+                nodes.append(node)
+                label += 1
+            (elNumber,) = model.topology.reserveElementNumbers(1)
+            element = DisplacementElement("C3D20", elNumber)
+            element.setNodes(nodes)
+            model.createElement(element)
+            elements[key] = element
+
+        model.surfaces["masterFace"] = {_YMIN: ElementSet("m", [elements["upper"]])}
+        model.surfaces["slaveFace"] = {_YMAX: ElementSet("s", [elements["lower"]])}
+
+        masterSetName, _ = buildContactFacets(model, "masterFace", "mst", "midside", nodalWeights, journal)
+        slaveSetName, _ = buildContactFacets(model, "slaveFace", "slv", "midside", nodalWeights, journal)
+
+    return model, model.elementSets[slaveSetName], model.elementSets[masterSetName]

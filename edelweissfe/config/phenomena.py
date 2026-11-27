@@ -168,7 +168,8 @@ absoluteFluxResidualTolerance = {
     "jacobi": 1e-7,
 }
 
-# domain                 dimensions
+# domain                 dimensions; an axisymmetric model is the section r-z of a body of revolution, see
+#                        FEModel.axisymmetric
 domainMapping = {
     "1d": 1,
     "2d": 2,

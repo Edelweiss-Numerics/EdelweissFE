@@ -1,0 +1,67 @@
+** The penalty tie of an AXISYMMETRIC model on the explicit path (NED): two rings of CX8RUL elements, an inner one
+** (1 <= r <= 1.5) and an outer one (1.5 <= r <= 2) with a different mesh, tied across their cylindrical interface
+** r = 1.5 by type=surfaceToDeformableSurfacePenalty with type=tied. The outer face is pulled out radially, and the
+** inner ring, free otherwise, is expanded through the tie alone.
+**
+** Every contact point stands for the ring it sweeps about the axis, 2 pi r times its length, so the springs of the tie,
+** the lumped masses and the internal forces of the elements are all those of the full rings; the critical time step
+** of the degrees of freedom the tie couples adds the row sums of the springs, scaled by the ring-weighted masses.
+** tests/test_axisymmetric_contact.py checks that estimate against the exact critical time step of a small model.
+*material, name=CompressibleNeoHooke, id=neoHooke
+**K,                  G,      density
+333.3333333333333,    500.0,  1.0
+
+*job, name=axisymmetricTieNED, domain=axisymmetric
+*solver, solver=NED, name=theSolver
+output-frequency=20
+
+*modelGenerator, generator=planeRectQuad, name=inner
+x0      =1
+y0      =0
+l       =0.5
+h       =1
+nX      =2
+nY      =2
+elType  =CX8RUL
+
+*modelGenerator, generator=planeRectQuad, name=outer
+x0      =1.5
+y0      =0
+l       =0.5
+h       =1
+nX      =2
+nY      =3
+elType  =CX8RUL
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen1
+surface = outer_left
+name    = slaveSurf
+
+*modelGenerator, generator=surfaceElementGenerator, name=gen2
+surface = inner_right
+name    = masterSurf
+
+** thickness=1.0: type=plane requires one; the axisymmetric elements and the contact points integrate over the
+** rings about the axis and do not use it.
+*section, name=section1, thickness=1.0, material=neoHooke, type=plane
+inner_all
+outer_all
+
+*constraint, name=tie, type=surfaceToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=1e5, type=tied
+
+*fieldOutput
+>>perNode, elSet=inner_all, field=displacement, result=U, name=dispInner
+>>perNode, elSet=outer_all, field=displacement, result=U, name=dispOuter
+>>perNode, name=innerRadialDisplacement, nSet=inner_left, field=displacement, result=U, f(x)='np.mean(x[:,0])', saveHistory=True
+>>perNode, name=pullForce, nSet=outer_right, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True
+
+*output, type=monitor, name=monitor
+fieldOutput=innerRadialDisplacement
+fieldOutput=pullForce
+
+*step, type=adaptiveForExplicitSimulations, solver=theSolver
+maxInc=1, minInc=1e-8, maxNumInc=100000, maxIter=25, stepLength=0.2
+>>dirichlet, name=fixInnerBottom, nSet=inner_bottom, field=displacement, 2=0
+>>dirichlet, name=fixOuterBottom, nSet=outer_bottom, field=displacement, 2=0
+>>dirichlet, name=pullOut, nSet=outer_right, field=displacement, 1=2e-3

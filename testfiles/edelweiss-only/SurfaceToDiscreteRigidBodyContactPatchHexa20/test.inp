@@ -3,7 +3,7 @@
 ** (an STL, larger than the footprint) whose top face is at z = 1. The exact solution is homogeneous
 ** uniaxial stress with a perfectly FLAT interface.
 **
-** The node-based nodeToDiscreteRigidBodyPenalty cannot represent this state: a quad8 face's
+** Nodes as contact points (contactPoints=nodes) cannot represent this state: a quad8 face's
 ** consistent nodal loads under a uniform pressure are NEGATIVE at the corners (-pA/12, +pA/3 at the
 ** midsides), which a unilateral per-node spring cannot exert, so the corners lift off. Here the
 ** pressure is integrated at quadrature points and distributed with the PARENT FACE's quadratic

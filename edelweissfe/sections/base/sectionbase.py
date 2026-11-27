@@ -74,6 +74,11 @@ class Section(OptionSchemaProvider, ABC):
     #: hAdaptivity then rejects refining those hosts.
     supportsHostRefinement = True
 
+    #: The thickness of a plane section, by which its elements multiply what they integrate over their areas: a plane
+    #: model is a slice of the body of this thickness (see :meth:`~edelweissfe.models.femodel.FEModel.thicknessOf`).
+    #: None for a section without one (solid, truss).
+    thickness: float | None = None
+
     def __init__(
         self,
         name,

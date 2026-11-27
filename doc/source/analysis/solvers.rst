@@ -448,13 +448,21 @@ Contact searches during a step
 An explicit analysis with contact searches while it runs, every ``contact-update-frequency`` increments. A search
 re-assigns which nodes a contact constraint couples, and touches no node, no field, no scalar variable and no element:
 the change is ``LOCATIONS``, ``NED`` only wraps its vectors with the new locations, and the lumped inertia, the
-mass-proportional damping rate, the multi-point-constraint condensation and the critical time step are kept
-(:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations`, and :ref:`how-a-change-selects-the-path`).
+mass-proportional damping rate, the multi-point-constraint condensation and the critical time step of the elements are
+kept (:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewLocations`, and
+:ref:`how-a-change-selects-the-path`). The search runs before the increment it is due for is proposed, after the force
+that increment integrates was evaluated, and the stiffness of the contact enters the critical time step right after
+every net force, added to the frequencies of the nodes it couples: a point paired anew by the search is in the critical
+time step of the next increment, and the first increment that integrates its force does so over the average of its own
+time increment and the one taken without it. With ``follow-critical-time-step``, the contact is bounded right after the
+search over the next increment once more, on the new pairing, and the point is in the time increment of that increment
+already (:doc:`/theory/criticaltimestep`, "Over the next increment").
 
 A change of the mesh -- a refinement -- gives a new numbering
 (:meth:`~edelweissfe.solvers.nonlinearexplicitdynamic.NED.onNewNumbering`): the operators are assembled anew over the
 elements of the new discrete system, the solution, the velocity and the acceleration are read from the model, which
-interpolated them onto the new nodes, and the critical time step is computed again.
+interpolated them onto the new nodes, and the critical time step is computed again: the elements' on the new mesh, and
+the penalty constraints' at the state on it, before the first increment on the new mesh.
 
 Finite elements and particles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -468,42 +476,53 @@ nodes, a body of particles from the velocity of its particles. The particles' lu
 so a nonlocal field of gradient-enhanced particles is integrated by its own scheme. Their critical time step enters the
 critical time step with the elements'; it is estimated in the zero increment, and anew whenever the margin of its last
 estimate over the time increment in use may be used up (option ``critical-time-step-decrease-per-increment``, see
-:doc:`/theory/criticaltimestep`). With ``carry-critical-time-step-weights``, every estimate starts from the weights the
-last one left and refines them by one step of the power iteration, which tightens it over a few estimates at no extra
-cost; an estimate below the one the weights started from starts them anew, so an increment that is lowered only never
-falls below the smallest estimate without them (see "Entities that carry their own inertia" above). With
-``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum in every
-increment.
+:doc:`/theory/criticaltimestep`). A penalty constraint on the particles -- a support, the contact with a projectile --
+adds its stiffness to their rows in every increment. With ``carry-critical-time-step-weights``, every estimate starts
+from the weights the last one left and refines them by one step of the power iteration, which tightens it over a few
+estimates at no extra cost; an estimate below the one the weights started from starts them anew, so an increment that
+is lowered only never falls below the smallest estimate without them (see "Entities that carry their own inertia"
+above). With ``project-velocity-every-increment``, the velocity of the particles' nodes is projected from their momentum
+in every increment.
 
 .. _ned-time-increment-lowered-or-followed:
 
 The time increment: lowered only, or followed
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``NED`` takes the critical time step -- the smaller of the elements' and the entities' that carry their own inertia
-(e.g. particles), scaled by ``courant-number`` -- each time one of them is estimated: the elements at the start of the
-step and after a change of the mesh, the entities whenever the margin of their last estimate may be used up. Only at
-these points is it known; in between, the time increment is trusted.
+``NED`` takes the critical time step -- the smallest of the elements', the entities' that carry their own inertia (e.g.
+particles) and the one of the parts with the penalty constraints, scaled by ``courant-number`` -- each time one of them
+is estimated: the elements at the start of the step and after a change of the mesh, the entities whenever the margin of
+their last estimate may be used up, the penalty constraints after every increment and after a change of the mesh, and,
+followed, after a contact search. Only at these points is it known; in between, the time increment is trusted.
 
 **Lowered only (the default).** Whenever the critical time step is taken and falls below the time increment in use,
 the increment becomes the critical time step; it is never raised within a step. A step that asks for smaller increments
 (``startInc``, at most ``maxInc``) keeps them. A brief stiff state -- an entity that is briefly compressed, a node that
-the kernel functions of the entities reach only at the edge -- thus sets the increment for the rest of the step.
+the kernel functions of the entities reach only at the edge, a contact that closed and opened again -- thus sets the
+increment for the rest of the step.
 
 **Followed** (``follow-critical-time-step``). Each time the critical time step is taken, the time increment becomes
 the critical time step, at most the step's ``maxInc``, up as well as down; the step's ``startInc`` is not kept, and a
 step that wants smaller increments sets ``maxInc``. Once a stiff state has passed, the increment comes back with the
-next critical time step taken. As long as no estimate is known -- no element reports one, and the entities have not been
-estimated yet or report none -- there is nothing to follow, and the step keeps its own increment.
+next critical time step taken. The penalty constraints are then bounded over the states the next increment can reach
+as well, up to the largest increment the step could take: a contact point that could close within the next increment
+enters the critical time step before it closes, not half an increment late, where the bound over the states holds
+(:doc:`/theory/criticaltimestep`, "Over the next increment"). As long as no estimate is known -- no element reports
+one, the entities have not been estimated yet or report none, and no penalty constraint couples a degree of freedom --
+there is nothing to follow, and the step keeps its own increment.
 
 **What following gives up.** Between two critical time steps taken, the increment is trusted: the courant number covers
 the gradual change of the model in between. Lowered only, the increment of a run that has met a stiff state once stays
 low, and is ready for the next time that state returns. The states this option is meant for are brief, but they tend to
-recur: an entity compressed again, a node reached at the edge again. Followed, the increment is raised after the first
-one and meets the next with nothing but the courant margin until the next estimate sees it -- for the entities, once
-the margin of their last estimate may be used up. Use the option with a ``critical-time-step-decrease-per-increment`` large enough
-to estimate the entities as often as such a state may recur, or with a lower ``courant-number``; at a
-``courant-number`` close to 1, repeated raising and lowering can also pump energy into a mode near the stability limit.
+recur: an entity compressed again, a node reached at the edge again, a contact closing again. Followed, the increment is
+raised after the first one and meets the next with nothing but the courant margin until the next estimate sees it -- for
+the entities, once the margin of their last estimate may be used up. A contact point that closes is not left to the
+courant margin: it enters before it closes, as far as the bound over the states holds; a constraint bounded from its
+tangent whose closing springs share a degree of freedom in its block is seen only as far as one corner of the
+increment closes them together (:doc:`/theory/criticaltimestep`, "What the estimate does not see"). Use the option
+with a ``critical-time-step-decrease-per-increment`` large enough to estimate the entities as often as such a state may
+recur, or with a lower ``courant-number``; at a ``courant-number`` close to 1, repeated raising and lowering can also
+pump energy into a mode near the stability limit.
 
 .. code-block:: edelweiss
 

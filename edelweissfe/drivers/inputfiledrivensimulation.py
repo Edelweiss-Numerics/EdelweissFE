@@ -110,7 +110,7 @@ def finiteElementSimulation(
     jobInfo = dict()
 
     tic = getCurrentTime()
-    model = FEModel(domainSize)
+    model = FEModel(domainSize, axisymmetric=job["domain"] == "axisymmetric")
     model = fillFEModelFromInputFile(model, inputfile, journal)
     model.prepareYourself(journal)
     model.advanceToTime(job.get("startTime", 0.0))

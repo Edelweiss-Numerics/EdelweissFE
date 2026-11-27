@@ -39,7 +39,6 @@ from edelweissfe.generators.discreterigidbodygenerator import (
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.utils.facetcontactgeometry import tria3ClosestPoint
 from edelweissfe.utils.rotations import rightJacobianSO3, rotationMatrixFromPseudoVector
 
 
@@ -69,21 +68,6 @@ class TestDiscreteRigidBody(unittest.TestCase):
         outwardness = np.einsum("ti,ti->t", triangles.mean(axis=1) - self.cubeCenter, normals)
         self.assertTrue(np.all(outwardness > 0.0))
 
-    def test_reference_triangles_agree_with_surface_query(self):
-        rigidBody = self._rigidBodyFromSurface(self._unitCube())
-        triangles, normals = rigidBody.referenceTriangles()
-        point = self.cubeCenter + np.array([0.8, 0.1, -0.2])
-
-        distances = [tria3ClosestPoint(point, *triangle)[1] for triangle in triangles]
-        closest = int(np.argmin(distances))
-
-        u = np.zeros(3)
-        queryDistances, queryNormals = rigidBody.querySurface(
-            point[None, :], kinematics=(u, np.eye(3), rigidBody.rpNode.coordinates)
-        )
-        self.assertAlmostEqual(distances[closest], queryDistances[0], places=6)
-        np.testing.assert_allclose(normals[closest], queryNormals[0], rtol=0, atol=1e-12)
-
     def test_open_surface_is_rejected(self):
         openCube = self._unitCube().extract_cells(range(10)).extract_surface(algorithm="dataset_surface")
         rigidBody = self._rigidBodyFromSurface(openCube, "openCube")
@@ -105,7 +89,7 @@ class TestDiscreteRigidBody(unittest.TestCase):
     def _rejectedSurface(self, surface: pv.PolyData) -> str:
         rigidBody = self._rigidBodyFromSurface(self._unitCube())
         rigidBody.surfaceMesh = surface
-        rigidBody._queryEngine = None
+        rigidBody._outerSurface = None
         with self.assertRaises(ValueError) as context:
             rigidBody.referenceTriangles()
         return str(context.exception)
