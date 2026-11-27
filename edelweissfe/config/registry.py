@@ -230,6 +230,7 @@ _addBuiltins(
         "cuboidlatticegenerator",
         "cylindergenerator",
         "discreterigidbodygenerator",
+        "embeddedbond",
         "executepythoncode",
         "findclosestnode",
         "microstructuregenerator",

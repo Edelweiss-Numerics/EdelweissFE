@@ -118,8 +118,9 @@ update, meaning "evaluate freshly".
 :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers`,
 :meth:`~edelweissfe.models.femodel.FEModel.createElement` and
 :meth:`~edelweissfe.models.femodel.FEModel.removeElement`, and their node-side counterparts
-:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers` and
-:meth:`~edelweissfe.models.femodel.FEModel.createNode`.
+:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers`,
+:meth:`~edelweissfe.models.femodel.FEModel.createNode` and
+:meth:`~edelweissfe.models.femodel.FEModel.removeNodes`.
 
 **Say so if your modifier is purely reactive.** A modifier that can only act in response to another
 one's mutation -- the implicit surface-facet retiling is the only current example -- sets
